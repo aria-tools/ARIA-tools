@@ -1,0 +1,41 @@
+*This installation has been carried out on linux machines and successfully completed. This guide does not work on Mac computers.
+**The environment below starts from a clean Miniconda3 installation. Miniconda3 can be obtained and installed by using the line below.
+
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+
+############PROJ SETUP##################
+conda install autoconf automake libtool patchelf
+git clone https://github.com/OSGeo/proj.4 proj
+cd proj
+./autogen.sh
+setenv CXXFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
+setenv CFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
+./configure --prefix=/my/proj/install/directory --disable-static
+make -j4
+make install
+cd /my/proj/install/directory/lib
+mv libproj.so.15.0.0 libinternalproj.so.15.0.0
+ln -s libinternalproj.so.15.0.0 libinternalproj.so.15
+ln -s libinternalproj.so.15.0.0 libinternalproj.so
+rm -f libproj.*
+patchelf --set-soname libinternalproj.so libinternalproj.so
+######################################
+
+############GDAL SETUP##################
+git clone https://github.com/OSGeo/gdal
+cd gdal/gdal/
+./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python
+make -j4
+make install
+########################################
+
+cd
+vi .cshrc
+
+###########ADD TO SOURCE FILE###########
+setenv LD_LIBRARY_PATH /my/proj/install/directory/lib:/my/gdal/install/directory/lib
+setenv PROJ_LIB /my/proj/install/directory/share/proj
+setenv PYTHONPATH /my/gdal/install/directory/lib/python3.7/site-packages
+
+set path = ('/my/gdal/install/directory/bin' $path)
+########################################
