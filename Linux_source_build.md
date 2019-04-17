@@ -12,7 +12,7 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 Next execute the installer script and follow the instructions as provided by the installer.
 
 The miniconda installation does not contain all the python module we need.
-Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation.
+Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 ```
 conda install autoconf automake libtool patchelf numpy netcdf4 matplotlib pandas shapely --yes
 ```
