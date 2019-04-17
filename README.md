@@ -26,7 +26,7 @@ vi ~/.cshrc
 
 Add the following and update ***my*** to the location where you cloned ARIA-tools:
 ```
-setenv PYTHONPATH /my/tools
+setenv PYTHONPATH $PYTHONPATH:/my/tools
 set path = ('/my/tools' $path)
 ```
 
@@ -39,7 +39,7 @@ The following dependencies needs to be installed. Note that GDAL currently needs
 - [HDF5](https://www.h5py.org/) 
 
 
-[**Linux**](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+[**Linux installation guide**](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
 
 
 ### 3. Running ARIA-tools
