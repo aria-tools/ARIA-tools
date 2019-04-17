@@ -15,32 +15,40 @@ git clone https://github.com/dbekaert/ARIA-tools.git
 ```
 
 ### 2. Installation
-**TODO: PythonPATH setup, dependencies and requirements (e.g. GDAL >2.4, RELAX), split in example for macports and anaconda with the required pacakges and portfiles.**
+The ARIA-tools package can be installed by adding the tools folder on your PATH and PYTHONPATH.
+This can be done by editing your private module or your favorite start-up shell.
+
+
+For example, for csh do:
+```
+vi ~/.cshrc
+```
+
+Add the following and update ***my*** to the location where you cloned ARIA-tools:
+```
+setenv PYTHONPATH /my/tools
+set path = ('/my/tools' $path)
+```
+
+**Dependencies:**
+The following dependencies needs to be installed. Note that GDAL currently needs to be build manually from source as no pre-build is available via anaconda or macports for version 2.5. In addition PROJ 4 version 6.x is required for GDAL 2.5. Below we provide guidelines for Linux users on how to build these dependencies from source. In future we will expand this section to rely on anaconda and macports for installation.
+- GDAL v2.5 (currently only available on [GDAL](https://www.gdal.org/) github)
+- PROJ 6 (see [PROJ4](https://proj4.org/index.html) webpage and [PROJ4](https://github.com/OSGeo/proj) github)
+- [SciPy](https://www.scipy.org/) 
+- [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
+- [HDF5](https://www.h5py.org/) 
+
+
+[**Linux**](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+
 
 ### 3. Running ARIA-tools
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md).
 
-
-<details><summary>#### 3.1. Manipulating GUNW Products</summary>
-<p>
-**TODO: list the commandline parsing of the main script which allows for cropping/stiching and layer-extraction, link to the documentation page for a note-book example**
-</p>
-</details>
-
-
-<details><summary>#### 3.2. Baseline and quality control plots for GUNW Products</summary>
-<p>
-**TODO: list the commandline parsing of the main script, link to the documentation page for a note-book example**
-</p>
-</details>
-
-
-<details><summary>#### 3.3 Time-series set-up of GUNW Products</summary>
-<p>
-**TODO: list the commandline parsing of the main script, link to the documentation page for a note-book example**
-</p>
-</details>
+#### 3.1. Manipulating GUNW Products
+#### 3.2. Baseline and quality control plots for GUNW Products
+#### 3.3 Time-series set-up of GUNW Products
 
 
 ### 4. Documentation
