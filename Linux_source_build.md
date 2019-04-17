@@ -14,7 +14,7 @@ Next execute the installer script and follow the instructions as provided by the
 The miniconda installation does not contain all the python module we need.
 Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation.
 ```
-conda install autoconf automake libtool patchelf
+conda install autoconf automake libtool patchelf numpy netcdf4 matplotlib pandas shapely --yes
 ```
 
 ### 2. PROJ 4 SETUP
@@ -69,8 +69,8 @@ vi ~/.cshrc
 
 Add the following and update ***my*** to the location where you installed the packages.
 ```
-setenv LD_LIBRARY_PATH /my/proj/install/directory/lib:/my/gdal/install/directory/lib
+setenv LD_LIBRARY_PATH $LD_LIBRARY_PATH:/my/proj/install/directory/lib:/my/gdal/install/directory/lib
 setenv PROJ_LIB /my/proj/install/directory/share/proj
-setenv PYTHONPATH /my/gdal/install/directory/lib/python3.7/site-packages
+setenv PYTHONPATH $PYTHONPATH:/my/gdal/install/directory/lib/python3.7/site-packages
 set path = ('/my/gdal/install/directory/bin' $path)
 ```
