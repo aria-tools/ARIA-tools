@@ -224,7 +224,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             if abs(new_scene_end-scene_end)<=timedelta(minutes=100) and abs(slave-master)<=timedelta(days=1):
                 # Don't export product if it is already tracked as a rejected pair
                 if j[0]['pair_name'] in track_rejected_pairs or self.products[i+1][0]['pair_name'] in track_rejected_pairs:
-                    print("Warning! Gap for pair %s"%(j[0]['pair_name']))
                     track_rejected_pairs.extend((j[0]['pair_name'],self.products[i+1][0]['pair_name']))
                 
                 # Only pass scene if it temporally overlaps with reference scene
