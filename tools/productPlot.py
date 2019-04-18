@@ -37,10 +37,11 @@ def createParser():
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-plotcoh', '--plotcoh', action='store_true', dest='plotcoh', help="Make coherence plot + histogram. Also generate raster of average coherence.")
-    parser.add_argument('-plotbperp', '--plotbperp', action='store_true', dest='plotbperp', help="Make baseline plot + histogram.")
     parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks', help="Make plot of track extents vs bounding bbox/common track extent.")
+    parser.add_argument('-plotbperp', '--plotbperp', action='store_true', dest='plotbperp', help="Make baseline plot + histogram.")
     parser.add_argument('-plotbperpcoh', '--plotbperpcoh', action='store_true', dest='plotbperpcoh', help="Make pbaseline plot that is color-coded w.r.t. coherence.")
+    parser.add_argument('-plotcoh', '--plotcoh', action='store_true', dest='plotcoh', help="Make coherence plot + histogram.")
+    parser.add_argument('-makeavgoh', '--makeavgoh', action='store_true', dest='makeavgoh', help="Generate raster of average coherence.")
     parser.add_argument('-plotall', '--plotall', action='store_true', dest='plotall', help="Generate all above plots.")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
     return parser
@@ -267,7 +268,7 @@ class plot_class:
 
     def plot_coherence(self):
         '''
-            Make coherence plot + histogram. Also generates average coherence raster.
+            Make coherence plot + histogram.
         '''
 
         # Import functions
@@ -275,7 +276,6 @@ class plot_class:
         
         ax=self.plt.figure().add_subplot(111)
         coh_hist = []
-        outname=os.path.join(self.workdir,'coherence_average.rdr')
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
         
         # Iterate through all IFGs
@@ -297,20 +297,6 @@ class plot_class:
             
             # Plot average coherence per IFG
             ax.plot([master, slave], [coh_val]*2, 'b')
-            
-            # Iteratively update average coherence file
-            # If looping through first coherence file, nothing to sum so just save to file
-            if os.path.exists(outname):
-                coh_file=gdal.Open(outname,gdal.GA_Update)
-                coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file_arr+coh_file.ReadAsArray())
-            else:
-                renderVRT(outname, coh_file_arr, geotrans=coh_file.GetGeoTransform(), gdal_fmt=coh_file_arr.dtype.name, proj=coh_file.GetProjection(), nodata=coh_file.GetRasterBand(1).GetNoDataValue())
-            coh_file = coh_val = coh_file_arr = None
-
-        # Take average of coherence sum
-        coh_file=gdal.Open(outname,gdal.GA_Update)
-        coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file.ReadAsArray()/len(self.product_dict[0]))
-        coh_file = None
 
         ### Make average coherence plot
         ax.set_ylabel('Avg. coherence')
@@ -339,6 +325,42 @@ class plot_class:
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram.eps'))
         self.plt.close()
+            
+        return
+
+    def plot_avgcoherence(self):
+        '''
+            Generate average coherence raster.
+        '''
+
+        # Import functions
+        from vrtmanager import renderVRT
+        
+        outname=os.path.join(self.workdir,'coherence_average.rdr')
+        bounds=open_shapefile(self.bbox_file, 0, 0).bounds
+        
+        # Iterate through all IFGs
+        for i,j in enumerate(self.product_dict[0]):
+            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
+            coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
+            
+            # Apply mask (if specified).
+            if self.mask is not None:
+                coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
+            
+            # Iteratively update average coherence file
+            # If looping through first coherence file, nothing to sum so just save to file
+            if os.path.exists(outname):
+                coh_file=gdal.Open(outname,gdal.GA_Update)
+                coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file_arr+coh_file.ReadAsArray())
+            else:
+                renderVRT(outname, coh_file_arr, geotrans=coh_file.GetGeoTransform(), gdal_fmt=coh_file_arr.dtype.name, proj=coh_file.GetProjection(), nodata=coh_file.GetRasterBand(1).GetNoDataValue())
+            coh_file = coh_val = coh_file_arr = None
+
+        # Take average of coherence sum
+        coh_file=gdal.Open(outname,gdal.GA_Update)
+        coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file.ReadAsArray()/len(self.product_dict[0]))
+        coh_file = None
             
         return
 
@@ -441,9 +463,10 @@ if __name__ == '__main__':
         inps.plotbperp=True
         inps.plotcoh=True
         inps.plotbperpcoh=True
+        inps.makeavgoh=True
 
 
-    if inps.plottracks or inps.plotcoh:
+    if inps.plottracks or inps.plotcoh or inps.makeavgoh:
         # Import functions
         from extractProduct import merged_productbbox
         print('\n'+'\n'+"########################################")
@@ -482,6 +505,14 @@ if __name__ == '__main__':
         print("class 'plot_class': Make coherence plot + histogram. Also generate raster of average coherence."+'\n')
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plot_coherence()
+
+
+    # Generate average land coherence raster
+    if inps.makeavgoh:
+        print('\n'+'\n'+"########################################")
+        print("class 'plot_class': Generate raster of average coherence."+'\n')
+        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
+        make_plot.plot_avgcoherence()
 
 
     # Make pbaseline/coherence combo plot
