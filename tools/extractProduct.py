@@ -116,7 +116,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         Longitude=Longitude.transpose()
     except:
         raise Exception('Failed to open user DEM')
-        sys.exit(1)
 
     return demfilename, demfile, Latitude, Longitude
 
@@ -160,6 +159,9 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
         # Generate footprint for the common intersection of all products
         else:
             prods_bbox=prods_bbox.intersection(total_bbox)
+        # Check if there is any common overlap
+        if prods_bbox.bounds==():
+            raise Exception('No common overlap, footprint cannot be generated. Last scene checked: %s'%(scene['productBoundingBox'][0]))
         save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
 
     # If bbox specified, intersect with common track intersection/union
@@ -215,16 +217,13 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in j):
                 if dem is None:
-                    raise Exception('No DEM input specified.')
-                    raise Exception('Cannot extract 3D imaging geometry layers without DEM to intersect with.')
-                    sys.exit(1)
+                    raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
                 
                 # Check if height layers are consistent, and if not exit with error
                 if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j]))==1:
                     gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open(j[0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
                 else:
                     raise Exception('Inconsistent heights for metadata layer(s) ', j, ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j])
-                    sys.exit(1)
                 
                 # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask)
