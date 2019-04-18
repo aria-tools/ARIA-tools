@@ -224,7 +224,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             if abs(new_scene_end-scene_end)<=timedelta(minutes=100) and abs(slave-master)<=timedelta(days=1):
                 # Don't export product if it is already tracked as a rejected pair
                 if j[0]['pair_name'] in track_rejected_pairs or self.products[i+1][0]['pair_name'] in track_rejected_pairs:
-                    print("Warning! Gap for pair %s"%(j[0]['pair_name']))
                     track_rejected_pairs.extend((j[0]['pair_name'],self.products[i+1][0]['pair_name']))
                 
                 # Only pass scene if it temporally overlaps with reference scene
@@ -257,8 +256,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs were successfully selected
             raise Exception('No valid pairs meet criteria due to gaps in each and/or invalid input, nothing to export.')
-            sys.exit(1)
-
         if len(track_rejected_pairs)>0:
             print("%d out of %d input files rejected since corresponding stitched IFG would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
             # Provide report of which files were kept vs. which were not.
@@ -282,7 +279,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Check if any pairs meet criteria
         if self.products==[]:
             raise Exception('No valid pairs meet criteria, nothing to export.')
-            sys.exit(1)
         if len(self.products)!=len(self.files):
             print("%d out of %d input files rejected for not meeting user's bbox spatial criteria"%(len(self.files)-len(self.products),len(self.files)))
             # Provide report of which files were kept vs. which weren't
