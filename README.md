@@ -30,7 +30,7 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 
 ------
 
-## 1. Download
+## Download
 
 To download the ARIA-tools repository:
 ```
@@ -39,7 +39,7 @@ git clone https://github.com/dbekaert/ARIA-tools.git
 
 ------
 
-## 2. Software Dependencies
+## Software Dependencies
 Below we provide guidelines for Linux and Max users on how to build the required dependencies from source as not all packages are yet availble through third-party package managers. In future we will expand this section to rely on anaconda and macports for installation.
 
 ### Packages:
@@ -61,7 +61,7 @@ Below we provide guidelines for Linux and Max users on how to build the required
 
 
 ------
-## 3. Installation
+## Installation
 
 The ARIA-tools package can be installed by adding the tools folder on your PATH and PYTHONPATH.
 This can be done by editing your private module or your favorite start-up shell.
@@ -79,22 +79,22 @@ set path = ('/my/tools' $path)
 ```
 
 ------
-## 4. Running ARIA-tools
+## Running ARIA-tools
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
-### 4.1. Manipulating GUNW Products
+### Manipulating GUNW Products
 GUNW product can be manipulated (cropped, stitched, extracted) using the *extractProduct.py* program. 
 
-### 4.2. Baseline and quality control plots for GUNW Products
+### Baseline and quality control plots for GUNW Products
 Quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *productPlot.py* program. 
 
-### 4.3 Time-series set-up of GUNW Products
+### Time-series set-up of GUNW Products
 Time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *TS_setup.py* program.
 
 
 ------
-## 5. Documentation
+## Documentation
 
 See the ARIA-tools-docs repo for all documentation:
 + [Jupyter Notebook Tutorials](https://github.com/dbekaert/ARIA-tools-docs/tree/master/Notebooks.md)
@@ -102,11 +102,11 @@ See the ARIA-tools-docs repo for all documentation:
 
 
 ------
-## 6. Citation
+## Citation
 D. Bekaert, M. Karim, L. Justin, H. Hua, P. Agram, S. Owen, G. Manipon, N. Malarout, M. Lucas, G. Sacco, L. Pan, S. Sangha, and ARIA team (2019), *Development and Dissemination of Standardized Geodetic Products by the Advanced Rapid Imaging and Analysis (ARIA) Center for Natural Hazards*, The International Union of Geodesy and Geophysics (IUGG), Montreal
 
 ------
-## 7. Contributors    
+## Contributors    
 
 * David Bekaert
 * Simran Sangha
