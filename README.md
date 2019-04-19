@@ -16,8 +16,9 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 
 1. [Download](#download)
 2. [Software Dependencies](#software-dependencies)
-   - [Installing dependencies with Anaconda](#installing-dependencies-with-anaconda)
-   - [Installing dependencies with Macports](#installing-dependencies-with-macports)
+   - [Installing dependencies on linux with Anaconda](#installing-dependencies-on-linux-with-anaconda)
+   - [Installing dependencies on mac with Macports](#installing-dependencies-on-mac-with-macports)
+   - [Installing dependencies on mac with Anaconda](#installing-dependencies-on-mac-with-anaconda)   
 3. [Installation](#installation)
 4. [Running ARIA-tools](#running-aria-tools)
    - [Manipulating GUNW Products](#manipulating-gunw-products)
@@ -56,9 +57,9 @@ Below we provide guidelines for Linux and Max users on how to build the required
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 ```
 
-### [Installing dependencies with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-### [Installing dependencies with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
-
+### [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+### [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
+### [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
 
 ------
 ## Installation
