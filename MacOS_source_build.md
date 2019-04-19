@@ -11,7 +11,7 @@ The following instructions are tested using python 3.6.8.
 sudo port -N install autoconf automake libtool
 sudo port -N install python3X py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely
 sudo port select python python36
-sudo port -N install netcdf hdf5 pkgconfi
+sudo port -N install netcdf hdf5 pkgconfig
 ```
 Place macports install directories (/opt/local/...) ahead of system directories (/usr/...) so that compilers find the right libraries.
 ```
