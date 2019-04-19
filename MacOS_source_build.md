@@ -1,15 +1,17 @@
 ## MacOSx
 Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines. For **Linux** see the respective installation instructions. 
 
-** Note this is untested on a clean install as of 4/17/2019, but will be conducted shortly. **
-
 ### 1. MacPorts
 First install **Macports** following the instructions at https://www.macports.org/.
 
 Use the **ports** package manager to install python 3.X.X and associated packages, and compiler tools that are needed for PROJ 4 installation and ARIA-tools.
+The following instructions are tested using python 3.6.8.
+
 ```
-sudo port install py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely
-sudo port install autoconf automake libtool numpy hdf5 netcdf4 
+sudo port -N install autoconf automake libtool
+sudo port -N install python3X py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely
+sudo port select python python36
+sudo port -N install netcdf hdf5 pkgconfi
 ```
 Place macports install directories (/opt/local/...) ahead of system directories (/usr/...) so that compilers find the right libraries.
 ```
@@ -28,7 +30,7 @@ Build the PROJ package.
 cd /my/proj
 mkdir install
 ./autogen.sh
-./configure --prefix=./install --disable-static
+./configure --prefix=./install 
 make -j4
 make install
 ```
@@ -46,14 +48,16 @@ git clone https://github.com/OSGeo/gdal
 Build the GDAL package with the python bindings:
 ```
 cd /my/gdal/gdal/
+./configure --with-proj=/my/proj/install --prefix=/my/gdal/install 
+make -j4 
+make install
+```
+if configure fails, the following options may help:
+```
 ./configure --without-libtool --with-proj=/my/proj/install --prefix=/my/gdal/install \
             --with-libjson-c=internal --with-local=/opt/local --with-python=yes \
             --with-kea=no
-
-make -j4
-make install
 ```
-
 
 ### 4. Setting of environment variables:
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
