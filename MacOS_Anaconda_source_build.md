@@ -2,8 +2,17 @@
 Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines. For **Linux** see the respective installation instructions.
 
 ### 0. XCode and Command Line Tools
-Make sure that you have XCode and Command Line Tools installed.
+Make sure that you have XCode and Command Line Tools installed. XCode 10.X versions do not install the header files under /usr/include but we need that directory for the installation.
+For that purpose, after installing XCode and Command Line Tools run:
+```
+open /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg
+```
+this command will install some header files under /usr/include
 
+Since some required header files are missing we will need to point our environment to C++ header files under Xcode
+```
+setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
+```
 ### 1. Anaconda3
 First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
 
@@ -42,6 +51,11 @@ Clone the GDAL repository from github with a version of at least 2.5 (i.e. main 
 git clone https://github.com/OSGeo/gdal
 ```
 
+Please make sure you followed the instructions in section 0
+```
+setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
+```
+
 Build the GDAL package with the python bindings:
 ```
 cd gdal/gdal/
@@ -61,6 +75,7 @@ vi ~/.cshrc
 
 Add the following and update ***my*** to the location where you installed the packages.
 ```
+setenv DYLD_LIBRARY_PATH /my/python/directory/lib:/my/proj/install/directory/lib:/usr/lib
 setenv PROJ_LIB /my/proj/install/directory/share/proj
 setenv PYTHONPATH $PYTHONPATH:/my/gdal/install/directory/lib/python3.X/site-packages
 set path = ('/my/gdal/install/directory/bin' $path)
