@@ -25,27 +25,16 @@ Next execute the installer script and follow the instructions as provided by the
 The miniconda installation does not contain all the python module we need.
 Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 ```
-conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely --yes
+conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack proj4=6.0 --yes
 ```
 
-### 2. PROJ 4 SETUP
-Clone the **PROJ 4** repository from github and install at least the version 6 release (i.e. main branch).
+Setup your shell environment to include python libraries before starting GDAL installation.
+An example of C-shell would look like below
 ```
-git clone https://github.com/OSGeo/proj.4 proj
-```
-
-Build the PROJ package.
-```
-cd proj
-./autogen.sh
-setenv CXXFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
-setenv CFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
-./configure --prefix=/my/proj/install/directory --disable-static
-make -j4
-make install
+setenv LD_LIBRARY_PATH /my/python/directory/lib
 ```
 
-### 3. GDAL SETUP
+### 2. GDAL SETUP
 Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
@@ -59,7 +48,7 @@ setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
 Build the GDAL package with the python bindings:
 ```
 cd gdal/gdal/
-./configure --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python
+./configure --with-proj=/my/python/install/directory --prefix=/my/gdal/install/directory --with-python
 make -j4
 make install
 ```
@@ -75,8 +64,7 @@ vi ~/.cshrc
 
 Add the following and update ***my*** to the location where you installed the packages.
 ```
-setenv DYLD_LIBRARY_PATH /my/python/directory/lib:/my/proj/install/directory/lib:/usr/lib
-setenv PROJ_LIB /my/proj/install/directory/share/proj
-setenv PYTHONPATH $PYTHONPATH:/my/gdal/install/directory/lib/python3.X/site-packages
+setenv LD_LIBRARY_PATH /my/python/directory/lib
+setenv GDAL_DATA /my/gdal/install/directory/share/gdal
 set path = ('/my/gdal/install/directory/bin' $path)
 ```
