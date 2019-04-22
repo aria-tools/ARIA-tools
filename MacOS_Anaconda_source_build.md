@@ -66,5 +66,6 @@ Add the following and update ***my*** to the location where you installed the pa
 ```
 setenv LD_LIBRARY_PATH /my/python/directory/lib
 setenv GDAL_DATA /my/gdal/install/directory/share/gdal
+setenv PYTHONPATH /my/gdal/install/directory/lib/python3.7/site-packages
 set path = ('/my/gdal/install/directory/bin' $path)
 ```
