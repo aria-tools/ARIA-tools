@@ -1,7 +1,21 @@
-## MacOSx
-Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines. For **Linux** see the respective installation instructions. 
+# MacOSx
+Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Macports**. For a variant to this using Anaconda click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md). 
 
-### 1. MacPorts
+
+For **Linux** installation instructions see [here](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md). 
+
+------
+## Contents
+
+1. [MacPorts](#macports)
+2. [PROJ 4 SETUP](#proj-4-setup) 
+3. [GDAL SETUP](#gdal-setup)
+4. [Setting of environment variables](#setting-of-environment-variables)
+5. [Return to back to ARIA-tools-docs page](https://github.com/dbekaert/ARIA-tools)
+
+
+------
+## MacPorts
 First install **Macports** following the instructions at https://www.macports.org/.
 
 Use the **ports** package manager to install python 3.X.X and associated packages, and compiler tools that are needed for PROJ 4 installation and ARIA-tools. 
@@ -18,7 +32,8 @@ Place macports install directories (/opt/local/...) ahead of system directories 
 export PATH="/opt/local/bin:/opt/local/lib:/opt/local/sbin:$(getconf PATH)"
 ```
 
-### 2. PROJ 4 SETUP
+------
+## PROJ 4 SETUP
 ```
 cd /my/proj
 ```
@@ -39,7 +54,8 @@ make -j4
 make install
 ```
 
-### 3. GDAL SETUP
+------
+## GDAL SETUP
 ```
 cd /my/gdal
 mkdir -p install
@@ -50,7 +66,7 @@ Clone the GDAL repository from github with a version of at least 2.5 (i.e. main 
 git clone https://github.com/OSGeo/gdal
 ```
 
-Build the GDAL package with the python bindings. Note python bindings are build for the **python** executable. If you are having both python2 and 3 installed make sure you are installing it for python3.
+Build the GDAL package with the python bindings and add them to the location of the python library. Note python bindings are built for the **python** executable. If you are having both python2 and 3 installed make sure you are installing it for python3. We have experienced conflicts it a pre-existing GDAL version was already installed with Macports. 
 ```
 cd /my/gdal/gdal/
 ./configure --with-proj=/my/proj/install --prefix=/my/gdal/install 
@@ -64,7 +80,8 @@ if configure fails, the following options may help:
             --with-kea=no
 ```
 
-### 4. Setting of environment variables:
+------
+## Setting of environment variables
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
 
 For example for bash do:
@@ -77,3 +94,6 @@ Add the following and update ***my*** to the location where you installed the pa
 export PROJ_LIB=/my/proj/install/share/proj
 export PATH="/my/gdal/install/bin:/opt/local/bin:/opt/local/lib:/opt/local/sbin:$(getconf PATH)"
 ```
+
+------
+## [Return to back to ARIA-tools-docs page](https://github.com/dbekaert/ARIA-tools)
