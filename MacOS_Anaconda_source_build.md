@@ -1,7 +1,23 @@
-## MacOSX
-Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines. For **Linux** see the respective installation instructions.
+# MacOSX
+Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Anaconda**.  For a variant to this using Macports click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md).
 
-### 0. XCode and Command Line Tools
+
+For **Linux** installation instructions click [here](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md).
+
+
+
+------
+## Contents
+
+1. [XCode and Command Line Tools](#xcode-and-command-line-tools)
+2. [Anaconda3 and PROJ 4 SETUP](#anaconda3-and-proj-4-setup) 
+3. [GDAL SETUP](#gdal-setup)
+4. [Setting of environment variables](#setting-of-environment-variables)
+5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+
+
+------
+## XCode and Command Line Tools
 Make sure that you have XCode and Command Line Tools installed. XCode 10.X versions do not install the header files under /usr/include but we need that directory for the installation.
 For that purpose, after installing XCode and Command Line Tools run:
 ```
@@ -13,7 +29,9 @@ Since some required header files are missing we will need to point our environme
 ```
 setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
 ```
-### 1. Anaconda3
+
+------
+## Anaconda3 and PROJ 4 setup
 First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
 
 Below we use a clean installation of Miniconda3. First we will download Miniconda3:
@@ -28,13 +46,8 @@ Use the **conda** excecutable to install the compiler tools that are needed for 
 conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack proj4=6.0 --yes
 ```
 
-Setup your shell environment to include python libraries before starting GDAL installation.
-An example of C-shell would look like below
-```
-setenv LD_LIBRARY_PATH /my/python/directory/lib
-```
-
-### 2. GDAL SETUP
+------
+## GDAL SETUP
 Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
@@ -53,8 +66,8 @@ make -j4
 make install
 ```
 
-
-### 4. Setting of environment variables:
+------
+## Setting of environment variables
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
 
 For example for csh do:
@@ -69,3 +82,7 @@ setenv GDAL_DATA /my/gdal/install/directory/share/gdal
 setenv PYTHONPATH /my/gdal/install/directory/lib/python3.7/site-packages
 set path = ('/my/gdal/install/directory/bin' $path)
 ```
+
+
+## [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+
