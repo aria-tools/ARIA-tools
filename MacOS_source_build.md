@@ -23,9 +23,8 @@ The following instructions are tested using python 3.6.8. Note that below we def
 
 ```
 sudo port -N install autoconf automake libtool json-c
-sudo port -N install python3X py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely
+sudo port -N install python3X py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely py3X-netcdf4 py3X-pkgconfig
 sudo port select python python3X
-sudo port -N install netcdf hdf5 pkgconfig
 ```
 Place macports install directories (/opt/local/...) ahead of system directories (/usr/...) so that compilers find the right libraries.
 ```
