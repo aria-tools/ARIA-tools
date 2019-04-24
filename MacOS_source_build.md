@@ -11,7 +11,7 @@ For **Linux** installation instructions see [here](https://github.com/dbekaert/A
 2. [PROJ 4 SETUP](#proj-4-setup) 
 3. [GDAL SETUP](#gdal-setup)
 4. [Setting of environment variables](#setting-of-environment-variables)
-5. [Return to back to ARIA-tools-docs page](https://github.com/dbekaert/ARIA-tools)
+5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 
 ------
@@ -96,4 +96,4 @@ export PATH="/my/gdal/install/bin:/opt/local/bin:/opt/local/lib:/opt/local/sbin:
 ```
 
 ------
-## [Return to back to ARIA-tools-docs page](https://github.com/dbekaert/ARIA-tools)
+## [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
