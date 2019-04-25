@@ -22,7 +22,7 @@ Use the **ports** package manager to install python 3.X.X and associated package
 The following instructions are tested using python 3.6.8. Note that below we default the python executable to python3.
 
 ```
-sudo port -N install autoconf automake libtool json-c
+sudo port -N install autoconf automake libtool json-c netcdf
 sudo port -N install python3X py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely py3X-netcdf4 py3X-pkgconfig
 sudo port select python python3X
 ```
