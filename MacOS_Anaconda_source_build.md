@@ -86,6 +86,7 @@ cd ../swig/python/
 setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
 python setup.py build
 
+cd ../../
 make install
 ```
 
