@@ -25,10 +25,6 @@ open /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10
 ```
 this command will install some header files under /usr/include
 
-Since some required header files are missing we will need to point our environment to C++ header files under Xcode
-```
-setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
-```
 
 ------
 ## Anaconda3 and PROJ 4 setup
@@ -43,7 +39,30 @@ Next execute the installer script and follow the instructions as provided by the
 The miniconda installation does not contain all the python module we need.
 Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 ```
-conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack proj4=6.0 --yes
+conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
+```
+
+### 2. PROJ 4 SETUP
+Clone the **PROJ 4** repository from github and install at least the version 6 release (i.e. main branch).
+```
+git clone https://github.com/OSGeo/proj.4 proj
+```
+
+Build the PROJ package.
+```
+cd proj
+./autogen.sh
+setenv CXXFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
+setenv CFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
+./configure --prefix=/my/proj/install/directory --disable-static
+make -j4
+make install
+
+cd /my/proj/install/directory/lib
+rm libproj.dylib
+mv libproj.15.dylib libinternalproj.15.dylib
+ln -s libinternalproj.15.dylib libinternalproj.dylib
+
 ```
 
 ------
@@ -53,16 +72,20 @@ Clone the GDAL repository from github with a version of at least 2.5 (i.e. main 
 git clone https://github.com/OSGeo/gdal
 ```
 
-Please make sure you followed the instructions in section 0
-```
-setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
-```
-
-Build the GDAL package with the python bindings:
+Build the GDAL package with
 ```
 cd gdal/gdal/
-./configure --with-proj=/my/python/install/directory --prefix=/my/gdal/install/directory --with-python
+./autogen.sh
+./configure --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-local=/my/python/install/directory
 make -j4
+
+cd apps/
+make test_ogrsf
+
+cd ../swig/python/
+setenv CPATH /Library/Developer/CommandLineTools/usr/include/c++/v1
+python setup.py build
+
 make install
 ```
 
@@ -77,7 +100,7 @@ vi ~/.cshrc
 
 Add the following and update ***my*** to the location where you installed the packages.
 ```
-setenv LD_LIBRARY_PATH /my/python/directory/lib
+setenv LD_LIBRARY_PATH /my/python/directory/lib:/my/gdal/install/directory/lib
 setenv GDAL_DATA /my/gdal/install/directory/share/gdal
 setenv PYTHONPATH /my/gdal/install/directory/lib/python3.7/site-packages
 set path = ('/my/gdal/install/directory/bin' $path)
