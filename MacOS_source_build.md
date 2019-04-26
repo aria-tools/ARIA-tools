@@ -6,10 +6,10 @@ For **Linux** installation instructions see [here](https://github.com/dbekaert/A
 
 ------
 ## Contents
-
+Make sure to run these in the specified order!
 1. [MacPorts](#macports)
 2. [GDAL COMMANDLINE SETUP](#gdal-commandline-setup)
-3. [GDAL PYTHON bindings](#gdal-commandline-bindings)
+3. [GDAL PYTHON bindings](#gdal-python-bindings)
 4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 
@@ -76,7 +76,8 @@ export PATH="/my/gdal/install/bin:$(getconf PATH)"
 
 
 ------
-3. [GDAL PYTHON bindings](#gdal-commandline-bindings)
+## GDAL PYTHON bindings
+
 Make sure your *LD_LIBRARY_PATH*, *DYLD_LIBRARY_PATH* and *PATH*  are pointing to your GDAL installation.
 ```
 echo $LD_LIBRARY_PATH
