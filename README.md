@@ -75,7 +75,7 @@ vi ~/.cshrc
 
 Add the following and update *my* to the location where you cloned ARIA-tools:
 ```
-setenv PYTHONPATH $PYTHONPATH:/my/tools
+setenv PYTHONPATH $PYTHONPATH:/my/tools/python
 set path = ('/my/tools/python' $path)
 ```
 
