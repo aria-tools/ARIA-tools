@@ -47,7 +47,7 @@ We will first build the GDAL package and command line tools. Note it is better n
 
 ```
 cd /my/gdal/gdal/
-./configure --with-proj=/my/proj/install --prefix=/my/gdal/install --with-proj=/opt/local/lib/proj6 --with-sqlite3  --with-libjson-c=internal
+./configure --prefix=/my/gdal/install --with-proj=/opt/local/lib/proj6 --with-sqlite3  --with-libjson-c=internal
 ```
 if configure fails, you might want to try and specify additional options, such as:
 ```
@@ -92,7 +92,7 @@ cd swig/python
 Edit the **setup.cfg** file such that *gdal-config* is pointing to your install folder of GDAL.
 ```
 vim setup.cfg
-# update gdal_config=/my/gdal/install/bin/gdal-config
+#update gdal_config=/my/gdal/install/bin/gdal-config
 ```
 
 
@@ -114,17 +114,15 @@ Once done you can execute the commands using:
 chmod +x linkcmds
 sudo ./linkcmds
 ```
-
-Now that the binding have been build, we will install them at the same location as out GDAL command line tools using:
-```
-mkdir /my/gdal/install/lib/python
-python setup.py install --home=/my/gdal/install/
-```
-
-
-To complete the installation add the python bindings to your *PYTHONPATH* and source the environment. E.g for *bash*:
+To set the location the installation for install add the python bindings to your *PYTHONPATH* and source the environment. E.g for *bash*:
 ```
 export PYTHONPATH="/my/gdal/install/lib/python:${PYTHONPATH}"
+mkdir /my/gdal/install/lib/python
+
+```
+Now we will install them at the same location as out GDAL command line tools using:
+```
+python setup.py install --home=/my/gdal/install/
 ```
 
 To test your GDAL python bindings are correctly working with **NumPy** try:
