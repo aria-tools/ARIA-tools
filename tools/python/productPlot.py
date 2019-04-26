@@ -274,11 +274,13 @@ class plot_class:
         # Import functions
         from vrtmanager import renderVRT
         
-        ax=self.plt.figure().add_subplot(111)
+        fig, ax = self.plt.subplots()
+        # ax=self.plt.figure().add_subplot(111)
         coh_hist = []
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
         
         # Iterate through all IFGs
+        masters = []; slaves = []
         for i,j in enumerate(self.product_dict[0]):
             coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
@@ -292,11 +294,21 @@ class plot_class:
             
             # Record average coherence val for histogram
             coh_hist.append(coh_val)
-            slave=self.pd.to_datetime(self.product_dict[1][i][0][:8])
-            master=self.pd.to_datetime(self.product_dict[1][i][0][9:])
+            slaves.append(self.pd.to_datetime(self.product_dict[1][i][0][:8]))
+            masters.append(self.pd.to_datetime(self.product_dict[1][i][0][9:]))
             
-            # Plot average coherence per IFG
-            ax.plot([master, slave], [coh_val]*2, 'b')
+        # Plot average coherence per IFG
+        cols, mapper = self._create_colors(coh_hist)
+        ax.set_prop_cycle(color=cols)
+        # ax.plot([master, slave], [coh_val]*2, 'b')
+        lines       = ax.plot([masters, slaves],
+                          [coh_hist]*2)
+        scatter     = ax.scatter(slaves, coh_hist, c='k', zorder=100)
+        master      = ax.scatter(masters, coh_hist, c='k', zorder=100)
+
+        cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
+        cbar        = fig.colorbar(mapper, cbar_ax, spacing='proportional')
+        # cbar.set_label(lbl, rotation=90, labelpad=15)
 
         ### Make average coherence plot
         ax.set_ylabel('Avg. coherence')
@@ -309,7 +321,7 @@ class plot_class:
         ax.set_xlim(min(xticks),max(xticks))
         self.plt.gca().xaxis.set_major_formatter(self.mdates.DateFormatter('%Y%m%d'))
         self.plt.xticks(xticks, rotation=90)
-        self.plt.tight_layout()
+        # self.plt.tight_layout()
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
@@ -440,6 +452,16 @@ class plot_class:
             
         return
 
+    def _create_colors(self, vals, cm='coolwarm'):
+        """ create colors from a set of values """
+        if not isinstance(vals, np.ndarray):
+            vals = np.array(vals)
+        norm        = self.mpl.colors.Normalize(vmin=vals.min(), vmax=vals.max(), clip=True)
+        cmap        = self.plt.cm.get_cmap('coolwarm')
+        mapper      = self.plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+        mapper._A   = [] # necessary dummy array for cbar
+        colors      =  [mapper.to_rgba(v) for v in vals]
+        return colors, mapper
 
 
 if __name__ == '__main__':
