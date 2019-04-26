@@ -6,12 +6,11 @@ For **Linux** installation instructions see [here](https://github.com/dbekaert/A
 
 ------
 ## Contents
-
+Make sure to run these in the specified order!
 1. [MacPorts](#macports)
-2. [PROJ 4 SETUP](#proj-4-setup) 
-3. [GDAL SETUP](#gdal-setup)
-4. [Setting of environment variables](#setting-of-environment-variables)
-5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+2. [GDAL COMMANDLINE SETUP](#gdal-commandline-setup)
+3. [GDAL PYTHON bindings](#gdal-python-bindings)
+4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 
 ------
@@ -22,42 +21,20 @@ Use the **ports** package manager to install python 3.X.X and associated package
 The following instructions are tested using python 3.6.8. Note that below we default the python executable to python3.
 
 ```
-sudo port -N install autoconf automake libtool json-c netcdf
+sudo port -N install autoconf automake libtool json-c netcdf proj6
 sudo port -N install python3X py3X-scipy py3X-matplotlib py3X-pandas py3X-shapely py3X-netcdf4 py3X-pkgconfig
 sudo port select python python3X
 ```
-Place macports install directories (/opt/local/...) ahead of system directories (/usr/...) so that compilers find the right libraries.
+Place macports install directories (/opt/local/...) ahead of system directories (/usr/...) so that compilers find the right libraries. e.g. for *bash*:
 ```
 export PATH="/opt/local/bin:/opt/local/lib:/opt/local/sbin:$(getconf PATH)"
 ```
 
 ------
-## PROJ 4 SETUP
-```
-cd /my/proj
-```
-
-Clone the **PROJ 4** repository from github and install at least the version 6 release (i.e. main branch).
-
-```
-git clone https://github.com/OSGeo/proj.4 proj
-```
-
-Build the PROJ package.
-```
-mkdir install
-cd proj
-./autogen.sh
-./configure --prefix=/my/proj/install 
-make -j4
-make install
-```
-
-------
-## GDAL SETUP
+## GDAL COMMANDLINE SETUP
 ```
 cd /my/gdal
-mkdir -p install
+mkdir install
 ```
 
 Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
@@ -65,33 +42,94 @@ Clone the GDAL repository from github with a version of at least 2.5 (i.e. main 
 git clone https://github.com/OSGeo/gdal
 ```
 
-Build the GDAL package with the python bindings and add them to the location of the python library. Note python bindings are built for the **python** executable. If you are having both python2 and 3 installed make sure you are installing it for python3. We have experienced conflicts it a pre-existing GDAL version was already installed with Macports. 
+
+We will first build the GDAL package and command line tools. Note it is better not to build the python tools at the same time given library and compiler conflicts with NumPy. 
+
 ```
 cd /my/gdal/gdal/
-./configure --with-proj=/my/proj/install --prefix=/my/gdal/install 
+./configure --prefix=/my/gdal/install --with-proj=/opt/local/lib/proj6 --with-sqlite3  --with-libjson-c=internal
+```
+if configure fails, you might want to try and specify additional options, such as:
+```
+--with-kea=no
+```
+Next make and install GDAL:
+```
 make -j4 
 make install
 ```
-if configure fails, the following options may help:
+
+Next you can inspect if the following passes without errors:
 ```
-./configure --without-libtool --with-proj=/my/proj/install --prefix=/my/gdal/install \
-            --with-libjson-c=internal --with-local=/opt/local --with-python=yes \
-            --with-kea=no
+cd apps
+make test_ogrsf
+cd ..
 ```
+
+
+Before proceeding to the python bindings installation make sure your *LD_LIBRARY_PATH*, *DYLD_LIBRARY_PATH* and *PATH* in your shell to point to the new GDAL installation lib and bin folders. E.g for *bash*:
+```
+export LD_LIBRARY_PATH="/my/gdal/install/lib"
+export DYLD_LIBRARY_PATH="/my/gdal/install/lib"
+export PATH="/my/gdal/install/bin:$(getconf PATH)"
+```
+
 
 ------
-## Setting of environment variables
-Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
+## GDAL PYTHON bindings
 
-For example for bash do:
+Make sure your *LD_LIBRARY_PATH*, *DYLD_LIBRARY_PATH* and *PATH*  are pointing to your GDAL installation.
 ```
-vi ~/.bash_profile
+echo $LD_LIBRARY_PATH
+echo $DYLD_LIBRARY_PATH
+echo $PATH
 ```
 
-Add the following and update ***my*** to the location where you installed the packages.
+To install the python bindings:
 ```
-export PROJ_LIB=/my/proj/install/share/proj
-export PATH="/my/gdal/install/bin:/opt/local/bin:/opt/local/lib:/opt/local/sbin:$(getconf PATH)"
+cd swig/python
+```
+Edit the **setup.cfg** file such that *gdal-config* is pointing to your install folder of GDAL.
+```
+vim setup.cfg
+#update gdal_config=/my/gdal/install/bin/gdal-config
+```
+
+
+The GDAL python bindings are built here for the **python** executable. If you are having both python2 and 3 installed make sure you are installing it for python3. Here we assume python is an alias for python3 and specify the use of **gcc** and **g++**. Note the later should be the same as used for building **NumPy**. If the test provided below fail you could remove **gcc** and **g++** specification and try again.
+```
+CC=gcc CXX=g++ python setup.py build >& blog
+```
+Note if you re-run the build command make sure to delete the build folder.
+
+
+Next, we will extract the library build paths:
+```
+grep lgdal blog > linkcmds
+```
+Edit this file and ***remove all*** '-L/opt/local/lib' occurrences and 'blog:' occurrences at beginning of line.
+
+Once done you can execute the commands using:
+```
+chmod +x linkcmds
+sudo ./linkcmds
+```
+To set the location the installation for install add the python bindings to your *PYTHONPATH* and source the environment. E.g for *bash*:
+```
+export PYTHONPATH="/my/gdal/install/lib/python:${PYTHONPATH}"
+mkdir /my/gdal/install/lib/python
+```
+
+Now we will install them at the same location as out GDAL command line tools using:
+```
+python setup.py install --home=/my/gdal/install/
+```
+
+To test your GDAL python bindings are correctly working with **NumPy** try:
+```
+python
+> from osgeo import gdal_array
+> import gdalnumeric
 ```
 
 ------
