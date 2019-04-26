@@ -107,7 +107,7 @@ Next, we will extract the library build paths:
 ```
 grep lgdal blog > linkcmds
 ```
-Edit this file and ***remove all*** -L/opt/local/lib occurrences.
+Edit this file and ***remove all*** '-L/opt/local/lib' occurrences and 'blog:' occurrences at beginning of line.
 
 Once done you can execute the commands using:
 ```
@@ -118,8 +118,8 @@ To set the location the installation for install add the python bindings to your
 ```
 export PYTHONPATH="/my/gdal/install/lib/python:${PYTHONPATH}"
 mkdir /my/gdal/install/lib/python
-
 ```
+
 Now we will install them at the same location as out GDAL command line tools using:
 ```
 python setup.py install --home=/my/gdal/install/
