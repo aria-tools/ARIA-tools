@@ -384,7 +384,8 @@ class plot_class:
         # importing dependencies
         from matplotlib import cm
         
-        ax=self.plt.figure().add_subplot(111)
+        # ax=self.plt.figure().add_subplot(111)
+        fig, ax = self.plt.subplots()
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
@@ -412,9 +413,10 @@ class plot_class:
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
             ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=20, linestyle='None')
         
+        slaves = []; masters = []; coh_vals = []; y1 = []; y2 = []
         for i,j in enumerate(self.pairs): #Plot lines for each pair
-            slave=self.pd.to_datetime(j[:8])
-            master=self.pd.to_datetime(j[9:])
+            slaves.append(self.pd.to_datetime(j[:8]))
+            masters.append(self.pd.to_datetime(j[9:]))
             
             # Open coherence file
             coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
@@ -426,10 +428,17 @@ class plot_class:
             
             # Report mean
             coh_val=coh_file_arr.mean()
-
-            # Hot colorbar default
-            ax.plot([master, slave], [offset_dict[j[9:]], offset_dict[j[:8]]], c=cm.hot(coh_val))
+            coh_vals.append(coh_val)
+            y1.append(offset_dict[j[9:]])
+            y2.append(offset_dict[j[:8]])
             coh_file = coh_file_arr = coh_val = None
+
+        cols, mapper = self._create_colors(coh_vals, 'autumn') # don't use hot
+        ax.set_prop_cycle(color=cols)
+        lines       = ax.plot([masters, slaves], [y1, y2])
+        cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
+        cbar        = fig.colorbar(mapper, cbar_ax, spacing='proportional')
+
 
         ### Make baseline plot
         ax.set_ylabel('⊥ baseline (m)')
@@ -441,23 +450,23 @@ class plot_class:
         ax.set_xlim(min(xticks),max(xticks))
         self.plt.gca().xaxis.set_major_formatter(self.mdates.DateFormatter('%Y%m%d'))
         self.plt.xticks(xticks, rotation=90)
-        self.plt.tight_layout()
+        # self.plt.tight_layout()
 
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]])
-        self.plt.savefig(os.path.join(self.workdir,'perpBaseline+coherence_plot.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot.eps'))
         self.plt.close()
             
         return
 
-    def _create_colors(self, vals, cm='coolwarm'):
+    def _create_colors(self, vals, cm='autumn'):
         """ create colors from a set of values """
         if not isinstance(vals, np.ndarray):
             vals = np.array(vals)
         norm        = self.mpl.colors.Normalize(vmin=vals.min(), vmax=vals.max(), clip=True)
-        cmap        = self.plt.cm.get_cmap('coolwarm')
+        cmap        = self.plt.cm.get_cmap(cm)
         mapper      = self.plt.cm.ScalarMappable(norm=norm, cmap=cmap)
         mapper._A   = [] # necessary dummy array for cbar
         colors      =  [mapper.to_rgba(v) for v in vals]
@@ -488,7 +497,7 @@ if __name__ == '__main__':
         inps.makeavgoh=True
 
 
-    if inps.plottracks or inps.plotcoh or inps.makeavgoh:
+    if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
         # Import functions
         from extractProduct import merged_productbbox
         print('\n'+'\n'+"########################################")
