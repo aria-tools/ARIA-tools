@@ -112,7 +112,7 @@ Edit this file and ***remove all*** '-L/opt/local/lib' occurrences and 'blog:' o
 Once done you can execute the commands using:
 ```
 chmod +x linkcmds
-sudo ./linkcmds
+./linkcmds
 ```
 To set the location the installation for install add the python bindings to your *PYTHONPATH* and source the environment. E.g for *bash*:
 ```
