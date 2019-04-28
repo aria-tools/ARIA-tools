@@ -76,7 +76,7 @@ Build the GDAL package with
 ```
 cd gdal/gdal/
 ./autogen.sh
-./configure --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-local=/my/python/install/directory
+./configure --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-sqlite3  --with-libjson-c --with-geos --with-netcdf
 make -j4
 
 cd apps/
