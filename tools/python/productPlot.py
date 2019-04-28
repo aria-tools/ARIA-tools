@@ -25,9 +25,9 @@ def createParser():
         Make any of the following specified plot(s): ⊥ baseline + histogram, coherence + histogram + average coherence raster, ⊥ baseline & coherence combo, and track extents. The default is to generate all of these.
     '''
     import argparse
-    
+
     ##SS => Update the inputs and description of the function
-    
+
     parser = argparse.ArgumentParser(description='Get DEM')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
@@ -56,7 +56,7 @@ class plot_class:
     '''
     Class to generate standard plots for ARIA products.
     '''
-    
+
     # importing dependencies
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
@@ -68,7 +68,7 @@ class plot_class:
     from pandas.plotting import register_matplotlib_converters
     import warnings
     register_matplotlib_converters()
-    
+
     def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None):
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
@@ -76,7 +76,7 @@ class plot_class:
         self.workdir = workdir
         self.prods_TOTbbox = prods_TOTbbox
         self.mask = mask
-        
+
         # create workdir if it doesn't exist
         if not os.path.exists(self.workdir):
             os.mkdir(self.workdir)
@@ -87,10 +87,10 @@ class plot_class:
         '''
             Make dictionary of time differences between successive epochs.
         '''
-        
+
         # importing dependencies
         import time
-        
+
         dateList = []
         tbase = []
         # Get list of epochs
@@ -98,7 +98,7 @@ class plot_class:
             dates = os.path.basename(di).split('_')
             if not dates[1] in dateList: dateList.append(dates[1])
             if not dates[0] in dateList: dateList.append(dates[0])
-       
+
         dateList.sort()
         d1 = self.datetime(*time.strptime(dateList[0],"%Y%m%d")[0:5])
         for ni in range(len(dateList)):
@@ -107,7 +107,7 @@ class plot_class:
             tbase.append(diff.days)
         dateDict = {}
         for i in range(len(dateList)): dateDict[dateList[i]] = tbase[i]
-        
+
         return dateDict
 
     def __design_matrix__(self):
@@ -130,7 +130,7 @@ class plot_class:
         tbase = np.array(list(dateDict.values()))
         t = np.zeros((numIfgrams,2))
         baseline_hist = []
-        
+
         #Iterate through all IFGs
         for i, j in enumerate(self.product_dict[0]):
             date12 = self.product_dict[1][i][0]
@@ -157,7 +157,7 @@ class plot_class:
 
         A = A[:,1:]
         B = B[:,:-1]
-      
+
         ind=~np.isnan(L)
         return A[ind[:,0],:],B[ind[:,0],:],L[ind],baseline_hist
 
@@ -165,7 +165,7 @@ class plot_class:
         '''
             Make baseline plot + histogram of baselines.
         '''
-        
+
         ax=self.plt.figure().add_subplot(111)
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
@@ -178,10 +178,10 @@ class plot_class:
         dtbase = np.diff(list(dateDict.values()))
         dt = np.zeros((len(dtbase),1))
         zero = np.array([0.],np.float32)
-        
+
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
         residual = L-np.dot(B,dS)
-        
+
         RMSE = np.sqrt(np.sum(residual**2)/len(residual))
         if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
             print('Baseline plot warning!')
@@ -211,7 +211,7 @@ class plot_class:
         for label in ax.get_xticklabels():
                  label.set_ha('center')
                  label.set_rotation(20.)
-       
+
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
@@ -227,14 +227,14 @@ class plot_class:
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'bperp_histogram.eps'))
         self.plt.close()
-            
+
         return
 
     def plot_extents(self):
         '''
             Make plot of track extents vs bounding bbox/common track extent.
         '''
-        
+
         ax=self.plt.figure().add_subplot(111)
         #Iterate through all IFGs
         for i, j in enumerate(self.product_dict[0]):
@@ -244,12 +244,12 @@ class plot_class:
             # Plot IFG extent line connecting bounds in latitude
             ax.plot([self.product_dict[1][i][0]]*2,list(prods_bbox[1::2]), color='0.5', linestyle='--')
         user_bbox=open_shapefile(self.bbox_file, 0, 0).bounds
-        
+
         # Plot bounds of final track extent all IFGs will be cropped to
         ax.axhline(y=user_bbox[1], color='b', linestyle='--')
         ax.axhline(y=user_bbox[3], color='b', linestyle='--')
         prods_bbox=open_shapefile(self.prods_TOTbbox, 0, 0).bounds
-        
+
         # Plot bounds of common track extent
         if [user_bbox[1], user_bbox[3]]!=[prods_bbox[1], prods_bbox[3]]:
             ax.axhline(y=prods_bbox[1], color='r', linestyle=':')
@@ -274,30 +274,30 @@ class plot_class:
 
         # Import functions
         from vrtmanager import renderVRT
-        
+
         fig, ax = self.plt.subplots()
         # ax=self.plt.figure().add_subplot(111)
         coh_hist = []
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
-        
+
         # Iterate through all IFGs
         masters = []; slaves = []
         for i,j in enumerate(self.product_dict[0]):
             coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
-            
+
             # Apply mask (if specified).
             if self.mask is not None:
                 coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
-            
+
             # Report mean
             coh_val=coh_file_arr.mean()
-            
+
             # Record average coherence val for histogram
             coh_hist.append(coh_val)
             slaves.append(self.pd.to_datetime(self.product_dict[1][i][0][:8]))
             masters.append(self.pd.to_datetime(self.product_dict[1][i][0][9:]))
-            
+
         # Plot average coherence per IFG
         cols, mapper = self._create_colors_coh(coh_hist)
         ax.set_prop_cycle(color=cols)
@@ -339,7 +339,7 @@ class plot_class:
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram.eps'))
         self.plt.close()
-            
+
         return
 
     def plot_avgcoherence(self):
@@ -349,19 +349,18 @@ class plot_class:
 
         # Import functions
         from vrtmanager import renderVRT
-        
         outname=os.path.join(self.workdir,'avgcoherence')
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
-        
+
         # Iterate through all IFGs
         for i,j in enumerate(self.product_dict[0]):
             coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
-            
+
             # Apply mask (if specified).
             if self.mask is not None:
                 coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
-            
+
             # Iteratively update average coherence file
             # If looping through first coherence file, nothing to sum so just save to file
             if os.path.exists(outname):
@@ -375,18 +374,16 @@ class plot_class:
         coh_file=gdal.Open(outname,gdal.GA_Update)
         coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file.ReadAsArray()/len(self.product_dict[0]))
         coh_file = None
-            
+
         return
 
     def plotbperpcoh(self):
         '''
             Make pbaseline plot that is color-coded w.r.t. coherence.
         '''
-        
+
         # importing dependencies
         from matplotlib import cm
-        
-        # ax=self.plt.figure().add_subplot(111)
         fig, ax = self.plt.subplots()
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
         self.pairs=[i[0] for i in self.product_dict[1]]
@@ -414,12 +411,10 @@ class plot_class:
             offset_dict[list(dateDict.keys())[i]]=S[i]
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
             ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10)
-        
         slaves = []; masters = []; coh_vals = []; y1 = []; y2 = []
         for i,j in enumerate(self.pairs): #Plot lines for each pair
             slaves.append(self.pd.to_datetime(j[:8]))
             masters.append(self.pd.to_datetime(j[9:]))
-            
             # Open coherence file
             coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
@@ -428,7 +423,6 @@ class plot_class:
             if self.mask is not None:
                 coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
 
-            
             # Report mean
             coh_val=coh_file_arr.mean()
             coh_vals.append(coh_val)
@@ -462,7 +456,7 @@ class plot_class:
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]])
         self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot.eps'))
         self.plt.close()
-            
+
         return
 
     def _create_colors_coh(self, vals, cm='autumn'):
@@ -475,7 +469,7 @@ class plot_class:
         mapper._A   = [] # necessary dummy array for cbar
         colors      =  [mapper.to_rgba(v) for v in vals]
         return colors, mapper
-    
+
     def _adaptive_xticks(self, dates):
         """ Adjust the number of xticks based on the time interval """
         # dates = ['20150310', '20160410', '20160410', '20220511']
@@ -490,7 +484,6 @@ class plot_class:
             labels = self.pd.date_range(st, en, freq='MS')
         elif elap.days > 365*2.5 and elap.days <= 365*5.5: 
             labels = self.pd.date_range(st, en, freq='3MS')
-
         elif elap.days > 365*5.5 and elap.days <= 365*8.5:
             labels = self.pd.date_range(st, en, freq='6MS')
         else:
@@ -578,4 +571,3 @@ if __name__ == '__main__':
         print("class 'plot_class': Make pbaseline plot that is color-coded w.r.t. coherence."+'\n')
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'bPerpendicular'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plotbperpcoh()
-
