@@ -27,17 +27,18 @@ def createParser():
     '''
     
     import argparse
-    parser = argparse.ArgumentParser(description='Get DEM')
+    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stiching when needed.')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-l', '--layers', dest='layers', default='all', help='Specify layers to extract as a comma deliminated list bounded by single quotes. Default is to extract all. If "None" is specified, then nothing is extracted.')
+    parser.add_argument('-l', '--layers', dest='layers', default='None', required=True, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
+    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
@@ -183,7 +184,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./'):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT'):
     '''
         The function allows for exporting layer and 2D meta-data layers (at the product resolution).
         The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -197,8 +198,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
     # Loop through user expected layers
     for key in layers:
-        print([j for j in full_product_dict])
-        print("[j[key] for j in full_product_dict]")
         print([j[key] for j in full_product_dict])
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
         workdir=os.path.join(outDir,key)
@@ -211,7 +210,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
         # Iterate through all IFGs
         for i,j in enumerate(product_dict[0]):
-            outname=os.path.join(workdir, product_dict[1][i][0]+'.rdr')
+            outname=os.path.join(workdir, product_dict[1][i][0])
             gdal.BuildVRT(outname+'.vrt', j)
             
             # Extract/crop metadata layers
@@ -348,5 +347,5 @@ if __name__ == '__main__':
 
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat)
 
