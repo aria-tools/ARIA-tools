@@ -58,13 +58,15 @@ class plot_class:
     '''
     
     # importing dependencies
-    from datetime import datetime
+    from datetime import datetime, date
+    from dateutil.relativedelta import relativedelta
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
     import matplotlib as mpl
     import pandas as pd
     from pandas.plotting import register_matplotlib_converters
+    import warnings
     register_matplotlib_converters()
     
     def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None):
@@ -191,7 +193,7 @@ class plot_class:
         for i in range(len(list(dateDict.keys()))):
             offset_dict[list(dateDict.keys())[i]]=S[i]
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
-            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=20, linestyle='None')
+            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10) 
         
         # Plot lines for each pair
         for i in self.pairs:
@@ -201,21 +203,20 @@ class plot_class:
 
         # Make Baseline plot
         ax.set_ylabel('⊥ baseline (m)')
-        xticks=self.pd.to_datetime(list(set(dateDict.keys()))); xticks=[self.datetime(i.year, i.month, i.day) for i in xticks]
-        xticks.sort()
-        
-        # Only keep up to 10 evenly spaced ticks
-        xticks=list(np.array(xticks)[np.round(np.linspace(0, len(xticks)-1, 10)).astype(int)])
+        xticks, labels = self._adaptive_xticks(list(set(dateDict.keys())))
         ax.set_xlim(min(xticks),max(xticks))
-        self.plt.gca().xaxis.set_major_formatter(self.mdates.DateFormatter('%Y%m%d'))
-        self.plt.xticks(xticks, rotation=90)
-        self.plt.tight_layout()
-        
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(labels)
+        ax.xaxis.set_major_formatter(self.mpl.dates.DateFormatter('%Y-%m'))
+        for label in ax.get_xticklabels():
+                 label.set_ha('center')
+                 label.set_rotation(20.)
+       
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]])
-        self.plt.savefig(os.path.join(self.workdir,'perpBaseline_plot.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_plot.eps'))
         self.plt.close()
 
         # Make Baseline histogram
@@ -224,7 +225,7 @@ class plot_class:
         ax1.set_xlabel('⊥ baseline (m)', weight='bold')
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
-        self.plt.savefig(os.path.join(self.workdir,'perpBaseline_histogram.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_histogram.eps'))
         self.plt.close()
             
         return
@@ -298,15 +299,15 @@ class plot_class:
             masters.append(self.pd.to_datetime(self.product_dict[1][i][0][9:]))
             
         # Plot average coherence per IFG
-        cols, mapper = self._create_colors(coh_hist)
+        cols, mapper = self._create_colors_coh(coh_hist)
         ax.set_prop_cycle(color=cols)
-        # ax.plot([master, slave], [coh_val]*2, 'b')
         lines       = ax.plot([masters, slaves],
                           [coh_hist]*2)
         scatter     = ax.scatter(slaves, coh_hist, c='k', zorder=100)
         master      = ax.scatter(masters, coh_hist, c='k', zorder=100)
 
         cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
+        self.warnings.filterwarnings("ignore",category=UserWarning)
         cbar        = fig.colorbar(mapper, cbar_ax, spacing='proportional')
         # cbar.set_label(lbl, rotation=90, labelpad=15)
 
@@ -314,14 +315,15 @@ class plot_class:
         ax.set_ylabel('Avg. coherence')
         ax.set_ylim(0, 1)
         self.pairs=[i[0] for i in self.product_dict[1]]; xticks=self.__date_list__()
-        xticks=self.pd.to_datetime(list(set(xticks.keys()))); xticks=[self.datetime(i.year, i.month, i.day) for i in xticks]
-        xticks.sort()
-        # only keep up to 10 evenly spaced ticks
-        xticks=list(np.array(xticks)[np.round(np.linspace(0, len(xticks)-1, 10)).astype(int)])
+        xticks, labels = self._adaptive_xticks(list(set(xticks.keys())))
         ax.set_xlim(min(xticks),max(xticks))
-        self.plt.gca().xaxis.set_major_formatter(self.mdates.DateFormatter('%Y%m%d'))
-        self.plt.xticks(xticks, rotation=90)
-        # self.plt.tight_layout()
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(labels)
+        ax.xaxis.set_major_formatter(self.mpl.dates.DateFormatter('%Y-%m'))
+        for label in ax.get_xticklabels():
+                 label.set_ha('center')
+                 label.set_rotation(20.)
+
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
@@ -348,7 +350,7 @@ class plot_class:
         # Import functions
         from vrtmanager import renderVRT
         
-        outname=os.path.join(self.workdir,'coherence_average.rdr')
+        outname=os.path.join(self.workdir,'avgcoherence')
         bounds=open_shapefile(self.bbox_file, 0, 0).bounds
         
         # Iterate through all IFGs
@@ -411,7 +413,7 @@ class plot_class:
         for i in range(len(list(dateDict.keys()))):
             offset_dict[list(dateDict.keys())[i]]=S[i]
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
-            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=20, linestyle='None')
+            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10)
         
         slaves = []; masters = []; coh_vals = []; y1 = []; y2 = []
         for i,j in enumerate(self.pairs): #Plot lines for each pair
@@ -421,10 +423,11 @@ class plot_class:
             # Open coherence file
             coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
-            
+
             # Apply mask (if specified).
             if self.mask is not None:
                 coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
+
             
             # Report mean
             coh_val=coh_file_arr.mean()
@@ -433,24 +436,25 @@ class plot_class:
             y2.append(offset_dict[j[:8]])
             coh_file = coh_file_arr = coh_val = None
 
-        cols, mapper = self._create_colors(coh_vals, 'autumn') # don't use hot
+        cols, mapper = self._create_colors_coh(coh_vals, 'autumn') # don't use hot
         ax.set_prop_cycle(color=cols)
         lines       = ax.plot([masters, slaves], [y1, y2])
         cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
-        cbar        = fig.colorbar(mapper, cbar_ax, spacing='proportional')
-
+        self.warnings.filterwarnings("ignore",category=UserWarning)
+        cbar        = fig.colorbar(mapper, cbar_ax)
+        # cbar_ax.set_title('Coherence', loc='left')
+        cbar_ax.set_ylabel('Coherence', rotation=-90, labelpad=17)
+        ax.set_ylabel('⊥ baseline (m)')
 
         ### Make baseline plot
-        ax.set_ylabel('⊥ baseline (m)')
-        xticks=self.pd.to_datetime(list(set(dateDict.keys()))); xticks=[self.datetime(i.year, i.month, i.day) for i in xticks]
-        xticks.sort()
-
-        # only keep up to 10 evenly spaced ticks
-        xticks=list(np.array(xticks)[np.round(np.linspace(0, len(xticks)-1, 10)).astype(int)])
+        xticks, labels = self._adaptive_xticks(list(set(dateDict.keys())))
         ax.set_xlim(min(xticks),max(xticks))
-        self.plt.gca().xaxis.set_major_formatter(self.mdates.DateFormatter('%Y%m%d'))
-        self.plt.xticks(xticks, rotation=90)
-        # self.plt.tight_layout()
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(labels)
+        ax.xaxis.set_major_formatter(self.mpl.dates.DateFormatter('%Y-%m'))
+        for label in ax.get_xticklabels():
+                 label.set_ha('center')
+                 label.set_rotation(20.)
 
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
@@ -461,17 +465,39 @@ class plot_class:
             
         return
 
-    def _create_colors(self, vals, cm='autumn'):
-        """ create colors from a set of values """
+    def _create_colors_coh(self, vals, cm='autumn'):
+        """ create colors from a set of values between 0/1"""
         if not isinstance(vals, np.ndarray):
             vals = np.array(vals)
-        norm        = self.mpl.colors.Normalize(vmin=vals.min(), vmax=vals.max(), clip=True)
+        norm        = self.mpl.colors.Normalize(vmin=0, vmax=1)# clip=False)
         cmap        = self.plt.cm.get_cmap(cm)
         mapper      = self.plt.cm.ScalarMappable(norm=norm, cmap=cmap)
         mapper._A   = [] # necessary dummy array for cbar
         colors      =  [mapper.to_rgba(v) for v in vals]
         return colors, mapper
+    
+    def _adaptive_xticks(self, dates):
+        """ Adjust the number of xticks based on the time interval """
+        # dates = ['20150310', '20160410', '20160410', '20220511']
+        dates = [self.datetime.strptime(i, '%Y%m%d') for i in dates]
+        dates.sort()
+        st   = self.datetime(min(dates).year, 1, 1)
+        en   = max(dates) + self.relativedelta(months=1)
+        elap = en - min(dates)
 
+        if len(dates) == 2 or elap.days <= 365*2.5:
+            st = min(dates).replace(day=1)
+            labels = self.pd.date_range(st, en, freq='MS')
+        elif elap.days > 365*2.5 and elap.days <= 365*5.5: 
+            labels = self.pd.date_range(st, en, freq='3MS')
+
+        elif elap.days > 365*5.5 and elap.days <= 365*8.5:
+            labels = self.pd.date_range(st, en, freq='6MS')
+        else:
+            labels = self.pd.date_range(st, en, freq='AS')
+
+        xticks = [x.toordinal() for x in labels]
+        return xticks, labels
 
 if __name__ == '__main__':
     '''
@@ -550,6 +576,6 @@ if __name__ == '__main__':
     if inps.plotbperpcoh:
         print('\n'+'\n'+"########################################")
         print("class 'plot_class': Make pbaseline plot that is color-coded w.r.t. coherence."+'\n')
-        make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
+        make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'bPerpendicular'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plotbperpcoh()
 
