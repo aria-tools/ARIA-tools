@@ -28,6 +28,10 @@ Use the **conda** excecutable to install the compiler tools that are needed for 
 ```
 conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
 ```
+As soon as conda is done with the installation you can run update command below and finish conda installation
+```
+conda update --all
+```
 
 ------
 ## PROJ 4 SETUP
