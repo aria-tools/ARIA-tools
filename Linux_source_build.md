@@ -26,7 +26,7 @@ Next execute the installer script and follow the instructions as provided by the
 The miniconda installation does not contain all the python module we need.
 Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 ```
-conda install autoconf automake libtool patchelf numpy netcdf4 matplotlib pandas shapely --yes
+conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
 ```
 
 ------
@@ -47,16 +47,6 @@ make -j4
 make install
 ```
 
-You will need to manualy fix the linking of the PROJ libraries.
-```
-cd /my/proj/install/directory/lib
-mv libproj.so.15.0.0 libinternalproj.so.15.0.0
-ln -s libinternalproj.so.15.0.0 libinternalproj.so.15
-ln -s libinternalproj.so.15.0.0 libinternalproj.so
-rm -f libproj.*
-patchelf --set-soname libinternalproj.so libinternalproj.so
-```
-
 ------
 ## GDAL SETUP
 Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
@@ -67,7 +57,7 @@ git clone https://github.com/OSGeo/gdal
 Build the GDAL package with the python bindings:
 ```
 cd gdal/gdal/
-./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python
+./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python 
 make -j4
 make install
 ```
