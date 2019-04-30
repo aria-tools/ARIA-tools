@@ -25,6 +25,13 @@ Next execute the installer script and follow the instructions as provided by the
 
 The miniconda installation does not contain all the python module we need.
 Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
+We can add the conda-forge channel to our installation so the packages in conda-forge are indexed.
+
+```
+conda config --add channels conda-forge
+```
+After adding conda-forge we can make the installation of required packages
+
 ```
 conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
 ```
