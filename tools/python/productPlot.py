@@ -56,15 +56,16 @@ class plot_class:
     # importing dependencies
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
+    import matplotlib as mpl
+    mpl.use("TkAgg")
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
-    import matplotlib as mpl
     import pandas as pd
     from pandas.plotting import register_matplotlib_converters
     import warnings
     register_matplotlib_converters()
-    
+
     def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None):
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
