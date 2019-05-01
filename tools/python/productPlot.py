@@ -18,7 +18,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAProduct import ARIA_standardproduct
-from shapefile import open_shapefile
+from shapefile_util import open_shapefile
 
 def createParser():
     '''
@@ -193,8 +193,8 @@ class plot_class:
         for i in range(len(list(dateDict.keys()))):
             offset_dict[list(dateDict.keys())[i]]=S[i]
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
-            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10) 
-        
+            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10)
+
         # Plot lines for each pair
         for i in self.pairs:
             slave=self.pd.to_datetime(i[:8])
@@ -482,7 +482,7 @@ class plot_class:
         if len(dates) == 2 or elap.days <= 365*2.5:
             st = min(dates).replace(day=1)
             labels = self.pd.date_range(st, en, freq='MS')
-        elif elap.days > 365*2.5 and elap.days <= 365*5.5: 
+        elif elap.days > 365*2.5 and elap.days <= 365*5.5:
             labels = self.pd.date_range(st, en, freq='3MS')
         elif elap.days > 365*5.5 and elap.days <= 365*8.5:
             labels = self.pd.date_range(st, en, freq='6MS')
