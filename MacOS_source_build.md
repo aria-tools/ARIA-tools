@@ -131,6 +131,10 @@ python
 > from osgeo import gdal_array
 > import gdalnumeric
 ```
+------
+## Misc
+
+Add `export PYTHONIOENCODING=utf-8` to your bash_profile (or equivalent for other shells) to prevent potential unicode problems in python
 
 ------
 ## [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
