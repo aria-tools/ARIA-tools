@@ -108,7 +108,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         demfile = gdal.Warp('', demfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0))
         demfile.SetProjection(proj)
 
-        ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
         # Define lat/lon arrays for fullres layers
         Latitude=np.linspace(demfile.GetGeoTransform()[3],demfile.GetGeoTransform()[3]+(demfile.GetGeoTransform()[5]*demfile.RasterYSize),demfile.RasterYSize)
         Latitude=np.repeat(Latitude[:, np.newaxis], demfile.RasterXSize, axis=1)
@@ -145,7 +144,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
             if os.path.exists(outname):
                 union_bbox=open_shapefile(outname, 0, 0)
                 prods_bbox=prods_bbox.union(union_bbox)
-            save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
+            save_shapefile(outname, prods_bbox, 'GeoJSON')              
         scene["productBoundingBox"]=[outname]
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox_total.shp')
@@ -229,7 +228,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
-                ##SS make the output formate as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
                 gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format="ISCE", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
 
                 # Update VRT
@@ -262,7 +260,6 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
     # Define lat/lon/height arrays for metadata layers
     heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
     data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds))
-    ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
 
@@ -283,7 +280,6 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
 
     # Apply mask (if specified).
     if mask is not None:
-        ##SS Just to double check if the no-data is being tracked here. The vrt is setting a no-data value, but here no-data is not used.
         out_interpolated = np.multiply(out_interpolated, mask, out=out_interpolated, where=mask==0)
 
     # Save file
@@ -325,6 +321,7 @@ if __name__ == '__main__':
 
     print('\n'+'\n'+"########################################")
     print("fn 'merged_productbbox': extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM."+'\n')
+    print (inps.croptounion)
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
     # Load mask (if specified).
     if inps.mask is not None:

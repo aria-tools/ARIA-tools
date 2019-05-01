@@ -26,8 +26,6 @@ def createParser():
     '''
     import argparse
 
-    ##SS => Update the inputs and description of the function
-
     parser = argparse.ArgumentParser(description='Get DEM')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')

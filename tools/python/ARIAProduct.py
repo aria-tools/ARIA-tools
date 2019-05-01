@@ -74,7 +74,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 print("Shapefile %s created for input user bounds."%os.path.join(workdir,'user_bbox.shp'))
             # If shapefile
             elif os.path.isfile(bbox):
-                self.bbox = open_shapefile(bbox, 0, 0)                       ##SS => We should track the projection of the shapefile. i.e. if user provides this in e.g. UTM etc.
+                self.bbox = open_shapefile(bbox, 0, 0)                       
                 self.bbox_file = bbox
             else:
                 raise Exception('bbox input neither valid list nor file')
@@ -101,7 +101,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         rmdkeys, sdskeys = self.__mappingVersion__(file, version)
         if self.bbox is not None:
             # Open standard product bbox
-            file_bbox = open_shapefile('NETCDF:"' + file + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            file_bbox = open_shapefile('NETCDF:"' + file + '":'+sdskeys[0], 'productBoundingBox', 1)                    
             # Only generate dictionaries if there is spatial overlap with user bbox
             if file_bbox.intersects(self.bbox):
                 product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]

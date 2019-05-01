@@ -27,7 +27,6 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 def open_shapefile(fname, lyrind, ftind):
     '''
         Open a existing shapefile and pass the coordinates back.
-        ##SS => see commend on projection of the shapefile, expand the desciption of what the function would do based on this.
     '''
 
     # import dependencies
@@ -43,14 +42,13 @@ def open_shapefile(fname, lyrind, ftind):
     else:
         file_bbox = file_bbox.GetLayerByIndex(lyrind).GetFeature(ftind)
     geom = file_bbox.GetGeometryRef()
-    file_bbox = loads(geom.ExportToWkt())                       ##SS => We should track the projection of the shapefile adn pass it up? e.g. what it the data has different projection than that of the shapefile?
-
+    file_bbox = loads(geom.ExportToWkt())                       
     return file_bbox
 
 
 def save_shapefile(fname, polygon, drivername):
     '''
-        ##SS => add descritpion and limitations. Is there not a way to add the projection pf the shape file as well?
+        Save a shapefile
     '''
 
     # open file
