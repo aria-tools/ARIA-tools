@@ -10,9 +10,9 @@
 import os
 import sys
 import numpy as np
-
 from osgeo import gdal
 gdal.UseExceptions()
+
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
@@ -28,20 +28,18 @@ def createParser():
 
     ##SS => Update the inputs and description of the function
 
-    parser = argparse.ArgumentParser(description='Get DEM')
+    parser = argparse.ArgumentParser(description='Function to generate various quality control and baseline figures of the spatial-temporal network of products.')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
-            help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Mask file. This file needs to be GDAL compatible and contains projection information its meta-data.")
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks', help="Make plot of track extents vs bounding bbox/common track extent.")
-    parser.add_argument('-plotbperp', '--plotbperp', action='store_true', dest='plotbperp', help="Make baseline plot + histogram.")
-    parser.add_argument('-plotbperpcoh', '--plotbperpcoh', action='store_true', dest='plotbperpcoh', help="Make pbaseline plot that is color-coded w.r.t. coherence.")
-    parser.add_argument('-plotcoh', '--plotcoh', action='store_true', dest='plotcoh', help="Make coherence plot + histogram.")
-    parser.add_argument('-makeavgoh', '--makeavgoh', action='store_true', dest='makeavgoh', help="Generate raster of average coherence.")
+    parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks', help="Make plot of track latitude extents vs bounding bbox/common track extent.")
+    parser.add_argument('-plotbperp', '--plotbperp', action='store_true', dest='plotbperp', help="Make a baseline plot, and a histogram of perpendicular baseline.")
+    parser.add_argument('-plotbperpcoh', '--plotbperpcoh', action='store_true', dest='plotbperpcoh', help="Make a baseline plot that is color-coded based on average IFG coherence.")
+    parser.add_argument('-plotcoh', '--plotcoh', action='store_true', dest='plotcoh', help="Make an average IFG coherence plot in time, and histogram of IFG average coherence.")
+    parser.add_argument('-makeavgoh', '--makeavgoh', action='store_true', dest='makeavgoh', help="Generate a 2D raster of average IFG coherence.")
     parser.add_argument('-plotall', '--plotall', action='store_true', dest='plotall', help="Generate all above plots.")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
     return parser
@@ -60,10 +58,11 @@ class plot_class:
     # importing dependencies
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
+    import matplotlib as mpl
+    mpl.use("TkAgg")
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
-    import matplotlib as mpl
     import pandas as pd
     from pandas.plotting import register_matplotlib_converters
     import warnings
@@ -498,17 +497,15 @@ if __name__ == '__main__':
     '''
     inps = cmdLineParse()
 
-    print("########################################")
-    print("class 'Aria_standardproduct': sort input file(s) by starting time")
-    print("if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected."+'\n')
-    print("Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product + path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)."+'\n')
+    print("***Plotting Function:***")
+    # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
+    # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
+    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-
 
     # If user requests to generate all plots.
     if inps.plotall:
-        print('\n'+'\n'+"########################################")
-        print('"-plotall"==True, so all plots (i.e. track, perp baseline, and coherence) to be made.')
+        print('"-plotall"==True. All plots will be made.')
         inps.plottracks=True
         inps.plotbperp=True
         inps.plotcoh=True
@@ -519,8 +516,8 @@ if __name__ == '__main__':
     if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
         # Import functions
         from extractProduct import merged_productbbox
-        print('\n'+'\n'+"########################################")
-        print("fn 'merged_productbbox': extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM."+'\n')
+        # extract/merge productBoundingBox layers for each pair and update dict,
+        # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
         standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
         # Load mask (if specified).
         if inps.mask is not None:
@@ -535,39 +532,34 @@ if __name__ == '__main__':
 
     # Make spatial extent plot
     if inps.plottracks:
-        print('\n'+'\n'+"########################################")
-        print("class 'plot_class': Make plot of track extents vs bounding bbox/common track extent."+'\n')
+        print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
         make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox)
         make_plot.plot_extents()
 
 
     # Make pbaseline plot
     if inps.plotbperp:
-        print('\n'+'\n'+"########################################")
-        print("class 'plot_class': Make baseline plot + histogram."+'\n')
+        print("- Make baseline plot and histogram.")
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'bPerpendicular'))
         make_plot.plot_pbaselines()
 
 
     # Make average land coherence plot
     if inps.plotcoh:
-        print('\n'+'\n'+"########################################")
-        print("class 'plot_class': Make coherence plot + histogram. Also generate raster of average coherence."+'\n')
+        print("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plot_coherence()
 
 
     # Generate average land coherence raster
     if inps.makeavgoh:
-        print('\n'+'\n'+"########################################")
-        print("class 'plot_class': Generate raster of average coherence."+'\n')
+        print("- Generate 2D raster of average coherence.")
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plot_avgcoherence()
 
 
     # Make pbaseline/coherence combo plot
     if inps.plotbperpcoh:
-        print('\n'+'\n'+"########################################")
-        print("class 'plot_class': Make pbaseline plot that is color-coded w.r.t. coherence."+'\n')
+        print("- Make baseline plot that is color-coded with respect to mean IFG coherence.")
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'bPerpendicular'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plotbperpcoh()
