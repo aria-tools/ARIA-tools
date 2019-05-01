@@ -17,7 +17,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAProduct import ARIA_standardproduct
-from shapefile import open_shapefile
+from shapefile_util import open_shapefile
 from extractProduct import merged_productbbox
 from extractProduct import prep_dem
 from extractProduct import export_products
@@ -29,7 +29,7 @@ def createParser():
     '''
         Extract unwrapped interferogram, coherence, ⊥ baseline, and LOS file(s) for TS analysis.
     '''
-    
+
     import argparse
     parser = argparse.ArgumentParser(description='Get DEM')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,

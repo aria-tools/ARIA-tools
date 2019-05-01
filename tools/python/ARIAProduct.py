@@ -18,18 +18,18 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
-from shapefile import open_shapefile
-from shapefile import save_shapefile
+from shapefile_util import open_shapefile
+from shapefile_util import save_shapefile
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
     '''
         Class which loads ARIA standard products and splits them into spatiotemporally contigeous interferograms.
     '''
-    
+
     # import dependencies
     import netCDF4
     import glob
-    
+
     def __init__(self, filearg, bbox=None, workdir='./', verbose=False):
         # If user wants verbose mode
         self.verbose=verbose
@@ -40,7 +40,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         self.bbox_file = None
         # Pair name for layer extraction
         self.pairname = None
-        
+
         ### Determine if file input is single file, a list, or wildcard.
         # If list of files
         if len([str(val) for val in filearg.split()])>1:
@@ -66,7 +66,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 from shapely.geometry import Polygon
                 bbox = [float(val) for val in bbox.split()]
                 # Use shapely to make list
-                self.bbox = Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]), 
+                self.bbox = Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]])))) #Pass lons/lats to create polygon
                 # Save polygon in shapefile
                 save_shapefile(os.path.join(workdir,'user_bbox.shp'), self.bbox, 'GeoJSON')
@@ -89,14 +89,14 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         '''
             Read product, determine expected layer names based off of version number, and populate corresponding product dictionary accordingly.
         '''
-        
+
         ### Get standard product version from file
         # If netcdf with groups
         version=str(gdal.Open(file).GetMetadataItem('NC_GLOBAL#version'))
         # If netcdf with nogroups
         if version==str(None):
             version=str(gdal.Open(file).GetMetadataItem('version'))
-        
+
         ### Get lists of radarmetadata/layer keys for this file version
         rmdkeys, sdskeys = self.__mappingVersion__(file, version)
         if self.bbox is not None:
@@ -121,19 +121,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             The order of the keys needs to be consistent with the keys in the mappingData function.
             E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
         '''
-        
+
         # ARIA standard product version 1a and 1b have same mapping
         if version=='1a' or version=='1b':
             # Radarmetadata names for these versions
             rmdkeys=['missionID', 'wavelength', 'centerFrequency', 'productType',
-            'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime', 
+            'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime',
             'azimuthTimeInterval', 'slantRangeSpacing', 'slantRangeEnd', 'slantRangeStart']
-            
+
             # Layer names for these versions
             sdskeys=['productBoundingBox','unwrappedPhase','coherence',
             'connectedComponents','amplitude','perpendicularBaseline',
             'parallelBaseline','incidenceAngle','lookAngle','azimuthAngle','ionosphere']
-            
+
             #Pass pair name
             read_file=self.netCDF4.Dataset(file, keepweakref=True).groups['science'].groups['radarMetaData'].groups['inputSLC']
             self.pairname=read_file.groups['reference']['L1InputGranules'][:][0][17:25] +'_'+ read_file.groups['secondary']['L1InputGranules'][:][0][17:25]
@@ -147,12 +147,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
             The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
         '''
-        
+
         # Expected radarmetadata
         radarkeys=['missionID', 'wavelength', 'centerFrequency', 'productType',
-        'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime', 
+        'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime',
         'azimuthTimeInterval', 'slantRangeSpacing', 'slantRangeEnd', 'slantRangeStart']
-        
+
         # Expected layers
         layerkeys=['productBoundingBox','unwrappedPhase',
         'coherence','connectedComponents','amplitude','bPerpendicular',
@@ -198,17 +198,17 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             Split the products into spatiotemporally continuous groups (i.e. by individual, continuous interferograms). Input must be already sorted by pair and start-time to fit the logic scheme below.
             Using their time-tags, this function determines whether or not successive products are in the same orbit. If in the same orbit, the program determines whether or not they overlap in time and are therefore spatially contiguous, and rejects/reports cases for which there is no temporal overlap and therefore a spatial gap.
         '''
-        
+
         # import dependencies
         from datetime import datetime, timedelta
-        
+
         sorted_products=[]
         track_rejected_pairs=[]
 
         # If only one pair in list, add it to list.
         if len(self.products)==1:
             sorted_products.extend([[dict(zip(self.products[0][0].keys(), [list(a) for a in zip(self.products[0][0].values())])), dict(zip(self.products[0][1].keys(), [list(a) for a in zip(self.products[0][1].values())]))]])
-        
+
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i, j in enumerate(self.products[:-1]):
             # Get this reference product's times
@@ -218,14 +218,14 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             new_scene_start=datetime.strptime(self.products[i+1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
             new_scene_end=datetime.strptime(self.products[i+1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
             slave=datetime.strptime(self.products[i+1][0]['pair_name'][9:], "%Y%m%d")
-            
+
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
             # If it is within same orbit cycle, try to append scene. This accounts for day change.
             if abs(new_scene_end-scene_end)<=timedelta(minutes=100) and abs(slave-master)<=timedelta(days=1):
                 # Don't export product if it is already tracked as a rejected pair
                 if j[0]['pair_name'] in track_rejected_pairs or self.products[i+1][0]['pair_name'] in track_rejected_pairs:
                     track_rejected_pairs.extend((j[0]['pair_name'],self.products[i+1][0]['pair_name']))
-                
+
                 # Only pass scene if it temporally overlaps with reference scene
                 elif ((scene_end <= new_scene_start) and (new_scene_end <= scene_start)) or ((scene_end >= new_scene_start) and (new_scene_end >= scene_start)):
                     # Check if dictionary for IFG corresponding to reference product already exists, and if it does then append values
