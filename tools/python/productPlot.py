@@ -199,7 +199,8 @@ class plot_class:
             ax.plot([master, slave], [offset_dict[i[9:]], offset_dict[i[:8]]], 'b')
 
         # Make Baseline plot
-        ax.set_ylabel('⊥ baseline (m)')
+        ax.set_ylabel(r'$\perp$'+' Baseline (m)',weight='bold')
+        ax.set_xlabel('Time',weight='bold')
         xticks, labels = self._adaptive_xticks(list(set(dateDict.keys())))
         ax.set_xlim(min(xticks),max(xticks))
         ax.set_xticks(xticks)
@@ -212,14 +213,15 @@ class plot_class:
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
-            self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]])
+            self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
         self.plt.savefig(os.path.join(self.workdir,'bperp_plot.eps'))
         self.plt.close()
 
         # Make Baseline histogram
         ax1=self.plt.figure().add_subplot(111)
         ax1.hist(baseline_hist)
-        ax1.set_xlabel('⊥ baseline (m)', weight='bold')
+        ax1.set_xlabel(r'$\perp$'+' Baseline (m)', weight='bold')
+        ax1.set_ylabel('Number of Interferograms', weight='bold')
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'bperp_histogram.eps'))
@@ -253,7 +255,8 @@ class plot_class:
             ax.axhline(y=prods_bbox[3], color='r', linestyle=':')
 
         # defining the axis labels
-        ax.set_ylabel('Lat')
+        ax.set_ylabel('Latitude',weight='bold')
+        ax.set_xlabel('Interferograms', weight='bold')
         ax.set_title('Interferogram lat extents', weight='bold')
         self.plt.xticks(rotation=90)
         self.plt.tight_layout()
@@ -309,7 +312,8 @@ class plot_class:
         # cbar.set_label(lbl, rotation=90, labelpad=15)
 
         ### Make average coherence plot
-        ax.set_ylabel('Avg. coherence')
+        ax.set_ylabel('Average Coherence',weight='bold')
+        ax.set_xlabel('Time',weight='bold')
         ax.set_ylim(0, 1)
         self.pairs=[i[0] for i in self.product_dict[1]]; xticks=self.__date_list__()
         xticks, labels = self._adaptive_xticks(list(set(xticks.keys())))
@@ -324,14 +328,15 @@ class plot_class:
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
-            self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]])
+            self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot.eps'))
         self.plt.close()
 
         ### Make average coherence histogram
         ax1=self.plt.figure().add_subplot(111)
         ax1.hist(coh_hist)
-        ax1.set_xlabel('Avg. coherence', weight='bold')
+        ax1.set_xlabel('Average Coherence', weight='bold')
+        ax1.set_ylabel('Number of Interferograms',weight='bold')
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram.eps'))
@@ -435,7 +440,8 @@ class plot_class:
         cbar        = fig.colorbar(mapper, cbar_ax)
         # cbar_ax.set_title('Coherence', loc='left')
         cbar_ax.set_ylabel('Coherence', rotation=-90, labelpad=17)
-        ax.set_ylabel('⊥ baseline (m)')
+        ax.set_ylabel(r'$\perp$'+' Baseline (m)',weight='bold')
+        ax.set_xlabel('Time',weight='bold')
 
         ### Make baseline plot
         xticks, labels = self._adaptive_xticks(list(set(dateDict.keys())))
@@ -450,7 +456,7 @@ class plot_class:
         # If plotting parameters are the default, must adjust X-axis
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
-            self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]])
+            self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
         self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot.eps'))
         self.plt.close()
 
