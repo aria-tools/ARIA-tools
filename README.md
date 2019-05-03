@@ -97,10 +97,8 @@ Time-series set-up with spatial-temporal contiguous unwrapped interferograms and
 ------
 ## Documentation
 
-See the ARIA-tools-docs repo for all documentation:
+See the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md) for all documentation:
 + [Jupyter Notebook Tutorials](https://github.com/dbekaert/ARIA-tools-docs/tree/master/Notebooks.md)
-+ [Overview of ARIA-tool modules](https://github.com/dbekaert/ARIA-tools-docs/tree/master/Modules.md)
-
 
 ------
 ## Citation
