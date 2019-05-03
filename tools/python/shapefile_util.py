@@ -16,7 +16,7 @@ from osgeo import ogr
 import matplotlib.path as mpath
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-plt.style.use('seaborn')
+#plt.style.use('seaborn')
 
 from osgeo import gdal, ogr
 gdal.UseExceptions()
