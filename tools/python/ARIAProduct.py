@@ -257,13 +257,13 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         if sorted_products==[[], []]: #Check if pairs were successfully selected
             raise Exception('No valid pairs meet criteria due to gaps in each and/or invalid input, nothing to export.')
         if len(track_rejected_pairs)>0:
-            print("%d out of %d input files rejected since corresponding stitched IFG would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
+            print("%d out of %d files rejected since corresponding stitched IFG would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
             # Provide report of which files were kept vs. which were not.
             if self.verbose:
                 print("Specifically, the following files were rejected:")
                 print([item[1]['productBoundingBox'].split('"')[1] for item in sorted_products[1] if (item[1]['pair_name'][0] in track_rejected_pairs)])
         else:
-            print("All %d input files successfully passed!"%(len(sorted_products[1])))
+            print("All %d files have no spatiotemporal gaps!"%(len(sorted_products[1])))
 
         return sorted_products
 
@@ -278,7 +278,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # Check if any pairs meet criteria
         if self.products==[]:
-            raise Exception('No valid pairs meet criteria, nothing to export.')
+            raise Exception('No valid pairs meet spatial criteria, nothing to export.')
         if len(self.products)!=len(self.files):
             print("%d out of %d input files rejected for not meeting user's bbox spatial criteria"%(len(self.files)-len(self.products),len(self.files)))
             # Provide report of which files were kept vs. which weren't
@@ -286,7 +286,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 print("Specifically, the following files were rejected:")
                 print([i for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]])
         else:
-            print("All %d input files successfully passed!"%(len(self.files)))
+            print("All %d input files meet spatial criteria!"%(len(self.files)))
 
         ### Split products in spatiotemporally continuous groups
         print("Group spatiotemporally continuous IFGs."+'\n')
