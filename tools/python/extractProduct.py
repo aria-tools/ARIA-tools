@@ -242,17 +242,17 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
                 ##SS make the output formate as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
-                if outputFormat=='VRT' and not mask:
+                if outputFormat=='VRT' and mask is None:
                     gdal.Warp(outname+'.vrt', j, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
                 else:
                     # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-                    if outputFormat=='VRT' and mask:
+                    if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
                     # Apply mask (if specified).
-                    if mask:
+                    if mask is not None:
                         update_file=gdal.Open(outname+'.vrt',gdal.GA_Update)
                         update_file=update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outname+'.vrt').ReadAsArray())
                         update_file=None
