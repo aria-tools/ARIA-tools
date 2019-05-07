@@ -145,7 +145,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
             save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
         scene["productBoundingBox"]=[outname]
 
-    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox_total.shp')
+    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.shp')
     # Initiate intersection file with first product
     # this is for different scenes
     save_shapefile(prods_TOTbbox, open_shapefile(product_dict[0]['productBoundingBox'][0], 0, 0), 'GeoJSON')
