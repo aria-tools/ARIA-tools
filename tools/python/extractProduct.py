@@ -31,7 +31,7 @@ def createParser():
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-l', '--layers', dest='layers', default='None', required=True, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted.')
+    parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
@@ -47,7 +47,6 @@ def createParser():
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
-
 
 class InterpCube(object):
     '''
@@ -86,7 +85,6 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
-
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./'):
     '''
         Function which load and export DEM, lat, lon arrays.
@@ -120,7 +118,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     return demfilename, demfile, Latitude, Longitude
 
-
 def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=False):
     '''
         Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
@@ -150,6 +147,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox_total.shp')
     # Initiate intersection file with first product
+    # this is for different scenes
     save_shapefile(prods_TOTbbox, open_shapefile(product_dict[0]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     for scene in product_dict[1:]:
         prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
@@ -185,16 +183,17 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT'):
-    '''
-        The function allows for exporting layer and 2D meta-data layers (at the product resolution).
-        The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
-        The key specifies which layer to extract from the dictionary.
-        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
-        Optionally, a user may pass a mask-file.
-    '''
+    """
+    The function allows for exporting layer and 2D meta-data layers (at the product resolution).
+    The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
+    The key specifies which layer to extract from the dictionary.
+    All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+    Optionally, a user may pass a mask-file.
+    """
 
     # loading dependencies
     from collections import OrderedDict
+    if not layers: return # only bbox
 
     # Loop through user expected layers
     for key in layers:
@@ -218,7 +217,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                 if dem is None:
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
-                # Check if height layers are consistent, and if not exit with error
+                # Check if height layers are consistent between frames, and if not exit with error
                 if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j]))==1:
                     gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open(j[0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
                 else:
@@ -229,7 +228,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
-                ##SS make the output formate as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
+                ##SS make the output format as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
                 gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format="ISCE", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
 
                 # Update VRT
@@ -247,11 +246,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
     return
 
-
 def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=None):
-    '''
-        2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
-    '''
+    """
+    2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
+    """
 
     # import dependencies
     import scipy
@@ -297,11 +295,10 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
 
     del out_interpolated, interpolator, interp_2d, data_array, update_file
 
-
 if __name__ == '__main__':
-    '''
-        Main driver.
-    '''
+    """
+    Main driver
+    """
     inps = cmdLineParse()
 
     print("########################################")
@@ -313,12 +310,15 @@ if __name__ == '__main__':
     if inps.layers=='all':
         print('\n'+'\n'+"########################################")
         print('All layers are to be extracted, pass all keys.')
-        print('Note, the default input argument for "layers==all".')
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes, because it's not a raster layer
         inps.layers.remove('productBoundingBox')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
+    elif not inps.layers:
+        print('\n'+'\n'+"########################################")
+        print ('No layers specified; only creating bounding box shapes')
+
     else:
         inps.layers=list(inps.layers.split(','))
 
