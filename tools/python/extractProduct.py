@@ -95,7 +95,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
     bounds=open_shapefile(bbox_file, 0, 0).bounds
 
     # Download DEM
-    if demfilename=='Download':
+    if demfilename.lower()=='download':
         demfilename=os.path.join(workdir,'SRTM_3arcsec'+'.dem')
         gdal.Warp(demfilename, '/vsicurl/'+_world_dem, options=gdal.WarpOptions(format="ISCE", outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=0.0, srcNodata=-32768.0))
         gdal.Open(demfilename,gdal.GA_Update).SetProjection(proj)
@@ -307,7 +307,11 @@ if __name__ == '__main__':
     print("Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product + path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)."+'\n')
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
-    if inps.layers=='all':
+    if not inps.layers:
+        print('\n'+'\n'+"########################################")
+        print ('No layers specified; only creating bounding box shapes')
+
+    elif inps.layers.lower()=='all':
         print('\n'+'\n'+"########################################")
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
@@ -315,9 +319,6 @@ if __name__ == '__main__':
         inps.layers.remove('productBoundingBox')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
-    elif not inps.layers:
-        print('\n'+'\n'+"########################################")
-        print ('No layers specified; only creating bounding box shapes')
 
     else:
         inps.layers=list(inps.layers.split(','))
