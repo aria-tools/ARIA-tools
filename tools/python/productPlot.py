@@ -67,7 +67,7 @@ class plot_class:
     import warnings
     register_matplotlib_converters()
 
-    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None, outputFormat='ENVI'):
+    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None, outputFormat='ENVI', croptounion=False):
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
         self.bbox_file = bbox_file
@@ -77,6 +77,7 @@ class plot_class:
         self.prods_TOTbbox = prods_TOTbbox
         self.mask = mask
         self.outputFormat = outputFormat
+        self.croptounion = croptounion
         # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
         if  self.outputFormat=='VRT':
             self.outputFormat='ENVI'
@@ -254,18 +255,23 @@ class plot_class:
             # Plot IFG extent line connecting bounds in latitude
             ax.plot([self.product_dict[1][i][0]]*2,list(prods_bbox[1::2]), color='0.5', linestyle='--')
 
-        # Get bounds of common intersection
-        S_extent=max(S_extent)
-        N_extent=min(N_extent)
+        # Plot bounds of common track extent
+        if self.croptounion:
+            S_extent=min(S_extent)
+            N_extent=max(N_extent)
+            if [self.bbox_file[1], self.bbox_file[3]]!=[S_extent, N_extent] and S_extent!=N_extent:
+                ax.axhline(y=S_extent, color='r', linestyle=':', label="extent of union")
+                ax.axhline(y=N_extent, color='r', linestyle=':')
+        else:
+            S_extent=max(S_extent)
+            N_extent=min(N_extent)
+            if [self.bbox_file[1], self.bbox_file[3]]!=[S_extent, N_extent] and S_extent!=N_extent:
+                    ax.axhline(y=S_extent, color='r', linestyle=':', label="extent of intersection")
+                    ax.axhline(y=N_extent, color='r', linestyle=':')
 
         # Plot bounds of final track extent all IFGs will be cropped to
         ax.axhline(y=self.bbox_file[1], color='b', linestyle='--', label="bounding box")
         ax.axhline(y=self.bbox_file[3], color='b', linestyle='--')
-
-        # Plot bounds of common track extent
-        if [self.bbox_file[1], self.bbox_file[3]]!=[S_extent, N_extent] and S_extent!=N_extent:
-            ax.axhline(y=S_extent, color='r', linestyle=':', label="common track extent")
-            ax.axhline(y=N_extent, color='r', linestyle=':')
 
         # add legend
         self.plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
@@ -547,7 +553,7 @@ if __name__ == '__main__':
     # Make spatial extent plot
     if inps.plottracks:
         print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
-        make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox)
+        make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
         make_plot.plot_extents()
 
 
