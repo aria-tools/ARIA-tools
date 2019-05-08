@@ -71,7 +71,7 @@ def save_shapefile(fname, polygon, drivername):
 
 def plot_shapefile(fname):
     # Extract first layer of features from shapefile using OGR
-    ds = ogr.Open(fname, gdal.GA_ReadOnly())
+    ds = ogr.Open(fname, gdal.GA_ReadOnly)
     nlay = ds.GetLayerCount()
     lyr = ds.GetLayer(0)
 
