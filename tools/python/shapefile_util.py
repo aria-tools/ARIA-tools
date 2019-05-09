@@ -110,7 +110,7 @@ def plot_shapefile(fname):
         paths.append(path)
 
     with plt.style.context(('seaborn')):
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(12, 9))
         ax.set_xlim(ext[0]-xoff,ext[1]+xoff)
         ax.set_ylim(ext[2]-yoff,ext[3]+yoff)
 
@@ -120,8 +120,9 @@ def plot_shapefile(fname):
 
             ax.add_patch(patch)
 
-        ax.set_xlabel('Longitude')
-        ax.set_ylabel('Latitude')
+        ax.set_xlabel('longitude', labelpad=15, fontsize=15)
+        ax.set_ylabel('latitude', labelpad=15, fontsize=15)
+        ax.set_title(os.path.basename(os.path.splitext(fname)[0]), fontsize=15)
         ax.set_aspect(1.0)
         ax.grid(False)
     plt.show()
