@@ -13,7 +13,7 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 ###Save file with gdal
-def renderVRT(fname, data_lyr, geotrans=None, drivername='ISCE', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
+def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
     '''
         Exports raster and renders corresponding VRT file.
     '''
@@ -25,7 +25,7 @@ def renderVRT(fname, data_lyr, geotrans=None, drivername='ISCE', gdal_fmt='float
                 'cfloat32' : 10,
                 'cfloat64': 11}
 
-    gdalfile=gdal.GetDriverByName('ISCE').Create(fname, data_lyr.shape[1], data_lyr.shape[0], 1, gdalMap[gdal_fmt])
+    gdalfile=gdal.GetDriverByName(drivername).Create(fname, data_lyr.shape[1], data_lyr.shape[0], 1, gdalMap[gdal_fmt])
     gdalfile.GetRasterBand(1).WriteArray(data_lyr)
     if geotrans: #If user wishes to update geotrans.
         gdalfile.SetGeoTransform(geotrans)

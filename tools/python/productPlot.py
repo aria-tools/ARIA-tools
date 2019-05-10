@@ -32,6 +32,7 @@ def createParser():
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Mask file. This file needs to be GDAL compatible and contains projection information its meta-data.")
+    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='ENVI', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated with ENVI format.')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks', help="Make plot of track latitude extents vs bounding bbox/common track extent.")
     parser.add_argument('-plotbperp', '--plotbperp', action='store_true', dest='plotbperp', help="Make a baseline plot, and a histogram of perpendicular baseline.")
@@ -66,13 +67,20 @@ class plot_class:
     import warnings
     register_matplotlib_converters()
 
-    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None):
+    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None, outputFormat='ENVI', croptounion=False):
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
         self.bbox_file = bbox_file
+        if self.bbox_file:
+            self.bbox_file = open_shapefile(bbox_file, 0, 0).bounds
         self.workdir = workdir
         self.prods_TOTbbox = prods_TOTbbox
         self.mask = mask
+        self.outputFormat = outputFormat
+        self.croptounion = croptounion
+        # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+        if  self.outputFormat=='VRT':
+            self.outputFormat='ENVI'
 
         # create workdir if it doesn't exist
         if not os.path.exists(self.workdir):
@@ -236,23 +244,37 @@ class plot_class:
 
         ax=self.plt.figure().add_subplot(111)
         #Iterate through all IFGs
+        S_extent=[]
+        N_extent=[]
         for i, j in enumerate(self.product_dict[0]):
             prods_bbox=open_shapefile(j[0], 0, 0).bounds
+            S_extent.append(prods_bbox[1])
+            N_extent.append(prods_bbox[3])
             # Plot IFG extent bounds in latitude
             ax.plot([self.product_dict[1][i][0]]*2,list(prods_bbox[1::2]),'ko',markersize=10)
             # Plot IFG extent line connecting bounds in latitude
             ax.plot([self.product_dict[1][i][0]]*2,list(prods_bbox[1::2]), color='0.5', linestyle='--')
-        user_bbox=open_shapefile(self.bbox_file, 0, 0).bounds
-
-        # Plot bounds of final track extent all IFGs will be cropped to
-        ax.axhline(y=user_bbox[1], color='b', linestyle='--')
-        ax.axhline(y=user_bbox[3], color='b', linestyle='--')
-        prods_bbox=open_shapefile(self.prods_TOTbbox, 0, 0).bounds
 
         # Plot bounds of common track extent
-        if [user_bbox[1], user_bbox[3]]!=[prods_bbox[1], prods_bbox[3]]:
-            ax.axhline(y=prods_bbox[1], color='r', linestyle=':')
-            ax.axhline(y=prods_bbox[3], color='r', linestyle=':')
+        if self.croptounion:
+            S_extent=min(S_extent)
+            N_extent=max(N_extent)
+            if [self.bbox_file[1], self.bbox_file[3]]!=[S_extent, N_extent] and S_extent!=N_extent:
+                ax.axhline(y=S_extent, color='r', linestyle=':', label="extent of union")
+                ax.axhline(y=N_extent, color='r', linestyle=':')
+        else:
+            S_extent=max(S_extent)
+            N_extent=min(N_extent)
+            if [self.bbox_file[1], self.bbox_file[3]]!=[S_extent, N_extent] and S_extent!=N_extent:
+                    ax.axhline(y=S_extent, color='r', linestyle=':', label="extent of intersection")
+                    ax.axhline(y=N_extent, color='r', linestyle=':')
+
+        # Plot bounds of final track extent all IFGs will be cropped to
+        ax.axhline(y=self.bbox_file[1], color='b', linestyle='--', label="bounding box")
+        ax.axhline(y=self.bbox_file[3], color='b', linestyle='--')
+
+        # add legend
+        self.plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 
         # defining the axis labels
         ax.set_ylabel('Latitude',weight='bold')
@@ -272,18 +294,14 @@ class plot_class:
             Make coherence plot + histogram.
         '''
 
-        # Import functions
-        from vrtmanager import renderVRT
-
         fig, ax = self.plt.subplots()
         # ax=self.plt.figure().add_subplot(111)
         coh_hist = []
-        bounds=open_shapefile(self.bbox_file, 0, 0).bounds
 
         # Iterate through all IFGs
         masters = []; slaves = []
         for i,j in enumerate(self.product_dict[0]):
-            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
+            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
 
             # Apply mask (if specified).
@@ -352,11 +370,10 @@ class plot_class:
         # Import functions
         from vrtmanager import renderVRT
         outname=os.path.join(self.workdir,'avgcoherence')
-        bounds=open_shapefile(self.bbox_file, 0, 0).bounds
 
         # Iterate through all IFGs
         for i,j in enumerate(self.product_dict[0]):
-            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
+            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
 
             # Apply mask (if specified).
@@ -369,7 +386,7 @@ class plot_class:
                 coh_file=gdal.Open(outname,gdal.GA_Update)
                 coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file_arr+coh_file.ReadAsArray())
             else:
-                renderVRT(outname, coh_file_arr, geotrans=coh_file.GetGeoTransform(), gdal_fmt=coh_file_arr.dtype.name, proj=coh_file.GetProjection(), nodata=coh_file.GetRasterBand(1).GetNoDataValue())
+                renderVRT(outname, coh_file_arr, geotrans=coh_file.GetGeoTransform(), drivername=self.outputFormat, gdal_fmt=coh_file_arr.dtype.name, proj=coh_file.GetProjection(), nodata=coh_file.GetRasterBand(1).GetNoDataValue())
             coh_file = coh_val = coh_file_arr = None
 
         # Take average of coherence sum
@@ -387,7 +404,6 @@ class plot_class:
         # importing dependencies
         from matplotlib import cm
         fig, ax = self.plt.subplots()
-        bounds=open_shapefile(self.bbox_file, 0, 0).bounds
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
         A,B,L,baseline_hist = self.__design_matrix__()
@@ -418,7 +434,7 @@ class plot_class:
             slaves.append(self.pd.to_datetime(j[:8]))
             masters.append(self.pd.to_datetime(j[9:]))
             # Open coherence file
-            coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=bounds))
+            coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file))
             coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
 
             # Apply mask (if specified).
@@ -537,7 +553,7 @@ if __name__ == '__main__':
     # Make spatial extent plot
     if inps.plottracks:
         print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
-        make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox)
+        make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
         make_plot.plot_extents()
 
 
@@ -558,7 +574,7 @@ if __name__ == '__main__':
     # Generate average land coherence raster
     if inps.makeavgoh:
         print("- Generate 2D raster of average coherence.")
-        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
+        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat)
         make_plot.plot_avgcoherence()
 
 
