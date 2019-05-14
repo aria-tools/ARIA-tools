@@ -64,7 +64,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             # If list
             if isinstance ([str(val) for val in bbox.split()], list) and not os.path.isfile(bbox):
                 from shapely.geometry import Polygon
-                bbox = [float(val) for val in bbox.split()]
+                try:
+                    bbox = [float(val) for val in bbox.split()]
+                except:
+                    raise Exception('Cannot understand the --bbox argument. String input is incorrect or path does not exist.')
                 # Use shapely to make list
                 self.bbox = Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]])))) #Pass lons/lats to create polygon

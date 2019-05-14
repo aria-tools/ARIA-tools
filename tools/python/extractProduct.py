@@ -27,11 +27,11 @@ def createParser():
     '''
 
     import argparse
-    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stiching when needed.')
+    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stiching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-l', '--layers', dest='layers', default='None', required=True, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted.')
+    parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
@@ -47,7 +47,6 @@ def createParser():
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
-
 
 class InterpCube(object):
     '''
@@ -86,7 +85,6 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
-
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI'):
     '''
         Function which load and export DEM, lat, lon arrays.
@@ -101,7 +99,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
        outputFormat='ENVI'
 
     # Download DEM
-    if demfilename=='Download':
+    if demfilename.lower()=='download':
         demfilename=os.path.join(workdir,'SRTM_3arcsec'+'.dem')
         gdal.Warp(demfilename, '/vsicurl/'+_world_dem, options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=0.0, srcNodata=-32768.0))
         gdal.Open(demfilename,gdal.GA_Update).SetProjection(proj)
@@ -123,7 +121,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         raise Exception('Failed to open user DEM')
 
     return demfilename, demfile, Latitude, Longitude
-
 
 def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=False):
     '''
@@ -152,8 +149,9 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
             save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
         scene["productBoundingBox"]=[outname]
 
-    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox_total.shp')
+    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.shp')
     # Initiate intersection file with first product
+    # this is for different scenes
     save_shapefile(prods_TOTbbox, open_shapefile(product_dict[0]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     for scene in product_dict[1:]:
         prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
@@ -198,16 +196,17 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT'):
-    '''
-        The function allows for exporting layer and 2D meta-data layers (at the product resolution).
-        The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
-        The key specifies which layer to extract from the dictionary.
-        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
-        Optionally, a user may pass a mask-file.
-    '''
+    """
+    The function allows for exporting layer and 2D meta-data layers (at the product resolution).
+    The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
+    The key specifies which layer to extract from the dictionary.
+    All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+    Optionally, a user may pass a mask-file.
+    """
 
     # loading dependencies
     from collections import OrderedDict
+    if not layers: return # only bbox
 
     # Loop through user expected layers
     for key in layers:
@@ -317,11 +316,10 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
 
     del out_interpolated, interpolator, interp_2d, data_array, update_file
 
-
 if __name__ == '__main__':
-    '''
-        Main driver.
-    '''
+    """
+    Main driver
+    """
     inps = cmdLineParse()
 
     print("########################################")
@@ -330,15 +328,19 @@ if __name__ == '__main__':
     print("Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product + path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)."+'\n')
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
-    if inps.layers=='all':
+    if not inps.layers:
+        print('\n'+'\n'+"########################################")
+        print ('No layers specified; only creating bounding box shapes')
+
+    elif inps.layers.lower()=='all':
         print('\n'+'\n'+"########################################")
         print('All layers are to be extracted, pass all keys.')
-        print('Note, the default input argument for "layers==all".')
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes, because it's not a raster layer
         inps.layers.remove('productBoundingBox')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
+
     else:
         inps.layers=list(inps.layers.split(','))
 
