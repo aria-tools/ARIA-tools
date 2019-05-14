@@ -229,7 +229,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                 if dem is None:
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
-                # Check if height layers are consistent between frames, and if not exit with error
+                # Check if height layers are consistent, and if not exit with error
                 if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j]))==1:
                     gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open(j[0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
                 else:
@@ -240,17 +240,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
-                ##SS make the output format as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
-                gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format="ISCE", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
-
-                # Update VRT
-                gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
-
-                # Apply mask (if specified).
-                if mask is not None:
-                    update_file=gdal.Open(outname,gdal.GA_Update)
-                    update_file=update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outname+'.vrt').ReadAsArray())
-                    update_file=None
                 ##SS make the output formate as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
                 if outputFormat=='VRT' and mask is None:
                     gdal.Warp(outname+'.vrt', j, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
