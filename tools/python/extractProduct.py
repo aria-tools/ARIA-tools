@@ -85,7 +85,7 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./'):
+def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI'):
     '''
         Function which load and export DEM, lat, lon arrays.
         If "Download" flag is specified, DEM will be donwloaded on the fly.
@@ -94,10 +94,14 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
     # Get bounds of user bbox_file
     bounds=open_shapefile(bbox_file, 0, 0).bounds
 
+    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT':
+       outputFormat='ENVI'
+
     # Download DEM
     if demfilename.lower()=='download':
         demfilename=os.path.join(workdir,'SRTM_3arcsec'+'.dem')
-        gdal.Warp(demfilename, '/vsicurl/'+_world_dem, options=gdal.WarpOptions(format="ISCE", outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=0.0, srcNodata=-32768.0))
+        gdal.Warp(demfilename, '/vsicurl/'+_world_dem, options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=0.0, srcNodata=-32768.0))
         gdal.Open(demfilename,gdal.GA_Update).SetProjection(proj)
         gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
 
@@ -169,6 +173,15 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
         total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
         user_bbox=user_bbox.intersection(total_bbox)
         save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
+
+        # Estimate percentage of overlap with bbox
+        prods_bbox_area=open_shapefile(prods_TOTbbox, 0, 0).bounds
+        prods_bbox_area=(max(prods_bbox_area[0],prods_bbox_area[2]) - min(prods_bbox_area[0],prods_bbox_area[2]))*(max(prods_bbox_area[1],prods_bbox_area[3]) - min(prods_bbox_area[1],prods_bbox_area[3]))
+        bbox_area=open_shapefile(bbox_file, 0, 0).bounds
+        bbox_area=(max(bbox_area[0],bbox_area[2]) - min(bbox_area[0],bbox_area[2]))*(max(bbox_area[1],bbox_area[3]) - min(bbox_area[1],bbox_area[3]))
+        per_overlap=(prods_bbox_area/bbox_area)*100
+        if per_overlap<50.:
+            print("WARNING: Common track extent only has %d%% overlap with bbox"%per_overlap+'\n')
     else:
         bbox_file=prods_TOTbbox
 
@@ -197,7 +210,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
     # Loop through user expected layers
     for key in layers:
-        print([j[key] for j in full_product_dict])
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
         workdir=os.path.join(outDir,key)
 
@@ -224,7 +236,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     raise Exception('Inconsistent heights for metadata layer(s) ', j, ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j])
 
                 # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask)
+                finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask, outputFormat)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
@@ -239,6 +251,21 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     update_file=gdal.Open(outname,gdal.GA_Update)
                     update_file=update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outname+'.vrt').ReadAsArray())
                     update_file=None
+                ##SS make the output formate as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
+                if outputFormat=='VRT' and mask is None:
+                    gdal.Warp(outname+'.vrt', j, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+                else:
+                    # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+                    if outputFormat=='VRT' and mask is not None:
+                       outputFormat='ENVI'
+                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+                    # Update VRT
+                    gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
+                    # Apply mask (if specified).
+                    if mask is not None:
+                        update_file=gdal.Open(outname+'.vrt',gdal.GA_Update)
+                        update_file=update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outname+'.vrt').ReadAsArray())
+                        update_file=None
 
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
@@ -246,16 +273,21 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
     return
 
-def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=None):
-    """
-    2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
-    """
+
+def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI'):
+    '''
+        2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
+    '''
 
     # import dependencies
     import scipy
 
     # Import functions
     from vrtmanager import renderVRT
+
+    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT':
+       outputFormat='ENVI'
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
@@ -285,7 +317,7 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
         out_interpolated = np.multiply(out_interpolated, mask, out=out_interpolated, where=mask==0)
 
     # Save file
-    renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
+    renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
 
     # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
     # Crop to track extents
@@ -342,7 +374,7 @@ if __name__ == '__main__':
     if inps.demfile is not None:
         print('\n'+'\n'+"########################################")
         print("fn 'prep_dem': Pass DEM-filename, loaded DEM array, and lat/lon arrays."+'\n')
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
     else:
         demfile=None ; Latitude=None ; Longitude=None
 
