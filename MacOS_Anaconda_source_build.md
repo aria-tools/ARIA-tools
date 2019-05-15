@@ -9,25 +9,42 @@ For **Linux** installation instructions click [here](https://github.com/dbekaert
 ------
 ## Contents
 
-1. [XCode and Command Line Tools](#xcode-and-command-line-tools)
-2. [Anaconda3 and PROJ 4 SETUP](#anaconda3-and-proj-4-setup) 
-3. [GDAL SETUP](#gdal-setup)
-4. [Setting of environment variables](#setting-of-environment-variables)
-5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+0. [XCode and Command Line Tools](#xcode-and-command-line-tools)
+1. [Install with Anaconda](#install-with-anaconda)
+2. [Building from source](#install-with-anaconda)
+2.1 [Anaconda3 Setup](#anaconda3-and-proj-4-setup)
+2.2 [PROJ4 Setup] (#proj4-setup)
+2.3 [GDAL SETUP](#gdal-setup)
+3. [Setting of environment variables](#setting-of-environment-variables)
+4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 
 ------
-## XCode and Command Line Tools
+## 0. XCode and Command Line Tools
 Make sure that you have XCode and Command Line Tools installed. XCode 10.X versions do not install the header files under /usr/include but we need that directory for the installation.
 For that purpose, after installing XCode and Command Line Tools run:
 ```
 open /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg
 ```
 this command will install some header files under /usr/include
+------
 
+## 1. Install with Anaconda
+ARIA-tools require GDAL3 environtment and GDAL3 can be installed using Anaconda package manager.
+The lines below will create and environment called ARIA-tools and install required packages
+
+```
+conda config --add channels conda-forge
+conda create -n ARIA-tools python=3.7 libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack
+source activate ARIA-tools
+conda install gdal
+```
 
 ------
-## Anaconda3 and PROJ 4 setup
+## 2. Building from source
+You can build gdal and proj4 from source. Other required packages can be installed by using conda package manager.
+
+### 2.1 Anaconda3 Setup
 First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
 
 Below we use a clean installation of Miniconda3. First we will download Miniconda3:
@@ -42,7 +59,7 @@ Use the **conda** excecutable to install the compiler tools that are needed for 
 conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
 ```
 
-### 2. PROJ 4 SETUP
+#### 2.2 PROJ4 Setup
 Clone the **PROJ 4** repository from github and install at least the version 6 release (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/proj.4 proj
@@ -65,8 +82,7 @@ ln -s libinternalproj.15.dylib libinternalproj.dylib
 
 ```
 
-------
-## GDAL SETUP
+#### 2.3 GDAL SETUP
 Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
@@ -91,7 +107,7 @@ make install
 ```
 
 ------
-## Setting of environment variables
+## 3. Setting of environment variables
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
 
 For example for csh do:
@@ -107,6 +123,5 @@ setenv PYTHONPATH /my/gdal/install/directory/lib/python3.7/site-packages
 set path = ('/my/gdal/install/directory/bin' $path)
 ```
 
-
-## [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
-
+------
+## 4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
