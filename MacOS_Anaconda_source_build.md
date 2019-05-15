@@ -11,7 +11,7 @@ For **Linux** installation instructions click [here](https://github.com/dbekaert
 
 0. [XCode and Command Line Tools](#xcode-and-command-line-tools)
 1. [Install with Anaconda](#install-with-anaconda)
-2. [Building from source](#install-with-anaconda)
+2. [Building from source](#building-from-source)
     1. [Anaconda3 Setup](#anaconda3-setup)
     2. [PROJ4 Setup](#proj4-setup)
     3. [GDAL Setup](#gdal-setup)
