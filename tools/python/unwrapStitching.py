@@ -10,16 +10,14 @@
 import os
 
 import argparse
-from phaseMinimization import Vertex, Edge, PhaseUnwrap
 import time
 
 import sys
-import logging
 
 import numpy as np
 from osgeo import gdal
 from gdalconst import *
-import pdb
+#import pdb
 import tempfile
 import shutil
 import subprocess as sp
@@ -34,17 +32,220 @@ import glob
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
+stitchMethodTypes = ['overlap','2stage']
 
-class UnwrapComponents:
-    ''' 
-        2-Stage Phase Unwrapping
+
+# Import functions
+from ARIAProduct import ARIA_standardproduct
+from shapefile_util import open_shapefile
+
+
+_world_dem = ('https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1_Ellip/SRTM_GL1_Ellip_srtm.vrt')
+
+def createParser():
+    '''
+        Extract specified product layers. The default is to export all layers.
     '''
     
-  
+    import argparse
+    parser = argparse.ArgumentParser(description='Program to merge unwrapped layer of ARIA GUNW products. Program will handle cropping/stiching when needed.')
+    parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
+    parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
+    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
+    parser.add_argument('-sm', '--stichMethod', dest='stichMethodType',  type=str, default='overlap', help="Method applied to stich the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
+    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
+    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
+    parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
+                        
+    return parser
+
+def cmdLineParse(iargs = None):
+    parser = createParser()
+    return parser.parse_args(args=iargs)
+
+
+class Stitching:
+    '''
+        This is the parent class of all stiching codes.
+        It is whatever is shared between the different variants of stitching methods
+        e.g. - setting of the main input arguments,
+             - functions to verify GDAL compatibility,
+             - function to write new connected component of merged product based on a mapping table,
+             - fucntion to write unwrapped phase of merged product based on a mapping table
+    '''
+    
     def __init__(self):
         '''
             Setting the default arguments needed by the class.
-            Fill parse the file-names as None as they need to be set by the user, which will be caught when running the class
+            Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the child classes of the respective stitch method
+        '''
+        self.inpFile = None
+        self.ccFile = None
+        self.bboxFile = None
+        self.bbox = None
+        self.solver ='pulp'
+        self.redArcs =-1
+        # stitching methods, by default leverage product overlap method
+        # other options would be to leverage connected component
+        self.stitchMethodType = "overlap"
+
+
+    def setInpFile(self, input):
+        """ Set the input Filename for stitching/unwrapping """
+        # Convert a string (i.e. user gave single file) to a list
+        if isinstance(input, np.str):
+            input = [input]
+        self.inpFile = input
+        
+        # the number of files that needs to be merged/ unwrapped
+        self.nfiles = np.shape(self.inpFile)[0]
+    
+    def setOutFile(self, output):
+        """ Set the output File name """
+        self.outFile = output
+
+    def setConnCompFile(self, connCompFile):
+        """ Set the connected Component file """
+        # Convert a string (i.e. user gave single file) to a list
+        if isinstance(connCompFile, np.str):
+            connCompFile = [connCompFile]
+        self.ccFile = connCompFile
+
+    def setBBoxFile(self, BBoxFile):
+        """ Set the connected Component file """
+        # Convert a string (i.e. user gave single file) to a list
+        if isinstance(BBoxFile, np.str):
+            BBoxFile = [BBoxFile]
+        self.bboxFile = BBoxFile
+
+    def setStitchMethod(self,stitchMethodType):
+        """ Set the stitch method to be used to handle parant class internals """
+        if stitchMethodType not in stitchMethodTypes:
+            raise ValueError(stitchMethodType + ' must be in ' + str(stitchMethodTypes))
+        else:
+            self.stitchMethodType =stitchMethodType
+
+    def __verifyInputs__(self):
+        '''
+            Verify if the unwrapped and connected component inputs are gdal compatible.
+            That the provided shape files are well-formed.
+            If not remove them from the list to be stiched.
+            If a vrt exist and gdalcompatible update the file to be a vrt
+        '''
+        # track a list of files to keep
+        inpFile_keep = []
+        ccFile_keep = []
+        bboxFile_keep = []
+        for k_file in range(self.nfiles):
+            # unw and corresponding conncomponent file
+            inFile = self.inpFile[k_file]
+            ccFile = self.ccFile[k_file]
+            # shape file in case passed through
+            if self.stitchMethodType == "overlap":
+                bboxFile = self.bboxFile[k_file]
+    
+        # vrt files are prefered as they contain proj and transf information
+        # Convert to inputs to vrt if exist, and check for gdal compatibility
+        inFile_temp = gdalTest(inFile)
+        ccFile_temp = gdalTest(ccFile)
+        # check if it exist and well-formed and pass back shapefile of it
+        if self.stitchMethodType == "overlap":
+            bbox_temp = open_shapefile(bboxFile,'productBoundingBox',1)
+            bboxFile_temp = bboxFile
+        else:
+            bbox_temp= "Pass"
+            bboxFile_temp = "Pass"
+        
+        # if one of the two files fails then do not try and merge them later on as GDAL is leveraged
+        if inFile_temp is None or ccFile_temp is None:
+            print('Removing following pair combination (not GDAL compatible)')
+            print('UNW: ' + inFile)
+            print('CONN: ' + ccFile)
+        elif bboxFile_temp is None:
+            print('Removing following pair combination (malformed shapefile)')
+            print('UNW: ' + inFile)
+            print('CONN: ' + ccFile)
+        else:
+            inpFile_keep.append(inFile_temp)
+            ccFile_keep.append(ccFile)
+            # shape file in case passed through
+            if self.stitchMethodType == "overlap":
+                bbox_keep.append(bbox_temp)
+                bboxFile_keep.append(bboxFile_temp)
+
+        # update the input files and only keep those being GDAL compatible
+        self.inpFile=inpFile_keep
+        self.ccFile=ccFile_keep
+        # shape file in case passed through
+        if self.stitchMethodType == "overlap":
+            self.bbox=bbox_keep
+            self.bboxFile=bboxFile_keep
+
+
+        # update the number of file in case some got removed
+        self.nfiles = np.shape(self.inpFile)[0]
+        
+        if self.nfiles==0:
+            print('No files left after GDAL compatibility check')
+            sys.exit(0)
+
+
+
+class UnwrapOverlap(Stitching):
+    '''
+        Stiching/unwrapping using product overlap minimization
+    '''
+    
+    def __init__(self):
+        '''
+            Inheret properties from the parent class
+            Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
+        '''
+        Stitching.__init__(self)
+    
+    def UnwrapOverlap(self):
+        
+        ## setting the method
+        self.stitchMethodType = "overlap"
+        
+        ## check if required inputs are set
+        if self.inpFile is None:
+            print("Error. Input unwrapped file(s) is (are) not set.")
+            raise Exception
+        if self.ccFile is None:
+            print("Error. Input Connected Components file(s) is (are) not set.")
+            raise Exception
+        if self.bboxFile is None:
+            print("Error. Input product Bounding box file(s) is (are) not set.")
+            raise Exception
+        
+        ## Verify if all the inputs are well-formed/GDAL compatible
+        # Update files to be vrt if they exist and remove files which failed the gdal compatibility
+        self.__verifyInputs__()
+        
+        ## Calculating the number of phase cycles needed to miminize the residual between products
+        self.__calculateCycles__()
+        
+        ## Write out merged phase and connected component files
+        self.__createImages__()
+        
+        ## inform user of succesfull completion
+        print('--DONE--')
+
+        return
+
+
+
+class UnwrapComponents:
+    ''' 
+        Stiching/unwrapping using 2-Stage Phase Unwrapping
+    '''
+    
+    def __init__(self):
+        '''
+            Setting the default arguments needed by the class.
+            Parse the file-names as None as they need to be set by the user, which will be caught when running the class
         '''
         self.inpFile = None
         self.ccFile = None
@@ -75,7 +276,6 @@ class UnwrapComponents:
         self.region=5
         self.__run__()
 
-
         return
 
     def setRedArcs(self, redArcs):
@@ -86,68 +286,7 @@ class UnwrapComponents:
         """ Set the solver to use for unwrapping """
         self.solver = solver
 
-    def setInpFile(self, input):
-        """ Set the input Filename for 2-stage stitching/unwrapping """
-        # Convert a string (i.e. user gave single file) to a list
-        if isinstance(input, np.str):
-            input = [input]
-        self.inpFile = input
-        
-        # the number of files that needs to be merged/two-staged unwrapped
-        self.nfiles = np.shape(self.inpFile)[0]
 
-    def setOutFile(self, output): 
-        """ Set the output File name """
-        self.outFile = output
-    
-    def setConnCompFile(self, connCompFile):
-        """ Set the connected Component file """
-        # Convert a string (i.e. user gave single file) to a list
-        if isinstance(connCompFile, np.str):
-            connCompFile = [connCompFile]
-        self.ccFile = connCompFile
-            
-
-    
-    
-    def __verifyInputs__(self):
-        '''
-            Verify if the unwrapped and connected component inputs are gdal compatible.
-            If not remove them from the list to be stiched.
-            If a vrt exist and gdalcompatible update the file to be a vrt
-        '''
-        # track a list of files to keep
-        inpFile_keep = []
-        ccFile_keep = []
-        for k_file in range(self.nfiles):
-            # unw and corresponding conncomponent file
-            inFile = self.inpFile[k_file]
-            ccFile = self.ccFile[k_file]
-            
-            # vrt files are prefered as they contain proj and transf information
-            # Convert to inputs to vrt if exist, and check for gdal compatibility
-            inFile_temp = gdalTest(inFile)
-            ccFile_temp = gdalTest(ccFile)
-            
-            # if one of the two files fails then do not try and merge them later on as GDAL is leveraged
-            if inFile_temp is None or ccFile_temp is None:
-                print('Removing following pair combination (not GDAL compatible)')
-                print('UNW: ' + inFile)
-                print('CONN: ' + ccFile)
-            else:
-                inpFile_keep.append(inFile_temp)
-                ccFile_keep.append(ccFile)
-        
-        # update the input files and only keep those being GDAL compatible
-        self.inpFile=inpFile_keep
-        self.ccFile=ccFile_keep
-        
-        # update the number of file in case some got removed
-        self.nfiles = np.shape(self.inpFile)[0]
-        
-        if self.nfiles==0:
-            print('No files left after GDAL compatibility check')
-            sys.exit(0)
 
 
     def __populatePolyTable__(self):
@@ -697,38 +836,6 @@ def minDistancePoints(pairing):
    
     return dist, points
 
-def product_stitch(unw_files, conn_files,unwrapped2StageFilename = None, unwrapper_2stage_name = None, solver_2stage = None):
-      # The solver used in minimizing the stiching of products
-      
-      if unwrapper_2stage_name is None:
-          unwrapper_2stage_name = 'REDARC0'
-  
-      if solver_2stage is None:
-          # If unwrapper_2state_name is MCF then solver is ignored
-          # and relaxIV MCF solver is used by default
-          solver_2stage = 'pulp'
-      '''
-      if unwrapped2StageFilename is None:
-          unwrapped2StageFilename = unwrappedIntFilename.replace('.unw','_2stage.unw')
-      '''
-
-      print('STICH/UNWRAP Settings:')
-      print('Name: %s'%unwrapper_2stage_name)
-      print('Solver: %s'%solver_2stage)
-  
-  
-      out_file = 'test.unw'
-  
-      # Hand over to 2Stage unwrap
-      unw = UnwrapComponents()
-      unw._legacy_flag = True
-      unw.setInpFile(unw_files)
-      unw.setConnCompFile(conn_files)
-      unw.setOutFile(out_file)
-      unw.setSolver(solver_2stage)
-      unw.setRedArcs(unwrapper_2stage_name)
-      unw.unwrapComponents()
-
 def polygonizeConn(ccFile):
     """
         Polygonize a connected component image.
@@ -1098,17 +1205,90 @@ def gdalTest(file):
         print(file + " is GDAL compatible")
         return file
 
-#end class
+
+
+def product_stitch_overlap(unw_files, conn_files,bbox_files,out_file='mergedOverlap'):
+    '''
+        Stitching of products minimizing overlap betnween products
+    '''
+    
+    # report method to user
+    print('STICH Settings: Product overlap approach')
+    print('Solver: Minimize overlap')
+    
+    # Hand over to product overlap stitch code
+    unw = UnwrapOverlap()
+    unw.setInpFile(unw_files)
+    unw.setConnCompFile(conn_files)
+    unw.setOutFile(out_file)
+    unw.setBBoxFile(bbox_files)
+    unw.UnwrapOverlap()
+
+def product_stitch_2stage(unw_files, conn_files,unwrapper_2stage_name = None, solver_2stage = None,out_file='merged2stage'):
+    '''
+        Stitching of products using the two-stage unwrapper approach
+        i.e. minimize the discontinuities between connected components
+    '''
+
+    # import specific dependencies to this function
+    from phaseMinimization import Vertex, Edge, PhaseUnwrap
+
+    # The solver used in minimizing the stiching of products
+    if unwrapper_2stage_name is None:
+        unwrapper_2stage_name = 'REDARC0'
+    
+    if solver_2stage is None:
+        # If unwrapper_2state_name is MCF then solver is ignored
+        # and relaxIV MCF solver is used by default
+        solver_2stage = 'pulp'
+    
+    # report method to user
+    print('STICH Settings: Connected component approach')
+    print('Name: %s'%unwrapper_2stage_name)
+    print('Solver: %s'%solver_2stage)
+    
+    # Hand over to 2Stage unwrap
+    unw = UnwrapComponents()
+    unw._legacy_flag = True
+    unw.setInpFile(unw_files)
+    unw.setConnCompFile(conn_files)
+    unw.setOutFile(out_file)
+    unw.setSolver(solver_2stage)
+    unw.setRedArcs(unwrapper_2stage_name)
+    unw.unwrapComponents()
+
+
 if __name__ == "__main__":
 
 
-    os.chdir('/Users/dbekaert/Documents/ARIA/Standard_product_tests/tops_stich_python_test')
+    # parsing the commandline inputs
+    inps = cmdLineParse()
 
-    unw_files= ['NETCDF:"Iran_A072_20171117_20171111.nc":unwrappedPhase','NETCDF:"Iran_A072_20171117_20171111_part2.nc":unwrappedPhase']
-    conn_files= ['NETCDF:"Iran_A072_20171117_20171111.nc":connectedComponents','NETCDF:"Iran_A072_20171117_20171111_part2.nc":connectedComponents']
+    print("***UNW Stitch Function:***")
+    # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
+    # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
+    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
+    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
-    unw_files= ['unwPhase.unw.vrt','unwPhase2.unw.vrt']
-    conn_files = ['connComp.vrt','connComp.vrt']
+    # getting the number of products that needs to be stiched
+    n_IFG = len(standardproduct_info.products[1])
 
-    product_stitch(unw_files,conn_files)
+    # Loop over each spatial contigeous IFG that needs to be formed
+    for IFG_count in range(n_IFG):
+        
+        # extract the filename of the spatial contigeous IFG that will be generated
+        IFG_name =standardproduct_info.pairname[IFG_count]
+        print(IFG_name)
+        IFG_name = 'testDavid'
+        
+        # extract the inputs required for stitching of unwrapped and connected component files
+        unw_files = standardproduct_info.products[1][IFG_count]['unwrappedPhase']
+        conn_files = standardproduct_info.products[1][IFG_count]['connectedComponents']
+        bbox_files = standardproduct_info.products[1][IFG_count]['productBoundingBox']
+        
+        # calling the stiching methods
+        if inps.stichMethodType == 'overlap':
+            product_stitch_overlap(unw_files,conn_files,bbox_files,out_file=IFG_name)
+        elif inps.stichMethodType == '2stage':
+            product_stitch_2stage(unw_files,conn_files,out_file=IFG_name)
 
