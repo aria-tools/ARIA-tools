@@ -58,7 +58,6 @@ class plot_class:
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
     import matplotlib as mpl
-    mpl.use("TkAgg")
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
@@ -285,7 +284,7 @@ class plot_class:
         self.plt.tight_layout()
 
         # saving the figure
-        self.plt.savefig(os.path.join(self.workdir,'lat_extents{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'lat_extents.eps'))
         self.plt.close()
 
         return
@@ -294,7 +293,6 @@ class plot_class:
         '''
             Make coherence plot + histogram.
         '''
-        import pandas as pd
         fig, ax = self.plt.subplots()
         # ax=self.plt.figure().add_subplot(111)
         coh_hist = []
