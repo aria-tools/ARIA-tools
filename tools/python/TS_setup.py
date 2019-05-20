@@ -91,11 +91,13 @@ if __name__ == '__main__':
 
 
     # Only extract layers needed for TS analysis
-    layers=['unwrappedPhase','coherence']
+    layers=['unwrappedPhase','coherence','bPerpendicular']
+    print('Extracting unwrapped phase, coherence and perpendicular baseline of all products')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
-    # layers=['bPerpendicular','incidenceAngle','lookAngle']
-    # export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
+    layers=['incidenceAngle','lookAngle']
+    print('Extracting incidence angle and look angle of the first product')
+    export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir) ##Only the first product is written
 
 
     if inps.stack==True:
