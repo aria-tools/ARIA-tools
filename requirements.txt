@@ -1,0 +1,9 @@
+python
+netcdf4
+shapely
+jupyterlab
+joblib
+scipy
+matplotlib
+pandas
+gdal>=3
