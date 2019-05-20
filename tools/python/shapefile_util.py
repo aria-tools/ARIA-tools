@@ -12,11 +12,6 @@ import ogr
 import sys
 import numpy as np
 
-from osgeo import ogr
-import matplotlib.path as mpath
-import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
-
 from osgeo import gdal, ogr
 gdal.UseExceptions()
 #Suppress warnings
@@ -70,6 +65,10 @@ def save_shapefile(fname, polygon, drivername):
     return
 
 def plot_shapefile(fname):
+    import matplotlib.path as mpath
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+
     # Extract first layer of features from shapefile using OGR
     ds = ogr.Open(fname, gdal.GA_ReadOnly)
     nlay = ds.GetLayerCount()

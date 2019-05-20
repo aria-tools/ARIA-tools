@@ -58,7 +58,6 @@ class plot_class:
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
     import matplotlib as mpl
-#    mpl.use("TkAgg")
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
@@ -87,6 +86,7 @@ class plot_class:
             os.mkdir(self.workdir)
 
         self.pairs=None
+        self.mask_ext = '_mask' if self.mask is not None else ''
 
     def __date_list__(self):
         '''
@@ -222,7 +222,7 @@ class plot_class:
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
-        self.plt.savefig(os.path.join(self.workdir,'bperp_plot.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_plot{}.eps'.format(self.mask_ext)))
         self.plt.close()
 
         # Make Baseline histogram
@@ -232,7 +232,7 @@ class plot_class:
         ax1.set_ylabel('Number of Interferograms', weight='bold')
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
-        self.plt.savefig(os.path.join(self.workdir,'bperp_histogram.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_histogram{}.eps'.format(self.mask_ext)))
         self.plt.close()
 
         return
@@ -293,7 +293,6 @@ class plot_class:
         '''
             Make coherence plot + histogram.
         '''
-
         fig, ax = self.plt.subplots()
         # ax=self.plt.figure().add_subplot(111)
         coh_hist = []
@@ -319,10 +318,11 @@ class plot_class:
         # Plot average coherence per IFG
         cols, mapper = self._create_colors_coh(coh_hist)
         ax.set_prop_cycle(color=cols)
+
         lines       = ax.plot([masters, slaves],
                           [coh_hist]*2)
-        scatter     = ax.scatter(slaves, coh_hist, c='k', zorder=100)
-        master      = ax.scatter(masters, coh_hist, c='k', zorder=100)
+        scatter     = ax.scatter(slaves, coh_hist, c='k', s=7, zorder=100)
+        master      = ax.scatter(masters, coh_hist, c='k', s=7, zorder=100)
 
         cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
         self.warnings.filterwarnings("ignore",category=UserWarning)
@@ -347,7 +347,7 @@ class plot_class:
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
-        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot{}.eps'.format(self.mask_ext)))
         self.plt.close()
 
         ### Make average coherence histogram
@@ -357,9 +357,8 @@ class plot_class:
         ax1.set_ylabel('Number of Interferograms',weight='bold')
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
-        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram{}.eps'.format(self.mask_ext)))
         self.plt.close()
-
         return
 
     def plot_avgcoherence(self):
@@ -369,7 +368,7 @@ class plot_class:
 
         # Import functions
         from vrtmanager import renderVRT
-        outname=os.path.join(self.workdir,'avgcoherence')
+        outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
 
         # Iterate through all IFGs
         for i,j in enumerate(self.product_dict[0]):
@@ -473,7 +472,7 @@ class plot_class:
         if self.mpl.rcParams==self.mpl.rcParamsDefault:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
-        self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot{}.eps'.format(self.mask_ext)))
         self.plt.close()
 
         return
