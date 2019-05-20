@@ -101,7 +101,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
     # Download DEM
     if demfilename.lower()=='download':
         demfilename=os.path.join(workdir,'SRTM_3arcsec'+'.dem')
-        gdal.Warp(demfilename, '/vsicurl/'+_world_dem, options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=0.0, srcNodata=-32768.0))
+        gdal.Warp(demfilename, '/vsicurl/'+_world_dem, options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=-32768.0, srcNodata=-32768.0))
         gdal.Open(demfilename,gdal.GA_Update).SetProjection(proj)
         gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
 
