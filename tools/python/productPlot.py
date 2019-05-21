@@ -198,7 +198,7 @@ class plot_class:
         for i in range(len(list(dateDict.keys()))):
             offset_dict[list(dateDict.keys())[i]]=S[i]
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
-            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10)
+            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=7, linestyle='None', zorder=10)
 
         # Plot lines for each pair
         for i in self.pairs:
@@ -427,7 +427,7 @@ class plot_class:
         for i in range(len(list(dateDict.keys()))):
             offset_dict[list(dateDict.keys())[i]]=S[i]
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
-            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=15, linestyle='None', zorder=10)
+            ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=7, linestyle='None', zorder=10)
         slaves = []; masters = []; coh_vals = []; y1 = []; y2 = []
         for i,j in enumerate(self.pairs): #Plot lines for each pair
             slaves.append(self.pd.to_datetime(j[:8]))
