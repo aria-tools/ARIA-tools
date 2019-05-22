@@ -3,11 +3,11 @@
 [![Language](https://img.shields.io/badge/python-3.5%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-GPL-yellow.svg)](https://github.com/dbekaert/ARIA-tools/blob/master/LICENSE)
 
-ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the GNU General Public License. Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program. 
+ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the GNU General Public License. Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.
 
 
 For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
-The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [PySAR](https://github.com/yunjunz/PySAR). 
+The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [PySAR](https://github.com/yunjunz/PySAR).
 
 
 THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
@@ -41,7 +41,7 @@ git clone https://github.com/dbekaert/ARIA-tools.git
 ------
 
 ## Software Dependencies
-Below we provide guidelines for Linux and Max users on how to build the required dependencies from source as not all packages are yet availble through third-party package managers. In future we will expand this section to rely on anaconda and macports for installation.
+Below we provide guidelines for Linux and MacOSX users on how to build the required dependencies from source as not all packages are yet available through third-party package managers.
 
 ### Packages:
 
@@ -53,19 +53,26 @@ Below we provide guidelines for Linux and Max users on how to build the required
 
 ### Python dependencies
 ```
-* [SciPy](https://www.scipy.org/) 
+* [SciPy](https://www.scipy.org/)
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 ```
 
-### [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-### [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
-### [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
-
 ------
 ## Installation
+ARIA-tools package can be easily installed and start using after the dependencies are installed and activated.
+We strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for the installation of dependencies in python environment.
+Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
-The ARIA-tools package can be installed by adding the tools folder on your PATH and PYTHONPATH.
-This can be done by editing your private module or your favorite start-up shell.
+```
+git clone https://github.com/dbekaert/ARIA-tools.git
+conda config --add channels conda-forge
+conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
+conda activate ARIA-tools
+
+```
+
+After the installation of ARIA-tools package and dependencies we need to update our PATH and PYTHONPATH variables and add a new PROJ_LIB variable to our shell environment.
+This can be done by editing your private module or your favorite start-up shell profile.
 
 
 For example, for csh do:
@@ -76,8 +83,15 @@ vi ~/.cshrc
 Add the following and update *my* to the location where you cloned ARIA-tools:
 ```
 setenv PYTHONPATH $PYTHONPATH:/my/tools/python
+setenv PROJ_LIB /my/python/directory/share/proj
 set path = ('/my/tools/python' $path)
 ```
+
+If you want to build GDAL from source or prefer Macports installation please follow the instruction given in the pages below:
+
+### [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+### [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
+### [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
 
 ------
 ## Running ARIA-tools
@@ -85,10 +99,10 @@ set path = ('/my/tools/python' $path)
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
 ### Manipulating GUNW Products
-GUNW product can be manipulated (cropped, stitched, extracted) using the *extractProduct.py* program. 
+GUNW product can be manipulated (cropped, stitched, extracted) using the *extractProduct.py* program.
 
 ### Baseline and quality control plots for GUNW Products
-Quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *productPlot.py* program. 
+Quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *productPlot.py* program.
 
 ### Time-series set-up of GUNW Products
 Time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *TS_setup.py* program.
