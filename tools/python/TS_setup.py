@@ -51,7 +51,6 @@ def cmdLineParse(iargs = None):
     return parser.parse_args(args=iargs)
 
 def generateStack(inputFiles,outputFileName):
-
     ##Mid-frame UTC times to dictionary
     f = list(np.sort(standardproduct_info.files))
     utcDict = {}
@@ -100,7 +99,6 @@ def generateStack(inputFiles,outputFileName):
     else:
         print('Stacks can be created for interferogram, coherence and connectedComponent VRT files')
 
-    ####Interferograms####
     for ind, data in enumerate(Dlist):
         width = None
         height = None
