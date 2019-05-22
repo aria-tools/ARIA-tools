@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Simran Sangha & David Bekaert
+# Author: Simran Sangha & David Bekaert & Emre Havazli
 # Copyright 2019, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
@@ -34,17 +34,14 @@ def createParser():
 
     import argparse
     parser = argparse.ArgumentParser(description='Get DEM')
-    parser.add_argument('-f', '--file', dest='imgfile', type=str,
-            required=True, help='ARIA file')
+    parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-d', '--demfile', dest='demfile', type=str,
-            default=None, help='DEM file. To download new DEM, specify "Download".')
-    parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
-            help='projection for DEM. By default WGS84.')
+    parser.add_argument('-d', '--demfile', dest='demfile', type=str, default=None, help='DEM file. To download new DEM, specify "Download".')
+    parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str, help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
-    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-s', '--stack', action='store_true', dest='stack', help="If turned on, creates vrt files of stacks that can be used for time series processing")
+    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
     return parser
@@ -52,6 +49,124 @@ def createParser():
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
+
+def generateStack(inputFiles,outputFileName):
+
+    ##Mid-frame UTC times to dictionary
+    f = list(np.sort(standardproduct_info.files))
+    utcDict = {}
+    dates= []
+    times = []
+    for i in range(0,len(f)):
+        if f[i].split('-')[6] in dates:
+            times.append(f[i].split('-')[7])
+            utcDict[dates[-1]] = times
+        else:
+            times = []
+            dates.append(f[i].split('-')[6])
+            times.append(f[i].split('-')[7])
+            utcDict[f[i].split('-')[6]] = times
+
+    UTC_time = {}
+    for key, value in utcDict.items():
+        tFirst = datetime.strptime(value[0],'%H%M%S')
+        tLast = datetime.strptime(value[-1],'%H%M%S')
+        tDelta = (tLast - tFirst)/2
+        tMid = tFirst+tDelta
+        UTC_time[key] = datetime.strftime(tMid,'%H%M%S')
+
+    ###Set up single stack file
+    if not os.path.exists(os.path.join(inps.workdir,'stack')):
+        print('Creating directory: {0}'.format(os.path.join(inps.workdir,'stack')))
+        os.makedirs(os.path.join(inps.workdir,'stack'))
+    else:
+        print('Directory {0} already exists.'.format(os.path.join(inps.workdir,'stack')))
+
+    if inputFiles in ['interferogram', 'Interferogram', 'int']:
+        domainName = 'Interferogram'
+        intList = glob.glob(os.path.join(inps.workdir,'unwrappedPhase','*.vrt'))
+        print('Number of interferograms discovered: ', len(intList))
+        Dlist = intList
+    elif inputFiles in ['coherence', 'Coherence', 'coh']:
+        domainName = 'Coherence'
+        cohList = glob.glob(os.path.join(inps.workdir,'coherence','*.vrt'))
+        print('Number of coherence discovered: ', len(cohList))
+        Dlist = cohList
+    elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
+        domainName = 'connectedComponents'
+        connCompList = glob.glob(os.path.join(inps.workdir,'connectedComponents','*.vrt'))
+        print('Number of connectedComponents discovered: ', len(connCompList))
+        Dlist = connCompList
+    else:
+        print('Stacks can be created for interferogram, coherence and connectedComponent VRT files')
+
+    ####Interferograms####
+    for ind, data in enumerate(Dlist):
+        width = None
+        height = None
+        path = None
+
+        ds = gdal.Open(data, gdal.GA_ReadOnly)
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+
+        ds = None
+
+    # setting up a subset of the stack
+    ymin, ymax, xmin, xmax = [0 , height, 0 , width]
+    if inps.bbox:
+        ymin, ymax, xmin, xmax = inps.bbox
+
+    xsize = xmax - xmin
+    ysize = ymax - ymin
+
+    with open( os.path.join(inps.workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
+        fid.write( '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'.format(xsize=xsize, ysize=ysize))
+
+        for ind, data in enumerate(Dlist):
+            metadata = {}
+            dates = data.split('/')[2][:-4]
+            width = None
+            height = None
+            path = None
+
+            ds = gdal.Open(data, gdal.GA_ReadOnly)
+            width = ds.RasterXSize
+            height = ds.RasterYSize
+            ds = None
+
+
+            metadata['wavelength'] = wavelength
+            # metadata['ACQUISITION_TIME'] = os.path.basename(os.path.dirname(slc))
+            metadata['utcTime'] = UTC_time[dates]
+
+            path = os.path.abspath(data)
+
+            outstr = '''    <VRTRasterBand dataType="CFloat32" band="{index}">
+        <SimpleSource>
+            <SourceFilename>{path}</SourceFilename>
+            <SourceBand>1</SourceBand>
+            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="CFloat32"/>
+            <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
+            <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
+        </SimpleSource>
+        <Metadata domain='{domainName}'>
+            <MDI key="Dates">{dates}</MDI>
+            <MDI key="Wavelength (m)">{wvl}</MDI>
+            <MDI key="UTC Time">{acq}</MDI>
+        </Metadata>
+    </VRTRasterBand>\n'''.format(domainName=domainName,width=width, height=height,
+                                xmin=xmin, ymin=ymin,
+                                xsize=xsize, ysize=ysize,
+                                dates=dates, acq=metadata['utcTime'],
+                                wvl = metadata['wavelength'], index=ind+1,
+                                path = path)
+            fid.write(outstr)
+
+        fid.write('</VRTDataset>')
+        print(outputFileName, ' stack generated')
+
+################################################################################
 
 
 if __name__ == '__main__':
@@ -91,8 +206,8 @@ if __name__ == '__main__':
 
 
     # Only extract layers needed for TS analysis
-    layers=['unwrappedPhase','coherence','bPerpendicular']
-    print('Extracting unwrapped phase, coherence and perpendicular baseline of all products')
+    layers=['unwrappedPhase','coherence','bPerpendicular','connectedComponents']
+    print('Extracting unwrapped phase, coherence, perpendicular baseline and connected components layers of all products')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
     layers=['incidenceAngle','lookAngle']
@@ -101,170 +216,6 @@ if __name__ == '__main__':
 
 
     if inps.stack==True:
-        ##Mid-frame UTC times to dictionary
-        f = list(np.sort(standardproduct_info.files))
-        utcDict = {}
-        dates= []
-        times = []
-        for i in range(0,len(f)):
-            if f[i].split('-')[6] in dates:
-                times.append(f[i].split('-')[7])
-                utcDict[dates[-1]] = times
-            else:
-                times = []
-                dates.append(f[i].split('-')[6])
-                times.append(f[i].split('-')[7])
-                utcDict[f[i].split('-')[6]] = times
-
-        UTC_time = {}
-        for key, value in utcDict.items():
-            tFirst = datetime.strptime(value[0],'%H%M%S')
-            tLast = datetime.strptime(value[-1],'%H%M%S')
-            tDelta = (tLast - tFirst)/2
-            tMid = tFirst+tDelta
-            UTC_time[key] = datetime.strftime(tMid,'%H%M%S')
-
-    ####Set up single stack file
-        if not os.path.exists(os.path.join(inps.workdir,'stack')):
-            print('Creating directory: {0}'.format(os.path.join(inps.workdir,'stack')))
-            os.makedirs(os.path.join(inps.workdir,'stack'))
-        else:
-            print('Directory {0} already exists.'.format(os.path.join(inps.workdir,'stack')))
-
-        intlist = glob.glob(os.path.join(inps.workdir,'unwrappedPhase','*.vrt'))
-        print('Number of interferograms discovered: ', len(intlist))
-        cohlist = glob.glob(os.path.join(inps.workdir,'coherence','*.vrt'))
-        print('Number of coherence discovered: ', len(cohlist))
-
-
-        ####Interferograms####
-        for ind, interf in enumerate(intlist):
-            width = None
-            height = None
-            path = None
-
-            ds = gdal.Open(interf, gdal.GA_ReadOnly)
-            width = ds.RasterXSize
-            height = ds.RasterYSize
-
-            ds = None
-
-        # setting up a subset of the stack
-        ymin, ymax, xmin, xmax = [0 , height, 0 , width]
-        if inps.bbox:
-            ymin, ymax, xmin, xmax = inps.bbox
-
-        xsize = xmax - xmin
-        ysize = ymax - ymin
-
-        with open( os.path.join(inps.workdir,'stack', 'stack_intrf.vrt'), 'w') as fid:
-            fid.write( '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'.format(xsize=xsize, ysize=ysize))
-
-            for ind, interf in enumerate(intlist):
-                metadata = {}
-                dates = interf.split('/')[2][:-4]
-                width = None
-                height = None
-                path = None
-
-                ds = gdal.Open(interf, gdal.GA_ReadOnly)
-                width = ds.RasterXSize
-                height = ds.RasterYSize
-                ds = None
-
-
-                metadata['WAVELENGTH'] = wavelength
-                # metadata['ACQUISITION_TIME'] = os.path.basename(os.path.dirname(slc))
-                metadata['UTC Time'] = UTC_time[dates]
-
-                path = os.path.abspath(interf)
-
-                outstr = '''    <VRTRasterBand dataType="CFloat32" band="{index}">
-            <SimpleSource>
-                <SourceFilename>{path}</SourceFilename>
-                <SourceBand>1</SourceBand>
-                <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="CFloat32"/>
-                <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
-                <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
-            </SimpleSource>
-            <Metadata domain="interferogram">
-                <MDI key="Dates">{dates}</MDI>
-                <MDI key="Wavelength (m)">{wvl}</MDI>
-                <MDI key="UTC Time">{acq}</MDI>
-            </Metadata>
-        </VRTRasterBand>\n'''.format(width=width, height=height,
-                                    xmin=xmin, ymin=ymin,
-                                    xsize=xsize, ysize=ysize,
-                                    dates=dates, acq=metadata['UTC Time'],
-                                    wvl = metadata['WAVELENGTH'], index=ind+1,
-                                    path = path)
-                fid.write(outstr)
-
-            fid.write('</VRTDataset>')
-            print('Interferogram stack generated')
-
-
-            ####Coherence####
-        for ind, coh in enumerate(cohlist):
-            width = None
-            height = None
-            path = None
-
-            ds = gdal.Open(coh, gdal.GA_ReadOnly)
-            width = ds.RasterXSize
-            height = ds.RasterYSize
-            ds = None
-
-        # setting up a subset of the stack
-        ymin, ymax, xmin, xmax = [0 , height, 0 , width]
-        if inps.bbox:
-            ymin, ymax, xmin, xmax = inps.bbox
-
-        xsize = xmax - xmin
-        ysize = ymax - ymin
-
-        with open( os.path.join(inps.workdir,'stack', 'stack_coh.vrt'), 'w') as fid:
-            fid.write( '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'.format(xsize=xsize, ysize=ysize))
-
-            for ind, coh in enumerate(cohlist):
-                metadata = {}
-                dates = coh.split('/')[2][:-4]
-                width = None
-                height = None
-                path = None
-
-                ds = gdal.Open(coh, gdal.GA_ReadOnly)
-                width = ds.RasterXSize
-                height = ds.RasterYSize
-                ds = None
-
-
-                metadata['WAVELENGTH'] = wavelength
-                # metadata['ACQUISITION_TIME'] = os.path.basename(os.path.dirname(slc))
-                metadata['UTC Time'] = UTC_time[dates]
-
-                path = os.path.abspath(coh)
-
-                outstr = '''    <VRTRasterBand dataType="CFloat32" band="{index}">
-            <SimpleSource>
-                <SourceFilename>{path}</SourceFilename>
-                <SourceBand>1</SourceBand>
-                <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="CFloat32"/>
-                <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
-                <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
-            </SimpleSource>
-            <Metadata domain="coherence">
-                <MDI key="Dates">{dates}</MDI>
-                <MDI key="Wavelength (m)">{wvl}</MDI>
-                <MDI key="UTC Time">{acq}</MDI>
-            </Metadata>
-        </VRTRasterBand>\n'''.format(width=width, height=height,
-                                    xmin=xmin, ymin=ymin,
-                                    xsize=xsize, ysize=ysize,
-                                    dates=dates, acq=metadata['UTC Time'],
-                                    wvl = metadata['WAVELENGTH'], index=ind+1,
-                                    path = path)
-                fid.write(outstr)
-
-            fid.write('</VRTDataset>')
-            print('Coherence stack generated')
+        generateStack('interferogram','interfStack')
+        generateStack('coherence','cohStack')
+        generateStack('connectedComponents','connCompStack')
