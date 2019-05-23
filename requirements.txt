@@ -6,4 +6,4 @@ joblib
 scipy
 matplotlib
 pandas
-gdal>=3
+gdal
