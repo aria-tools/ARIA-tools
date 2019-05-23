@@ -50,7 +50,7 @@ def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
 
-def generateStack(inputFiles,outputFileName):
+def generateStack(inputFiles,outputFileName,workdir='./'):
     ##Mid-frame UTC times to dictionary
     f = list(np.sort(standardproduct_info.files))
     utcDict = {}
@@ -75,25 +75,25 @@ def generateStack(inputFiles,outputFileName):
         UTC_time[key] = datetime.strftime(tMid,'%H%M%S')
 
     ###Set up single stack file
-    if not os.path.exists(os.path.join(inps.workdir,'stack')):
-        print('Creating directory: {0}'.format(os.path.join(inps.workdir,'stack')))
-        os.makedirs(os.path.join(inps.workdir,'stack'))
+    if not os.path.exists(os.path.join(workdir,'stack')):
+        print('Creating directory: {0}'.format(os.path.join(workdir,'stack')))
+        os.makedirs(os.path.join(workdir,'stack'))
     else:
-        print('Directory {0} already exists.'.format(os.path.join(inps.workdir,'stack')))
+        print('Directory {0} already exists.'.format(os.path.join(workdir,'stack')))
 
     if inputFiles in ['interferogram', 'Interferogram', 'int']:
         domainName = 'Interferogram'
-        intList = glob.glob(os.path.join(inps.workdir,'unwrappedPhase','*.vrt'))
+        intList = glob.glob(os.path.join(workdir,'unwrappedPhase','*.vrt'))
         print('Number of interferograms discovered: ', len(intList))
         Dlist = intList
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
-        cohList = glob.glob(os.path.join(inps.workdir,'coherence','*.vrt'))
+        cohList = glob.glob(os.path.join(workdir,'coherence','*.vrt'))
         print('Number of coherence discovered: ', len(cohList))
         Dlist = cohList
     elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
         domainName = 'connectedComponents'
-        connCompList = glob.glob(os.path.join(inps.workdir,'connectedComponents','*.vrt'))
+        connCompList = glob.glob(os.path.join(workdir,'connectedComponents','*.vrt'))
         print('Number of connectedComponents discovered: ', len(connCompList))
         Dlist = connCompList
     else:
@@ -112,13 +112,11 @@ def generateStack(inputFiles,outputFileName):
 
     # setting up a subset of the stack
     ymin, ymax, xmin, xmax = [0 , height, 0 , width]
-    if inps.bbox:
-        ymin, ymax, xmin, xmax = inps.bbox
-
+    
     xsize = xmax - xmin
     ysize = ymax - ymin
 
-    with open( os.path.join(inps.workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
+    with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'.format(xsize=xsize, ysize=ysize))
 
         for ind, data in enumerate(Dlist):
@@ -204,7 +202,7 @@ if __name__ == '__main__':
 
 
     # Only extract layers needed for TS analysis
-    layers=['unwrappedPhase','coherence','bPerpendicular','connectedComponents']
+    layers=['unwrappedPhase','coherence','bPerpendicular']
     print('Extracting unwrapped phase, coherence, perpendicular baseline and connected components layers of all products')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
