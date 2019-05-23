@@ -59,7 +59,7 @@ Below we provide guidelines for Linux and MacOSX users on how to build the requi
 
 ------
 ## Installation
-ARIA-tools package can be easily installed and start using after the dependencies are installed and activated.
+ARIA-tools package can be easily installed and used after the dependencies are installed and activated.
 We strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for the installation of dependencies in python environment.
 Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
@@ -68,7 +68,6 @@ git clone https://github.com/dbekaert/ARIA-tools.git
 conda config --add channels conda-forge
 conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
 conda activate ARIA-tools
-
 ```
 
 After the installation of ARIA-tools package and dependencies we need to update our PATH and PYTHONPATH variables and add a new PROJ_LIB variable to our shell environment.
