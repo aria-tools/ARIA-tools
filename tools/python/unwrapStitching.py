@@ -92,6 +92,7 @@ class Stitching:
         self.outFileUnw = './unwMerged'
         self.outFileConnComp = './connCompMerged'
         self.outputFormat='ENVI'
+        self.verbose=False
         # stitching methods, by default leverage product overlap method
         # other options would be to leverage connected component
         self.setStitchMethod("overlap")
@@ -164,6 +165,10 @@ class Stitching:
     def setOutFileConnComp(self,outFileConnComp):
         """ Set the output file name for the connected component stiched file to be generated"""
         self.outFileConnComp = outFileConnComp
+    
+    def setVerboseMode(self,verbose):
+        """ Set verbose output mode"""
+        self.verbose = verbose
     
     def __verifyInputs__(self):
         '''
@@ -388,25 +393,74 @@ class UnwrapOverlap(Stitching):
                 tmfile = None
                 # saving the temp geojson
                 save_shapefile(outname, polyOverlap, 'GeoJSON')
-            
-                # Crop each product to the overlap region using cutline of the overlap polygon and set a no-data value
-                unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=0))
-                unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=0))
-
-                # remove the tempfile
-                shutil.os.remove(outname)
                 
                 # calculate the mean of the phase for each product in the overlap region alone
-                # Compute the min, max, mean, stddev of the product in the overlap region
-                unwStatistics1 = unwFile1.GetRasterBand(1).GetStatistics(0,1)
-                unwStatistics2 = unwFile2.GetRasterBand(1).GetStatistics(0,1)
+                # will first attempt to mask out connected component 0, and default to complete overlap if this fails.
+                try:
+                    d
+                    print("Connected Comp 0 masked approach")
+                    
+                    # Cropping the unwrapped phase and connected component to the overlap region alone, inhereting the no-data.
+                    # connected component
+                    out_data,connCompNoData1,geoTrans,proj = GDALread(self.ccFile[counter],data_band=1,loadData=False)
+                    out_data,connCompNoData2,geoTrans,proj = GDALread(self.ccFile[counter+1],data_band=1,loadData=False)
+                    connCompFile1 = gdal.Warp('', self.ccFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData1))
+                    connCompFile2 = gdal.Warp('', self.ccFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData2))
+                    # unwrapped phase
+                    out_data,unwNoData1,geoTrans,proj = GDALread(self.inpFile[counter],data_band=1,loadData=False)
+                    out_data,unwNoData2,geoTrans,proj = GDALread(self.inpFile[counter+1],data_band=1,loadData=False)
+                    unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData1))
+                    unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
+                    
+                    # masking the unwrapped phase based on connected component 0, and calculation of the mean
+                    unwData1 =unwFile1.GetRasterBand(1).ReadAsArray()
+                    connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
+                    unwData1[connCompData1==0]=unwNoData1
+                    unwData1=np.ma.masked_where(unwData1==unwNoData1 , unwData1)
+                    unwStatistics1=unwData1.mean()
+                    unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
+                    connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
+                    unwData2[connCompData2==0]=unwNoData2
+                    unwData2=np.ma.masked_where(unwData2==unwNoData2 , unwData2)
+                    unwStatistics2=unwData2.mean()
+                    
+                    # closing the files
+                    unwFile1 = None
+                    unwFile2 = None
+                    connCompFile1 = None
+                    connCompFile2 = None
+                    
+                except:
+                    print("Fall Back")
+
+                    # calculate the mean of the phase for each product in the overlap region alone
+                    
+                    # Crop each product to the overlap region using cutline of the overlap polygon and set a no-data value
+                    unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds))
+                    unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds))
+                    '''
+                    unwData1 = unwFile1.GetRasterBand(1).ReadAsArray();
+                    unwData2 = unwFile2.GetRasterBand(1).ReadAsArray();
+                    unwData1 = ( unwData1 + np.pi) % (2 * np.pi ) - np.pi
+                    unwData2 = ( unwData2 + np.pi) % (2 * np.pi ) - np.pi
+                    '''
+            
+                    # Compute the min, max, mean, stddev of the product in the overlap region
+                    unwStatistics1 = unwFile1.GetRasterBand(1).GetStatistics(0,1)
+                    unwStatistics1 = unwStatistics1[2]
+                    unwStatistics2 = unwFile2.GetRasterBand(1).GetStatistics(0,1)
+                    unwStatistics2 = unwStatistics2[2]
+
+                    # close the file
+                    unwFile1 = None
+                    unwFile2 = None
                 
-                # close the file
-                unwFile1 = None
-                unwFile2 = None
+                
+                # remove the tempfile
+                shutil.os.remove(outname)
 
                 # store the residual and populate the design matrix
-                residual[counter]=(unwStatistics1[2]-unwStatistics2[2])
+                residual[counter]=(unwStatistics1-unwStatistics2)
                 A[counter,counter]=1
                 A[counter,counter+1]=-1
     
@@ -1017,7 +1071,7 @@ def polygonizeConn(ccFile):
 
     return poly_unique,ccomp_unique,geoTrans,proj,sizeData
 
-def GDALread(filename,data_band=None):
+def GDALread(filename,data_band=1,loadData=True):
     '''
         Script to load GDAL data
         Returns data, no-data value, projection, transformation
@@ -1030,26 +1084,21 @@ def GDALread(filename,data_band=None):
         raise Exception(filename + " is not a GDAL supported")
 
     # loading the requested band or by default all
-    if data_band is not None:
-        raster = data.GetRasterBand(data_band)
+    raster = data.GetRasterBand(data_band)
+    if loadData:
         out_data = raster.ReadAsArray()
     else:
-        # load the data
-        out_data = data.ReadAsArray()
+        out_data=None
+    # parsing no-data
+    try:
+        NoData = raster.GetNoDataValue()
+    except:
+        print('Could not find a no-data value...')
+        NoData = None
 
     # getting the gdal transform and projection
     geoTrans = data.GetGeoTransform()
     proj = data.GetProjection()
-
-    # getting the no-data value
-    try:
-        NoData = data.GetNoDataValue()
-        print(NoData)
-    except:
-        print('DBTODO Could not find a no-data value...')
-
-        NoData = None
-        NoData=-1
 
     return out_data,NoData,geoTrans,proj
 
@@ -1285,7 +1334,7 @@ def point2unwPhase(inputs):
     return unwPhase
 
 
-def gdalTest(file):
+def gdalTest(file, verbose=False):
     '''
         Checks if the file is GDAL compatible and return compatible VRT in case it exists
     '''
@@ -1302,7 +1351,8 @@ def gdalTest(file):
         ds = gdal.Open(file, gdal.GA_ReadOnly)
         ds = None
     except:
-        print(file + " is Not GDAL compatible")
+        if verbose:
+            print(file + " is Not GDAL compatible")
         return file_success
     
     # ideally use vrt file
@@ -1319,18 +1369,21 @@ def gdalTest(file):
         if os.path.isfile(filetest):
             ds = gdal.Open(filetest, gdal.GA_ReadOnly)
             ds = None
-            print(filetest + " is GDAL compatible")
+            if verbose:
+                print(filetest + " is GDAL compatible")
             return filetest
         else:
-            print(file + " is GDAL compatible")
+            if verbose:
+                print(file + " is GDAL compatible")
             return file
     except:
-        print(file + " is GDAL compatible")
+        if verbose:
+            print(file + " is GDAL compatible")
         return file
 
 
 
-def product_stitch_overlap(unw_files, conn_files,bbox_files,outFileUnw = './unwMerged', outFileConnComp = './connCompMerged' ,outputFormat='ENVI',mask=None, ):
+def product_stitch_overlap(unw_files, conn_files,bbox_files,outFileUnw = './unwMerged', outFileConnComp = './connCompMerged' ,outputFormat='ENVI',mask=None, verbose=False):
     '''
         Stitching of products minimizing overlap betnween products
     '''
@@ -1350,9 +1403,10 @@ def product_stitch_overlap(unw_files, conn_files,bbox_files,outFileUnw = './unwM
     unw.setOutputFormat(outputFormat)
     unw.setOutFileUnw(outFileUnw)
     unw.setOutFileConnComp(outFileConnComp)
+    unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
-def product_stitch_2stage(unw_files, conn_files,unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, ):
+def product_stitch_2stage(unw_files, conn_files,unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
@@ -1388,6 +1442,7 @@ def product_stitch_2stage(unw_files, conn_files,unwrapper_2stage_name = None, so
     unw.setOutputFormat(outputFormat)
     unw.setOutFileUnw(outFileUnw)
     unw.setOutFileConnComp(outFileConnComp)
+    unw.setVerboseMode(verbose)
     unw.unwrapComponents()
 
 
@@ -1425,7 +1480,7 @@ if __name__ == "__main__":
         
         # calling the stiching methods
         if inps.stichMethodType == 'overlap':
-            product_stitch_overlap(unw_files,conn_files,bbox_files,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat)
+            product_stitch_overlap(unw_files,conn_files,bbox_files,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
         elif inps.stichMethodType == '2stage':
-            product_stitch_2stage(unw_files,conn_files,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat)
+            product_stitch_2stage(unw_files,conn_files,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
 
