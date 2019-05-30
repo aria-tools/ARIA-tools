@@ -313,7 +313,8 @@ class Stitching:
         os.system(cmd)
 
         # Remove the directory with intermediate files as they are no longer needed
-        shutil.rmtree(tempdir)
+        
+        #shutil.rmtree(tempdir)
             
         print('DONE')
 
@@ -370,7 +371,8 @@ class UnwrapOverlap(Stitching):
         if self.nfiles>1:
             
             # initiate the residuals and design matrix
-            residual = np.zeros((self.nfiles-1,1))
+            residualcycles = np.zeros((self.nfiles-1,1))
+            residualrange = np.zeros((self.nfiles-1,1))
             A = np.zeros((self.nfiles-1,self.nfiles))
 
             # the files are already sorted in the ARIAproduct class, will make consecutive overlaps between these sorted products
@@ -397,9 +399,6 @@ class UnwrapOverlap(Stitching):
                 # calculate the mean of the phase for each product in the overlap region alone
                 # will first attempt to mask out connected component 0, and default to complete overlap if this fails.
                 try:
-                    d
-                    print("Connected Comp 0 masked approach")
-                    
                     # Cropping the unwrapped phase and connected component to the overlap region alone, inhereting the no-data.
                     # connected component
                     out_data,connCompNoData1,geoTrans,proj = GDALread(self.ccFile[counter],data_band=1,loadData=False)
@@ -412,18 +411,27 @@ class UnwrapOverlap(Stitching):
                     unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData1))
                     unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
                     
-                    # masking the unwrapped phase based on connected component 0, and calculation of the mean
-                    unwData1 =unwFile1.GetRasterBand(1).ReadAsArray()
+                    
+                    # masking the unwrapped phase based on connected component 0
+                    unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
-                    unwData1[connCompData1==0]=unwNoData1
-                    unwData1=np.ma.masked_where(unwData1==unwNoData1 , unwData1)
-                    unwStatistics1=unwData1.mean()
+                    unwData1=np.ma.masked_where((unwData1==unwNoData1) | (connCompData1==0), unwData1)
                     unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
                     connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
-                    unwData2[connCompData2==0]=unwNoData2
-                    unwData2=np.ma.masked_where(unwData2==unwNoData2 , unwData2)
-                    unwStatistics2=unwData2.mean()
+                    unwData2=np.ma.masked_where((unwData2==unwNoData2) | (connCompData1==0), unwData2)
                     
+                    
+                    # Calculation of the range correction
+                    unwData1_wrapped = ( unwData1 + np.pi) % (2 * np.pi ) - np.pi
+                    unwData2_wrapped = ( unwData2 + np.pi) % (2 * np.pi ) - np.pi
+                    arr =unwData1_wrapped-unwData2_wrapped
+                    arr = arr - np.round(arr/(2*np.pi))*2*np.pi
+                    range_temp = np.mean(arr)
+                    
+                    # calculation of the number of 2 pi cycles accounting for range correction
+                    cycles_temp = np.round((np.mean(unwData1-unwData2)-range_temp)/(2*np.pi))
+
+
                     # closing the files
                     unwFile1 = None
                     unwFile2 = None
@@ -431,26 +439,19 @@ class UnwrapOverlap(Stitching):
                     connCompFile2 = None
                     
                 except:
-                    print("Fall Back")
-
                     # calculate the mean of the phase for each product in the overlap region alone
-                    
                     # Crop each product to the overlap region using cutline of the overlap polygon and set a no-data value
                     unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds))
                     unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds))
-                    '''
-                    unwData1 = unwFile1.GetRasterBand(1).ReadAsArray();
-                    unwData2 = unwFile2.GetRasterBand(1).ReadAsArray();
-                    unwData1 = ( unwData1 + np.pi) % (2 * np.pi ) - np.pi
-                    unwData2 = ( unwData2 + np.pi) % (2 * np.pi ) - np.pi
-                    '''
+
             
                     # Compute the min, max, mean, stddev of the product in the overlap region
                     unwStatistics1 = unwFile1.GetRasterBand(1).GetStatistics(0,1)
                     unwStatistics1 = unwStatistics1[2]
                     unwStatistics2 = unwFile2.GetRasterBand(1).GetStatistics(0,1)
                     unwStatistics2 = unwStatistics2[2]
-
+                    cycles_temp = np.round((unwStatistics1-unwStatistics2)/(2*np.pi))
+                    range_temp = 0
                     # close the file
                     unwFile1 = None
                     unwFile2 = None
@@ -460,21 +461,25 @@ class UnwrapOverlap(Stitching):
                 shutil.os.remove(outname)
 
                 # store the residual and populate the design matrix
-                residual[counter]=(unwStatistics1-unwStatistics2)
+                residualcycles[counter]=cycles_temp
+                residualrange[counter]=range_temp
                 A[counter,counter]=1
                 A[counter,counter+1]=-1
     
-            # normalize the residuals to be an integer multiple of two pi
-            residalcycles = np.round(residual/(2*np.pi))
                         
             # invert the offsets with respect to the first product
-            cycles = np.round(np.linalg.lstsq(A[:,1:], residalcycles,rcond=None)[0])
+            cycles = np.round(np.linalg.lstsq(A[:,1:], residualcycles,rcond=None)[0])
+            rangesoffset = np.linalg.lstsq(A[:,1:], residualrange,rcond=None)[0]
+            #pdb.set_trace()
+
             # force first product to have 0 as offset
             cycles = -1*np.concatenate((np.zeros((1,1)), cycles), axis=0)
-        
+            rangesoffset = -1*np.concatenate((np.zeros((1,1)), rangesoffset), axis=0)
+
         else:
             # nothing to be done, i.e. no phase cycles to be added
             cycles = np.zeros((1,1))
+            rangesoffset = np.zeros((1,1))
 
         # build the mapping dictionary
         fileMappingDict = {}
@@ -491,6 +496,7 @@ class UnwrapOverlap(Stitching):
 
             # The cyclemapping of product using a single offset (i.e. all connectedComponents have the same mapping)
             cycleMapping = np.ones((n_comp+1,1))*cycles[fileCounter,0]
+            rangeOffsetMapping = np.ones((n_comp+1,1))*rangesoffset[fileCounter,0]
 
             # Generate the mapping of connectedComponents
             # Increment based on unique components of the merged product, 0 is grouped for all products
@@ -499,7 +505,7 @@ class UnwrapOverlap(Stitching):
 
             # concatenate and generate a connComponent based mapping matrix
             # [original comp, new component, 2pi unw offset]
-            connCompMapping = np.concatenate((connComp, connCompMapping,cycleMapping), axis=1)
+            connCompMapping = np.concatenate((connComp, connCompMapping,cycleMapping,rangeOffsetMapping), axis=1)
 
             # Increment the count of total number of unique components
             connCompOffset = connCompOffset+n_comp
@@ -1155,15 +1161,22 @@ def createConnComp_Int(inputs):
     intShiftName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_intShift.tif'))
     write_ambiguity(intShift,intShiftName,connProj,connGeoTrans)
 
+    
     # writing out the scalled vrt => 2PI * integer map
-    width = intShift.shape[0]
-    length = intShift.shape[1]
+    length = intShift.shape[0]
+    width = intShift.shape[1]
     scaleVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_scale.vrt'))
-    build2PiScaleVRT(scaleVRTName,intShiftName,length,width)
+    build2PiScaleVRT(scaleVRTName,intShiftName,length=length,width=width)
 
+    # Offseting the vrt for the range offset correctiom
+    unwRangeOffsetVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_rangeOffset.vrt'))
+    print(connCompMapping[1,3])
+    buildScaleOffsetVRT(unwRangeOffsetVRTName,unwFile,connProj,connGeoTrans,File1_offset=0*connCompMapping[1,3],length=length,width=width)
+
+    
     # writing out the corrected unw phase vrt => phase + 2PI * integer map
     unwVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '.vrt'))
-    buildSumVRT(unwVRTName,unwFile,scaleVRTName,connProj,connGeoTrans,length,width,description= inputs['description'])
+    buildSumVRT(unwVRTName,unwRangeOffsetVRTName,scaleVRTName,connProj,connGeoTrans,length,width,description= inputs['description'])
     
     return [connDataName, unwVRTName]
 
@@ -1239,11 +1252,52 @@ def build2PiScaleVRT(output,File,width=False,length=False):
     with open(output, 'w') as fid:
         fid.write(vrttmpl.format(width = width, length = length, File = File))
 
-def buildSumVRT(output,File1,File2,proj,geoTrans,width=False,length=False,description='Unwrapped Phase'):
+
+def buildScaleOffsetVRT(output,File1,proj,geoTrans,File1_offset=0, File1_scale = 1, width=False,length=False,description='Scalled and offsetted VRT'):
+    '''
+        Building a VRT file which sums two files together using pixel functionality
+        '''
+
+    # the vrt template with sum pixel functionality
+    vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
+    <VRTRasterBand dataType="Float32" band="1">
+    <Description>{description}</Description>
+        <ComplexSource>
+            <SourceFilename relativeToVRT="1">{File1}</SourceFilename>
+            <SourceBand>1</SourceBand>
+            <ScaleOffset>{File1_offset}</ScaleOffset>
+            <ScaleRatio>{File1_scale}</ScaleRatio>
+            <SrcRect xOff="0" yOff="0" xSize="{width}" ySize="{length}"/>
+            <DstRect xOff="0" yOff="0" xSize="{width}" ySize="{length}"/>
+            <NoData>0</NoData>
+        </ComplexSource>
+    </VRTRasterBand>
+</VRTDataset>'''
+    #<SourceProperties RasterXSize="{lengthwidth}" RasterYSize="{length}" DataType="Float32"/>
+
+    
+    # the inputs needed to build the vrt
+    # load the width and length from the GDAL file in case not specified
+    if not width or not length:
+        ds = gdal.Open(File1, gdal.GA_ReadOnly)
+        width = ds.RasterXSize
+        ysize = ds.RasterYSize
+        ds = None
+    
+    # check if the path to the file needs to be created
+    dirname = os.path.dirname(output)
+    if not os.path.isdir(dirname):
+        os.makedirs(dirname)
+    
+    # write out the VRT file
+    with open('{0}'.format(output) , 'w') as fid:
+        fid.write( vrttmpl.format(width=width,length=length,File1=File1,File1_offset=File1_offset, File1_scale = File1_scale, proj=proj,geoTrans=str(geoTrans)[1:-1],description=description))
+
+def buildSumVRT(output,File1,File2,proj,geoTrans,length=False, width=False,description='Unwrapped Phase'):
     '''
         Building a VRT file which sums two files together using pixel functionality
     '''
-
+    
     # the vrt template with sum pixel functionality
     vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
     <SRS>{proj}</SRS>
@@ -1257,6 +1311,7 @@ def buildSumVRT(output,File1,File2,proj,geoTrans,width=False,length=False,descri
         </SimpleSource>
         <SimpleSource>
             <SourceFilename>{File2}</SourceFilename>
+            <NoData>0</NoData>
         </SimpleSource>
     </VRTRasterBand>
 </VRTDataset>'''
