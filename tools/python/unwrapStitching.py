@@ -40,6 +40,7 @@ stitchMethodTypes = ['overlap','2stage']
 
 # Import functions
 from ARIAProduct import ARIA_standardproduct
+from extractProduct import merged_productbbox
 from shapefile_util import open_shapefile, save_shapefile
 
 
@@ -84,8 +85,8 @@ class Stitching:
         '''
         self.inpFile = None
         self.ccFile = None
-        self.bboxFile = None
-        self.bbox = None
+        self.prodbboxFile = None
+        self.prodbbox = None
         self.solver ='pulp'
         self.redArcs =-1
         self.mask = None
@@ -119,12 +120,20 @@ class Stitching:
             connCompFile = [connCompFile]
         self.ccFile = connCompFile
 
-    def setBBoxFile(self, BBoxFile):
-        """ Set the connected Component file """
+    def setProdBBoxFile(self, ProdBBoxFile):
+        """ Set the product bounding box file(s) """
         # Convert a string (i.e. user gave single file) to a list
-        if isinstance(BBoxFile, np.str):
-            BBoxFile = [BBoxFile]
-        self.bboxFile = BBoxFile
+        if isinstance(ProdBBoxFile, np.str):
+            ProdBBoxFile = [ProdBBoxFile]
+        self.prodbboxFile = ProdBBoxFile
+
+    def setBBoxFile(self, BBoxFile):
+        """ Load bounds of bbox file """
+        self.bbox_file = open_shapefile(BBoxFile, 0, 0).bounds
+
+    def setTotProdBBoxFile(self, BBoxFile):
+        """ Set common track bbox file"""
+        self.setTotProdBBoxFile = prods_TOTbbox
 
     def setStitchMethod(self,stitchMethodType):
         """ Set the stitch method to be used to handle parant class internals """
@@ -148,8 +157,6 @@ class Stitching:
 
     def setMask(self, mask):
         """ Set the mask file """
-        if mask is not None:
-            mask = gdalTest(mask)
         self.mask = mask
         
     def setOutputFormat(self,outputFormat):
@@ -180,7 +187,7 @@ class Stitching:
         # track a list of files to keep
         inpFile_keep = []
         ccFile_keep = []
-        bboxFile_keep = []
+        prodbboxFile_keep = []
         bbox_keep = []
         for k_file in range(self.nfiles):
             # unw and corresponding conncomponent file
@@ -188,7 +195,7 @@ class Stitching:
             ccFile = self.ccFile[k_file]
             # shape file in case passed through
             if self.stitchMethodType == "overlap":
-                bboxFile = self.bboxFile[k_file]
+                prodbboxFile = self.prodbboxFile[k_file]
     
             # vrt files are prefered as they contain proj and transf information
             # Convert to inputs to vrt if exist, and check for gdal compatibility
@@ -196,18 +203,18 @@ class Stitching:
             ccFile_temp = gdalTest(ccFile)
             # check if it exist and well-formed and pass back shapefile of it
             if self.stitchMethodType == "overlap":
-                bbox_temp = open_shapefile(bboxFile,'productBoundingBox',1)
-                bboxFile_temp = bboxFile
+                bbox_temp = open_shapefile(prodbboxFile,'productBoundingBox',1)
+                prodbboxFile_temp = prodbboxFile
             else:
                 bbox_temp= "Pass"
-                bboxFile_temp = "Pass"
+                prodbboxFile_temp = "Pass"
         
             # if one of the two files fails then do not try and merge them later on as GDAL is leveraged
             if inFile_temp is None or ccFile_temp is None:
                 print('Removing following pair combination (not GDAL compatible)')
                 print('UNW: ' + inFile)
                 print('CONN: ' + ccFile)
-            elif bboxFile_temp is None:
+            elif prodbboxFile_temp is None:
                 print('Removing following pair combination (malformed shapefile)')
                 print('UNW: ' + inFile)
                 print('CONN: ' + ccFile)
@@ -217,15 +224,15 @@ class Stitching:
                 # shape file in case passed through
                 if self.stitchMethodType == "overlap":
                     bbox_keep.append(bbox_temp)
-                    bboxFile_keep.append(bboxFile_temp)
+                    prodbboxFile_keep.append(prodbboxFile_temp)
 
         # update the input files and only keep those being GDAL compatible
         self.inpFile=inpFile_keep
         self.ccFile=ccFile_keep
         # shape file in case passed through
         if self.stitchMethodType == "overlap":
-            self.bbox=bbox_keep
-            self.bboxFile=bboxFile_keep
+            self.prodbbox=bbox_keep
+            self.prodbboxFile=prodbboxFile_keep
 
         # update the number of file in case some got removed
         self.nfiles = np.shape(self.inpFile)[0]
@@ -298,19 +305,31 @@ class Stitching:
             os.makedirs(outPathConnComp)
 
         ## Will now merge the unwrapped and connected component files
-        cmd = 'gdalwarp -co TILED=YES -srcnodata 0 -of ' + self.outputFormat + ' ' + ' '.join(unwFiles) + ' ' + self.outFileUnw
+        # remove existing output file(s)
         for file in glob.glob(self.outFileUnw + "*"):
             os.remove(file)
-        os.system(cmd)
-        cmd = 'gdal_translate -of png -scale ' +  self.outFileUnw + ' ' +  self.outFileUnw + '.png'
-        os.system(cmd)
+        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
+        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        # Update VRT
+        gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
+        # Apply mask (if specified).
+        if self.mask is not None:
+            update_file=gdal.Open(self.outFileUnw+'.vrt',gdal.GA_Update)
+            update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
+            update_file=None
 
-        cmd = 'gdalwarp -co TILED=YES -srcnodata -1  -of ' +  self.outputFormat + ' '+ ' '.join(conCompFiles) + ' ' + self.outFileConnComp
+        # remove existing output file(s)
         for file in glob.glob(self.outFileConnComp + "*"):
             os.remove(file)
-        os.system(cmd)
-        cmd = 'gdal_translate -of png -scale ' +  self.outFileConnComp + ' ' +  self.outFileConnComp + '.png'
-        os.system(cmd)
+        gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles, options=gdal.BuildVRTOptions(srcNodata=-1))
+        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        # Update VRT
+        gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, options=gdal.TranslateOptions(format="VRT"))
+        # Apply mask (if specified).
+        if self.mask is not None:
+            update_file=gdal.Open(self.outFileConnComp+'.vrt',gdal.GA_Update)
+            update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
+            update_file=None
 
         # Remove the directory with intermediate files as they are no longer needed
         
@@ -343,7 +362,7 @@ class UnwrapOverlap(Stitching):
         if self.ccFile is None:
             print("Error. Input Connected Components file(s) is (are) not set.")
             raise Exception
-        if self.bboxFile is None:
+        if self.prodbboxFile is None:
             print("Error. Input product Bounding box file(s) is (are) not set.")
             raise Exception
         
@@ -378,8 +397,8 @@ class UnwrapOverlap(Stitching):
             # the files are already sorted in the ARIAproduct class, will make consecutive overlaps between these sorted products
             for counter in range(self.nfiles-1):
                 # getting the two neighboring frames
-                bbox_frame1 = self.bbox[counter]
-                bbox_frame2 = self.bbox[counter+1]
+                bbox_frame1 = self.prodbbox[counter]
+                bbox_frame2 = self.prodbbox[counter+1]
                 
                 # determining the intersection between the two frames
                 if not bbox_frame1.intersects(bbox_frame2):
@@ -1438,13 +1457,13 @@ def gdalTest(file, verbose=False):
 
 
 
-def product_stitch_overlap(unw_files, conn_files,bbox_files,outFileUnw = './unwMerged', outFileConnComp = './connCompMerged' ,outputFormat='ENVI',mask=None, verbose=False):
+def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged', outputFormat='ENVI', mask=None, verbose=False):
     '''
         Stitching of products minimizing overlap betnween products
     '''
     
     # report method to user
-    print('STICH Settings: Product overlap approach')
+    print('STITCH Settings: Product overlap approach')
     print('Solver: Minimize overlap')
     
     # Hand over to product overlap stitch code
@@ -1453,7 +1472,9 @@ def product_stitch_overlap(unw_files, conn_files,bbox_files,outFileUnw = './unwM
     unw.setConnCompFile(conn_files)
     unw.setOutFileConnComp(outFileConnComp)
     unw.setOutFileUnw(outFileUnw)
-    unw.setBBoxFile(bbox_files)
+    unw.setProdBBoxFile(prod_bbox_files)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setMask(mask)
     unw.setOutputFormat(outputFormat)
     unw.setOutFileUnw(outFileUnw)
@@ -1461,7 +1482,7 @@ def product_stitch_overlap(unw_files, conn_files,bbox_files,outFileUnw = './unwM
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
-def product_stitch_2stage(unw_files, conn_files,unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
@@ -1497,6 +1518,8 @@ def product_stitch_2stage(unw_files, conn_files,unwrapper_2stage_name = None, so
     unw.setOutputFormat(outputFormat)
     unw.setOutFileUnw(outFileUnw)
     unw.setOutFileConnComp(outFileConnComp)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setVerboseMode(verbose)
     unw.unwrapComponents()
 
@@ -1515,6 +1538,20 @@ if __name__ == "__main__":
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
+    print('\n'+'\n'+"########################################")
+    print("fn 'merged_productbbox': extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM."+'\n')
+    updated_product_dict=copy.deepcopy(standardproduct_info.products[1])
+    updated_product_dict, standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(updated_product_dict, os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
+    # Load mask (if specified).
+    if inps.mask is not None:
+        inps.mask=gdal.Warp('', inps.mask, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds, dstNodata=0))
+        inps.mask.SetProjection(proj)
+        # If no data value
+        if inps.mask.GetRasterBand(1).GetNoDataValue():
+            inps.mask=np.ma.masked_where(inps.mask.ReadAsArray() == inps.mask.GetRasterBand(1).GetNoDataValue(), inps.mask.ReadAsArray())
+        else:
+            inps.mask=inps.mask.ReadAsArray()
+
     # getting the number of products that needs to be stiched
     n_IFG = len(standardproduct_info.products[1])
 
@@ -1527,7 +1564,7 @@ if __name__ == "__main__":
         # extract the inputs required for stitching of unwrapped and connected component files
         unw_files = standardproduct_info.products[1][IFG_count]['unwrappedPhase']
         conn_files = standardproduct_info.products[1][IFG_count]['connectedComponents']
-        bbox_files = standardproduct_info.products[1][IFG_count]['productBoundingBox']
+        prod_bbox_files = standardproduct_info.products[1][IFG_count]['productBoundingBox']
         # based on the key define the output directories
         outFileUnw=os.path.join(inps.workdir,'unwrappedPhase',IFG_name)
         outFileConnComp=os.path.join(inps.workdir,'connectedComponents',IFG_name)
@@ -1535,7 +1572,6 @@ if __name__ == "__main__":
         
         # calling the stiching methods
         if inps.stichMethodType == 'overlap':
-            product_stitch_overlap(unw_files,conn_files,bbox_files,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
+            product_stitch_overlap(unw_files,conn_files,prod_bbox_files,standardproduct_info.bbox_file,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
         elif inps.stichMethodType == '2stage':
-            product_stitch_2stage(unw_files,conn_files,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
-
+            product_stitch_2stage(unw_files,conn_files,standardproduct_info.bbox_file,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
