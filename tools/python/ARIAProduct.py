@@ -191,6 +191,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             except:
                 print("WARNING: Data layer key %s not expected in sdskeys"%(j[1]))
         datalyr_dict['pair_name']=self.pairname
+        # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
+        datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
 
         # remove temp variables
         del rdrmetadata, sdsdict
