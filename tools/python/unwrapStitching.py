@@ -40,32 +40,7 @@ stitchMethodTypes = ['overlap','2stage']
 
 # Import functions
 from ARIAProduct import ARIA_standardproduct
-from extractProduct import merged_productbbox
 from shapefile_util import open_shapefile, save_shapefile
-
-
-
-def createParser():
-    '''
-        Extract specified product layers. The default is to export all layers.
-    '''
-    
-    import argparse
-    parser = argparse.ArgumentParser(description='Program to merge unwrapped layer of ARIA GUNW products. Program will handle cropping/stiching when needed.')
-    parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
-    parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
-    parser.add_argument('-sm', '--stichMethod', dest='stichMethodType',  type=str, default='overlap', help="Method applied to stich the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
-    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='ENVI', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). Files cannot be unpacked as VRT as corrections are to be applied.')
-    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
-                        
-    return parser
-
-def cmdLineParse(iargs = None):
-    parser = createParser()
-    return parser.parse_args(args=iargs)
 
 
 class Stitching:
@@ -128,10 +103,10 @@ class Stitching:
         self.prodbboxFile = ProdBBoxFile
 
     def setBBoxFile(self, BBoxFile):
-        """ Load bounds of bbox file """
-        self.bbox_file = open_shapefile(BBoxFile, 0, 0).bounds
+        """ Set bounds of bbox """
+        self.bbox_file = BBoxFile
 
-    def setTotProdBBoxFile(self, BBoxFile):
+    def setTotProdBBoxFile(self, prods_TOTbbox):
         """ Set common track bbox file"""
         self.setTotProdBBoxFile = prods_TOTbbox
 
@@ -162,8 +137,9 @@ class Stitching:
     def setOutputFormat(self,outputFormat):
         """ Set the output format of the files to be generated """
         # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-        if outputFormat=='VRT':
-            outputFormat='ENVI'
+        self.outputFormat = outputFormat
+        if self.outputFormat=='VRT':
+            self.outputFormat='ENVI'
     
     def setOutFileUnw(self,outFileUnw):
         """ Set the output file name for the unwrapped stiched file to be generated"""
@@ -314,7 +290,7 @@ class Stitching:
         gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file=gdal.Open(self.outFileUnw+'.vrt',gdal.GA_Update)
+            update_file=gdal.Open(self.outFileUnw,gdal.GA_Update)
             update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
             update_file=None
 
@@ -327,7 +303,7 @@ class Stitching:
         gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, options=gdal.TranslateOptions(format="VRT"))
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file=gdal.Open(self.outFileConnComp+'.vrt',gdal.GA_Update)
+            update_file=gdal.Open(self.outFileConnComp,gdal.GA_Update)
             update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
             update_file=None
 
@@ -1501,7 +1477,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
         solver_2stage = 'pulp'
     
     # report method to user
-    print('STICH Settings: Connected component approach')
+    print('STITCH Settings: Connected component approach')
     print('Name: %s'%unwrapper_2stage_name)
     print('Solver: %s'%solver_2stage)
     
@@ -1522,56 +1498,3 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setVerboseMode(verbose)
     unw.unwrapComponents()
-
-
-if __name__ == "__main__":
-
-
-    # parsing the commandline inputs
-    inps = cmdLineParse()
-
-    
-
-    print("***UNW Stitch Function:***")
-    # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
-    # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-
-    print('\n'+'\n'+"########################################")
-    print("fn 'merged_productbbox': extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM."+'\n')
-    updated_product_dict=copy.deepcopy(standardproduct_info.products[1])
-    updated_product_dict, standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(updated_product_dict, os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
-    # Load mask (if specified).
-    if inps.mask is not None:
-        inps.mask=gdal.Warp('', inps.mask, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds, dstNodata=0))
-        inps.mask.SetProjection(proj)
-        # If no data value
-        if inps.mask.GetRasterBand(1).GetNoDataValue():
-            inps.mask=np.ma.masked_where(inps.mask.ReadAsArray() == inps.mask.GetRasterBand(1).GetNoDataValue(), inps.mask.ReadAsArray())
-        else:
-            inps.mask=inps.mask.ReadAsArray()
-
-    # getting the number of products that needs to be stiched
-    n_IFG = len(standardproduct_info.products[1])
-
-    # Loop over each spatial contigeous IFG that needs to be formed
-    for IFG_count in range(n_IFG):
-        
-        # extract the filename of the spatial contigeous IFG that will be generated
-        IFG_name =standardproduct_info.products[1][IFG_count]['pair_name'][0]
-
-        # extract the inputs required for stitching of unwrapped and connected component files
-        unw_files = standardproduct_info.products[1][IFG_count]['unwrappedPhase']
-        conn_files = standardproduct_info.products[1][IFG_count]['connectedComponents']
-        prod_bbox_files = standardproduct_info.products[1][IFG_count]['productBoundingBox']
-        # based on the key define the output directories
-        outFileUnw=os.path.join(inps.workdir,'unwrappedPhase',IFG_name)
-        outFileConnComp=os.path.join(inps.workdir,'connectedComponents',IFG_name)
-
-        
-        # calling the stiching methods
-        if inps.stichMethodType == 'overlap':
-            product_stitch_overlap(unw_files,conn_files,prod_bbox_files,standardproduct_info.bbox_file,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
-        elif inps.stichMethodType == '2stage':
-            product_stitch_2stage(unw_files,conn_files,standardproduct_info.bbox_file,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = inps.outputFormat,verbose=inps.verbose)
