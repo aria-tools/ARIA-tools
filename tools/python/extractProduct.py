@@ -18,6 +18,8 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 # Import functions
 from ARIAProduct import ARIA_standardproduct
 from shapefile_util import open_shapefile
+from unwrapStitching import product_stitch_overlap
+from unwrapStitching import product_stitch_2stage
 
 _world_dem = ('https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1_Ellip/SRTM_GL1_Ellip_srtm.vrt')
 
@@ -38,6 +40,7 @@ def createParser():
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
+    parser.add_argument('-sm', '--stichMethod', dest='stichMethodType',  type=str, default='overlap', help="Method applied to stich the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
@@ -195,7 +198,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT'):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', verbose=None):
     """
     The function allows for exporting layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -208,6 +211,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
     from collections import OrderedDict
     if not layers: return # only bbox
 
+    bounds=open_shapefile(bbox_file, 0, 0).bounds
     # Loop through user expected layers
     for key in layers:
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
@@ -217,12 +221,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
         if not os.path.exists(workdir):
             os.mkdir(workdir)
 
-        bounds=open_shapefile(bbox_file, 0, 0).bounds
-
         # Iterate through all IFGs
         for i,j in enumerate(product_dict[0]):
-            outname=os.path.join(workdir, product_dict[1][i][0])
-            gdal.BuildVRT(outname+'.vrt', j)
+            # VRT for unw phase and connected component files built later
+            if key!='unwrappedPhase' and key!='connectedComponents':
+                outname=os.path.join(workdir, product_dict[1][i][0])
+                gdal.BuildVRT(outname+'.vrt', j)
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in j):
@@ -252,13 +256,30 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
                     # Apply mask (if specified).
                     if mask is not None:
-                        update_file=gdal.Open(outname+'.vrt',gdal.GA_Update)
+                        update_file=gdal.Open(outname,gdal.GA_Update)
                         update_file=update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outname+'.vrt').ReadAsArray())
                         update_file=None
 
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
                 print('###Placeholder for 2stage unw! For now just write out VRT file.')
+                # Loop over each spatially contiguous IFG
+                for IFG_count in range(len(j)):
+                    # Check if unw phase and connected components are already generated
+                    if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i][0])):
+                        # extract the inputs required for stitching of unwrapped and connected component files
+                        unw_files = full_product_dict[IFG_count]['unwrappedPhase']
+                        conn_files = full_product_dict[IFG_count]['connectedComponents']
+                        prod_bbox_files = full_product_dict[IFG_count]['productBoundingBoxFrames']
+                        # based on the key define the output directories
+                        outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
+                        outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
+                        
+                        # calling the stiching methods
+                        if inps.stichMethodType == 'overlap':
+                            product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
+                        elif inps.stichMethodType == '2stage':
+                            product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
 
     return
 
@@ -338,6 +359,7 @@ if __name__ == '__main__':
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes, because it's not a raster layer
         inps.layers.remove('productBoundingBox')
+        inps.layers.remove('productBoundingBoxFrames')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
 
@@ -367,6 +389,5 @@ if __name__ == '__main__':
     else:
         demfile=None ; Latitude=None ; Longitude=None
 
-
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, verbose=inps.verbose)
