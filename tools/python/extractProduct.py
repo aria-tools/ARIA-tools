@@ -222,7 +222,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
             os.mkdir(workdir)
 
         # Iterate through all IFGs
-        print("Generating:" + key + ":")
+        print("Generating: " + key)
         for i,j in enumerate(product_dict[0]):
             # provide update on which IFG
             print(product_dict[1][i][0])
@@ -271,23 +271,21 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
-                # Loop over each spatially contiguous IFG
-                for IFG_count in range(len(j)):
-                    # Check if unw phase and connected components are already generated
-                    if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i][0])):
-                        # extract the inputs required for stitching of unwrapped and connected component files
-                        unw_files = full_product_dict[IFG_count]['unwrappedPhase']
-                        conn_files = full_product_dict[IFG_count]['connectedComponents']
-                        prod_bbox_files = full_product_dict[IFG_count]['productBoundingBoxFrames']
-                        # based on the key define the output directories
-                        outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
-                        outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
-                        
-                        # calling the stiching methods
-                        if inps.stichMethodType == 'overlap':
-                            product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
-                        elif inps.stichMethodType == '2stage':
-                            product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
+                # Check if unw phase and connected components are already generated
+                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i][0])):
+                    # extract the inputs required for stitching of unwrapped and connected component files
+                    unw_files = full_product_dict[i]['unwrappedPhase']
+                    conn_files = full_product_dict[i]['connectedComponents']
+                    prod_bbox_files = full_product_dict[i]['productBoundingBoxFrames']
+                    # based on the key define the output directories
+                    outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
+                    outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
+                    
+                    # calling the stiching methods
+                    if inps.stichMethodType == 'overlap':
+                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
+                    elif inps.stichMethodType == '2stage':
+                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
 
     return
 
