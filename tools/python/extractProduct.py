@@ -343,18 +343,16 @@ if __name__ == '__main__':
     """
     inps = cmdLineParse()
 
-    print("########################################")
-    print("class 'Aria_standardproduct': sort input file(s) by starting time")
-    print("if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected."+'\n')
-    print("Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product + path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)."+'\n')
+    print("***Extract Product Function:***")
+    # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
+    # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
+    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
     if not inps.layers:
-        print('\n'+'\n'+"########################################")
         print ('No layers specified; only creating bounding box shapes')
 
     elif inps.layers.lower()=='all':
-        print('\n'+'\n'+"########################################")
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes, because it's not a raster layer
@@ -367,8 +365,8 @@ if __name__ == '__main__':
         inps.layers=list(inps.layers.split(','))
 
 
-    print('\n'+'\n'+"########################################")
-    print("fn 'merged_productbbox': extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM."+'\n')
+    # extract/merge productBoundingBox layers for each pair and update dict,
+    # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
     # Load mask (if specified).
     if inps.mask is not None:
@@ -383,8 +381,7 @@ if __name__ == '__main__':
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
     if inps.demfile is not None:
-        print('\n'+'\n'+"########################################")
-        print("fn 'prep_dem': Pass DEM-filename, loaded DEM array, and lat/lon arrays."+'\n')
+        # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
     else:
         demfile=None ; Latitude=None ; Longitude=None
