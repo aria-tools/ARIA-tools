@@ -198,7 +198,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', verbose=None):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stichMethodType = 'overlap', verbose=None):
     """
     The function allows for exporting layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -282,10 +282,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
                     
                     # calling the stiching methods
-                    if inps.stichMethodType == 'overlap':
-                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
-                    elif inps.stichMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
+                    if stichMethodType == 'overlap':
+                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
+                    elif stichMethodType == '2stage':
+                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
 
     return
 
@@ -393,4 +393,4 @@ if __name__ == '__main__':
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, verbose=inps.verbose)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, stichMethodType = inps.stichMethodType, verbose=inps.verbose)
