@@ -9,13 +9,8 @@
 
 
 import pdb
-
-
 import os
-
-import argparse
 import time
-
 import sys
 
 import numpy as np
@@ -308,8 +303,7 @@ class Stitching:
             update_file=None
 
         # Remove the directory with intermediate files as they are no longer needed
-        
-        #shutil.rmtree(tempdir)
+        shutil.rmtree(tempdir)
             
         print('DONE')
 
@@ -1165,10 +1159,8 @@ def createConnComp_Int(inputs):
 
     # Offseting the vrt for the range offset correctiom
     unwRangeOffsetVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_rangeOffset.vrt'))
-    print(connCompMapping[1,3])
-    buildScaleOffsetVRT(unwRangeOffsetVRTName,unwFile,connProj,connGeoTrans,File1_offset=0*connCompMapping[1,3],length=length,width=width)
+    buildScaleOffsetVRT(unwRangeOffsetVRTName,unwFile,connProj,connGeoTrans,File1_offset=connCompMapping[1,3],length=length,width=width)
 
-    
     # writing out the corrected unw phase vrt => phase + 2PI * integer map
     unwVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '.vrt'))
     buildSumVRT(unwVRTName,unwRangeOffsetVRTName,scaleVRTName,connProj,connGeoTrans,length,width,description= inputs['description'])
@@ -1358,8 +1350,6 @@ def point2unwPhase(inputs):
         xoff=0
     if yoff<0:
         yoff=0
-
-    #pdb.set_trace()  
 
     # loading a chunk of the connected component data
     ds_connFile = gdal.Open(connFile, gdal.GA_ReadOnly)
