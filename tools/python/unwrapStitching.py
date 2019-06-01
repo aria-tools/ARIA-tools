@@ -224,7 +224,6 @@ class Stitching:
         
         # will try multi-core version and default to for loop in case of failure
         try:
-            start = time.time()
             # need to combine all inputs together as single argument tuple
             all_inputs = ()
             for counter in  range(len(self.fileMappingDict)):
@@ -238,13 +237,9 @@ class Stitching:
                 all_inputs = all_inputs + (inputs,)
             # compute the phase value using multi-thread functionality
             intermediateFiles = Parallel(n_jobs=-1,max_nbytes=1e6)(delayed(createConnComp_Int)(ii) for ii in all_inputs)
-            # end timer
-            end = time.time()
         
         except:
             print('Multi-core version failed, will try single for loop')
-            # will track processing time
-            start = time.time()
             intermediateFiles = []
             for counter in  range(len(self.fileMappingDict)):
                 fileMappingDict = self.fileMappingDict[counter]
@@ -256,9 +251,6 @@ class Stitching:
                 # compute the phase value
                 intermediateFiles_temp = createConnComp_Int(inputs)
                 intermediateFiles.append(intermediateFiles_temp)
-            # end timer
-            end = time.time()
-        print("runtime phase value calculation: " + str(end - start) + " sec")
 
         # combining all conComp and unw files that need to be blended
         conCompFiles = []
@@ -304,8 +296,6 @@ class Stitching:
 
         # Remove the directory with intermediate files as they are no longer needed
         shutil.rmtree(tempdir)
-            
-        print('DONE')
 
 
 class UnwrapOverlap(Stitching):
@@ -346,8 +336,6 @@ class UnwrapOverlap(Stitching):
         ## Write out merged phase and connected component files
         self.__createImages__()
         
-        ## inform user of succesfull completion
-        print('--DONE--')
 
         return
 
@@ -571,9 +559,6 @@ class UnwrapComponents(Stitching):
         ## Write out merged phase and connected component files
         self.__createImages__()
         
-        ## inform user of succesfull completion
-        print('--DONE--')
-
 
         return
 
