@@ -222,14 +222,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
             os.mkdir(workdir)
 
         # Iterate through all IFGs
+        print("Generating:" + key + ":")
         for i,j in enumerate(product_dict[0]):
-            # VRT for unw phase and connected component files built later
-            if key!='unwrappedPhase' and key!='connectedComponents':
-                outname=os.path.join(workdir, product_dict[1][i][0])
-                gdal.BuildVRT(outname+'.vrt', j)
+            # provide update on which IFG
+            print(product_dict[1][i][0])
+            outname=os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in j):
+                gdal.BuildVRT(outname +'.vrt', j)
+
                 if dem is None:
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
@@ -244,16 +246,23 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
-                ##SS make the output formate as an option. e.g. default is vrt, if somethign else is asked, then make the physical file and link the vrt to the physical file.
                 if outputFormat=='VRT' and mask is None:
-                    gdal.Warp(outname+'.vrt', j, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+                    # building the virtual vrt
+                    gdal.BuildVRT(outname+ "_uncropped" +'.vrt', j)
+                    # building the cropped vrt
+                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
                 else:
+                    # building the VRT
+                    gdal.BuildVRT(outname +'.vrt', j)
+
                     # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
                     if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+                    
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
+                    
                     # Apply mask (if specified).
                     if mask is not None:
                         update_file=gdal.Open(outname,gdal.GA_Update)
@@ -262,7 +271,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
-                print('###Placeholder for 2stage unw! For now just write out VRT file.')
                 # Loop over each spatially contiguous IFG
                 for IFG_count in range(len(j)):
                     # Check if unw phase and connected components are already generated
@@ -277,7 +285,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                         
                         # calling the stiching methods
                         if inps.stichMethodType == 'overlap':
-                            product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
+                            product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
                         elif inps.stichMethodType == '2stage':
                             product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=inps.mask,outputFormat = outputFormat,verbose=verbose)
 
