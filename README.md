@@ -48,7 +48,7 @@ Below we provide guidelines for Linux and MacOSX users on how to build the requi
 ```
 * Python >= 3.5  (3.6 preferred)
 * [PROJ 4](https://github.com/OSGeo/proj) github) >= 6.0
-* [GDAL](https://www.gdal.org/) and its Python bindings >= 2.5
+* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0 
 ```
 
 ### Python dependencies
