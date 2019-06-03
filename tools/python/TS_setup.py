@@ -117,6 +117,12 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     xsize = xmax - xmin
     ysize = ymax - ymin
 
+    # extraction of radar meta-data
+    wavelength = standardproduct_info.products[0][0]['wavelength'][0].data
+    startRange = standardproduct_info.products[0][0]['slantRangeStart'][0].data
+    endRange = standardproduct_info.products[0][0]['slantRangeEnd'][0].data
+    rangeSpacing = standardproduct_info.products[0][0]['slantRangeSpacing'][0].data
+
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
         <SRS>{proj}</SRS>">
@@ -124,7 +130,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         '''.format(xsize=xsize, ysize=ysize,
         proj=projection,
         GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
-        
+
         for ind, data in enumerate(Dlist):
             metadata = {}
             dates = data.split('/')[2][:-4]
@@ -135,9 +141,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             ds = gdal.Open(data, gdal.GA_ReadOnly)
             width = ds.RasterXSize
             height = ds.RasterYSize
-            startRange = '1111' ##Placeholder until metadata extracted from product
-            endRange = '1111' ##Placeholder
-            rangeSpacing = '1111' ##Placeholder
             ds = None
 
             metadata['wavelength'] = wavelength
@@ -172,7 +175,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
 
         fid.write('</VRTDataset>')
         print(outputFileName, ': stack generated')
-
 
 
 if __name__ == '__main__':
@@ -216,10 +218,6 @@ if __name__ == '__main__':
     layers=['incidenceAngle','lookAngle','azimuthAngle']
     print('Extracting incidence angle, look angle, and heading of the first interferogram only')
     export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir) ##Only the first product is written
-
-
-    # extraction of radar meta-data
-    wavelength = standardproduct_info.products[0][0]['wavelength'][0].data
 
 
     if inps.stack==True:
