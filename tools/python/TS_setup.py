@@ -202,8 +202,8 @@ if __name__ == '__main__':
     print('Extracting unwrapped phase, coherence, perpendicular baseline and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
-    layers=['incidenceAngle','lookAngle']
-    print('Extracting incidence angle and look angle of the first interferogram only')
+    layers=['incidenceAngle','lookAngle','azimuthAngle']
+    print('Extracting incidence angle, look angle, and heading of the first interferogram only')
     export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir) ##Only the first product is written
 
 
