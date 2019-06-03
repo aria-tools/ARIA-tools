@@ -47,9 +47,9 @@ def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
 
-def generateStack(inputFiles,outputFileName,workdir='./'):
+def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     ##Mid-frame UTC times to dictionary
-    f = list(np.sort(standardproduct_info.files))
+    f = list(np.sort(aria_prod.files))
     utcDict = {}
     dates= []
     times = []
@@ -69,7 +69,7 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
         tLast = datetime.strptime(value[-1],'%H%M%S')
         tDelta = (tLast - tFirst)/2
         tMid = tFirst+tDelta
-        UTC_time[key] = datetime.strftime(tMid,'%H%M%S')
+        UTC_time[key] = str(datetime.strftime(tMid,'%H%M%S'))
 
     ###Set up single stack file
     if not os.path.exists(os.path.join(workdir,'stack')):
@@ -81,16 +81,19 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
     if inputFiles in ['unwrappedPhase', 'unwrapped', 'unw']:
         domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'unwrappedPhase','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
         print('Number of unwrapped interferograms discovered: ', len(intList))
         Dlist = intList
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
         cohList = glob.glob(os.path.join(workdir,'coherence','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
         print('Number of coherence discovered: ', len(cohList))
         Dlist = cohList
     elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
         domainName = 'connectedComponents'
         connCompList = glob.glob(os.path.join(workdir,'connectedComponents','[0-9]*[0-9].vrt'))
+        dataType = "Int16"
         print('Number of connectedComponents discovered: ', len(connCompList))
         Dlist = connCompList
     else:
@@ -109,7 +112,7 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
 
     # setting up a subset of the stack
     ymin, ymax, xmin, xmax = [0 , height, 0 , width]
-    
+
     xsize = xmax - xmin
     ysize = ymax - ymin
 
@@ -135,7 +138,7 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
 
             path = os.path.abspath(data)
 
-            outstr = '''    <VRTRasterBand dataType="CFloat32" band="{index}">
+            outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
             <SourceFilename>{path}</SourceFilename>
             <SourceBand>1</SourceBand>
@@ -153,7 +156,7 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
                                 xsize=xsize, ysize=ysize,
                                 dates=dates, acq=metadata['utcTime'],
                                 wvl = metadata['wavelength'], index=ind+1,
-                                path = path)
+                                path = path, dataType = dataType)
             fid.write(outstr)
 
         fid.write('</VRTDataset>')
@@ -203,12 +206,12 @@ if __name__ == '__main__':
     print('Extracting incidence angle and look angle of the first interferogram only')
     export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir) ##Only the first product is written
 
-    
+
     # extraction of radar meta-data
     wavelength = standardproduct_info.products[0][0]['wavelength'][0].data
 
 
     if inps.stack==True:
-        generateStack('unwrappedPhase','unwrapStack')
-        generateStack('coherence','cohStack')
-        generateStack('connectedComponents','connCompStack')
+        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack')
+        generateStack(standardproduct_info,'coherence','cohStack')
+        generateStack(standardproduct_info,'connectedComponents','connCompStack')
