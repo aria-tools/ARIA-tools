@@ -107,7 +107,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         ds = gdal.Open(data, gdal.GA_ReadOnly)
         width = ds.RasterXSize
         height = ds.RasterYSize
-
+        gt  = ds.GetGeoTransform()
+        projection = ds.GetProjection()
         ds = None
 
     # setting up a subset of the stack
@@ -117,8 +118,13 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     ysize = ymax - ymin
 
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
-        fid.write( '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'.format(xsize=xsize, ysize=ysize))
-
+        fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
+        <SRS>{proj}</SRS>">
+        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>
+        '''.format(xsize=xsize, ysize=ysize,
+        proj=projection,
+        GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
+        
         for ind, data in enumerate(Dlist):
             metadata = {}
             dates = data.split('/')[2][:-4]
@@ -129,11 +135,12 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             ds = gdal.Open(data, gdal.GA_ReadOnly)
             width = ds.RasterXSize
             height = ds.RasterYSize
+            startRange = '1111' ##Placeholder until metadata extracted from product
+            endRange = '1111' ##Placeholder
+            rangeSpacing = '1111' ##Placeholder
             ds = None
 
-
             metadata['wavelength'] = wavelength
-            # metadata['ACQUISITION_TIME'] = os.path.basename(os.path.dirname(slc))
             metadata['utcTime'] = UTC_time[dates]
 
             path = os.path.abspath(data)
@@ -142,25 +149,29 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         <SimpleSource>
             <SourceFilename>{path}</SourceFilename>
             <SourceBand>1</SourceBand>
-            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="CFloat32"/>
+            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{dataType}"/>
             <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
             <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
         </SimpleSource>
         <Metadata domain='{domainName}'>
             <MDI key="Dates">{dates}</MDI>
             <MDI key="Wavelength (m)">{wvl}</MDI>
-            <MDI key="UTC Time">{acq}</MDI>
+            <MDI key="UTCTime">"{acq}"</MDI>
+            <MDI key="startRange">"{start_range}"</MDI>
+            <MDI key="endRange">"{end_range}"</MDI>
+            <MDI key="rangeSpacing">"{range_spacing}"</MDI>
         </Metadata>
-    </VRTRasterBand>\n'''.format(domainName=domainName,width=width, height=height,
+    </VRTRasterBand>\n'''.format(GT=gt,domainName=domainName,width=width, height=height,
                                 xmin=xmin, ymin=ymin,
                                 xsize=xsize, ysize=ysize,
                                 dates=dates, acq=metadata['utcTime'],
-                                wvl = metadata['wavelength'], index=ind+1,
-                                path = path, dataType = dataType)
+                                wvl=metadata['wavelength'], index=ind+1,
+                                path=path, dataType=dataType,
+                                start_range=startRange, end_range=endRange, range_spacing=rangeSpacing)
             fid.write(outstr)
 
         fid.write('</VRTDataset>')
-        print(outputFileName, ' stack generated')
+        print(outputFileName, ': stack generated')
 
 
 
