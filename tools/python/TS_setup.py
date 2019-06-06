@@ -232,7 +232,7 @@ if __name__ == '__main__':
 
     # Only extract layers needed for TS analysis
     layers=['unwrappedPhase','coherence']
-    print('Extracting unwrapped phase, coherence, perpendicular baseline and connected components for each interferogram pair')
+    print('Extracting unwrapped phase, coherence, and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
     layers=['incidenceAngle','lookAngle','azimuthAngle']
