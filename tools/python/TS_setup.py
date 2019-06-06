@@ -35,6 +35,7 @@ def createParser():
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str, default='download', help='DEM file. Default is to download new DEM.')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str, help='projection for DEM. By default WGS84.')
+    parser.add_argument('-bpx', '--bperpextract', action='store_true', dest='bperpextract', help="If turned on, extracts perpendicular baseline grids. A single perpendicular baseline value is calculated and included in the metadata stack VRT cube.")
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
     parser.add_argument('-s', '--stack', action='store_true', dest='stack', help="If turned on, creates vrt files of stacks that can be used for time series processing")
@@ -47,8 +48,19 @@ def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
 
-def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
-    ##Mid-frame UTC times to dictionary
+def extractBaselineDict(aria_prod):
+    bPerp = {}
+    for i in aria_prod.products[1]:
+        baselineName = i['bPerpendicular'][0]
+        ds = gdal.Open(baselineName)
+        # return [min, max, mean, std]
+        stat  = ds.GetRasterBand(1).GetStatistics(True, True)
+        bPerp[i['pair_name'][0]] = stat[2]
+        ds = None
+
+    return bPerp
+
+def extractUTCtime(aria_prod):
     f = list(np.sort(aria_prod.files))
     utcDict = {}
     dates= []
@@ -70,6 +82,13 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         tDelta = (tLast - tFirst)/2
         tMid = tFirst+tDelta
         UTC_time[key] = str(datetime.strftime(tMid,'%H%M%S'))
+
+    return UTC_time
+
+def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
+
+    UTC_time = extractUTCtime(aria_prod)
+    bPerp = extractBaselineDict(aria_prod)
 
     ###Set up single stack file
     if not os.path.exists(os.path.join(workdir,'stack')):
@@ -102,7 +121,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     for ind, data in enumerate(Dlist):
         width = None
         height = None
-        path = None
 
         ds = gdal.Open(data, gdal.GA_ReadOnly)
         width = ds.RasterXSize
@@ -118,10 +136,10 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     ysize = ymax - ymin
 
     # extraction of radar meta-data
-    wavelength = standardproduct_info.products[0][0]['wavelength'][0].data
-    startRange = standardproduct_info.products[0][0]['slantRangeStart'][0].data
-    endRange = standardproduct_info.products[0][0]['slantRangeEnd'][0].data
-    rangeSpacing = standardproduct_info.products[0][0]['slantRangeSpacing'][0].data
+    wavelength = aria_prod.products[0][0]['wavelength'][0].data
+    startRange = aria_prod.products[0][0]['slantRangeStart'][0].data
+    endRange = aria_prod.products[0][0]['slantRangeEnd'][0].data
+    rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0].data
 
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
@@ -145,6 +163,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
 
             metadata['wavelength'] = wavelength
             metadata['utcTime'] = UTC_time[dates]
+            metadata['bPerp'] = bPerp[dates]
 
             path = os.path.abspath(data)
 
@@ -157,19 +176,20 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
         </SimpleSource>
         <Metadata domain='{domainName}'>
-            <MDI key="Dates">{dates}</MDI>
-            <MDI key="Wavelength (m)">{wvl}</MDI>
+            <MDI key="Dates">"{dates}"</MDI>
+            <MDI key="Wavelength (m)">"{wvl}"</MDI>
             <MDI key="UTCTime">"{acq}"</MDI>
+            <MDI key="bPerp">"{bPerp}"</MDI>
             <MDI key="startRange">"{start_range}"</MDI>
             <MDI key="endRange">"{end_range}"</MDI>
             <MDI key="rangeSpacing">"{range_spacing}"</MDI>
         </Metadata>
-    </VRTRasterBand>\n'''.format(GT=gt,domainName=domainName,width=width, height=height,
+    </VRTRasterBand>\n'''.format(domainName=domainName,width=width, height=height,
                                 xmin=xmin, ymin=ymin,
                                 xsize=xsize, ysize=ysize,
                                 dates=dates, acq=metadata['utcTime'],
                                 wvl=metadata['wavelength'], index=ind+1,
-                                path=path, dataType=dataType,
+                                path=path, dataType=dataType, bPerp=metadata['bPerp'],
                                 start_range=startRange, end_range=endRange, range_spacing=rangeSpacing)
             fid.write(outstr)
 
@@ -211,7 +231,7 @@ if __name__ == '__main__':
         inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir)
 
     # Only extract layers needed for TS analysis
-    layers=['unwrappedPhase','coherence','bPerpendicular']
+    layers=['unwrappedPhase','coherence']
     print('Extracting unwrapped phase, coherence, perpendicular baseline and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
@@ -219,6 +239,10 @@ if __name__ == '__main__':
     print('Extracting incidence angle, look angle, and heading of the first interferogram only')
     export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir) ##Only the first product is written
 
+    if inps.bperpextract==True:
+        layers=['bPerpendicular']
+        print('Extracting perpendicular baseline grids for each interferogram pair')
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
     if inps.stack==True:
         generateStack(standardproduct_info,'unwrappedPhase','unwrapStack')
