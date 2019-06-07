@@ -294,6 +294,9 @@ class Stitching:
             update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
             update_file=None
 
+        cmd = "gdal_translate -of png -scale " + self.outFileUnw + ".vrt " + self.outFileUnw + ".png"
+        os.system(cmd)
+        
         # Remove the directory with intermediate files as they are no longer needed
         shutil.rmtree(tempdir)
 
@@ -392,23 +395,21 @@ class UnwrapOverlap(Stitching):
                     # masking the unwrapped phase based on connected component 0
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
-                    unwData1=np.ma.masked_where((unwData1==unwNoData1) | (connCompData1==0), unwData1)
+                    unwData1[(unwData1==unwNoData1) | (connCompData1==0)]=np.nan
                     unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
                     connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
-                    unwData2=np.ma.masked_where((unwData2==unwNoData2) | (connCompData1==0), unwData2)
-                    
-                    
+                    unwData2[(unwData2==unwNoData2) | (connCompData2==0)]=np.nan
+                    #pdb.set_trace()
                     # Calculation of the range correction
-                    unwData1_wrapped = ( unwData1 + np.pi) % (2 * np.pi ) - np.pi
-                    unwData2_wrapped = ( unwData2 + np.pi) % (2 * np.pi ) - np.pi
+                    unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
+                    unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
                     arr =unwData1_wrapped-unwData2_wrapped
                     arr = arr - np.round(arr/(2*np.pi))*2*np.pi
-                    range_temp = np.mean(arr)
-                    
+                    range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
+
                     # calculation of the number of 2 pi cycles accounting for range correction
-                    cycles_temp = np.round((np.mean(unwData1-unwData2)-range_temp)/(2*np.pi))
-
-
+                    cycles_temp = np.round((np.nanmean(unwData1-(unwData2+range_temp)))/(2*np.pi))
+                    
                     # closing the files
                     unwFile1 = None
                     unwFile2 = None
