@@ -37,8 +37,12 @@ def createParser():
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str, help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
-    parser.add_argument('-s', '--stack', action='store_true', dest='stack', help="If turned on, creates vrt files of stacks that can be used for time series processing")
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
+    parser.add_argument('-s', '--stack', action='store_true', dest='stack', help="If turned on, creates vrt files of stacks that can be used for time series processing")
+    parser.add_argument('-bpx', '--bperpextract', action='store_true', dest='bperpextract', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
+    parser.add_argument('-inca', '--incidenceangle', action='store_true', dest='incidenceangle', help="If turned on, extracts incidence angle grids. Default: A single incidence angle value is calculated and included in the metadata of stack cubes for each pair.")
+    parser.add_argument('-looka', '--lookangle', action='store_true', dest='lookangle', help="If turned on, extracts look angle grids. Default: A single look angle value is calculated and included in the metadata of stack cubes for each pair.")
+    parser.add_argument('-aza', '--azimuthangle', action='store_true', dest='azimuthangle', help="If turned on, extracts azimuth angle grids. Default: A single azimuth angle value is calculated and included in the metadata of stack cubes for each pair.")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
     return parser
@@ -47,9 +51,20 @@ def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
 
-def generateStack(inputFiles,outputFileName,workdir='./'):
-    ##Mid-frame UTC times to dictionary
-    f = list(np.sort(standardproduct_info.files))
+def extractMetaDict(aria_prod,metadata):
+    meta = {}
+    for i in aria_prod.products[1]:
+        metaName = i[metadata][0]
+        ds = gdal.Open(metaName)
+        # return [min, max, mean, std]
+        stat  = ds.GetRasterBand(1).GetStatistics(True, True)
+        meta[i['pair_name'][0]] = stat[2]
+        ds = None
+
+    return meta
+
+def extractUTCtime(aria_prod):
+    f = list(np.sort(aria_prod.files))
     utcDict = {}
     dates= []
     times = []
@@ -69,7 +84,17 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
         tLast = datetime.strptime(value[-1],'%H%M%S')
         tDelta = (tLast - tFirst)/2
         tMid = tFirst+tDelta
-        UTC_time[key] = datetime.strftime(tMid,'%H%M%S')
+        UTC_time[key] = str(datetime.strftime(tMid,'%H%M%S'))
+
+    return UTC_time
+
+def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
+
+    UTC_time = extractUTCtime(aria_prod)
+    bPerp = extractMetaDict(aria_prod,'bPerpendicular')
+    incAng = extractMetaDict(aria_prod,'incidenceAngle')
+    lookAng = extractMetaDict(aria_prod,'lookAngle')
+    azimuthAng = extractMetaDict(aria_prod,'azimuthAngle')
 
     ###Set up single stack file
     if not os.path.exists(os.path.join(workdir,'stack')):
@@ -81,16 +106,19 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
     if inputFiles in ['unwrappedPhase', 'unwrapped', 'unw']:
         domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'unwrappedPhase','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
         print('Number of unwrapped interferograms discovered: ', len(intList))
         Dlist = intList
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
         cohList = glob.glob(os.path.join(workdir,'coherence','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
         print('Number of coherence discovered: ', len(cohList))
         Dlist = cohList
     elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
         domainName = 'connectedComponents'
         connCompList = glob.glob(os.path.join(workdir,'connectedComponents','[0-9]*[0-9].vrt'))
+        dataType = "Int16"
         print('Number of connectedComponents discovered: ', len(connCompList))
         Dlist = connCompList
     else:
@@ -99,22 +127,33 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
     for ind, data in enumerate(Dlist):
         width = None
         height = None
-        path = None
 
         ds = gdal.Open(data, gdal.GA_ReadOnly)
         width = ds.RasterXSize
         height = ds.RasterYSize
-
+        gt  = ds.GetGeoTransform()
+        projection = ds.GetProjection()
         ds = None
 
     # setting up a subset of the stack
     ymin, ymax, xmin, xmax = [0 , height, 0 , width]
-    
+
     xsize = xmax - xmin
     ysize = ymax - ymin
 
+    # extraction of radar meta-data
+    wavelength = aria_prod.products[0][0]['wavelength'][0].data
+    startRange = aria_prod.products[0][0]['slantRangeStart'][0].data
+    endRange = aria_prod.products[0][0]['slantRangeEnd'][0].data
+    rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0].data
+
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
-        fid.write( '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'.format(xsize=xsize, ysize=ysize))
+        fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
+        <SRS>{proj}</SRS>">
+        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>
+        '''.format(xsize=xsize, ysize=ysize,
+        proj=projection,
+        GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
 
         for ind, data in enumerate(Dlist):
             metadata = {}
@@ -128,37 +167,47 @@ def generateStack(inputFiles,outputFileName,workdir='./'):
             height = ds.RasterYSize
             ds = None
 
-
             metadata['wavelength'] = wavelength
-            # metadata['ACQUISITION_TIME'] = os.path.basename(os.path.dirname(slc))
             metadata['utcTime'] = UTC_time[dates]
+            metadata['bPerp'] = bPerp[dates]
+            metadata['incAng'] = incAng[dates]
+            metadata['lookAng'] = lookAng[dates]
+            metadata['azimuthAng'] = azimuthAng[dates]
 
             path = os.path.abspath(data)
 
-            outstr = '''    <VRTRasterBand dataType="CFloat32" band="{index}">
+            outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
             <SourceFilename>{path}</SourceFilename>
             <SourceBand>1</SourceBand>
-            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="CFloat32"/>
+            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{dataType}"/>
             <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
             <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
         </SimpleSource>
         <Metadata domain='{domainName}'>
-            <MDI key="Dates">{dates}</MDI>
-            <MDI key="Wavelength (m)">{wvl}</MDI>
-            <MDI key="UTC Time">{acq}</MDI>
+            <MDI key="Dates">"{dates}"</MDI>
+            <MDI key="Wavelength (m)">"{wvl}"</MDI>
+            <MDI key="UTCTime">"{acq}"</MDI>
+            <MDI key="bPerp">"{bPerp}"</MDI>
+            <MDI key="incAng">"{incAng}"</MDI>
+            <MDI key="lookAng">"{lookAng}"</MDI>
+            <MDI key="azimuthAng">"{azimuthAng}"</MDI>
+            <MDI key="startRange">"{start_range}"</MDI>
+            <MDI key="endRange">"{end_range}"</MDI>
+            <MDI key="rangeSpacing">"{range_spacing}"</MDI>
         </Metadata>
     </VRTRasterBand>\n'''.format(domainName=domainName,width=width, height=height,
                                 xmin=xmin, ymin=ymin,
                                 xsize=xsize, ysize=ysize,
                                 dates=dates, acq=metadata['utcTime'],
-                                wvl = metadata['wavelength'], index=ind+1,
-                                path = path)
+                                wvl=metadata['wavelength'], index=ind+1,
+                                path=path, dataType=dataType, bPerp=metadata['bPerp'],
+                                incAng=metadata['incAng'],lookAng=metadata['lookAng'],azimuthAng=metadata['azimuthAng'],
+                                start_range=startRange, end_range=endRange, range_spacing=rangeSpacing)
             fid.write(outstr)
 
         fid.write('</VRTDataset>')
-        print(outputFileName, ' stack generated')
-
+        print(outputFileName, ': stack generated')
 
 
 if __name__ == '__main__':
@@ -195,20 +244,31 @@ if __name__ == '__main__':
         inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir)
 
     # Only extract layers needed for TS analysis
-    layers=['unwrappedPhase','coherence','bPerpendicular']
-    print('Extracting unwrapped phase, coherence, perpendicular baseline and connected components for each interferogram pair')
+    layers=['unwrappedPhase','coherence']
+    print('Extracting unwrapped phase, coherence, and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
-    layers=['incidenceAngle','lookAngle']
-    print('Extracting incidence angle and look angle of the first interferogram only')
-    export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir) ##Only the first product is written
+    if inps.bperpextract==True:
+        layers=['bPerpendicular']
+        print('Extracting perpendicular baseline grids for each interferogram pair')
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
-    
-    # extraction of radar meta-data
-    wavelength = standardproduct_info.products[0][0]['wavelength'][0].data
+    if inps.incidenceangle==True:
+        layers=['incidenceAngle']
+        print('Extracting incidence angle grids of each interferogram pair')
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
+    if inps.lookangle==True:
+        layers=['lookAngle']
+        print('Extracting look angle grids of each interferogram pair')
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
+
+    if inps.azimuthangle==True:
+        layers=['azimuthAngle']
+        print('Extracting azimuth angle grids of each interferogram pair')
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
     if inps.stack==True:
-        generateStack('unwrappedPhase','unwrapStack')
-        generateStack('coherence','cohStack')
-        generateStack('connectedComponents','connCompStack')
+        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack')
+        generateStack(standardproduct_info,'coherence','cohStack')
+        generateStack(standardproduct_info,'connectedComponents','connCompStack')
