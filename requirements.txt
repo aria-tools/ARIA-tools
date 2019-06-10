@@ -1,4 +1,4 @@
-python
+python>=3.6
 netcdf4
 shapely
 jupyterlab
