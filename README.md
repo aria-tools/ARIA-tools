@@ -14,37 +14,23 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 
 ## Contents
 
-1. [Download](#download)
-2. [Software Dependencies](#software-dependencies)
-   - [Installing dependencies on linux with Anaconda](#installing-dependencies-on-linux-with-anaconda)
-   - [Installing dependencies on mac with Macports](#installing-dependencies-on-mac-with-macports)
-   - [Installing dependencies on mac with Anaconda](#installing-dependencies-on-mac-with-anaconda)   
-3. [Installation](#installation)
-4. [Running ARIA-tools](#running-aria-tools)
+1. [Software Dependencies](#software-dependencies)
+2. [Installation](#installation)
+3. [Running ARIA-tools](#running-aria-tools)
    - [Manipulating GUNW Products](#manipulating-gunw-products)
    - [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
    - [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
-5. [Documentation](#documentation)
-6. [Citation](#citation)
-7. [Contributors and community contributions](#contributors)
+4. [Documentation](#documentation)
+5. [Citation](#citation)
+6. [Contributors and community contributions](#contributors)
 
-
-------
-
-## Download
-
-To download the ARIA-tools repository:
-```
-git clone https://github.com/dbekaert/ARIA-tools.git
-```
 
 ------
 
 ## Software Dependencies
-Below we provide guidelines for Linux and MacOSX users on how to build the required dependencies from source as not all packages are yet available through third-party package managers.
+Below we list the dependencies for ARIA-tools
 
 ### Packages:
-
 ```
 * Python >= 3.5  (3.6 preferred)
 * [PROJ 4](https://github.com/OSGeo/proj) github) >= 6.0
@@ -57,11 +43,22 @@ Below we provide guidelines for Linux and MacOSX users on how to build the requi
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 ```
 
+### Python Jupyter dependencies
+```
+* py3X-jupyter 
+* py3X-jupyter_client
+* py3X-jupyter_contrib_nbextensions
+* py3X-jupyter_nbextensions_configurator
+* py3X-hide_code
+* py3X-RISE
+```
+
 ------
 ## Installation
 ARIA-tools package can be easily installed and used after the dependencies are installed and activated.
 We strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for the installation of dependencies in python environment.
-Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
+
+Below we outline the differnt steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
 ```
 git clone https://github.com/dbekaert/ARIA-tools.git
@@ -86,8 +83,9 @@ setenv PROJ_LIB /my/python/directory/share/proj
 set path = ('/my/tools/python' $path)
 ```
 
-If you want to build GDAL from source or prefer Macports installation please follow the instruction given in the pages below:
 
+### Other installation options
+The following pages might be of use to those trying to build thrid party packages from source.
 ### [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
 ### [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
 ### [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
