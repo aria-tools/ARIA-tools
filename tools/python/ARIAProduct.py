@@ -97,7 +97,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         ### Get standard product version from file
         # If netcdf with groups
-        version=str(gdal.Open(file).GetMetadataItem('NC_GLOBAL#version'))
+        try:
+            version=str(gdal.Open(file).GetMetadataItem('NC_GLOBAL#version'))
+        except:
+            print ('{} is not a supported file type... skipping'.format(file))
+            return []
+
         # If netcdf with nogroups
         if version==str(None):
             version=str(gdal.Open(file).GetMetadataItem('version'))
