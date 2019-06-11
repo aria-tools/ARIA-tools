@@ -407,7 +407,6 @@ class UnwrapOverlap(Stitching):
                 # account for the case that no-data was left, e.g. fully decorrelated
                 # in that scenario use all data and estimate from wrapped, histogram will be broader...
                 if np.isnan(range_temp):
-                    pdb.set_trace()
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     unwData1[(unwData1==unwNoData1)]
                     unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
