@@ -2,6 +2,7 @@
 
 import os
 import os.path as op
+import math
 import requests
 import argparse
 import importlib
@@ -64,10 +65,14 @@ class Downloader(object):
     def write_dl_script(self, url):
         """Remove non gunw products from a download script """
         script = requests.get(url).text.split('\n')
-        dst    = op.join(self.inps.wd, 'download_products_{}.py'.format(self.inps.track if self.inps.track else 'bbox'))
-
+        dst    = self._fmt_dst()
         if self.inps.output == 'Count':
             print ('\nFound -- {} -- products, INCLUDING the on-demand layers'.format(script[0]))
+            quit()
+
+        elif self.inps.output == 'Kml':
+            print ('\n'.join(script), file=open(dst, 'w'))
+            print ('Wrote .KMZ to:\n\t {}'.format(dst))
             quit()
 
         elif self.inps.output == 'Download':
@@ -81,6 +86,7 @@ class Downloader(object):
                     script_gunw.append(line)
             script_exec = '\n'.join(script_gunw)
             print (script_exec, file=open(dst, 'w'))
+
 
         else:
             raise Exception('{} output type not currently supported'.format(self.inps.output))
@@ -106,6 +112,26 @@ class Downloader(object):
             except:
                 raise Exception('Cannot understand the --bbox argument. Input string was entered incorrectly or path does not exist.')
         return ','.join([W,S,E,N])
+
+    def _fmt_dst(self):
+        dst_base = op.join(self.inps.wd, 'download_products')
+        if self.inps.track:
+            dst = '{}_{}'.format(dst_base, self.inps.track)
+        elif self.inps.bbox:
+            WSEN     = self.get_bbox().split(',')
+            WSEN_fmt = []
+            for i, coord in enumerate(WSEN):
+                if i < 2:
+                    WSEN_fmt.append(math.floor(float(coord)))
+                else:
+                    WSEN_fmt.append(math.ceil(float(coord)))
+            dst = '{}_{}W{}S{}E{}N'.format(dst_base, *WSEN_fmt)
+
+        if self.inps.output == 'Kml':
+            dst += '.kmz'
+        elif self.inps.output == 'Download':
+            dst += '.py'
+        return dst
 
 
 if __name__ == '__main__':
