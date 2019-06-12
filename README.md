@@ -20,6 +20,8 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 1. [Software Dependencies](#software-dependencies)
 2. [Installation](#installation)
 3. [Running ARIA-tools](#running-aria-tools)
+### Commandline downloading of GUNW Products
+   - [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
    - [Manipulating GUNW Products](#manipulating-gunw-products)
    - [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
    - [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
@@ -90,14 +92,17 @@ set path = ('/my/tools/python' $path)
 
 ### Other installation options
 The following pages might be of use to those trying to build thrid party packages from source.
-### [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-### [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
-### [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
+- [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+- [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
+- [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
 
 ------
 ## Running ARIA-tools
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
+
+### Commandline download of GUNW Products
+GUNW products can be downloaded through the commandline using the *productAPI.py* program, which wraps around the ASF DAAC api.
 
 ### Manipulating GUNW Products
 GUNW product can be manipulated (cropped, stitched, extracted) using the *extractProduct.py* program.
