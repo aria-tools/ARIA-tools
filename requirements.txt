@@ -7,3 +7,4 @@ scipy
 matplotlib
 pandas
 gdal>=3
+requests
