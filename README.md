@@ -8,8 +8,11 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 
 For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [PySAR](https://github.com/yunjunz/PySAR).
-
-
+<p align="center">
+  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/Hawaii.png">
+  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/CA.png">
+  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/EastCoast.png">
+</p>
 THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
 
 ## Contents
@@ -17,6 +20,8 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 1. [Software Dependencies](#software-dependencies)
 2. [Installation](#installation)
 3. [Running ARIA-tools](#running-aria-tools)
+### Commandline downloading of GUNW Products
+   - [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
    - [Manipulating GUNW Products](#manipulating-gunw-products)
    - [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
    - [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
@@ -41,6 +46,7 @@ Below we list the dependencies for ARIA-tools
 ```
 * [SciPy](https://www.scipy.org/)
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
+* [requests](https://2.python-requests.org/en/master/)
 ```
 
 ### Python Jupyter dependencies
@@ -86,14 +92,17 @@ set path = ('/my/tools/python' $path)
 
 ### Other installation options
 The following pages might be of use to those trying to build thrid party packages from source.
-### [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-### [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
-### [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
+- [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+- [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
+- [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
 
 ------
 ## Running ARIA-tools
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
+
+### Commandline download of GUNW Products
+GUNW products can be downloaded through the commandline using the *productAPI.py* program, which wraps around the ASF DAAC api.
 
 ### Manipulating GUNW Products
 GUNW product can be manipulated (cropped, stitched, extracted) using the *extractProduct.py* program.
@@ -108,8 +117,7 @@ Time-series set-up with spatial-temporal contiguous unwrapped interferograms and
 ------
 ## Documentation
 
-See the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md) for all documentation:
-+ [Jupyter Notebook Tutorials](https://github.com/dbekaert/ARIA-tools-docs/tree/master/Notebooks.md)
+See the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs) for all documentation and Jupyter Notebook Tutorials.
 
 ------
 ## Citation

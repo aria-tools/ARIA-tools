@@ -117,6 +117,11 @@ class Downloader(object):
             print ('Wrote .KMZ to:\n\t {}'.format(dst))
             os.sys.exit(0)
 
+        elif self.inps.output == 'Kml':
+            print ('\n'.join(script), file=open(dst, 'w'))
+            print ('Wrote .KMZ to:\n\t {}'.format(dst))
+            quit()
+
         elif self.inps.output == 'Download':
             script_gunw = []
             for i, line in enumerate(script):
@@ -144,6 +149,7 @@ class Downloader(object):
 
             script_exec = '\n'.join(script_gunw)
             print (script_exec, file=open(dst, 'w'))
+
 
         else:
             raise Exception('{} output type not currently supported'.format(self.inps.output))
@@ -190,7 +196,7 @@ class Downloader(object):
         elif self.inps.output == 'Download':
             dst += '.py'
         return dst
-
+      
 if __name__ == '__main__':
     inps = cmdLineParse()
 
