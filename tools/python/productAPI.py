@@ -1,5 +1,13 @@
 #! /usr/bin/env python3
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# Author: Brett Buzzanga
+# Copyright 2019, by the California Institute of Technology. ALL RIGHTS
+# RESERVED. United States Government Sponsorship acknowledged.
+#
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 import os
 import os.path as op
 import math
@@ -31,7 +39,26 @@ def cmdLineParse(iargs=None):
     if len(os.sys.argv) < 2:
         parser.print_help()
         os.sys.exit(1)
-    return parser.parse_args(args=iargs)
+
+    inps = parser.parse_args(args=iargs)
+
+    if not inps.track and not inps.bbox:
+        raise Exception('Must specify either a bbox or track')
+
+    i1 = []
+    for i in [inps.start, inps.end]:
+        if not i or i == 'now' or i == 'today' or i.endswith('ago'):
+            i1.append(i)
+        elif len(i) == 8:
+            i1.append(datetime.strptime(i, '%Y%m%d').strftime('%Y-%m-%d'))
+        elif len(i) == 10:
+            i1.append(i)
+        else:
+            raise Exception('Date format not understood; see https://www.asf.alaska.edu/get-data/learn-by-doing/ for options')
+
+    inps.start = i1[0]; inps.end = i1[1]
+
+    return inps
 
 class Downloader(object):
     def __init__(self, inps):
@@ -82,13 +109,13 @@ class Downloader(object):
         dst    = self._fmt_dst()
         if self.inps.output == 'Count':
             print ('\nFound -- {} -- products, INCLUDING the on-demand layers'.format(script[0]))
-            quit()
+            os.sys.exit(0)
 
 
         elif self.inps.output == 'Kml':
             print ('\n'.join(script), file=open(dst, 'w'))
             print ('Wrote .KMZ to:\n\t {}'.format(dst))
-            quit()
+            os.sys.exit(0)
 
         elif self.inps.output == 'Download':
             script_gunw = []
@@ -165,10 +192,6 @@ class Downloader(object):
         return dst
 
 if __name__ == '__main__':
-    # inps  = createParser().parse_args()
     inps = cmdLineParse()
-    if not inps.track and not inps.bbox:
-        raise Exception('Must specify either a bbox or track')
 
     Downloader(inps)()
-    # Downloader(inps).temporal_baseline()
