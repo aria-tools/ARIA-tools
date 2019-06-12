@@ -8,8 +8,11 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 
 For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [PySAR](https://github.com/yunjunz/PySAR).
-
-
+<p align="center">
+  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/Hawaii.png">
+  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/CA.png">
+  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/EastCoast.png">
+</p>
 THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
 
 ## Contents
@@ -41,6 +44,7 @@ Below we list the dependencies for ARIA-tools
 ```
 * [SciPy](https://www.scipy.org/)
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
+* [requests](https://2.python-requests.org/en/master/)
 ```
 
 ### Python Jupyter dependencies
@@ -108,8 +112,7 @@ Time-series set-up with spatial-temporal contiguous unwrapped interferograms and
 ------
 ## Documentation
 
-See the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md) for all documentation:
-+ [Jupyter Notebook Tutorials](https://github.com/dbekaert/ARIA-tools-docs/tree/master/Notebooks.md)
+See the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs) for all documentation and Jupyter Notebook Tutorials.
 
 ------
 ## Citation
