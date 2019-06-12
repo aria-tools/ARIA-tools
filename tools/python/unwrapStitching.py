@@ -26,6 +26,7 @@ import json
 from joblib import Parallel, delayed, dump, load
 import random
 import glob
+import collections
 
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
@@ -383,30 +384,57 @@ class UnwrapOverlap(Stitching):
                 out_data,connCompNoData2,geoTrans,proj = GDALread(self.ccFile[counter+1],data_band=1,loadData=False)
                 connCompFile1 = gdal.Warp('', self.ccFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData1))
                 connCompFile2 = gdal.Warp('', self.ccFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData2))
+                
+                
                 # unwrapped phase
                 out_data,unwNoData1,geoTrans,proj = GDALread(self.inpFile[counter],data_band=1,loadData=False)
                 out_data,unwNoData2,geoTrans,proj = GDALread(self.inpFile[counter+1],data_band=1,loadData=False)
                 unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData1))
                 unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
                 
-                # masking the unwrapped phase based on connected component 0
-                unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
-                connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
-                unwData1[(unwData1==unwNoData1) | (connCompData1==0)]=np.nan
-                unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
-                connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
-                unwData2[(unwData2==unwNoData2) | (connCompData2==0)]=np.nan
-                #pdb.set_trace()
-                # Calculation of the range correction
-                unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
-                unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
-                arr =unwData1_wrapped-unwData2_wrapped
-                arr = arr - np.round(arr/(2*np.pi))*2*np.pi
-                range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
                 
-                # account for the case that no-data was left, e.g. fully decorrelated
-                # in that scenario use all data and estimate from wrapped, histogram will be broader...
-                if np.isnan(range_temp):
+                
+                # finding the component with the largest overlap
+                connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
+                connCompData1[(connCompData1==connCompNoData1) | (connCompNoData1==0)]=np.nan
+                connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
+                connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
+                connCompData2_temp = (connCompData2*100)
+                temp = connCompData2_temp.astype(np.int)-connCompData1.astype(np.int)
+                temp[(temp<0) | (temp>200)]=0
+                temp_count = collections.Counter(temp.flatten())
+                for key, keyCount in temp_count.items():
+                    maxKey = 0
+                    maxCount = 0
+                    if key!=0:
+                        if keyCount>maxCount:
+                            maxKey =key
+                            maxCount=keyCount
+
+                # if the max key count is 0, this means there is no good overlap region between products.
+                # In that scenario default to differnt stitching approach.
+                if maxKey!=0:
+                    # masking the unwrapped phase and only use the largest overlapping connected component
+                    unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
+                    unwData1[(unwData1==unwNoData1) | (temp!=maxKey)]=np.nan
+                    unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
+                    unwData2[(unwData2==unwNoData2) | (temp!=maxKey)]=np.nan
+                    
+                    # Calculation of the range correction
+                    unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
+                    unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
+                    arr =unwData1_wrapped-unwData2_wrapped
+
+                    # data is not fully decorrelated
+                    arr = arr - np.round(arr/(2*np.pi))*2*np.pi
+                    range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
+                
+                    # calculation of the number of 2 pi cycles accounting for range correction
+                    cycles_temp = np.round((np.nanmean(unwData1-(unwData2+range_temp)))/(2*np.pi))
+
+                else:
+                    # account for the case that no-data was left, e.g. fully decorrelated
+                    # in that scenario use all data and estimate from wrapped, histogram will be broader...
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     unwData1[(unwData1==unwNoData1)]
                     unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
@@ -417,9 +445,10 @@ class UnwrapOverlap(Stitching):
                     arr =unwData1_wrapped-unwData2_wrapped
                     arr = arr - np.round(arr/(2*np.pi))*2*np.pi
                     range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
+                
+                    # data is decorelated assume no 2-pi cycles
+                    cycles_temp = 0
 
-                # calculation of the number of 2 pi cycles accounting for range correction
-                cycles_temp = np.round((np.nanmean(unwData1-(unwData2+range_temp)))/(2*np.pi))
                 
                 # closing the files
                 unwFile1 = None
