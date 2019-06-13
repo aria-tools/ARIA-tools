@@ -71,10 +71,6 @@ conda config --add channels conda-forge
 conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
 conda activate ARIA-tools
 ```
-For an improved user experience, you can download and install these extensions to the Jupyter Notebook interface:
-```
-conda install -c conda-forge  jupyter_contrib_nbextensions hide_code rise --yes
-```
 
 After the installation of ARIA-tools package and dependencies we need to update our PATH and PYTHONPATH variables and add a new PROJ_LIB variable to our shell environment.
 This can be done by editing your private module or your favorite start-up shell profile.

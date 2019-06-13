@@ -79,7 +79,7 @@ make install
 Instructions to install jupyter notebooks in a conda environment
 
 ```
-conda install -c conda-forge jupyterlab jupyter_contrib_nbextensions hide_code rise --yes
+conda install -c conda-forge jupyterlab jupyter_contrib_nbextensions rise --yes
 ```
 
 Conda will install all required jupyter packages plus contributed notebook extensions, configurator, hide code and RISE to turn notebooks into slideshow.
