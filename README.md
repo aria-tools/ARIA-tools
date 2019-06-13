@@ -97,7 +97,7 @@ The following pages might be of use to those trying to build thrid party package
 ------
 ## Running ARIA-tools
 
-The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs/blob/master/README.md). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
+The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
 ### Commandline download of GUNW Products
 GUNW products can be downloaded through the commandline using the *productAPI.py* program, which wraps around the ASF DAAC api.
