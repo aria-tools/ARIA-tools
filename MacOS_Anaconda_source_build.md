@@ -1,4 +1,4 @@
-# MacOSX
+# MacOS0
 Here we provide guidelines on how to build GDAL 3.0+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Anaconda**.  For a variant to this using Macports click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md).
 
 
@@ -83,7 +83,7 @@ ln -s libinternalproj.15.dylib libinternalproj.dylib
 ```
 
 ### iii. GDAL Setup
-Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
+Clone the GDAL repository from github with a version of at least 3.0 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
 ```

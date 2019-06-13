@@ -38,7 +38,7 @@ cd /my/gdal
 mkdir install
 ```
 
-Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
+Clone the GDAL repository from github with a version of at least 3.0 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
 ```
