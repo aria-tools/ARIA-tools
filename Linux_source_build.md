@@ -1,21 +1,22 @@
 # Linux
-Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **Linux** machines. 
+Here we provide guidelines on how to build GDAL 3.0+ and PROJ 4 (6.X.X) from source for **Linux** machines.
 
 
-For **Mac** see the respective installation instructions provided on the [ARIA-tools](https://github.com/dbekaert/ARIA-tools) page. 
+For **Mac** see the respective installation instructions provided on the [ARIA-tools](https://github.com/dbekaert/ARIA-tools) page.
 
 ------
 ## Contents
 
 1. [Anaconda3](#anaconda3)
-2. [PROJ 4 SETUP](#proj-4-setup) 
+2. [PROJ 4 SETUP](#proj-4-setup)
 3. [GDAL SETUP](#gdal-setup)
-4. [Setting of environment variables](#setting-of-environment-variables)
-5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+4. [Jupyter Notebooks SETUP](#jupyter-notebooks-setup)
+5. [Setting of environment variables](#setting-of-environment-variables)
+6. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 ------
 ## Anaconda3
-First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html). 
+First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
 
 Below we use a clean installation of Miniconda3. First we will download Miniconda3:
 ```
@@ -60,7 +61,7 @@ make install
 
 ------
 ## GDAL SETUP
-Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
+Clone the GDAL repository from github with a version of at least 3.0 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
 ```
@@ -68,10 +69,20 @@ git clone https://github.com/OSGeo/gdal
 Build the GDAL package with the python bindings:
 ```
 cd gdal/gdal/
-./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python 
+./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python
 make -j4
 make install
 ```
+
+------
+## Jupyter Notebooks Setup
+Instructions to install jupyter notebooks in a conda environment
+
+```
+conda install -c conda-forge jupyterlab jupyter_contrib_nbextensions rise --yes
+```
+
+Conda will install all required jupyter packages plus contributed notebook extensions, configurator, hide code and RISE to turn notebooks into slideshow.
 
 ------
 ## Setting of environment variables:
@@ -92,4 +103,3 @@ set path = ('/my/gdal/install/directory/bin' $path)
 
 ------
 ## [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
-

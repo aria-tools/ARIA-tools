@@ -1,8 +1,8 @@
 # MacOSx
-Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Macports**. For a variant to this using Anaconda click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md). 
+Here we provide guidelines on how to build GDAL 3.0+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Macports**. For a variant to this using Anaconda click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md).
 
 
-For **Linux** installation instructions see [here](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md). 
+For **Linux** installation instructions see [here](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md).
 
 ------
 ## Contents
@@ -10,14 +10,15 @@ Make sure to run these in the specified order!
 1. [MacPorts](#macports)
 2. [GDAL COMMANDLINE SETUP](#gdal-commandline-setup)
 3. [GDAL PYTHON bindings](#gdal-python-bindings)
-4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+4. [Jupyter Notebooks SETUP](#jupyter-notebooks-setup)
+5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 
 ------
 ## MacPorts
 First install **Macports** following the instructions at https://www.macports.org/.
 
-Use the **ports** package manager to install python 3.X.X and associated packages, and compiler tools that are needed for PROJ 4 installation and ARIA-tools. 
+Use the **ports** package manager to install python 3.X.X and associated packages, and compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 The following instructions are tested using python 3.6.8. Note that below we default the python executable to python3.
 
 ```
@@ -37,13 +38,12 @@ cd /my/gdal
 mkdir install
 ```
 
-Clone the GDAL repository from github with a version of at least 2.5 (i.e. main branch).
+Clone the GDAL repository from github with a version of at least 3.0 (i.e. main branch).
 ```
 git clone https://github.com/OSGeo/gdal
 ```
 
-
-We will first build the GDAL package and command line tools. Note it is better not to build the python tools at the same time given library and compiler conflicts with NumPy. 
+We will first build the GDAL package and command line tools. Note it is better not to build the python tools at the same time given library and compiler conflicts with NumPy.
 
 ```
 cd /my/gdal/gdal/
@@ -55,7 +55,7 @@ if configure fails, you might want to try and specify additional options, such a
 ```
 Next make and install GDAL:
 ```
-make -j4 
+make -j4
 make install
 ```
 
@@ -131,6 +131,39 @@ python
 > from osgeo import gdal_array
 > import gdalnumeric
 ```
+------
+## Jupyter Notebooks Setup
+Use the **ports** package manager to install python 3.X and associated packages, the py3X-pip package mananger, and py3x-jupyter.
+Recommended is to use at least >=py36
+```
+sudo port install py3X-jupyter py3X-jupyter_client py3X-pip
+```
+
+Instructions for installing contributed notebook extensions
+
+```
+sudo pip-3.X install jupyter_contrib_nbextensions
+sudo jupyter-3.X contrib nbextension install --user
+```
+
+Instructions for installing extension configurator
+```
+sudo pip-3.X install jupyter_nbextensions_configurator
+sudo jupyter-3.X nbextensions_configurator enable --user
+```
+
+hide_code plugin for hiding cells with code if needed
+```
+sudo pip-3.X install hide_code
+sudo jupyter-3.X nbextension install --py hide_code
+```
+
+RISE plugin to turn notebooks into slideshow
+```
+sudo pip-3.X install RISE
+sudo jupyter-nbextension-3.X install rise --py --sys-prefix
+```
+
 ------
 ## Misc
 

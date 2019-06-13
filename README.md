@@ -38,7 +38,7 @@ Below we list the dependencies for ARIA-tools
 ```
 * Python >= 3.5  (3.6 preferred)
 * [PROJ 4](https://github.com/OSGeo/proj) github) >= 6.0
-* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0 
+* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0
 ```
 
 ### Python dependencies
@@ -50,7 +50,7 @@ Below we list the dependencies for ARIA-tools
 
 ### Python Jupyter dependencies
 ```
-* py3X-jupyter 
+* py3X-jupyter
 * py3X-jupyter_client
 * py3X-jupyter_contrib_nbextensions
 * py3X-jupyter_nbextensions_configurator
@@ -91,9 +91,8 @@ set path = ('/my/tools/python' $path)
 
 ### Other installation options
 The following pages might be of use to those trying to build thrid party packages from source.
-- [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-- [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
-- [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
+- [Installing dependencies from source on linux](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+- [Installing dependencies from source on mac](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
 
 ------
 ## Running ARIA-tools
