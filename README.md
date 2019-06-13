@@ -91,9 +91,8 @@ set path = ('/my/tools/python' $path)
 
 ### Other installation options
 The following pages might be of use to those trying to build thrid party packages from source.
-- [Installing dependencies on linux with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-- [Installing dependencies on mac with macports](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
-- [Installing dependencies on mac with Anaconda](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_Anaconda_source_build.md) 	
+- [Installing dependencies from source on linux](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
+- [Installing dependencies from source on mac](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
 
 ------
 ## Running ARIA-tools
