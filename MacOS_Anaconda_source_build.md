@@ -1,5 +1,5 @@
 # MacOSX
-Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Anaconda**.  For a variant to this using Macports click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md).
+Here we provide guidelines on how to build GDAL 3.0+ and PROJ 4 (6.X.X) from source for **MacOS** machines using **Anaconda**.  For a variant to this using Macports click [here](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md).
 
 
 For **Linux** installation instructions click [here](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md).
@@ -15,7 +15,7 @@ For **Linux** installation instructions click [here](https://github.com/dbekaert
     1. [Anaconda3 Setup](#anaconda3-setup)
     2. [PROJ4 Setup](#proj4-setup)
     3. [GDAL Setup](#gdal-setup)
-3. [Jupyter Notebooks SETUP](#Jupyter-Notebooks-Setup)
+3. [Jupyter Notebooks SETUP](#jupyter-notebooks-setup)
 4. [Setting of environment variables](#setting-of-environment-variables)
 5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 ------
