@@ -15,8 +15,9 @@ For **Linux** installation instructions click [here](https://github.com/dbekaert
     1. [Anaconda3 Setup](#anaconda3-setup)
     2. [PROJ4 Setup](#proj4-setup)
     3. [GDAL Setup](#gdal-setup)
-3. [Setting of environment variables](#setting-of-environment-variables)
-4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+3. [Jupyter Notebooks SETUP](#Jupyter-Notebooks-Setup)
+4. [Setting of environment variables](#setting-of-environment-variables)
+5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 ------
 ## 0. XCode and Command Line Tools
 Make sure that you have XCode and Command Line Tools installed. XCode 10.X versions do not install the header files under /usr/include but we need that directory for the installation.
@@ -106,7 +107,16 @@ make install
 ```
 
 ------
-## 3. Setting of environment variables
+## 3.  Jupyter Notebooks Setup
+Instructions to install jupyter notebooks in a conda environment
+
+```
+conda install -c conda-forge jupyterlab --yes
+```
+
+Conda will install all required jupyter packages.
+------
+## 4. Setting of environment variables
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
 
 For example for csh do:
@@ -123,4 +133,4 @@ set path = ('/my/gdal/install/directory/bin' $path)
 ```
 
 ------
-## 4. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+## 5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)

@@ -1,21 +1,22 @@
 # Linux
-Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **Linux** machines. 
+Here we provide guidelines on how to build GDAL 2.5+ and PROJ 4 (6.X.X) from source for **Linux** machines.
 
 
-For **Mac** see the respective installation instructions provided on the [ARIA-tools](https://github.com/dbekaert/ARIA-tools) page. 
+For **Mac** see the respective installation instructions provided on the [ARIA-tools](https://github.com/dbekaert/ARIA-tools) page.
 
 ------
 ## Contents
 
 1. [Anaconda3](#anaconda3)
-2. [PROJ 4 SETUP](#proj-4-setup) 
+2. [PROJ 4 SETUP](#proj-4-setup)
 3. [GDAL SETUP](#gdal-setup)
-4. [Setting of environment variables](#setting-of-environment-variables)
-5. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
+4. [Jupyter Notebooks SETUP](#Jupyter-Notebooks-Setup)
+5. [Setting of environment variables](#setting-of-environment-variables)
+6. [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
 
 ------
 ## Anaconda3
-First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html). 
+First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
 
 Below we use a clean installation of Miniconda3. First we will download Miniconda3:
 ```
@@ -68,11 +69,46 @@ git clone https://github.com/OSGeo/gdal
 Build the GDAL package with the python bindings:
 ```
 cd gdal/gdal/
-./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python 
+./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python
 make -j4
 make install
 ```
 
+
+## Jupyter Notebooks Setup
+Instructions to install jupyter notebooks in a conda environment
+
+```
+conda install -c conda-forge jupyterlab --yes
+```
+
+Conda will install all required jupyter packages.
+
+## PIP Jupyter notebook extensions
+Instructions for installing contributed notebook extensions
+
+```
+sudo pip-3.X install jupyter_contrib_nbextensions
+sudo jupyter-3.X contrib nbextension install --user
+```
+
+Instructions for installing extension configurator
+```
+sudo pip-3.X install jupyter_nbextensions_configurator
+sudo jupyter-3.X nbextensions_configurator enable --user
+```
+
+hide_code plugin for hiding cells with code if needed
+```
+sudo pip-3.X install hide_code
+sudo jupyter-3.X nbextension install --py hide_code
+```
+
+RISE plugin to turn notebooks into slideshow
+```
+sudo pip-3.X install RISE
+sudo jupyter-nbextension-3.X install rise --py --sys-prefix
+```
 ------
 ## Setting of environment variables:
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
@@ -92,4 +128,3 @@ set path = ('/my/gdal/install/directory/bin' $path)
 
 ------
 ## [Return to back to ARIA-tools page](https://github.com/dbekaert/ARIA-tools)
-
