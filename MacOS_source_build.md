@@ -43,7 +43,6 @@ Clone the GDAL repository from github with a version of at least 3.0 (i.e. main 
 git clone https://github.com/OSGeo/gdal
 ```
 
-
 We will first build the GDAL package and command line tools. Note it is better not to build the python tools at the same time given library and compiler conflicts with NumPy.
 
 ```
@@ -132,6 +131,7 @@ python
 > from osgeo import gdal_array
 > import gdalnumeric
 ```
+------
 ## Jupyter Notebooks Setup
 Use the **ports** package manager to install python 3.X and associated packages, the py3X-pip package mananger, and py3x-jupyter.
 Recommended is to use at least >=py36

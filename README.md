@@ -38,7 +38,7 @@ Below we list the dependencies for ARIA-tools
 ```
 * Python >= 3.5  (3.6 preferred)
 * [PROJ 4](https://github.com/OSGeo/proj) github) >= 6.0
-* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0 
+* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0
 ```
 
 ### Python dependencies
@@ -50,7 +50,7 @@ Below we list the dependencies for ARIA-tools
 
 ### Python Jupyter dependencies
 ```
-* py3X-jupyter 
+* py3X-jupyter
 * py3X-jupyter_client
 * py3X-jupyter_contrib_nbextensions
 * py3X-jupyter_nbextensions_configurator
@@ -70,6 +70,10 @@ git clone https://github.com/dbekaert/ARIA-tools.git
 conda config --add channels conda-forge
 conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
 conda activate ARIA-tools
+```
+For an improved user experience, you can download and install these extensions to the Jupyter Notebook interface:
+```
+conda install -c conda-forge  jupyter_contrib_nbextensions hide_code rise --yes
 ```
 
 After the installation of ARIA-tools package and dependencies we need to update our PATH and PYTHONPATH variables and add a new PROJ_LIB variable to our shell environment.

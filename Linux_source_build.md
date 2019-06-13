@@ -74,41 +74,16 @@ make -j4
 make install
 ```
 
-
+------
 ## Jupyter Notebooks Setup
 Instructions to install jupyter notebooks in a conda environment
 
 ```
-conda install -c conda-forge jupyterlab --yes
+conda install -c conda-forge jupyterlab jupyter_contrib_nbextensions hide_code rise --yes
 ```
 
-Conda will install all required jupyter packages.
+Conda will install all required jupyter packages plus contributed notebook extensions, configurator, hide code and RISE to turn notebooks into slideshow.
 
-## PIP Jupyter notebook extensions
-Instructions for installing contributed notebook extensions
-
-```
-sudo pip-3.X install jupyter_contrib_nbextensions
-sudo jupyter-3.X contrib nbextension install --user
-```
-
-Instructions for installing extension configurator
-```
-sudo pip-3.X install jupyter_nbextensions_configurator
-sudo jupyter-3.X nbextensions_configurator enable --user
-```
-
-hide_code plugin for hiding cells with code if needed
-```
-sudo pip-3.X install hide_code
-sudo jupyter-3.X nbextension install --py hide_code
-```
-
-RISE plugin to turn notebooks into slideshow
-```
-sudo pip-3.X install RISE
-sudo jupyter-nbextension-3.X install rise --py --sys-prefix
-```
 ------
 ## Setting of environment variables:
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
