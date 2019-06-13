@@ -20,7 +20,6 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 1. [Software Dependencies](#software-dependencies)
 2. [Installation](#installation)
 3. [Running ARIA-tools](#running-aria-tools)
-### Commandline downloading of GUNW Products
    - [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
    - [Manipulating GUNW Products](#manipulating-gunw-products)
    - [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
