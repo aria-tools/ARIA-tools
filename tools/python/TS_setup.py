@@ -39,10 +39,7 @@ def createParser():
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-s', '--stack', action='store_true', dest='stack', help="If turned on, creates vrt files of stacks that can be used for time series processing")
-    parser.add_argument('-bpx', '--bperpextract', action='store_true', dest='bperpextract', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
-    parser.add_argument('-inca', '--incidenceangle', action='store_true', dest='incidenceangle', help="If turned on, extracts incidence angle grids. Default: A single incidence angle value is calculated and included in the metadata of stack cubes for each pair.")
-    parser.add_argument('-looka', '--lookangle', action='store_true', dest='lookangle', help="If turned on, extracts look angle grids. Default: A single look angle value is calculated and included in the metadata of stack cubes for each pair.")
-    parser.add_argument('-aza', '--azimuthangle', action='store_true', dest='azimuthangle', help="If turned on, extracts azimuth angle grids. Default: A single azimuth angle value is calculated and included in the metadata of stack cubes for each pair.")
+    parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
     return parser
@@ -64,29 +61,33 @@ def extractMetaDict(aria_prod,metadata):
     return meta
 
 def extractUTCtime(aria_prod):
-    f = list(np.sort(aria_prod.files))
+    f = aria_prod.products[1]
     utcDict = {}
-    dates= []
-    times = []
+
     for i in range(0,len(f)):
-        if f[i].split('-')[6] in dates:
-            times.append(f[i].split('-')[7])
-            utcDict[dates[-1]] = times
-        else:
-            times = []
-            dates.append(f[i].split('-')[6])
-            times.append(f[i].split('-')[7])
-            utcDict[f[i].split('-')[6]] = times
+        #Grab pair name of the product
+        pairName = aria_prod.products[1][i]['pair_name']
 
-    UTC_time = {}
-    for key, value in utcDict.items():
-        tFirst = datetime.strptime(value[0],'%H%M%S')
-        tLast = datetime.strptime(value[-1],'%H%M%S')
-        tDelta = (tLast - tFirst)/2
-        tMid = tFirst+tDelta
-        UTC_time[key] = str(datetime.strftime(tMid,'%H%M%S'))
+        #Grab start times, append to a list and find minimum start time
+        startTimeList = aria_prod.products[0][i]['azimuthZeroDopplerStartTime']
+        startTime=[]
+        for j in startTimeList:
+            startTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S.%fZ'))
+        minStartTime = min(startTime)
 
-    return UTC_time
+        #Grab end times, append to a list and find maximum end time
+        endTimeList = aria_prod.products[0][i]['azimuthZeroDopplerEndTime']
+        endTime=[]
+        for k in endTimeList:
+            endTime.append(datetime.strptime(k,'%Y-%m-%dT%H:%M:%S.%fZ'))
+        maxEndTime = max(endTime)
+
+        #Calculate time difference between minimum start and maximum end time, and add it to mean start time
+        #Write calculated UTC time into a dictionary with associated pair names as keys
+        timeDelta = (maxEndTime - minStartTime)/2
+        utcTime = (minStartTime+timeDelta).time()
+        utcDict[pairName[0]] = utcTime
+    return utcDict
 
 def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
 
@@ -185,16 +186,16 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
         </SimpleSource>
         <Metadata domain='{domainName}'>
-            <MDI key="Dates">"{dates}"</MDI>
-            <MDI key="Wavelength (m)">"{wvl}"</MDI>
-            <MDI key="UTCTime">"{acq}"</MDI>
-            <MDI key="bPerp">"{bPerp}"</MDI>
-            <MDI key="incAng">"{incAng}"</MDI>
-            <MDI key="lookAng">"{lookAng}"</MDI>
-            <MDI key="azimuthAng">"{azimuthAng}"</MDI>
-            <MDI key="startRange">"{start_range}"</MDI>
-            <MDI key="endRange">"{end_range}"</MDI>
-            <MDI key="rangeSpacing">"{range_spacing}"</MDI>
+            <MDI key="Dates">{dates}</MDI>
+            <MDI key="Wavelength (m)">{wvl}</MDI>
+            <MDI key="UTCTime (HH:MM:SS.ss)">{acq}</MDI>
+            <MDI key="perpendicularBaseline">{bPerp}</MDI>
+            <MDI key="incidenceAngle">{incAng}</MDI>
+            <MDI key="lookAngle">{lookAng}</MDI>
+            <MDI key="azimuthAngle">{azimuthAng}</MDI>
+            <MDI key="startRange">{start_range}</MDI>
+            <MDI key="endRange">{end_range}</MDI>
+            <MDI key="slantRangeSpacing">{range_spacing}</MDI>
         </Metadata>
     </VRTRasterBand>\n'''.format(domainName=domainName,width=width, height=height,
                                 xmin=xmin, ymin=ymin,
@@ -243,29 +244,18 @@ if __name__ == '__main__':
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir)
 
-    # Only extract layers needed for TS analysis
+    # Extract
     layers=['unwrappedPhase','coherence']
     print('Extracting unwrapped phase, coherence, and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
-    if inps.bperpextract==True:
+    layers=['incidenceAngle','lookAngle','azimuthAngle']
+    print('Extracting incidence angle, look angle and azimuth angle grids of the first interferogram pair')
+    export_products([standardproduct_info.products[1][0]], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
+
+    if inps.bperp==True:
         layers=['bPerpendicular']
         print('Extracting perpendicular baseline grids for each interferogram pair')
-        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
-
-    if inps.incidenceangle==True:
-        layers=['incidenceAngle']
-        print('Extracting incidence angle grids of each interferogram pair')
-        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
-
-    if inps.lookangle==True:
-        layers=['lookAngle']
-        print('Extracting look angle grids of each interferogram pair')
-        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
-
-    if inps.azimuthangle==True:
-        layers=['azimuthAngle']
-        print('Extracting azimuth angle grids of each interferogram pair')
         export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
     if inps.stack==True:
