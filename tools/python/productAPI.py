@@ -31,7 +31,7 @@ def createParser():
     parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2015).')
     parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
     parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
-    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: productAPI.py -t 004 --daysgt 364.')
+    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: productAPI.py -t 004 --daysmore 364.')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('-v', '--verbose', dest='v', default=False, type=bool, help='Print products to be downloaded to stdout')
     return parser
@@ -143,8 +143,7 @@ class Downloader(object):
                     WSEN_fmt.append(math.floor(float(coord)))
                 else:
                     WSEN_fmt.append(math.ceil(float(coord)))
-            dst = '{}_{}W{}S{}E{}N.kmz'.format(dst_base, *WSEN_fmt)
-
+            dst = '{}_{}W{}S{}E{}N'.format(dst_base, *WSEN_fmt)
         dst += '.kmz'
         return dst
 
