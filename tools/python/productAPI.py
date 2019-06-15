@@ -21,19 +21,19 @@ from datetime import datetime, timedelta
 
 def createParser():
     """ Download a bulk download script and execute it """
-    parser = argparse.ArgumentParser(description='Program to download all GUNW products for a single track.\nDetails on parameters at: https://www.asf.alaska.edu/get-data/learn-by-doing/',
-                                     epilog='Examples of use:\n\t productAPI.py --track 004 --output count\n\t productAPI.py --bbox "36.75 37.225 -76.655 -75.928"\n\t productAPI.py -t 004 --start "1 year ago" --end now',
+    parser = argparse.ArgumentParser(description='Program to download all GUNW products for a single track.',
+                                     epilog='Examples of use:\n\t productAPI.py --track 004 --output count\n\t productAPI.py --bbox "36.75 37.225 -76.655 -75.928"\n\t productAPI.py -t 004 --start 20190101' ,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", and "Kml" are currently supported.')
     parser.add_argument('-t', '--track', dest='track', default=None, type=str, help='track to download')
     parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str, help='Lat/Lon Bounding SNWE')
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
-    parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date; If none provided, starts at beginning of Sentinel record (2015). See https://www.asf.alaska.edu/get-data/learn-by-doing/ for input options')
-    parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date; If none provided, ends today. See https://www.asf.alaska.edu/get-data/learn-by-doing/ for input options')
-    parser.add_argument('-g', '--daysgt', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: productAPI.py -t 004 --daysgt 364.')
-    parser.add_argument('-l', '--dayslt', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
+    parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2015).')
+    parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
+    parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
+    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: productAPI.py -t 004 --daysmore 364.')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
-    parser.add_argument('-v', '--verbose', dest='v', default=True, type=bool, help='Print products to be downloaded to stdout')
+    parser.add_argument('-v', '--verbose', dest='v', default=False, type=bool, help='Print products to be downloaded to stdout')
     return parser
 
 def cmdLineParse(iargs=None):
@@ -47,18 +47,6 @@ def cmdLineParse(iargs=None):
     if not inps.track and not inps.bbox:
         raise Exception('Must specify either a bbox or track')
 
-    i1 = []
-    for i in [inps.start, inps.end]:
-        if not i or i == 'now' or i == 'today' or i.endswith('ago'):
-            i1.append(i)
-        elif len(i) == 8:
-            i1.append(datetime.strptime(i, '%Y%m%d').strftime('%Y-%m-%d'))
-        elif len(i) == 10:
-            i1.append(i)
-        else:
-            raise Exception('Date format not understood; see https://www.asf.alaska.edu/get-data/learn-by-doing/ for options')
-
-    inps.start = i1[0]; inps.end = i1[1]
     return inps
 
 class Downloader(object):
@@ -89,17 +77,12 @@ class Downloader(object):
             exec(script, globals())
         return
 
-
     def form_url(self):
         url = '{}asfplatform=Sentinel-1%20Interferogram%20(BETA)&output=JSON'.format(self.url_base)
         if self.inps.track:
             url += '&relativeOrbit={}'.format(self.inps.track)
         if self.inps.bbox:
             url += '&bbox=' + self._get_bbox()
-        if self.inps.start:
-            url += '&start={}'.format(self.inps.start)
-        if self.inps.end:
-            url += '&end={}'.format(self.inps.end)
         if self.inps.flightdir:
             url += '&flightDirection={}'.format(self.inps.flightdir.upper())
 
@@ -114,17 +97,23 @@ class Downloader(object):
 
         prod_ids = []
         for prod in j:
-            id = prod['product_file_id']
             if 'layer' in prod['downloadUrl']: continue
-            elif (self.inps.daysgt or self.inps.dayslt):
-                match = re.search(r'\d{8}_\d{8}', id).group()
-                end, st = [datetime.strptime(i, '%Y%m%d').date() for i in match.split('_')]
+
+            id = prod['product_file_id']
+            match = re.search(r'\d{8}_\d{8}', id).group()
+            end, st = [datetime.strptime(i, '%Y%m%d').date() for i in match.split('_')]
+
+            if (self.inps.start or self.inps.end):
+                if self.inps.start and not (st >= datetime.strptime(self.inps.start, '%Y%m%d').date()): continue
+                if self.inps.end and not (end <= datetime.strptime(self.inps.end, '%Y%m%d').date()): continue
+
+            if (self.inps.daysgt or self.inps.dayslt):
                 elap = (end - st).days
                 if self.inps.daysgt and not (elap > self.inps.daysgt): continue
                 if self.inps.dayslt and not (elap < self.inps.dayslt): continue
 
             prod_ids.append(id)
-            if self.inps.v: print ('Will process: {}'.format(id))
+            if self.inps.v: print ('Found: {}'.format(id))
 
         data = {'product_list': ','.join(prod_ids)}
         return data
@@ -154,8 +143,7 @@ class Downloader(object):
                     WSEN_fmt.append(math.floor(float(coord)))
                 else:
                     WSEN_fmt.append(math.ceil(float(coord)))
-            dst = '{}_{}W{}S{}E{}N.kmz'.format(dst_base, *WSEN_fmt)
-
+            dst = '{}_{}W{}S{}E{}N'.format(dst_base, *WSEN_fmt)
         dst += '.kmz'
         return dst
 
