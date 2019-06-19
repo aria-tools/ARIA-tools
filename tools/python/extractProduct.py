@@ -242,7 +242,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     raise Exception('Inconsistent heights for metadata layer(s) ', j, ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j])
 
                 # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask, outputFormat)
+                finalize_metadata(outname, open_shapefile(bbox_file, 0, 0).bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
             elif key!='unwrappedPhase' and key!='connectedComponents':
@@ -290,7 +290,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
     return
 
 
-def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI'):
+def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None):
     '''
         2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
     '''
@@ -305,9 +305,15 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
     if outputFormat=='VRT':
        outputFormat='ENVI'
 
+    # Check and buffer bounds if <4pix in x/y, which would raise interpolation error
+    geotrans=gdal.Open(outname+'.vrt').GetGeoTransform()
+    if round((max(bbox_bounds[0::2])-min(bbox_bounds[0::2])),2)<round((abs(geotrans[1])*4),2) or round((max(bbox_bounds[1::2])-min(bbox_bounds[1::2])),2)<round((abs(geotrans[-1])*4),2):
+        data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM"))
+    else:
+        data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=bbox_bounds))
+
     # Define lat/lon/height arrays for metadata layers
     heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
-    data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds))
     ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
@@ -324,20 +330,22 @@ def finalize_metadata(outname, bbox_file, prods_TOTbbox, dem, lat, lon, mask=Non
             for ipix, pixel in enumerate(longitudeMeta):
                 out_interpolated[iz, iline, ipix] = interp_2d(line, pixel, hgt)
     out_interpolated=np.flip(out_interpolated, axis=0)
-    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
+    # must use 'nearest' interpolation to avoid disprepancies between different crop extents
+    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='nearest', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
     out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
-
-    # Apply mask (if specified).
-    if mask is not None:
-        ##SS Just to double check if the no-data is being tracked here. The vrt is setting a no-data value, but here no-data is not used.
-        out_interpolated = np.multiply(out_interpolated, mask, out=out_interpolated, where=mask==0)
 
     # Save file
     renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
 
     # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
     # Crop to track extents
-    out_interpolated=gdal.Warp('', outname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, dstNodata=data_array.GetRasterBand(1).GetNoDataValue())).ReadAsArray()
+    out_interpolated=gdal.Warp('', outname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue())).ReadAsArray()
+
+    # Apply mask (if specified).
+    if mask is not None:
+        ##SS Just to double check if the no-data is being tracked here. The vrt is setting a no-data value, but here no-data is not used.
+        out_interpolated = np.multiply(out_interpolated, mask, out=out_interpolated, where=mask==0)
+
     update_file=gdal.Open(outname,gdal.GA_Update)
     update_file=update_file.GetRasterBand(1).WriteArray(out_interpolated)
 

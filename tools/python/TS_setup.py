@@ -259,6 +259,6 @@ if __name__ == '__main__':
         export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir)
 
     if inps.stack==True:
-        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack')
-        generateStack(standardproduct_info,'coherence','cohStack')
-        generateStack(standardproduct_info,'connectedComponents','connCompStack')
+        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
+        generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
+        generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir)
