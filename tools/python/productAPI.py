@@ -32,7 +32,7 @@ def createParser():
     parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
     parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
     parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: productAPI.py -t 004 --daysmore 364.')
-    parser.add_argument('--sten', dest='sten', default=None, type=str, help='Specific start/end date for interferograms as YYYYMMDD_YYYYMMDD.')
+    parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD.')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('-v', '--verbose', dest='v', action='store_true', help='Print products to be downloaded to stdout')
     return parser
@@ -104,8 +104,8 @@ class Downloader(object):
             id = prod['product_file_id']
             match = re.search(r'\d{8}_\d{8}', id).group()
             end, st = [datetime.strptime(i, '%Y%m%d').date() for i in match.split('_')]
-            if self.inps.sten:
-                st1, end1 = [datetime.strptime(i, '%Y%m%d').date() for i in self.inps.sten.split('_')]
+            if self.inps.ifg:
+                st1, end1 = [datetime.strptime(i, '%Y%m%d').date() for i in self.inps.ifg.split('_')]
                 if st1 != st or end1 != end: continue
 
             if (self.inps.start or self.inps.end):
