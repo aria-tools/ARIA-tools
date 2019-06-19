@@ -10,6 +10,10 @@
 #include <sstream>
 #include <RelaxIV.h>
 #include <relaxIVdriver.h>
+#include <MCFClass.h>
+
+using namespace MCFClass_di_unipi_it;
+
 
 template<class T>
 inline T ABS( const T x )
