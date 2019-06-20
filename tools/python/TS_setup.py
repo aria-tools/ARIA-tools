@@ -158,7 +158,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
 
         for ind, data in enumerate(Dlist):
             metadata = {}
-            dates = data.split('/')[2][:-4]
+            dates = data.split('/')[-1][:-4]
             width = None
             height = None
             path = None
