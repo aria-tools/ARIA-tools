@@ -72,20 +72,20 @@ conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
 conda activate ARIA-tools
 ```
 
-After the installation of ARIA-tools package and dependencies we need to update our PATH and PYTHONPATH variables and add a new PROJ_LIB variable to our shell environment.
-This can be done by editing your private module or your favorite start-up shell profile.
+We have included a setup.py script which allows for easy installation of third-party dependencies (c-code), as well as the ARIA-tools package itself (python and command line tools).
+```
+python setup.py build
+python setup.py install
+```
 
-
-For example, for csh do:
+If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. This can be done by editing your private module or your favorite start-up shell profile. For example, for csh do:
 ```
 vi ~/.cshrc
 ```
-
 Add the following and update *my* to the location where you cloned ARIA-tools:
 ```
 setenv PYTHONPATH $PYTHONPATH:/my/tools/python
-setenv PROJ_LIB /my/python/directory/share/proj
-set path = ('/my/tools/python' $path)
+set PATH $PATH:'/my/tools/bin'
 ```
 
 
