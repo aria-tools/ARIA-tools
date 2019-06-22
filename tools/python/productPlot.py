@@ -17,8 +17,8 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
-from ARIAProduct import ARIA_standardproduct
-from shapefile_util import open_shapefile
+
+from ARIAtools.shapefile_util import open_shapefile
 
 def createParser():
     '''

@@ -18,8 +18,8 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
-from shapefile_util import open_shapefile
-from shapefile_util import save_shapefile
+from ARIAtools.shapefile_util import open_shapefile,save_shapefile
+
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
     '''

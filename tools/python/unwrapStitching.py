@@ -33,11 +33,8 @@ solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
 stitchMethodTypes = ['overlap','2stage']
 
-
 # Import functions
-from ARIAProduct import ARIA_standardproduct
-from shapefile_util import open_shapefile, save_shapefile
-
+from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 
 class Stitching:
     '''
