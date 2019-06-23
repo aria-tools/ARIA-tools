@@ -297,7 +297,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     import scipy
 
     # Import functions
-    from vrtmanager import renderVRT
+    from ARIAtools.vrtmanager import renderVRT
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':

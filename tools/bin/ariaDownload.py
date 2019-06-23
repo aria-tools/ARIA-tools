@@ -126,7 +126,7 @@ class Downloader(object):
     ## utility functions
     def _get_bbox(self):
         if op.exists(op.abspath(self.inps.bbox)):
-            from shapefile_util import open_shapefile
+            from ARIAtools.shapefile_util import open_shapefile
             bounds = open_shapefile(self.inps.bbox, 0, 0).bounds
             W, S, E, N = [str(i) for i in bounds]
         else:

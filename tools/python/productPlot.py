@@ -366,7 +366,7 @@ class plot_class:
         '''
 
         # Import functions
-        from vrtmanager import renderVRT
+        from ARIAtools.vrtmanager import renderVRT
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
 
         # Iterate through all IFGs
