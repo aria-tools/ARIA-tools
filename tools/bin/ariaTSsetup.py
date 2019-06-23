@@ -15,13 +15,11 @@ from osgeo import gdal
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
 # Import functions
-from ARIAProduct import ARIA_standardproduct
-from shapefile_util import open_shapefile
-from extractProduct import merged_productbbox
-from extractProduct import prep_dem
-from extractProduct import export_products
-from extractProduct import finalize_metadata
+from ARIAtools.ARIAProduct import ARIA_standardproduct
+from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.extractProduct import merged_productbbox, prep_dem,export_products,finalize_metadata
 
 
 def createParser():

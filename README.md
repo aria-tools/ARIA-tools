@@ -7,11 +7,11 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 
 
 For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
-The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [PySAR](https://github.com/yunjunz/PySAR).
+The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [MintPy](https://github.com/insarlab/MintPy).
 <p align="center">
-  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/Hawaii.png">
-  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/CA.png">
-  <img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/EastCoast.png">
+<img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/Hawaii.png">
+<img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/CA.png">
+<img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/EastCoast.png">
 </p>
 THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
 
@@ -20,10 +20,10 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 1. [Software Dependencies](#software-dependencies)
 2. [Installation](#installation)
 3. [Running ARIA-tools](#running-aria-tools)
-   - [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
-   - [Manipulating GUNW Products](#manipulating-gunw-products)
-   - [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
-   - [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
+- [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
+- [Manipulating GUNW Products](#manipulating-gunw-products)
+- [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
+- [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
 4. [Documentation](#documentation)
 5. [Citation](#citation)
 6. [Contributors and community contributions](#contributors)
@@ -58,12 +58,17 @@ Below we list the dependencies for ARIA-tools
 * py3X-RISE
 ```
 
+### Optional Third-party packages
+```
+* RelaxIV available from [Min-Cost-Flow-Class](https://github.com/frangio68/Min-Cost-Flow-Class)
+```
+
+
 ------
 ## Installation
-ARIA-tools package can be easily installed and used after the dependencies are installed and activated.
-We strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for the installation of dependencies in python environment.
+ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. Easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and use the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
 
-Below we outline the differnt steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
+Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
 ```
 git clone https://github.com/dbekaert/ARIA-tools.git
@@ -72,25 +77,21 @@ conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
 conda activate ARIA-tools
 ```
 
-After the installation of ARIA-tools package and dependencies we need to update our PATH and PYTHONPATH variables and add a new PROJ_LIB variable to our shell environment.
-This can be done by editing your private module or your favorite start-up shell profile.
-
-
-For example, for csh do:
+We have included a setup.py script which allows for easy compilation and installation of third-party dependencies (c-code), as well as setting up the ARIA-tools package itself (python and command line tools).
 ```
-vi ~/.cshrc
+python setup.py build
+python setup.py install
 ```
 
-Add the following and update *my* to the location where you cloned ARIA-tools:
+If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For c-shell this can be done as follows (replace "ARIAtoolsREPO" to the location where you have cloned the ARIAtools repository):
 ```
-setenv PYTHONPATH $PYTHONPATH:/my/tools/python
-setenv PROJ_LIB /my/python/directory/share/proj
-set path = ('/my/tools/python' $path)
+setenv PYTHONPATH $PYTHONPATH:/ARIAtoolsREPO/tools/ARIAtools
+set PATH $PATH:'/ARIAtoolsREPO/tools/bin'
 ```
 
 
 ### Other installation options
-The following pages might be of use to those trying to build thrid party packages from source.
+The following pages might be of use to those trying to build third party packages from source.
 - [Installing dependencies from source on linux](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
 - [Installing dependencies from source on mac](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
 
@@ -100,16 +101,16 @@ The following pages might be of use to those trying to build thrid party package
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
 ### Commandline download of GUNW Products
-GUNW products can be downloaded through the commandline using the *productAPI.py* program, which wraps around the ASF DAAC api.
+GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
 
 ### Manipulating GUNW Products
-GUNW product can be manipulated (cropped, stitched, extracted) using the *extractProduct.py* program.
+GUNW product can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program.
 
 ### Baseline and quality control plots for GUNW Products
-Quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *productPlot.py* program.
+Quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
 
 ### Time-series set-up of GUNW Products
-Time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *TS_setup.py* program.
+Time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
 
 
 ------
@@ -131,3 +132,6 @@ D. Bekaert, M. Karim, L. Justin, H. Hua, P. Agram, S. Owen, G. Manipon, N. Malar
 * [_other community members_](https://github.com/dbekaert/ARIA-tools/graphs/contributors)
 
 We welcome community contributions. For instructions see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md).
+
+
+

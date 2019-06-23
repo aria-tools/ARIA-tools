@@ -27,7 +27,8 @@ if os.path.isdir(relaxPath):
            description = 'This is the ARIA tools package with RelaxIV support',
            ext_modules = [module1],
            packages=['ARIAtools'],
-           package_dir={'ARIAtools': 'tools/python'},)
+           package_dir={'ARIAtools': 'tools/ARIAtools'},
+           scripts=['tools/bin/ariaPlot.py','tools/bin/ariaDownload.py','tools/bin/ariaExtract.py','tools/bin/ariaTSsetup.py'])
 else:
     # Third party package RelaxIV not found
     print('Installing ARIA-tools without support for RelaxIV')
@@ -36,5 +37,6 @@ else:
            version = '1.0',
            description = 'This is the ARIA tools package without RelaxIV support',
            packages=['ARIAtools'],
-           package_dir={'ARIAtools': 'tools/python'},)
+           package_dir={'ARIAtools': 'tools/ARIAtools'},
+           scripts=['tools/bin/ariaPlot.py','tools/bin/ariaDownload.py','tools/bin/ariaExtract.py','tools/bin/ariaTSsetup.py'])
 

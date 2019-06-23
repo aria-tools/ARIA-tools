@@ -16,10 +16,8 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
-from ARIAProduct import ARIA_standardproduct
-from shapefile_util import open_shapefile
-from unwrapStitching import product_stitch_overlap
-from unwrapStitching import product_stitch_2stage
+from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
 _world_dem = ('https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1_Ellip/SRTM_GL1_Ellip_srtm.vrt')
 
@@ -131,7 +129,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
     '''
 
     # Import functions
-    from shapefile_util import save_shapefile
+    from ARIAtools.shapefile_util import save_shapefile
 
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
@@ -299,7 +297,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     import scipy
 
     # Import functions
-    from vrtmanager import renderVRT
+    from ARIAtools.vrtmanager import renderVRT
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
@@ -351,21 +349,25 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
 
     del out_interpolated, interpolator, interp_2d, data_array, update_file
 
-if __name__ == '__main__':
-    """
-    Main driver
-    """
-    inps = cmdLineParse()
 
+
+def main(inps=None):
+    '''
+        Main workflow for extracting layers from ARIA products
+    '''
+    
+    from ARIAtools.ARIAProduct import ARIA_standardproduct
+    from ARIAtools.shapefile_util import open_shapefile
+    
     print("***Extract Product Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-
+    
     if not inps.layers:
         print ('No layers specified; only creating bounding box shapes')
-
+    
     elif inps.layers.lower()=='all':
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
@@ -374,11 +376,11 @@ if __name__ == '__main__':
         inps.layers.remove('productBoundingBoxFrames')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
-
+    
     else:
         inps.layers=list(inps.layers.split(','))
-
-
+    
+    
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)

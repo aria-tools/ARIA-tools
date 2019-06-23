@@ -17,8 +17,7 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
-from ARIAProduct import ARIA_standardproduct
-from shapefile_util import open_shapefile
+from ARIAtools.shapefile_util import open_shapefile
 
 def createParser():
     '''
@@ -367,7 +366,7 @@ class plot_class:
         '''
 
         # Import functions
-        from vrtmanager import renderVRT
+        from ARIAtools.vrtmanager import renderVRT
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
 
         # Iterate through all IFGs
@@ -510,18 +509,17 @@ class plot_class:
         xticks = [x.toordinal() for x in labels]
         return xticks, labels
 
-if __name__ == '__main__':
-    '''
-        Main driver.
-    '''
-    inps = cmdLineParse()
 
+def main(inps=None):
+    from ARIAtools.ARIAProduct import ARIA_standardproduct
+    from ARIAtools.shapefile_util import open_shapefile
+    
     print("***Plotting Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-
+    
     # If user requests to generate all plots.
     if inps.plotall:
         print('"-plotall"==True. All plots will be made.')
@@ -534,10 +532,12 @@ if __name__ == '__main__':
 
     if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
         # Import functions
-        from extractProduct import merged_productbbox
+        from ARIAtools.extractProduct import merged_productbbox
+        
         # extract/merge productBoundingBox layers for each pair and update dict,
         # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
         standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
+        
         # Load mask (if specified).
         if inps.mask is not None:
             inps.mask=gdal.Warp('', inps.mask, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds, dstNodata=0))
@@ -554,22 +554,22 @@ if __name__ == '__main__':
         print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
         make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
         make_plot.plot_extents()
-
-
+    
+    
     # Make pbaseline plot
     if inps.plotbperp:
         print("- Make baseline plot and histogram.")
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'bPerpendicular'))
         make_plot.plot_pbaselines()
-
-
+    
+    
     # Make average land coherence plot
     if inps.plotcoh:
         print("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plot_coherence()
-
-
+    
+    
     # Generate average land coherence raster
     if inps.makeavgoh:
         print("- Generate 2D raster of average coherence.")
