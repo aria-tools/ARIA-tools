@@ -129,7 +129,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
     '''
 
     # Import functions
-    from shapefile_util import save_shapefile
+    from ARIAtools.shapefile_util import save_shapefile
 
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
