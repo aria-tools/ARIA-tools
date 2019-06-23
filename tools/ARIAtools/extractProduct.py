@@ -363,7 +363,7 @@ def main(inps=None):
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
+    # standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
     
     if not inps.layers:
         print ('No layers specified; only creating bounding box shapes')
@@ -379,7 +379,10 @@ def main(inps=None):
     
     else:
         inps.layers=list(inps.layers.split(','))
-    
+        valid = ["unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle"] 
+        for layinp in inps.layers:
+            if not layinp in valid: 
+                raise Exception('Invalid layer: {} entered. Options are any combination of: {} or all'.format(layinp, valid))
     
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
