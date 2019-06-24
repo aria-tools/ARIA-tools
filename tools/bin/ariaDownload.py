@@ -22,16 +22,16 @@ from datetime import datetime, timedelta
 def createParser():
     """ Download a bulk download script and execute it """
     parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add “ARIA Product Search” to their URS approved applications.',
-                                     epilog='Examples of use:\n\t productAPI.py --track 004 --output count\n\t productAPI.py --bbox "36.75 37.225 -76.655 -75.928"\n\t productAPI.py -t 004 --start 20190101' ,
+                                     epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004 --start 20190101' ,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", and "Kml" are currently supported.')
+    parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", and "Kmz" are currently supported.')
     parser.add_argument('-t', '--track', dest='track', default=None, type=str, help='track to download')
     parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str, help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON geometry.')
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
     parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2014).')
     parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
     parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
-    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: productAPI.py -t 004 --daysmore 364.')
+    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: ariaDownload.py -t 004 --daysmore 364.')
     parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('-v', '--verbose', dest='v', action='store_true', help='Print products to be downloaded to stdout')
@@ -49,7 +49,7 @@ def cmdLineParse(iargs=None):
         raise Exception('Must specify either a bbox or track')
 
     if not inps.output.lower() in ['count', 'kml', 'kmz', 'download']:
-        raise Exception ('Incorrect output keyword. Choose "count", "kml", or "download"')
+        raise Exception ('Incorrect output keyword. Choose "count", "kmz", or "download"')
 
     return inps
 
@@ -134,7 +134,7 @@ class Downloader(object):
     ## utility functions
     def _get_bbox(self):
         if op.exists(op.abspath(self.inps.bbox)):
-            from shapefile_util import open_shapefile
+            from ARIAtools.shapefile_util import open_shapefile
             bounds = open_shapefile(self.inps.bbox, 0, 0).bounds
             W, S, E, N = [str(i) for i in bounds]
         else:

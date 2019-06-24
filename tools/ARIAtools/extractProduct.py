@@ -257,10 +257,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
-                    
+
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
-                    
+
                     # Apply mask (if specified).
                     if mask is not None:
                         update_file=gdal.Open(outname,gdal.GA_Update)
@@ -278,7 +278,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     # based on the key define the output directories
                     outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
-                    
+
                     # calling the stiching methods
                     if stichMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
@@ -355,19 +355,19 @@ def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
     '''
-    
+
     from ARIAtools.ARIAProduct import ARIA_standardproduct
     from ARIAtools.shapefile_util import open_shapefile
-    
+
     print("***Extract Product Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    # standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-    
+    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
+
     if not inps.layers:
         print ('No layers specified; only creating bounding box shapes')
-    
+
     elif inps.layers.lower()=='all':
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
@@ -376,14 +376,14 @@ def main(inps=None):
         inps.layers.remove('productBoundingBoxFrames')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
-    
+
     else:
         inps.layers=list(inps.layers.split(','))
-        valid = ["unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle"] 
+        valid = ["unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle"]
         for layinp in inps.layers:
-            if not layinp in valid: 
+            if not layinp in valid:
                 raise Exception('Invalid layer: {} entered. Options are any combination of: {} or all'.format(layinp, valid))
-    
+
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
