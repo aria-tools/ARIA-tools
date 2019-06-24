@@ -33,8 +33,10 @@ solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
 stitchMethodTypes = ['overlap','2stage']
 
+
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
+
 
 class Stitching:
     '''
@@ -390,27 +392,26 @@ class UnwrapOverlap(Stitching):
                 unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
                 
                 
-                
                 # finding the component with the largest overlap
                 connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
-                connCompData1[(connCompData1==connCompNoData1) | (connCompNoData1==0)]=np.nan
+                connCompData1[(connCompData1==connCompNoData1) | (connCompData1==0)]=np.nan
                 connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
                 connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
                 connCompData2_temp = (connCompData2*100)
                 temp = connCompData2_temp.astype(np.int)-connCompData1.astype(np.int)
-                temp[(temp<0) | (temp>200)]=0
+                temp[(temp<0) | (temp>2000)]=0
                 temp_count = collections.Counter(temp.flatten())
+                maxKey = 0
+                maxCount = 0
                 for key, keyCount in temp_count.items():
-                    maxKey = 0
-                    maxCount = 0
                     if key!=0:
                         if keyCount>maxCount:
                             maxKey =key
                             maxCount=keyCount
 
                 # if the max key count is 0, this means there is no good overlap region between products.
-                # In that scenario default to differnt stitching approach.
-                if maxKey!=0:
+                # In that scenario default to different stitching approach.
+                if maxKey!=0 and maxCount>75:
                     # masking the unwrapped phase and only use the largest overlapping connected component
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     unwData1[(unwData1==unwNoData1) | (temp!=maxKey)]=np.nan
