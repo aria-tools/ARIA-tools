@@ -12,6 +12,7 @@ import glob
 import numpy as np
 from datetime import datetime, time
 from osgeo import gdal
+
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -36,7 +37,7 @@ def createParser():
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-s', '--stack', action='store_true', dest='stack', help="If turned on, creates vrt files of stacks that can be used for time series processing")
+    parser.add_argument('-s', '--stack', action='store_true', dest='stack',default=True, help="Default: True. Creates a VRT file stack from unwrapped phase, coherence and connected component VRT files. The output files are ready to be used for time series processing.")
     parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
@@ -47,6 +48,7 @@ def cmdLineParse(iargs = None):
     return parser.parse_args(args=iargs)
 
 def extractMetaDict(aria_prod,metadata):
+    os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
     for i in aria_prod.products[1]:
         metaName = i[metadata][0]
@@ -94,6 +96,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     incAng = extractMetaDict(aria_prod,'incidenceAngle')
     lookAng = extractMetaDict(aria_prod,'lookAngle')
     azimuthAng = extractMetaDict(aria_prod,'azimuthAngle')
+    os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     ###Set up single stack file
     if not os.path.exists(os.path.join(workdir,'stack')):
