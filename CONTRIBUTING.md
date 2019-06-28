@@ -8,7 +8,7 @@ These are several ways to contribute to the ARIA-tools framework:
 * Fixing typos, code and improving documentation
 * Writing code for everyone to use
 
-If you get stuck at any point you can create an [issue on GitHub](https://github.com/dbekaert/aria-tools/issues).
+If you get stuck at any point you can create an [issue on GitHub](https://github.com/aria-tools/aria-tools/issues).
 
 For more information on contributing to open source projects, [GitHub's own guide](https://guides.github.com/activities/contributing-to-open-source/)
 is a great starting point if you are new to version control.
@@ -21,7 +21,7 @@ is a great starting point if you are new to version control.
 Fork aria-tools/aria-tools from GitHub UI, and then
 
 ```
-git clone https://github.com/dbekaert/aria-tools.git
+git clone https://github.com/aria-tools/aria-tools.git
 cd aria-tools
 git remote add my_user_name https://github.com/my_user_name/aria-tools.git
 ```
@@ -99,4 +99,4 @@ git push -f my_user_name my_new_feature_branch
 Once a pull request is issued it will be reviewed by multiple members before it will be approved and integrated into the main.
 
 ### Things you should NOT do
-(For anyone with push rights to github.com/dbekaert/ARIA-tools or github.com/dbekaert/ARIA-tools-docs) Never modify a commit or the history of anything that has been committed to https://github.com/dbekaert/ARIA-tools and github.com/dbekaert/ARIA-tools-docs.
+(For anyone with push rights to github.com/aria-tools/ARIA-tools or github.com/dbekaert/ARIA-tools-docs) Never modify a commit or the history of anything that has been committed to https://github.com/aria-tools/ARIA-tools and github.com/dbekaert/ARIA-tools-docs.
