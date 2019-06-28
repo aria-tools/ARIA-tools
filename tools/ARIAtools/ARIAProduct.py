@@ -52,7 +52,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.files=[filearg]
             # If wildcard
             else:
-                self.files=self.glob.glob(filearg)
+                self.files=self.glob.glob(os.path.expanduser(os.path.expandvars(filearg)))
             # Convert relative paths to absolute paths
             self.files=[os.path.normpath(os.path.join(os.getcwd(),i)) if not os.path.isabs(i) else i for i in self.files]
         if len(self.files)==0:
