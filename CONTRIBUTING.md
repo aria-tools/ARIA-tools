@@ -93,7 +93,7 @@ git rebase -i master
 , in which case you will have to force-push your branch with 
 
 ```
-git push -f my_user_name my_new_feature_branch
+git push -f origin my_new_feature_branch
 ```
 
 Once a pull request is issued it will be reviewed by multiple members before it will be approved and integrated into the main.
