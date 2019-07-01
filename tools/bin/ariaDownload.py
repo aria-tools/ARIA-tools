@@ -22,10 +22,10 @@ from datetime import datetime, timedelta
 def createParser():
     """ Download a bulk download script and execute it """
     parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add “ARIA Product Search” to their URS approved applications.',
-                                     epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004 --start 20190101' ,
+                                     epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", and "Kmz" are currently supported.')
-    parser.add_argument('-t', '--track', dest='track', default=None, type=str, help='track to download')
+    parser.add_argument('-t', '--track', dest='track', default=None, type=str, help='track to download; single number, including leading zeros, or comma separated')
     parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str, help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON geometry.')
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
     parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2014).')
@@ -150,7 +150,8 @@ class Downloader(object):
     def _fmt_dst(self):
         dst_base = op.join(self.inps.wd, 'download_products')
         if self.inps.track:
-            dst = '{}_{}'.format(dst_base, self.inps.track)
+            dst = '{}_{}'.format(dst_base, self.inps.track).replace(',', '-')
+
         elif self.inps.bbox:
             WSEN     = self._get_bbox().split(',')
             WSEN_fmt = []
