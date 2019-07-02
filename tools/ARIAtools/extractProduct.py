@@ -27,9 +27,9 @@ def createParser():
     '''
 
     import argparse
-    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stiching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
+    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stitching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
-            required=True, help='ARIA file')
+            required=True, help='ARIA GUNW product(s)')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -37,8 +37,7 @@ def createParser():
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
-    parser.add_argument('-sm', '--stichMethod', dest='stichMethodType',  type=str, default='overlap', help="Method applied to stich the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file with values 0/1 indicating masked/non masked data, respectively.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
@@ -196,7 +195,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stichMethodType = 'overlap', verbose=None):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', verbose=None):
     """
     The function allows for exporting layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -257,10 +256,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
-                    
+
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
-                    
+
                     # Apply mask (if specified).
                     if mask is not None:
                         update_file=gdal.Open(outname,gdal.GA_Update)
@@ -278,12 +277,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     # based on the key define the output directories
                     outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
-                    
-                    # calling the stiching methods
-                    if stichMethodType == 'overlap':
-                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
-                    elif stichMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
+
+                    product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
 
     return
 
@@ -355,19 +350,19 @@ def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
     '''
-    
+
     from ARIAtools.ARIAProduct import ARIA_standardproduct
     from ARIAtools.shapefile_util import open_shapefile
-    
+
     print("***Extract Product Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-    
+
     if not inps.layers:
         print ('No layers specified; only creating bounding box shapes')
-    
+
     elif inps.layers.lower()=='all':
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
@@ -376,11 +371,11 @@ def main(inps=None):
         inps.layers.remove('productBoundingBoxFrames')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
-    
+
     else:
         inps.layers=list(inps.layers.split(','))
-    
-    
+
+
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
@@ -403,4 +398,4 @@ def main(inps=None):
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, stichMethodType = inps.stichMethodType, verbose=inps.verbose)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, verbose=inps.verbose)
