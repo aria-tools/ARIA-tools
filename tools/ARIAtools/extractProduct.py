@@ -27,7 +27,7 @@ def createParser():
     '''
 
     import argparse
-    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stiching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
+    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stitching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
@@ -38,7 +38,7 @@ def createParser():
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Provide valid mask file.")
-    parser.add_argument('-sm', '--stichMethod', dest='stichMethodType',  type=str, default='overlap', help="Method applied to stich the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
+#    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
@@ -196,7 +196,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stichMethodType = 'overlap', verbose=None):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None):
     """
     The function allows for exporting layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -242,7 +242,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                 # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, open_shapefile(bbox_file, 0, 0).bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
 
-            # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stiching
+            # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
             elif key!='unwrappedPhase' and key!='connectedComponents':
                 if outputFormat=='VRT' and mask is None:
                     # building the virtual vrt
@@ -279,10 +279,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
                     
-                    # calling the stiching methods
-                    if stichMethodType == 'overlap':
+                    # calling the stitching methods
+                    if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
-                    elif stichMethodType == '2stage':
+                    elif stitchMethodType == '2stage':
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
 
     return
@@ -403,4 +403,4 @@ def main(inps=None):
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, stichMethodType = inps.stichMethodType, verbose=inps.verbose)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose)
