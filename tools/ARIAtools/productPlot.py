@@ -18,6 +18,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.extractProduct import prep_mask
 
 def createParser():
     '''
@@ -538,15 +539,9 @@ def main(inps=None):
         # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
         standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
         
-        # Load mask (if specified).
+        # Load or download mask (if specified).
         if inps.mask is not None:
-            inps.mask=gdal.Warp('', inps.mask, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds, dstNodata=0))
-            inps.mask.SetProjection(proj)
-            # If no data value
-            if inps.mask.GetRasterBand(1).GetNoDataValue():
-                inps.mask=np.ma.masked_where(inps.mask.ReadAsArray() == inps.mask.GetRasterBand(1).GetNoDataValue(), inps.mask.ReadAsArray())
-            else:
-                inps.mask=inps.mask.ReadAsArray()
+            inps.mask = prep_mask(inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
 
 
     # Make spatial extent plot
