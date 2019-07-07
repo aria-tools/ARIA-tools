@@ -249,7 +249,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                         sorted_products.extend([[dict(zip(j[0].keys(), [list(a) for a in zip(j[0].values(), self.products[i+1][0].values())])), dict(zip(j[1].keys(), [list(a) for a in zip(j[1].values(), self.products[i+1][1].values())]))]])
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
-                    print("Warning! Gap for pair %s"%(j[0]['pair_name']))
+                    print("Warning! Gap for interferogram %s"%(j[0]['pair_name']))
                     track_rejected_pairs.extend((j[0]['pair_name'], self.products[i+1][0]['pair_name']))
 
             # Products correspond to different dates, so pass both as separate IFGs.
@@ -267,15 +267,15 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs were successfully selected
-            raise Exception('No valid pairs meet criteria due to gaps in each and/or invalid input, nothing to export.')
+            raise Exception('No valid interferogram meet spatial criteria due to gaps and/or invalid input, nothing to export.')
         if len(track_rejected_pairs)>0:
-            print("%d out of %d files rejected since corresponding stitched IFG would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
+            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
             # Provide report of which files were kept vs. which were not.
             if self.verbose:
-                print("Specifically, the following files were rejected:")
+                print("Specifically, the following interferograms were rejected:")
                 print([item[1]['productBoundingBox'].split('"')[1] for item in sorted_products[1] if (item[1]['pair_name'][0] in track_rejected_pairs)])
         else:
-            print("All %d files have no spatiotemporal gaps!"%(len(sorted_products[1])))
+            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[1])))
 
         return sorted_products
 
@@ -292,16 +292,16 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         if self.products==[]:
             raise Exception('No valid pairs meet spatial criteria, nothing to export.')
         if len(self.products)!=len(self.files):
-            print("%d out of %d input files rejected for not meeting user's bbox spatial criteria"%(len(self.files)-len(self.products),len(self.files)))
+            print("%d out of %d GUNW products rejected for not meeting user's bbox spatial criteria"%(len(self.files)-len(self.products),len(self.files)))
             # Provide report of which files were kept vs. which weren't
             if self.verbose:
-                print("Specifically, the following files were rejected:")
+                print("Specifically, the following GUNW products were rejected:")
                 print([i for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]])
         else:
-            print("All %d input files meet spatial criteria!"%(len(self.files)))
+            print("All (%d) GUNW products meet spatial bbox criteria."%(len(self.files)))
 
         ### Split products in spatiotemporally continuous groups
-        print("Group spatiotemporally continuous IFGs."+'\n')
+        print("Group GUNW products into spatiotemporally continuous interferograms.")
         self.products = self.__continuous_time__()
 
         return self.products
