@@ -31,7 +31,7 @@ git remote add my_user_name https://github.com/my_user_name/aria-tools.git
 Fork aria-tools/aria-tools-docs from GitHub UI, and then
 
 ```
-git clone https://github.com/dbekaert/aria-tools-docs.git
+git clone https://github.com/aria-tools/aria-tools-docs.git
 cd aria-tools-docs
 git remote add my_user_name https://github.com/my_user_name/aria-tools-docs.git
 ```
@@ -99,4 +99,4 @@ git push -f origin my_new_feature_branch
 Once a pull request is issued it will be reviewed by multiple members before it will be approved and integrated into the main.
 
 ### Things you should NOT do
-(For anyone with push rights to github.com/aria-tools/ARIA-tools or github.com/dbekaert/ARIA-tools-docs) Never modify a commit or the history of anything that has been committed to https://github.com/aria-tools/ARIA-tools and github.com/dbekaert/ARIA-tools-docs.
+(For anyone with push rights to github.com/aria-tools/ARIA-tools or github.com/aria-tools/ARIA-tools-docs) Never modify a commit or the history of anything that has been committed to https://github.com/aria-tools/ARIA-tools and github.com/aria-tools/ARIA-tools-docs.
