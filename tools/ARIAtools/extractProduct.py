@@ -35,7 +35,7 @@ def createParser():
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help='Provide valid mask file. To download GSHHS water mask, specify "Download".')
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
 #    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
@@ -141,7 +141,7 @@ def prep_mask(maskfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workd
     # Download mask
     if maskfilename.lower()=='download':
         maskfilename=os.path.join(workdir,'GSHHS_watermask'+'.msk')
-        
+
         ###Make coastlines/islands union VRT
         os.system('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_shorelines.vrt') + ''.join(_world_watermask[::2]) + ' -field_strategy Union -f VRT -single')
 
@@ -312,10 +312,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds))
-                    
+
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
-                    
+
                     # Apply mask (if specified).
                     if mask is not None:
                         update_file=gdal.Open(outname,gdal.GA_Update)
@@ -333,7 +333,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     # based on the key define the output directories
                     outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
-                    
+
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
@@ -410,19 +410,19 @@ def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
     '''
-    
+
     from ARIAtools.ARIAProduct import ARIA_standardproduct
     from ARIAtools.shapefile_util import open_shapefile
-    
+
     print("***Extract Product Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-    
+
     if not inps.layers:
         print ('No layers specified; only creating bounding box shapes')
-    
+
     elif inps.layers.lower()=='all':
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
@@ -431,11 +431,11 @@ def main(inps=None):
         inps.layers.remove('productBoundingBoxFrames')
         # Must remove pair_name, because it's not a raster layer
         inps.layers.remove('pair_name')
-    
+
     else:
         inps.layers=list(inps.layers.split(','))
-    
-    
+
+
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)

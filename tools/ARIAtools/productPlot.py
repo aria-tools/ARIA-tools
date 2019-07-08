@@ -31,7 +31,7 @@ def createParser():
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Mask file. This file needs to be GDAL compatible and contains projection information its meta-data.")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='ENVI', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated with ENVI format.')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks', help="Make plot of track latitude extents vs bounding bbox/common track extent.")
@@ -514,13 +514,13 @@ class plot_class:
 def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
     from ARIAtools.shapefile_util import open_shapefile
-    
+
     print("***Plotting Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
-    
+
     # If user requests to generate all plots.
     if inps.plotall:
         print('"-plotall"==True. All plots will be made.')
@@ -534,11 +534,11 @@ def main(inps=None):
     if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
         # Import functions
         from ARIAtools.extractProduct import merged_productbbox
-        
+
         # extract/merge productBoundingBox layers for each pair and update dict,
         # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
         standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
-        
+
         # Load or download mask (if specified).
         if inps.mask is not None:
             inps.mask = prep_mask(inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
@@ -549,22 +549,22 @@ def main(inps=None):
         print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
         make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'productBoundingBox'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
         make_plot.plot_extents()
-    
-    
+
+
     # Make pbaseline plot
     if inps.plotbperp:
         print("- Make baseline plot and histogram.")
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'bPerpendicular'))
         make_plot.plot_pbaselines()
-    
-    
+
+
     # Make average land coherence plot
     if inps.plotcoh:
         print("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=os.path.join(inps.workdir,'coherence'), bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plot_coherence()
-    
-    
+
+
     # Generate average land coherence raster
     if inps.makeavgoh:
         print("- Generate 2D raster of average coherence.")
