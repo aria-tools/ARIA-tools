@@ -1,17 +1,16 @@
 # ARIA-tools
 
 [![Language](https://img.shields.io/badge/python-3.5%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-GPL-yellow.svg)](https://github.com/dbekaert/ARIA-tools/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/license-GPL-yellow.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
 
 ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the GNU General Public License. Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.
-
 
 For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series programs such as GIAnT and [MintPy](https://github.com/insarlab/MintPy).
 <p align="center">
-<img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/Hawaii.png">
-<img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/CA.png">
-<img height="250" src="https://github.com/dbekaert/ARIA-tools-docs/blob/master/images/EastCoast.png">
+<img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/Hawaii.png">
+<img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/CA.png">
+<img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/EastCoast.png">
 </p>
 THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
 
@@ -71,7 +70,7 @@ ARIA-tools package can be easily installed and used after the dependencies are i
 Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
 ```
-git clone https://github.com/dbekaert/ARIA-tools.git
+git clone https://github.com/aria-tools/ARIA-tools.git
 conda config --add channels conda-forge
 conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
 conda activate ARIA-tools
@@ -92,13 +91,13 @@ set PATH $PATH:'/ARIAtoolsREPO/tools/bin'
 
 ### Other installation options
 The following pages might be of use to those trying to build third party packages from source.
-- [Installing dependencies from source on linux](https://github.com/dbekaert/ARIA-tools/blob/master/Linux_source_build.md)
-- [Installing dependencies from source on mac](https://github.com/dbekaert/ARIA-tools/blob/master/MacOS_source_build.md)
+- [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/Linux_source_build.md)
+- [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOS_source_build.md)
 
 ------
 ## Running ARIA-tools
 
-The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
+The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
 ### Commandline download of GUNW Products
 GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
@@ -116,7 +115,7 @@ Time-series set-up with spatial-temporal contiguous unwrapped interferograms and
 ------
 ## Documentation
 
-See the [ARIA-tools-docs repository](https://github.com/dbekaert/ARIA-tools-docs) for all documentation and Jupyter Notebook Tutorials.
+See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs) for all documentation and Jupyter Notebook Tutorials.
 
 ------
 ## Citation
@@ -129,9 +128,9 @@ D. Bekaert, M. Karim, L. Justin, H. Hua, P. Agram, S. Owen, G. Manipon, N. Malar
 * Simran Sangha
 * Emre Havazli
 * Brett Buzzanga
-* [_other community members_](https://github.com/dbekaert/ARIA-tools/graphs/contributors)
+* [_other community members_](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
 
-We welcome community contributions. For instructions see [here](https://github.com/dbekaert/ARIA-tools/blob/master/CONTRIBUTING.md).
+We welcome community contributions. For instructions see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md).
 
 
 
