@@ -36,6 +36,7 @@ def createParser():
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
+    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=500, type=float, help='Amplitude threshold below which to mask')
 #    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
@@ -123,13 +124,17 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     return demfilename, demfile, Latitude, Longitude
 
-def prep_mask(maskfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI'):
+def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=500, arrshape=None, workdir='./', outputFormat='ENVI'):
     '''
         Function to load and export mask file.
         If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
     '''
 
-    _world_watermask = [' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L1.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L2.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L3.shp', ' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L4.shp']
+    # Import functions
+    from ARIAtools.vrtmanager import renderVRT
+    import glob
+
+    _world_watermask = [' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L1.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L2.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L3.shp', ' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L4.shp',' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp']
 
     # Get bounds of user bbox_file
     bounds=open_shapefile(bbox_file, 0, 0).bounds
@@ -140,7 +145,7 @@ def prep_mask(maskfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workd
 
     # Download mask
     if maskfilename.lower()=='download':
-        maskfilename=os.path.join(workdir,'GSHHS_watermask'+'.msk')
+        maskfilename=os.path.join(workdir,'watermask'+'.msk')
 
         ###Make coastlines/islands union VRT
         os.system('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_shorelines.vrt') + ''.join(_world_watermask[::2]) + ' -field_strategy Union -f VRT -single')
@@ -158,11 +163,34 @@ def prep_mask(maskfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workd
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
-        ###Finalize water-mask with lakes/ponds union
+        ###Make average amplitude mask
+        # Iterate through all IFGs
+        for i,j in enumerate(product_dict[0]):
+            amp_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+            amp_file_arr=np.ma.masked_where(amp_file.ReadAsArray() == amp_file.GetRasterBand(1).GetNoDataValue(), amp_file.ReadAsArray())
+
+            # Iteratively update average amplitude file
+            # If looping through first amplitude file, nothing to sum so just save to file
+            if os.path.exists(os.path.join(workdir,'avgamplitude.msk')):
+                amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk'),gdal.GA_Update)
+                amp_file=amp_file.GetRasterBand(1).WriteArray(amp_file_arr+amp_file.ReadAsArray())
+            else:
+                renderVRT(os.path.join(workdir,'avgamplitude.msk'), amp_file_arr, geotrans=amp_file.GetGeoTransform(), drivername=outputFormat, gdal_fmt=amp_file_arr.dtype.name, proj=amp_file.GetProjection(), nodata=amp_file.GetRasterBand(1).GetNoDataValue())
+            amp_file = coh_val = amp_file_arr = None
+
+        # Take average of amplitude sum
+        amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk'),gdal.GA_Update)
+        arr_mean = amp_file.ReadAsArray()/len(product_dict[0])
+        arr_mean = np.where(arr_mean < amp_thresh, 0, 1)
+        amp_file=amp_file.GetRasterBand(1).WriteArray(arr_mean)
+        amp_file = None ; arr_mean = None
+        amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk')).ReadAsArray()
+
+        ###Update water-mask with lakes/ponds union and average amplitude
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
-        update_file=update_file.GetRasterBand(1).WriteArray(update_file.ReadAsArray()*lake_masks)
-        update_file=None ; lake_masks=None ; ds=None
-        os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
+        update_file=update_file.GetRasterBand(1).WriteArray(update_file.ReadAsArray()*lake_masks*amp_file)
+        update_file=None ; lake_masks=None; amp_file = None
+        os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt')); glob.glob(os.path.join(workdir,'avgamplitude.msk*'))
 
     # Load mask
     try:
@@ -441,7 +469,7 @@ def main(inps=None):
     standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
     # Load or download mask (if specified).
     if inps.mask is not None:
-        inps.mask = prep_mask(inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
+        inps.mask = prep_mask([[j['amplitude'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
 
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
