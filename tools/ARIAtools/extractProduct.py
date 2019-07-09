@@ -36,7 +36,7 @@ def createParser():
             help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
-    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=500, type=float, help='Amplitude threshold below which to mask')
+    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=500, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask.')
 #    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
@@ -124,7 +124,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     return demfilename, demfile, Latitude, Longitude
 
-def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=500, arrshape=None, workdir='./', outputFormat='ENVI'):
+def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh='500', arrshape=None, workdir='./', outputFormat='ENVI'):
     '''
         Function to load and export mask file.
         If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
@@ -163,34 +163,39 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
-        ###Make average amplitude mask
-        # Iterate through all IFGs
-        for i,j in enumerate(product_dict[0]):
-            amp_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
-            amp_file_arr=np.ma.masked_where(amp_file.ReadAsArray() == amp_file.GetRasterBand(1).GetNoDataValue(), amp_file.ReadAsArray())
+        if amp_thresh!='None':
+            ###Make average amplitude mask
+            # Iterate through all IFGs
+            for i,j in enumerate(product_dict[0]):
+                amp_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+                amp_file_arr=np.ma.masked_where(amp_file.ReadAsArray() == amp_file.GetRasterBand(1).GetNoDataValue(), amp_file.ReadAsArray())
 
-            # Iteratively update average amplitude file
-            # If looping through first amplitude file, nothing to sum so just save to file
-            if os.path.exists(os.path.join(workdir,'avgamplitude.msk')):
-                amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk'),gdal.GA_Update)
-                amp_file=amp_file.GetRasterBand(1).WriteArray(amp_file_arr+amp_file.ReadAsArray())
-            else:
-                renderVRT(os.path.join(workdir,'avgamplitude.msk'), amp_file_arr, geotrans=amp_file.GetGeoTransform(), drivername=outputFormat, gdal_fmt=amp_file_arr.dtype.name, proj=amp_file.GetProjection(), nodata=amp_file.GetRasterBand(1).GetNoDataValue())
-            amp_file = coh_val = amp_file_arr = None
+                # Iteratively update average amplitude file
+                # If looping through first amplitude file, nothing to sum so just save to file
+                if os.path.exists(os.path.join(workdir,'avgamplitude.msk')):
+                    amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk'),gdal.GA_Update)
+                    amp_file=amp_file.GetRasterBand(1).WriteArray(amp_file_arr+amp_file.ReadAsArray())
+                else:
+                    renderVRT(os.path.join(workdir,'avgamplitude.msk'), amp_file_arr, geotrans=amp_file.GetGeoTransform(), drivername=outputFormat, gdal_fmt=amp_file_arr.dtype.name, proj=amp_file.GetProjection(), nodata=amp_file.GetRasterBand(1).GetNoDataValue())
+                amp_file = coh_val = amp_file_arr = None
 
-        # Take average of amplitude sum
-        amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk'),gdal.GA_Update)
-        arr_mean = amp_file.ReadAsArray()/len(product_dict[0])
-        arr_mean = np.where(arr_mean < amp_thresh, 0, 1)
-        amp_file=amp_file.GetRasterBand(1).WriteArray(arr_mean)
-        amp_file = None ; arr_mean = None
-        amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk')).ReadAsArray()
+            # Take average of amplitude sum
+            amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk'),gdal.GA_Update)
+            arr_mean = amp_file.ReadAsArray()/len(product_dict[0])
+            arr_mean = np.where(arr_mean < float(amp_thresh), 0, 1)
+            amp_file=amp_file.GetRasterBand(1).WriteArray(arr_mean)
+            amp_file = None ; arr_mean = None
+            amp_file=gdal.Open(os.path.join(workdir,'avgamplitude.msk')).ReadAsArray()
+        else:
+            amp_file=np.ones((lake_masks.shape[0],lake_masks.shape[1]))
 
         ###Update water-mask with lakes/ponds union and average amplitude
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
         update_file=update_file.GetRasterBand(1).WriteArray(update_file.ReadAsArray()*lake_masks*amp_file)
         update_file=None ; lake_masks=None; amp_file = None
-        os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt')); glob.glob(os.path.join(workdir,'avgamplitude.msk*'))
+        #Delete temp files
+        os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
+        for i in glob.glob(os.path.join(workdir,'avgamplitude.msk*')): os.remove(i)
 
     # Load mask
     try:
