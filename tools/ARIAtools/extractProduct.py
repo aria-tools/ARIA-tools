@@ -106,6 +106,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         gdal.Warp(demfilename, _world_dem, options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], dstNodata=-32768.0, srcNodata=-32768.0))
         gdal.Open(demfilename,gdal.GA_Update).SetProjection(proj)
         gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
+        print('Downloaded 3 arc-sec SRTM DEM here: '+ demfilename)
 
     # Load DEM and setup lat and lon arrays
     try:
@@ -192,6 +193,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         ###Update water-mask with lakes/ponds union and average amplitude
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
         update_file=update_file.GetRasterBand(1).WriteArray(update_file.ReadAsArray()*lake_masks*amp_file)
+        print('Downloaded water-mask here: '+ maskfilename)
         update_file=None ; lake_masks=None; amp_file = None
         #Delete temp files
         os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
@@ -417,7 +419,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
                 out_interpolated[iz, iline, ipix] = interp_2d(line, pixel, hgt)
     out_interpolated=np.flip(out_interpolated, axis=0)
     # must use 'nearest' interpolation to avoid disprepancies between different crop extents
-    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='nearest', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
+    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
     out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
 
     # Save file
