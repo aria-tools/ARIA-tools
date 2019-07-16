@@ -43,8 +43,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         ### Determine if file input is single file, a list, or wildcard.
         # If list of files
-        if len([str(val) for val in filearg.split()])>1:
-            self.files=[str(val) for val in filearg.split()]
+        if len([str(val) for val in filearg.split(',')])>1:
+            self.files=[str(val) for val in filearg.split(',')]
         # If single file or wildcard
         else:
             # If single file
