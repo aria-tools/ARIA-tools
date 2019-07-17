@@ -33,6 +33,7 @@ def createParser():
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies) or tar file(s) containing GACOS products.')
+    parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str, default='download', help='DEM file. Default is to download new DEM.')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str, help='projection for DEM. By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
@@ -233,8 +234,7 @@ def main(inps=None):
 
     # Load or download mask (if specified).
     if inps.mask is not None:
-        inps.mask = prep_mask(inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
-
+        inps.mask = prep_mask([[j['amplitude'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
     if inps.demfile is not None:
@@ -255,6 +255,13 @@ def main(inps=None):
         layers=['bPerpendicular']
         print('Extracting perpendicular baseline grids for each interferogram pair')
         export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose)
+
+    # Extracting other layers, if specified
+    if inps.layers:
+        layers=[i for i in inps.layers if i not in ['unwrappedPhase','coherence','incidenceAngle','lookAngle','azimuthAngle','bPerpendicular']]
+        if layers!=[]:
+            print('Extracting optional, user-specified layers %s for each interferogram pair'%(layers))
+            export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:

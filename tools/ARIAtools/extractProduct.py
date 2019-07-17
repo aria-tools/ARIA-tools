@@ -126,7 +126,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     return demfilename, demfile, Latitude, Longitude
 
-def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh='500', arrshape=None, workdir='./', outputFormat='ENVI'):
+def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI'):
     '''
         Function to load and export mask file.
         If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
@@ -165,7 +165,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
-        if amp_thresh!='None':
+        if amp_thresh:
             ###Make average amplitude mask
             # Iterate through all IFGs
             for i,j in enumerate(product_dict[0]):
@@ -415,7 +415,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
             for ipix, pixel in enumerate(longitudeMeta):
                 out_interpolated[iz, iline, ipix] = interp_2d(line, pixel, hgt)
     out_interpolated=np.flip(out_interpolated, axis=0)
-    # must use 'nearest' interpolation to avoid disprepancies between different crop extents
+    # interpolate to interferometric grid
     interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
     out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
 
@@ -441,7 +441,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     """
         Perform tropospheric corrections. Must provide valid path to GACOS products.
         All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
-        Optionally, a user may pass a mask-file.
     """
 
     # Import functions
