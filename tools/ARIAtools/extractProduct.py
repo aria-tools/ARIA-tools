@@ -125,7 +125,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     return demfilename, demfile, Latitude, Longitude
 
-def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh='500', arrshape=None, workdir='./', outputFormat='ENVI'):
+def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI'):
     '''
         Function to load and export mask file.
         If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
@@ -164,7 +164,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
-        if amp_thresh!='None':
+        if amp_thresh:
             ###Make average amplitude mask
             # Iterate through all IFGs
             for i,j in enumerate(product_dict[0]):
@@ -288,15 +288,13 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None):
     """
-    The function allows for exporting layer and 2D meta-data layers (at the product resolution).
-    The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
-    The key specifies which layer to extract from the dictionary.
-    All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
-    Optionally, a user may pass a mask-file.
+        Export layer and 2D meta-data layers (at the product resolution).
+        The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
+        The keys specify which layer to extract from the dictionary.
+        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+        Optionally, a user may pass a mask-file.
     """
 
-    # loading dependencies
-    from collections import OrderedDict
     if not layers: return # only bbox
 
     bounds=open_shapefile(bbox_file, 0, 0).bounds
@@ -312,8 +310,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
         # Iterate through all IFGs
         print("Generating: " + key)
         for i,j in enumerate(product_dict[0]):
-            # provide update on which IFG
-            print(product_dict[1][i][0])
             outname=os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
 
             # Extract/crop metadata layers
@@ -418,7 +414,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
             for ipix, pixel in enumerate(longitudeMeta):
                 out_interpolated[iz, iline, ipix] = interp_2d(line, pixel, hgt)
     out_interpolated=np.flip(out_interpolated, axis=0)
-    # must use 'nearest' interpolation to avoid disprepancies between different crop extents
+    # interpolate to interferometric grid
     interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
     out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
 
@@ -440,7 +436,6 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     del out_interpolated, interpolator, interp_2d, data_array, update_file
 
 
-
 def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
@@ -456,16 +451,13 @@ def main(inps=None):
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
     if not inps.layers:
-        print ('No layers specified; only creating bounding box shapes')
+        print('No layers specified; only creating bounding box shapes')
 
     elif inps.layers.lower()=='all':
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
-        # Must remove productBoundingBoxes, because it's not a raster layer
-        inps.layers.remove('productBoundingBox')
-        inps.layers.remove('productBoundingBoxFrames')
-        # Must remove pair_name, because it's not a raster layer
-        inps.layers.remove('pair_name')
+        # Must remove productBoundingBoxes & pair-names because they are not raster layers
+        inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
 
     else:
         inps.layers=list(inps.layers.split(','))
@@ -487,4 +479,4 @@ def main(inps=None):
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose)
