@@ -545,7 +545,7 @@ def main(inps=None):
 
         # Load or download mask (if specified).
         if inps.mask is not None:
-            inps.mask = prep_mask(inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
+            inps.mask = prep_mask(standardproduct_info.products[1], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
 
 
     # Make spatial extent plot
