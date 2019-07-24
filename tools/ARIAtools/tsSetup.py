@@ -184,7 +184,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             elif orbitDirection == 'A':
                 metadata['orbit_direction'] = 'ASCENDING'
             else:
-                print('Orbit direciton not recognized')
+                print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
             path = os.path.abspath(data)
