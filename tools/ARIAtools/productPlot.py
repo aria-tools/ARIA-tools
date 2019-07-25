@@ -33,6 +33,7 @@ def createParser():
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
     parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
+    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='ENVI', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated with ENVI format.')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks', help="Make plot of track latitude extents vs bounding bbox/common track extent.")
@@ -67,7 +68,7 @@ class plot_class:
     import warnings
     register_matplotlib_converters()
 
-    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None, outputFormat='ENVI', croptounion=False):
+    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None, outputFormat='ENVI', croptounion=False, num_threads='2'):
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
         self.bbox_file = bbox_file
@@ -78,6 +79,7 @@ class plot_class:
         self.mask = mask
         self.outputFormat = outputFormat
         self.croptounion = croptounion
+        self.num_threads = num_threads
         # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
         if  self.outputFormat=='VRT':
             self.outputFormat='ENVI'
@@ -301,20 +303,18 @@ class plot_class:
         # Iterate through all IFGs
         masters = []; slaves = []
         for i,j in enumerate(self.product_dict[0]):
-            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file))
-            coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
+            # Open coherence file
+            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
 
             # Apply mask (if specified).
             if self.mask is not None:
-                coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
-
-            # Report mean
-            coh_val=coh_file_arr.mean()
+                coh_file.GetRasterBand(1).WriteArray(self.mask*coh_file.ReadAsArray())
 
             # Record average coherence val for histogram
-            coh_hist.append(coh_val)
+            coh_hist.append(coh_file.GetRasterBand(1).GetStatistics(0,1)[2])
             slaves.append(self.pd.to_datetime(self.product_dict[1][i][0][:8]))
             masters.append(self.pd.to_datetime(self.product_dict[1][i][0][9:]))
+            del coh_file
 
         # Plot average coherence per IFG
         cols, mapper = self._create_colors_coh(coh_hist)
@@ -374,28 +374,19 @@ class plot_class:
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
         #Delete existing average coherence file
         for i in glob.glob(os.path.join(self.workdir,'avgcoherence*')): os.remove(i)
-        # Iterate through all IFGs
-        for i,j in enumerate(self.product_dict[0]):
-            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file))
-            coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
 
-            # Apply mask (if specified).
-            if self.mask is not None:
-                coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
+        # building the VRT
+        gdal.BuildVRT(outname +'.vrt', self.product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
+        # taking average of all scenes and generating raster
+        gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
+        # Update VRT
+        gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
 
-            # Iteratively update average coherence file
-            # If looping through first coherence file, nothing to sum so just save to file
-            if os.path.exists(outname):
-                coh_file=gdal.Open(outname,gdal.GA_Update)
-                coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file_arr+coh_file.ReadAsArray())
-            else:
-                renderVRT(outname, coh_file_arr, geotrans=coh_file.GetGeoTransform(), drivername=self.outputFormat, gdal_fmt=coh_file_arr.dtype.name, proj=coh_file.GetProjection(), nodata=coh_file.GetRasterBand(1).GetNoDataValue())
-            coh_file = coh_val = coh_file_arr = None
-
-        # Take average of coherence sum
-        coh_file=gdal.Open(outname,gdal.GA_Update)
-        coh_file=coh_file.GetRasterBand(1).WriteArray(coh_file.ReadAsArray()/len(self.product_dict[0]))
-        coh_file = None
+        # Apply mask (if specified).
+        if self.mask is not None:
+            update_file=gdal.Open(outname,gdal.GA_Update)
+            update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(outname+'.vrt').ReadAsArray())
+            del update_file
 
         return
 
@@ -437,19 +428,17 @@ class plot_class:
             slaves.append(self.pd.to_datetime(j[:8]))
             masters.append(self.pd.to_datetime(j[9:]))
             # Open coherence file
-            coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file))
-            coh_file_arr=np.ma.masked_where(coh_file.ReadAsArray() == coh_file.GetRasterBand(1).GetNoDataValue(), coh_file.ReadAsArray())
+            coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
 
             # Apply mask (if specified).
             if self.mask is not None:
-                coh_file_arr=np.ma.masked_where(self.mask == 0.0, coh_file_arr)
+                coh_file.GetRasterBand(1).WriteArray(self.mask*coh_file.ReadAsArray())
 
-            # Report mean
-            coh_val=coh_file_arr.mean()
-            coh_vals.append(coh_val)
+            # Record average coherence val for histogram
+            coh_vals.append(coh_file.GetRasterBand(1).GetStatistics(0,1)[2])
             y1.append(offset_dict[j[9:]])
             y2.append(offset_dict[j[:8]])
-            coh_file = coh_file_arr = coh_val = None
+            del coh_file
 
         cols, mapper = self._create_colors_coh(coh_vals, 'autumn') # don't use hot
         ax.set_prop_cycle(color=cols)
@@ -534,6 +523,12 @@ def main(inps=None):
         inps.plotbperpcoh=True
         inps.makeavgoh=True
 
+    # pass number of threads for gdal multiprocessing computation
+    if inps.num_threads.lower()=='all':
+        import multiprocessing
+        print('User specified use of all %s threads for gdal multiprocessing'%(str(multiprocessing.cpu_count())))
+        inps.num_threads='ALL_CPUS'
+    print('Thread count specified for gdal multiprocessing = %s'%(inps.num_threads))
 
     if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
         # Import functions
@@ -545,7 +540,7 @@ def main(inps=None):
 
         # Load or download mask (if specified).
         if inps.mask is not None:
-            inps.mask = prep_mask(inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat)
+            inps.mask = prep_mask([[j['amplitude'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]],inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
 
     # Make spatial extent plot
@@ -565,14 +560,14 @@ def main(inps=None):
     # Make average land coherence plot
     if inps.plotcoh:
         print("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
-        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
+        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, num_threads=inps.num_threads)
         make_plot.plot_coherence()
 
 
     # Generate average land coherence raster
     if inps.makeavgoh:
         print("- Generate 2D raster of average coherence.")
-        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat)
+        make_plot=plot_class([[item for sublist in [list(set(d['coherence'])) for d in standardproduct_info.products[1] if 'coherence' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         make_plot.plot_avgcoherence()
 
 
