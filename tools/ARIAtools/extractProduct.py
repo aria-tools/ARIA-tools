@@ -30,6 +30,7 @@ def createParser():
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
+    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies) or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
@@ -476,6 +477,200 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     del out_interpolated, interpolator, interp_2d, data_array, update_file
 
 
+def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox, outDir='./',outputFormat='VRT', verbose=None, num_threads='2'):
+    """
+        Perform tropospheric corrections. Must provide valid path to GACOS products.
+        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+    """
+
+    # Import functions
+    from ARIAtools.vrtmanager import renderVRT
+    import tarfile
+    from datetime import datetime
+    from ARIAtools.shapefile_util import save_shapefile
+    from shapely.geometry import Polygon
+
+    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT':
+       outputFormat='ENVI'
+
+    user_bbox=open_shapefile(bbox_file, 0, 0)
+    bounds=open_shapefile(bbox_file, 0, 0).bounds
+    prods_bbox_area=(max(bounds[0],bounds[2]) - min(bounds[0],bounds[2]))*(max(bounds[1],bounds[3]) - min(bounds[1],bounds[3]))
+
+    product_dict=[[j['unwrappedPhase'] for j in full_product_dict[1]], [j['lookAngle'] for j in full_product_dict[1]], [j["pair_name"] for j in full_product_dict[1]]]
+    metadata_dict=[[j['azimuthZeroDopplerStartTime'] for j in full_product_dict[0]], [j['azimuthZeroDopplerEndTime'] for j in full_product_dict[0]], [j['wavelength'] for j in full_product_dict[0]]]
+    workdir=os.path.join(outDir,'tropocorrected_products')
+
+    # If specified workdir doesn't exist, create it
+    if not os.path.exists(workdir):
+        os.mkdir(workdir)
+
+    # Get list of all dates for which standard products exist
+    date_list=[]
+    for i in product_dict[2]:
+        date_list.append(i[0][:8]); date_list.append(i[0][9:])
+    date_list=list(set(date_list))
+
+    ### Determine if tropo input is single directory, a list, or wildcard.
+    # If list of directories/files
+    if len([str(val) for val in tropo_products.split(',')])>1:
+        tropo_products=[str(val) for val in tropo_products.split(',')]
+    # If single directory or wildcard
+    else:
+        # If single directory/file
+        if os.path.exists(tropo_products):
+            tropo_products=[tropo_products]
+        # If wildcard
+        else:
+            tropo_products=glob.glob(os.path.expanduser(os.path.expandvars(tropo_products)))
+        # Convert relative paths to absolute paths
+        tropo_products=[os.path.normpath(os.path.join(os.getcwd(),i)) if not os.path.isabs(i) else i for i in tropo_products]
+    if len(tropo_products)==0:
+        raise Exception('No file match found')
+
+    ###Extract tarfiles
+    # Setup dictionary to track for products that are to be merged
+    tropo_date_dict={}
+    for i in date_list: tropo_date_dict[i]=[] ; tropo_date_dict[i+"_UTC"]=[]
+    for i,j in enumerate(tropo_products):
+        if not os.path.isdir(j):
+            untar_dir=os.path.join(os.path.abspath(os.path.join(j, os.pardir)),os.path.basename(j).split('.')[0]+'_extracted')
+            if not tarfile.is_tarfile(j):
+                raise Exception('Cannot extract %s because it is not a valid tarfile. Resolve this and relaunch'%(j))
+            if os.path.exists(untar_dir):
+                raise Exception('Cannot extract %s to %s because path already exists. Resolve conflict and relaunch'%(os.path.basename(j),untar_dir))
+            print('Extracting GACOS tarfile %s to %s.'%(os.path.basename(j),untar_dir))
+            tarfile.open(j).extractall(path=untar_dir)
+            tropo_products[i]=untar_dir
+        # Loop through each GACOS product file
+        for k in glob.glob(os.path.join(tropo_products[i],'*.ztd')):
+            # Only check files corresponding to standard product dates
+            if os.path.basename(k)[:-4] in date_list:
+                tropo_date_dict[os.path.basename(k)[:-4]].append(k)
+                tropo_date_dict[os.path.basename(k)[:-4]+"_UTC"].append(os.path.basename(k)[:4]+'-'+os.path.basename(k)[4:6]+'-'+os.path.basename(k)[6:8]+'-'+open(k+'.rsc', 'r').readlines()[-1].split()[1])
+                # make corresponding VRT file, if it doesn't exist
+                if not os.path.exists(k+'.vrt'):
+                    tropo_rsc_dict={}
+                    for line in open(k+'.rsc', 'r').readlines(): tropo_rsc_dict[line.split()[0]]=line.split()[1]
+                    gacos_prod=np.fromfile(k, dtype='float32').reshape(int(tropo_rsc_dict['FILE_LENGTH']),int(tropo_rsc_dict['WIDTH']))
+                    # Save as GDAL file, using proj from first unwrappedPhase file
+                    renderVRT(k, gacos_prod, geotrans=(float(tropo_rsc_dict['X_FIRST']), float(tropo_rsc_dict['X_STEP']), 0.0, float(tropo_rsc_dict['Y_FIRST']), 0.0, float(tropo_rsc_dict['Y_STEP'])), drivername=outputFormat, gdal_fmt='float32', proj=gdal.Open(os.path.join(outDir,'unwrappedPhase',product_dict[2][0][0])).GetProjection(), nodata=0.)
+                    gacos_prod = None
+                    if verbose:
+                        print("GACOS product %s successfully converted to GDAL-readable raster"%(k))
+
+    # If multiple GACOS directories, merge products.
+    if len(tropo_products)>1:
+        tropo_products=os.path.join(outDir,'merged_GACOS')
+        print('Stitching/storing GACOS products in %s.'%(tropo_products))
+        # If specified merged directory doesn't exist, create it
+        if not os.path.exists(os.path.join(outDir,'merged_GACOS')):
+            os.mkdir(os.path.join(outDir,'merged_GACOS'))
+
+        for i in tropo_date_dict:
+            if 'UTC' not in i:
+                outname=os.path.join(outDir,'merged_GACOS',i+'.ztd.vrt')
+                # building the VRT
+                gdal.BuildVRT(outname, tropo_date_dict[i])
+                geotrans=gdal.Open(outname).GetGeoTransform()
+                # Create merge rsc file
+                with open(outname[:-4]+'.rsc','w') as merged_rsc:
+                    merged_rsc.write('WIDTH %s\n'%(gdal.Open(outname).ReadAsArray().shape[1])) ; merged_rsc.write('FILE_LENGTH %s\n'%(gdal.Open(outname).ReadAsArray().shape[0]))
+                    merged_rsc.write('XMIN %s\n'%(0)) ; merged_rsc.write('XMAX %s\n'%(gdal.Open(outname).ReadAsArray().shape[1]))
+                    merged_rsc.write('YMIN %s\n'%(0)) ; merged_rsc.write('YMAX %s\n'%(gdal.Open(outname).ReadAsArray().shape[0]))
+                    merged_rsc.write('X_FIRST %f\n'%(geotrans[0])) ; merged_rsc.write('Y_FIRST %f\n'%(geotrans[3]))
+                    merged_rsc.write('X_STEP %f\n'%(geotrans[1])) ; merged_rsc.write('Y_STEP %f\n'%(geotrans[-1]))
+                    merged_rsc.write('X_UNIT %s\n'%('degres')) ; merged_rsc.write('Y_UNIT %s\n'%('degres'))
+                    merged_rsc.write('Z_OFFSET %s\n'%(0)) ; merged_rsc.write('Z_SCALE %s\n'%(1))
+                    merged_rsc.write('PROJECTION %s\n'%('LATLON')) ; merged_rsc.write('DATUM %s\n'%('WGS84'))
+                    merged_rsc.write('TIME_OF_DAY %s\n'%(''.join(tropo_date_dict[i+"_UTC"])))
+    else:
+        tropo_products=tropo_products[0]
+
+    # Estimate percentage of overlap with tropospheric product
+    for i in glob.glob(os.path.join(tropo_products,'*.ztd.vrt')):
+        # create shapefile
+        geotrans=gdal.Open(i).GetGeoTransform()
+        bbox=[geotrans[0], geotrans[3]+(gdal.Open(i).ReadAsArray().shape[0]*geotrans[-1]),geotrans[0]+(gdal.Open(i).ReadAsArray().shape[1]*geotrans[1]),geotrans[3]]
+        bbox=Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
+                            np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]]))))
+        save_shapefile(i+'.shp', bbox, 'GeoJSON')
+        bbox_area=open_shapefile(i+'.shp', 0, 0)
+        bbox_area=user_bbox.intersection(bbox_area)
+        bbox_area=bbox_area.bounds
+        bbox_area=(max(bbox_area[0],bbox_area[2]) - min(bbox_area[0],bbox_area[2]))*(max(bbox_area[1],bbox_area[3]) - min(bbox_area[1],bbox_area[3]))
+        per_overlap=(prods_bbox_area/bbox_area)*100
+        if per_overlap!=100. and per_overlap!=0.:
+            print("WARNING: Common track extent only has %d%% overlap with bbox"%per_overlap+'\n')
+        if per_overlap==0.:
+            raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch'%(i))
+
+    # Iterate through all IFGs and apply corrections
+    for i,j in enumerate(product_dict[0]):
+        outname=os.path.join(workdir,product_dict[2][i][0])
+        unwname=os.path.join(outDir,'unwrappedPhase',product_dict[2][i][0])
+        tropo_reference=os.path.join(tropo_products,product_dict[2][i][0][:8]+'.ztd.vrt')
+        tropo_secondary=os.path.join(tropo_products,product_dict[2][i][0][9:]+'.ztd.vrt')
+        if os.path.exists(tropo_reference) and os.path.exists(tropo_secondary):
+            # Check if tropo products are temporally consistent with IFG
+            for k,l in enumerate([tropo_reference, tropo_secondary]):
+                # Get ARIA product times
+                aria_rsc_dict={}
+                aria_rsc_dict['azimuthZeroDopplerStartTime']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[0][0]]
+                aria_rsc_dict['azimuthZeroDopplerEndTime']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[1][0]]
+                # Get tropo product UTC times
+                tropo_rsc_dict={}
+                tropo_rsc_dict['TIME_OF_DAY']=open(l[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
+                # If stitched tropo product, must account for date change (if applicable)
+                if '-' in tropo_rsc_dict['TIME_OF_DAY'][0]:
+                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(m[:13]+'-'+str(round(float(m[13:])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
+                else:
+                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0][:2]+'-'+str(round(float(tropo_rsc_dict['TIME_OF_DAY'][0][2:])*60)), "%Y-%m-%d-%H-%M")]
+                
+                # Check and report if tropospheric product falls outside of standard product range
+                latest_start = max(aria_rsc_dict['azimuthZeroDopplerStartTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])
+                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerEndTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
+                delta = (earliest_end - latest_start).total_seconds() + 1
+                if delta<0:
+                    print("WARNING: tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s"%(abs(delta), os.path.basename(l)[:8], product_dict[2][i][0]))
+
+            # Open unwrappedPhase and mask nodata
+            unwphase=gdal.Open(unwname)
+            geotrans=unwphase.GetGeoTransform() ; proj=unwphase.GetProjection() ; unwnodata=unwphase.GetRasterBand(1).GetNoDataValue()
+            unwphase=unwphase.ReadAsArray()
+            unwphase=np.ma.masked_where(unwphase == unwnodata, unwphase)
+
+            # Open corresponding tropo products and pass the difference
+            tropo_product=gdal.Warp('', tropo_reference, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+            tropo_product=np.ma.masked_where(tropo_product == 0., tropo_product)
+            tropo_secondary=gdal.Warp('', tropo_secondary, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+            tropo_secondary=np.ma.masked_where(tropo_secondary == 0., tropo_secondary)
+            tropo_product=np.subtract(tropo_secondary,tropo_product)
+            
+            # Convert troposphere to rad
+            tropo_product=np.divide(tropo_product,float(metadata_dict[2][i][0])/(4*np.pi))
+            # Account for lookAngle
+            # if in TS mode, only 1 lookfile would be generated, so check for this
+            if os.path.exists(os.path.join(outDir,'lookAngle',product_dict[2][i][0])):
+                lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][i][0])).ReadAsArray()
+            else:
+                lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][0][0])).ReadAsArray()
+            lookfile=np.sin(np.deg2rad(np.ma.masked_where(lookfile == 0., lookfile)))
+            tropo_product=np.divide(tropo_product,lookfile)
+            
+            #Correct phase and save to file
+            unwphase=np.subtract(unwphase,tropo_product)
+            np.ma.set_fill_value(unwphase, unwnodata); np.ma.set_fill_value(tropo_product, 0.)
+            renderVRT(outname+'_tropodiff', tropo_product.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=0.)
+            renderVRT(outname, unwphase.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=unwnodata)
+
+            del unwphase, tropo_product, tropo_reference, tropo_secondary, lookfile
+            
+        else:
+            print("WARNING: Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s"%(product_dict[2][i][0],tropo_products))
+
+
 def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
@@ -498,6 +693,12 @@ def main(inps=None):
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes & pair-names because they are not raster layers
         inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
+
+    elif inps.tropo_products:
+        print('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
+        if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
+        if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
+        if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
 
     else:
         inps.layers=list(inps.layers.split(','))
@@ -527,3 +728,7 @@ def main(inps=None):
 
     # Extract user expected layers
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+
+    # Perform GACOS-based tropospheric corrections (if specified).
+    if inps.tropo_products:
+        tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)

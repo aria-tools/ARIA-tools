@@ -20,7 +20,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 # Import functions
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, finalize_metadata
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, finalize_metadata, tropo_correction
 
 
 def createParser():
@@ -32,6 +32,7 @@ def createParser():
     parser = argparse.ArgumentParser(description='Get DEM')
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
+    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies) or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str, default='download', help='DEM file. Default is to download new DEM.')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str, help='projection for DEM. By default WGS84.')
@@ -277,6 +278,10 @@ def main(inps=None):
         if layers!=[]:
             print('Extracting optional, user-specified layers %s for each interferogram pair'%(layers))
             export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+
+    # Perform GACOS-based tropospheric corrections (if specified).
+    if inps.tropo_products:
+        tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
     generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
