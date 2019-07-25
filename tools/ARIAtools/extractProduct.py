@@ -415,6 +415,67 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
     return
 
 
+def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
+    '''
+        2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
+    '''
+
+    # import dependencies
+    import scipy
+
+    # Import functions
+    from ARIAtools.vrtmanager import renderVRT
+
+    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT':
+       outputFormat='ENVI'
+
+    # Check and buffer bounds if <4pix in x/y, which would raise interpolation error
+    geotrans=gdal.Open(outname+'.vrt').GetGeoTransform()
+    if round((max(bbox_bounds[0::2])-min(bbox_bounds[0::2])),2)<round((abs(geotrans[1])*4),2) or round((max(bbox_bounds[1::2])-min(bbox_bounds[1::2])),2)<round((abs(geotrans[-1])*4),2):
+        data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    else:
+        data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=bbox_bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+
+    # Define lat/lon/height arrays for metadata layers
+    heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
+    ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
+    latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
+    longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
+
+    # First, using the height/latitude/longitude arrays corresponding to the metadata layer, set-up spatial 2D interpolator. Using this, perform vertical 1D interpolation on cube, and then use result to set-up a regular-grid-interpolator. Using this, pass DEM and full-res lat/lon arrays in order to get intersection with DEM.
+
+    # 2D interpolation
+    interp_2d = InterpCube(data_array.ReadAsArray(),heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta)
+    out_interpolated=np.zeros((heightsMeta.shape[0],latitudeMeta.shape[0],longitudeMeta.shape[0]))
+
+    # 3D interpolation
+    for iz, hgt in enumerate(heightsMeta):
+        for iline, line in enumerate(latitudeMeta):
+            for ipix, pixel in enumerate(longitudeMeta):
+                out_interpolated[iz, iline, ipix] = interp_2d(line, pixel, hgt)
+    out_interpolated=np.flip(out_interpolated, axis=0)
+    # interpolate to interferometric grid
+    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
+    out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
+
+    # Save file
+    renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
+
+    # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
+    # Crop to track extents
+    out_interpolated=gdal.Warp('', outname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+
+    # Apply mask (if specified).
+    if mask is not None:
+        out_interpolated = mask*out_interpolated
+
+    update_file=gdal.Open(outname,gdal.GA_Update)
+    update_file.GetRasterBand(1).WriteArray(out_interpolated)
+
+    del out_interpolated, interpolator, interp_2d, data_array, update_file
+
+
 def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
