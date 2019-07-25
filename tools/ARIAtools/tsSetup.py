@@ -153,6 +153,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     startRange = aria_prod.products[0][0]['slantRangeStart'][0].data
     endRange = aria_prod.products[0][0]['slantRangeEnd'][0].data
     rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0].data
+    orbitDirection = str.split(aria_prod.files[0],'-')[2]
 
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
@@ -180,6 +181,13 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             metadata['incAng'] = incAng[dates]
             metadata['lookAng'] = lookAng[dates]
             metadata['azimuthAng'] = azimuthAng[dates]
+            if orbitDirection == 'D':
+                metadata['orbit_direction'] = 'DESCENDING'
+            elif orbitDirection == 'A':
+                metadata['orbit_direction'] = 'ASCENDING'
+            else:
+                print('Orbit direction not recognized')
+                metadata['orbit_direction'] = 'UNKNOWN'
 
             path = os.path.abspath(data)
 
@@ -202,6 +210,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             <MDI key="startRange">{start_range}</MDI>
             <MDI key="endRange">{end_range}</MDI>
             <MDI key="slantRangeSpacing">{range_spacing}</MDI>
+            <MDI key="orbitDirection">{orbDir}</MDI>
         </Metadata>
     </VRTRasterBand>\n'''.format(domainName=domainName,width=width, height=height,
                                 xmin=xmin, ymin=ymin,
@@ -210,7 +219,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                                 wvl=metadata['wavelength'], index=ind+1,
                                 path=path, dataType=dataType, bPerp=metadata['bPerp'],
                                 incAng=metadata['incAng'],lookAng=metadata['lookAng'],azimuthAng=metadata['azimuthAng'],
-                                start_range=startRange, end_range=endRange, range_spacing=rangeSpacing)
+                                start_range=startRange, end_range=endRange, range_spacing=rangeSpacing, orbDir=metadata['orbit_direction'])
             fid.write(outstr)
 
         fid.write('</VRTDataset>')
