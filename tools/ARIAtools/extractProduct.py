@@ -132,14 +132,14 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
             # update demfilename 
             demfilename=os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')
             # save cropped DEM
-            gdal.Warp(demfilename, os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+            gdal.Warp(demfilename, os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
             update_file=gdal.Open(demfilename,gdal.GA_Update)
             update_file.SetProjection(proj) ; del update_file
             gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT"))
             print('Saved DEM cropped to interferometric grid here: '+ demfilename)
 
         #pass cropped DEM
-        demfile = gdal.Warp('', demfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        demfile = gdal.Warp('', demfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         demfile.SetProjection(proj)
 
         ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
@@ -213,7 +213,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
             # building the VRT
             gdal.BuildVRT(os.path.join(workdir,'avgamplitude') +'.vrt', product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
             # taking average of all scenes and generating raster
-            gdal.Warp(os.path.join(workdir,'avgamplitude'), os.path.join(workdir,'avgamplitude')+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+            gdal.Warp(os.path.join(workdir,'avgamplitude'), os.path.join(workdir,'avgamplitude')+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, resampleAlg='average', width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
             # Update VRT
             gdal.Translate(os.path.join(workdir,'avgamplitude')+'.vrt', os.path.join(workdir,'avgamplitude'), options=gdal.TranslateOptions(format="VRT"))
             print('Saved average amplitude here: '+ os.path.join(workdir,'avgamplitude'))
@@ -240,13 +240,13 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
             # update maskfilename 
             maskfilename=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')
             # save cropped maskfile
-            gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+            gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
             mask_file = gdal.Open(maskfilename,gdal.GA_Update)
             mask_file.SetProjection(proj) ; del mask_file
             gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
 
         #pass cropped DEM
-        mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         mask.SetProjection(proj)
         mask=mask.ReadAsArray()
 
@@ -308,11 +308,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
         save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
 
         # Estimate percentage of overlap with bbox
-        prods_bbox_area=open_shapefile(prods_TOTbbox, 0, 0).bounds
-        prods_bbox_area=(max(prods_bbox_area[0],prods_bbox_area[2]) - min(prods_bbox_area[0],prods_bbox_area[2]))*(max(prods_bbox_area[1],prods_bbox_area[3]) - min(prods_bbox_area[1],prods_bbox_area[3]))
-        bbox_area=open_shapefile(bbox_file, 0, 0).bounds
-        bbox_area=(max(bbox_area[0],bbox_area[2]) - min(bbox_area[0],bbox_area[2]))*(max(bbox_area[1],bbox_area[3]) - min(bbox_area[1],bbox_area[3]))
-        per_overlap=(prods_bbox_area/bbox_area)*100
+        per_overlap=((user_bbox.area)/(open_shapefile(bbox_file, 0, 0).area))*100
         if per_overlap<50.:
             print("WARNING: Common track extent only has %d%% overlap with bbox"%per_overlap+'\n')
     else:
@@ -496,7 +492,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
 
     user_bbox=open_shapefile(bbox_file, 0, 0)
     bounds=open_shapefile(bbox_file, 0, 0).bounds
-    prods_bbox_area=(max(bounds[0],bounds[2]) - min(bounds[0],bounds[2]))*(max(bounds[1],bounds[3]) - min(bounds[1],bounds[3]))
 
     product_dict=[[j['unwrappedPhase'] for j in full_product_dict[1]], [j['lookAngle'] for j in full_product_dict[1]], [j["pair_name"] for j in full_product_dict[1]]]
     metadata_dict=[[j['azimuthZeroDopplerStartTime'] for j in full_product_dict[0]], [j['azimuthZeroDopplerEndTime'] for j in full_product_dict[0]], [j['wavelength'] for j in full_product_dict[0]]]
@@ -596,13 +591,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         bbox=Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]]))))
         save_shapefile(i+'.shp', bbox, 'GeoJSON')
-        bbox_area=open_shapefile(i+'.shp', 0, 0)
-        bbox_area=user_bbox.intersection(bbox_area)
-        bbox_area=bbox_area.bounds
-        bbox_area=(max(bbox_area[0],bbox_area[2]) - min(bbox_area[0],bbox_area[2]))*(max(bbox_area[1],bbox_area[3]) - min(bbox_area[1],bbox_area[3]))
-        per_overlap=(prods_bbox_area/bbox_area)*100
+        per_overlap=((user_bbox.intersection(open_shapefile(i+'.shp', 0, 0)).area)/(user_bbox.area))*100
         if per_overlap!=100. and per_overlap!=0.:
-            print("WARNING: Common track extent only has %d%% overlap with bbox"%per_overlap+'\n')
+            print("WARNING: Common track extent only has %d%% overlap with tropospheric product %s"%(per_overlap, i)+'\n')
         if per_overlap==0.:
             raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch'%(i))
 
