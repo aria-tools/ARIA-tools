@@ -213,6 +213,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # import dependencies
         from datetime import datetime, timedelta
+        import itertools
 
         sorted_products=[]
         track_rejected_pairs=[]
@@ -220,6 +221,16 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # If only one pair in list, add it to list.
         if len(self.products)==1:
             sorted_products.extend([[dict(zip(self.products[0][0].keys(), [list(a) for a in zip(self.products[0][0].values())])), dict(zip(self.products[0][1].keys(), [list(a) for a in zip(self.products[0][1].values())]))]])
+
+        # Check for (and remove) duplicate products
+        for i, j in enumerate(self.products[:-1]):
+            # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
+            if (self.products[i+1][0]['pair_name'][9:]==j[0]['pair_name'][9:]) and (self.products[i+1][0]['pair_name'][:8]==j[0]['pair_name'][:8]) and (open_shapefile(self.products[i+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(j[1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(j[1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
+                print("WARNING: Duplicate date captured. Rejecting scene %s"%(self.products[i+1][1]['unwrappedPhase'].split('"')[1]))
+                # Overwrite latter scene with former
+                self.products[i+1]=j
+        # Delete duplicate products
+        self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
 
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i, j in enumerate(self.products[:-1]):
@@ -247,6 +258,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     # Match IFG corresponding to reference product NOT found, so initialize dictionary for new IFG
                     except:
                         sorted_products.extend([[dict(zip(j[0].keys(), [list(a) for a in zip(j[0].values(), self.products[i+1][0].values())])), dict(zip(j[1].keys(), [list(a) for a in zip(j[1].values(), self.products[i+1][1].values())]))]])
+
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
                     print("Warning! Gap for interferogram %s"%(j[0]['pair_name']))
