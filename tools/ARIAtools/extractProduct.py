@@ -98,7 +98,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     # If specified DEM subdirectory exists, delete contents
     workdir=os.path.join(workdir,'DEM')
-    if os.path.exists(workdir) and demfilename!=os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem') and demfilename!=os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem') or demfilename.lower()=='download':
+    if os.path.exists(workdir) and demfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')) and demfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')) or demfilename.lower()=='download':
         for i in glob.glob(os.path.join(workdir,'*dem*')): os.remove(i)
     if not os.path.exists(workdir):
         os.mkdir(workdir)
@@ -117,7 +117,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         # save uncropped DEM
         gdal.BuildVRT(os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), _world_dem, options=gdal.BuildVRTOptions(outputBounds=bounds))
         # save cropped DEM
-        gdal.Warp(demfilename, os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        gdal.Warp(demfilename, os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         update_file=gdal.Open(demfilename,gdal.GA_Update)
         update_file.SetProjection(proj) ; del update_file
         gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
@@ -167,7 +167,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     # If specified DEM subdirectory exists, delete contents
     workdir=os.path.join(workdir,'mask')
-    if os.path.exists(workdir) and maskfilename!=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk') and maskfilename!=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk') or maskfilename.lower()=='download':
+    if os.path.exists(workdir) and maskfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')) and maskfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')) or maskfilename.lower()=='download':
         for i in glob.glob(os.path.join(workdir,'*.*')): os.remove(i)
     if not os.path.exists(workdir):
         os.mkdir(workdir)
