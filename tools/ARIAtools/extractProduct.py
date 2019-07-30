@@ -593,7 +593,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         save_shapefile(i+'.shp', bbox, 'GeoJSON')
         per_overlap=((user_bbox.intersection(open_shapefile(i+'.shp', 0, 0)).area)/(user_bbox.area))*100
         if per_overlap!=100. and per_overlap!=0.:
-            print("WARNING: Common track extent only has %d%% overlap with bbox"%per_overlap+'\n')
+            print("WARNING: Common track extent only has %d%% overlap with tropospheric product %s"%(per_overlap, i)+'\n')
         if per_overlap==0.:
             raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch'%(i))
 
