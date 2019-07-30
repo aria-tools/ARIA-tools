@@ -226,7 +226,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         for i, j in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
             if (self.products[i+1][0]['pair_name'][9:]==j[0]['pair_name'][9:]) and (self.products[i+1][0]['pair_name'][:8]==j[0]['pair_name'][:8]) and (open_shapefile(self.products[i+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(j[1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(j[1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
-                print("WARNING: Duplicate date captured. Rejecting scene %s"%(self.products[i+1][1]['unwrappedPhase'].split('"')[1]))
+                print("WARNING: Duplicate product captured. Rejecting scene %s"%(self.products[i+1][1]['unwrappedPhase'].split('"')[1]))
                 # Overwrite latter scene with former
                 self.products[i+1]=j
         # Delete duplicate products
