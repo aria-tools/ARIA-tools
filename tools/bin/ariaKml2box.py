@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Simran Sangha, David Bekaert, & Emre Havazli
+# Author: Emre Havazli & David Bekaert
 # Copyright 2019, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
