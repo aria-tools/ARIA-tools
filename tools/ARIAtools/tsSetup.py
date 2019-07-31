@@ -152,7 +152,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     startRange = aria_prod.products[0][0]['slantRangeStart'][0].data
     endRange = aria_prod.products[0][0]['slantRangeEnd'][0].data
     rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0].data
-    orbitDirection = str.split(aria_prod.files[0],'-')[2]
+    orbitDirection = str.split(os.path.basename(aria_prod.files[0]),'-')[2]
 
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
