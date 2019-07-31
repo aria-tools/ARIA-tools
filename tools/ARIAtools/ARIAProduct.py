@@ -218,10 +218,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         sorted_products=[]
         track_rejected_pairs=[]
 
-        # If only one pair in list, add it to list.
-        if len(self.products)==1:
-            sorted_products.extend([[dict(zip(self.products[0][0].keys(), [list(a) for a in zip(self.products[0][0].values())])), dict(zip(self.products[0][1].keys(), [list(a) for a in zip(self.products[0][1].values())]))]])
-
         # Check for (and remove) duplicate products
         for i, j in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
@@ -231,6 +227,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.products[i+1]=j
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
+
+        # If only one pair in list, add it to list.
+        if len(self.products)==1:
+            sorted_products.extend([[dict(zip(self.products[0][0].keys(), [list(a) for a in zip(self.products[0][0].values())])), dict(zip(self.products[0][1].keys(), [list(a) for a in zip(self.products[0][1].values())]))]])
 
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i, j in enumerate(self.products[:-1]):
