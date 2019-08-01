@@ -368,7 +368,6 @@ class plot_class:
         '''
 
         # Import functions
-        from ARIAtools.vrtmanager import renderVRT
         import glob
 
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
