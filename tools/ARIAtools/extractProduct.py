@@ -98,7 +98,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     # If specified DEM subdirectory exists, delete contents
     workdir=os.path.join(workdir,'DEM')
-    if os.path.exists(workdir) and demfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')) and demfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')) or demfilename.lower()=='download':
+    if os.path.exists(workdir) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')) or demfilename.lower()=='download':
         for i in glob.glob(os.path.join(workdir,'*dem*')): os.remove(i)
     if not os.path.exists(workdir):
         os.mkdir(workdir)
@@ -167,7 +167,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     # If specified DEM subdirectory exists, delete contents
     workdir=os.path.join(workdir,'mask')
-    if os.path.exists(workdir) and maskfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')) and maskfilename!=os.path.relpath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')) or maskfilename.lower()=='download':
+    if os.path.exists(workdir) and os.path.abspath(maskfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')) and os.path.abspath(maskfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')) or maskfilename.lower()=='download':
         for i in glob.glob(os.path.join(workdir,'*.*')): os.remove(i)
     if not os.path.exists(workdir):
         os.mkdir(workdir)
@@ -676,20 +676,25 @@ def main(inps=None):
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
 
-    if not inps.layers:
+    if not inps.layers and not inps.tropo_products:
         print('No layers specified; only creating bounding box shapes')
+
+    elif inps.tropo_products:
+        print('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
+        # If no input layers specified, initialize list
+        if not inps.layers: inps.layers=[]
+        # If valid argument for input layers passed, parse to list
+        if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
+        print("inps.layers")
+        print(inps.layers)
+        if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
+        if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
 
     elif inps.layers.lower()=='all':
         print('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes & pair-names because they are not raster layers
         inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
-
-    elif inps.tropo_products:
-        print('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
-        if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
-        if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
-        if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
 
     else:
         inps.layers=list(inps.layers.split(','))
