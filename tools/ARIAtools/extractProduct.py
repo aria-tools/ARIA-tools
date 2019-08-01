@@ -160,9 +160,6 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
     '''
 
-    # Import functions
-    from ARIAtools.vrtmanager import renderVRT
-
     _world_watermask = [' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L1.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L2.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L3.shp', ' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L4.shp',' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp']
 
     # If specified DEM subdirectory exists, delete contents
@@ -587,7 +584,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     for i in glob.glob(os.path.join(tropo_products,'*.ztd.vrt')):
         # create shapefile
         geotrans=gdal.Open(i).GetGeoTransform()
-        bbox=[geotrans[0], geotrans[3]+(gdal.Open(i).ReadAsArray().shape[0]*geotrans[-1]),geotrans[0]+(gdal.Open(i).ReadAsArray().shape[1]*geotrans[1]),geotrans[3]]
+        bbox=[geotrans[3]+(gdal.Open(i).ReadAsArray().shape[0]*geotrans[-1]),geotrans[3],geotrans[0],geotrans[0]+(gdal.Open(i).ReadAsArray().shape[1]*geotrans[1])]
         bbox=Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]]))))
         save_shapefile(i+'.shp', bbox, 'GeoJSON')
@@ -685,8 +682,6 @@ def main(inps=None):
         if not inps.layers: inps.layers=[]
         # If valid argument for input layers passed, parse to list
         if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
-        print("inps.layers")
-        print(inps.layers)
         if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
         if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
 
