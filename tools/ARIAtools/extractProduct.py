@@ -112,7 +112,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     # Download DEM
     if demfilename.lower()=='download':
-        # update demfilename 
+        # update demfilename
         demfilename=os.path.join(workdir,'SRTM_3arcsec.dem')
         # save uncropped DEM
         gdal.BuildVRT(os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), _world_dem, options=gdal.BuildVRTOptions(outputBounds=bounds))
@@ -129,7 +129,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         if not os.path.exists(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')):
             # save uncropped DEM
             gdal.BuildVRT(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), demfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update demfilename 
+            # update demfilename
             demfilename=os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')
             # save cropped DEM
             gdal.Warp(demfilename, os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
@@ -234,7 +234,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         if not os.path.exists(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')):
             # save uncropped masfile
             gdal.BuildVRT(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), maskfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update maskfilename 
+            # update maskfilename
             maskfilename=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')
             # save cropped maskfile
             gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
@@ -530,8 +530,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             untar_dir=os.path.join(os.path.abspath(os.path.join(j, os.pardir)),os.path.basename(j).split('.')[0]+'_extracted')
             if not tarfile.is_tarfile(j):
                 raise Exception('Cannot extract %s because it is not a valid tarfile. Resolve this and relaunch'%(j))
-            if os.path.exists(untar_dir):
-                raise Exception('Cannot extract %s to %s because path already exists. Resolve conflict and relaunch'%(os.path.basename(j),untar_dir))
             print('Extracting GACOS tarfile %s to %s.'%(os.path.basename(j),untar_dir))
             tarfile.open(j).extractall(path=untar_dir)
             tropo_products[i]=untar_dir
@@ -615,7 +613,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                     tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(m[:13]+'-'+str(round(float(m[13:])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
                 else:
                     tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0][:2]+'-'+str(round(float(tropo_rsc_dict['TIME_OF_DAY'][0][2:])*60)), "%Y-%m-%d-%H-%M")]
-                
+
                 # Check and report if tropospheric product falls outside of standard product range
                 latest_start = max(aria_rsc_dict['azimuthZeroDopplerStartTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])
                 earliest_end = min(aria_rsc_dict['azimuthZeroDopplerEndTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
@@ -635,7 +633,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             tropo_secondary=gdal.Warp('', tropo_secondary, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
             tropo_secondary=np.ma.masked_where(tropo_secondary == 0., tropo_secondary)
             tropo_product=np.subtract(tropo_secondary,tropo_product)
-            
+
             # Convert troposphere to rad
             tropo_product=np.divide(tropo_product,float(metadata_dict[2][i][0])/(4*np.pi))
             # Account for lookAngle
@@ -646,7 +644,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                 lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][0][0])).ReadAsArray()
             lookfile=np.sin(np.deg2rad(np.ma.masked_where(lookfile == 0., lookfile)))
             tropo_product=np.divide(tropo_product,lookfile)
-            
+
             #Correct phase and save to file
             unwphase=np.subtract(unwphase,tropo_product)
             np.ma.set_fill_value(unwphase, unwnodata); np.ma.set_fill_value(tropo_product, 0.)
@@ -654,7 +652,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             renderVRT(outname, unwphase.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=unwnodata)
 
             del unwphase, tropo_product, tropo_reference, tropo_secondary, lookfile
-            
+
         else:
             print("WARNING: Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s"%(product_dict[2][i][0],tropo_products))
 
