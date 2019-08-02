@@ -1,0 +1,28 @@
+# create environment : conda env create -f environment.yml
+# update dependencies: conda env update -f environment.yml
+# remove environment : conda env remove -n ARIA-tools
+# enter  environment : conda activate ARIA-tools
+# exit   environment : conda deactivate
+name: ARIA-tools
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.6
+  - cartopy
+  - gdal>=3.0
+  - hdf5
+  - joblib
+  - jupyterlab
+  - jupyter_contrib_nbextensions
+  - libgdal
+  - matplotlib
+  - netcdf4
+  - pandas
+  - pip
+  - requests
+  - rise
+  - shapely
+  - scipy
+  - pip:
+    - h5py
