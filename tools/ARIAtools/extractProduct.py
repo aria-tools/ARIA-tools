@@ -111,7 +111,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     # Download DEM
     if demfilename.lower()=='download':
-        # update demfilename 
+        # update demfilename
         demfilename=os.path.join(workdir,'SRTM_3arcsec.dem')
         # save uncropped DEM
         gdal.BuildVRT(os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), _world_dem, options=gdal.BuildVRTOptions(outputBounds=bounds))
@@ -128,7 +128,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
         if not os.path.exists(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')):
             # save uncropped DEM
             gdal.BuildVRT(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), demfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update demfilename 
+            # update demfilename
             demfilename=os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')
             # save cropped DEM
             gdal.Warp(demfilename, os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
@@ -233,7 +233,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         if not os.path.exists(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')):
             # save uncropped masfile
             gdal.BuildVRT(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), maskfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update maskfilename 
+            # update maskfilename
             maskfilename=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')
             # save cropped maskfile
             gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
