@@ -71,8 +71,7 @@ Below we outline the different steps for setting up the ARIA-tools while leverag
 
 ```
 git clone https://github.com/aria-tools/ARIA-tools.git
-conda config --add channels conda-forge
-conda create -n ARIA-tools --file ./ARIA-tools/requirements.txt --yes
+conda env create -f ./ARIA-tools/environment.yml
 conda activate ARIA-tools
 ```
 
