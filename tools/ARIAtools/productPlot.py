@@ -366,14 +366,7 @@ class plot_class:
         '''
             Generate average coherence raster.
         '''
-
-        # Import functions
-        from ARIAtools.vrtmanager import renderVRT
-        import glob
-
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
-        #Delete existing average coherence file
-        for i in glob.glob(os.path.join(self.workdir,'avgcoherence*')): os.remove(i)
 
         # building the VRT
         gdal.BuildVRT(outname +'.vrt', self.product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
