@@ -16,16 +16,16 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 
 ## Contents
 
-1. [Software Dependencies](#software-dependencies)
-2. [Installation](#installation)
-3. [Running ARIA-tools](#running-aria-tools)
-- [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
-- [Manipulating GUNW Products](#manipulating-gunw-products)
-- [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
-- [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
-4. [Documentation](#documentation)
-5. [Citation](#citation)
-6. [Contributors and community contributions](#contributors)
+1.  [Software Dependencies](#software-dependencies)
+2.  [Installation](#installation)
+3.  [Running ARIA-tools](#running-aria-tools)
+-   [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
+-   [Manipulating GUNW Products](#manipulating-gunw-products)
+-   [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
+-   [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
+4.  [Documentation](#documentation)
+5.  [Citation](#citation)
+6.  [Contributors and community contributions](#contributors)
 
 
 ------
@@ -33,7 +33,7 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 ## Software Dependencies
 Below we list the dependencies for ARIA-tools
 
-### Packages:
+### Packages
 ```
 * Python >= 3.5  (3.6 preferred)
 * [PROJ 4](https://github.com/OSGeo/proj) github) >= 6.0
@@ -82,16 +82,15 @@ python setup.py install
 ```
 
 If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For c-shell this can be done as follows (replace "ARIAtoolsREPO" to the location where you have cloned the ARIAtools repository):
-```
+```.tcsh
 setenv PYTHONPATH $PYTHONPATH:/ARIAtoolsREPO/tools/ARIAtools
 set PATH $PATH:'/ARIAtoolsREPO/tools/bin'
 ```
 
-
 ### Other installation options
 The following pages might be of use to those trying to build third party packages from source.
-- [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/Linux_source_build.md)
-- [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOS_source_build.md)
+-   [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/Linux_source_build.md)
+-   [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOS_source_build.md)
 
 ------
 ## Running ARIA-tools
@@ -110,7 +109,6 @@ Quality and baseline plots for spatial-temporal contiguous interferograms can be
 ### Time-series set-up of GUNW Products
 Time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
 
-
 ------
 ## Documentation
 
@@ -121,15 +119,11 @@ See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-do
 D. Bekaert, M. Karim, L. Justin, H. Hua, P. Agram, S. Owen, G. Manipon, N. Malarout, M. Lucas, G. Sacco, L. Pan, S. Sangha, and ARIA team (2019), *Development and Dissemination of Standardized Geodetic Products by the Advanced Rapid Imaging and Analysis (ARIA) Center for Natural Hazards*, The International Union of Geodesy and Geophysics (IUGG), Montreal
 
 ------
-## Contributors    
-
-* David Bekaert
-* Simran Sangha
-* Emre Havazli
-* Brett Buzzanga
-* [_other community members_](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
+## Contributors
+-   David Bekaert
+-   Simran Sangha
+-   Emre Havazli
+-   Brett Buzzanga
+*   [_other community members_](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
 
 We welcome community contributions. For instructions see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md).
-
-
-

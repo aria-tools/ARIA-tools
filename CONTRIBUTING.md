@@ -1,18 +1,17 @@
 # Contributing Guidelines #
 
-This document is inspired by similar instructions from PySAR, ISCE, gdal and jupyterhub. 
+This document is inspired by similar instructions from PySAR, ISCE, gdal and jupyterhub.
 These are several ways to contribute to the ARIA-tools framework:
 
-* Submitting bug reports and feature requests in ARIA-tools
-* Writing tutorials or jupyter-notebooks in ARIA-tools-docs
-* Fixing typos, code and improving documentation
-* Writing code for everyone to use
+*   Submitting bug reports and feature requests in ARIA-tools
+*   Writing tutorials or jupyter-notebooks in ARIA-tools-docs
+*   Fixing typos, code and improving documentation
+*   Writing code for everyone to use
 
 If you get stuck at any point you can create an [issue on GitHub](https://github.com/aria-tools/aria-tools/issues).
 
 For more information on contributing to open source projects, [GitHub's own guide](https://guides.github.com/activities/contributing-to-open-source/)
 is a great starting point if you are new to version control.
-
 
 ## Git workflows ##
 
@@ -36,7 +35,6 @@ cd aria-tools-docs
 git remote add my_user_name https://github.com/my_user_name/aria-tools-docs.git
 ```
 
-
 ### Updating your local master against upstream master ###
 
 ```
@@ -59,7 +57,7 @@ git checkout -b my_new_feature_branch
 git add my_new_file
 git add my_modifid_message
 git rm old_file
-git commit -a 
+git commit -a
 
 # you may need to resynchronize against master if you need some bugfix
 # or new capability that has been added to master since you created your
@@ -90,7 +88,7 @@ commit locally and push. To get a reasonable history, you may need to
 git rebase -i master
 ```
 
-, in which case you will have to force-push your branch with 
+, in which case you will have to force-push your branch with
 
 ```
 git push -f origin my_new_feature_branch
@@ -98,5 +96,5 @@ git push -f origin my_new_feature_branch
 
 Once a pull request is issued it will be reviewed by multiple members before it will be approved and integrated into the main.
 
-### Things you should NOT do
-(For anyone with push rights to github.com/aria-tools/ARIA-tools or github.com/aria-tools/ARIA-tools-docs) Never modify a commit or the history of anything that has been committed to https://github.com/aria-tools/ARIA-tools and github.com/aria-tools/ARIA-tools-docs.
+### Things you should **NOT** do
+(For anyone with push rights to [https://github.com/aria-tools/ARIA-tools] or [https://github.com/aria-tools/ARIA-tools-docs]) Never modify a commit or the history of anything that has been committed to [https://github.com/aria-tools/ARIA-tools] and [https://github.com/aria-tools/ARIA-tools-docs].
