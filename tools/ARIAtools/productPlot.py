@@ -8,7 +8,6 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-import sys
 import numpy as np
 from osgeo import gdal
 gdal.UseExceptions()
@@ -109,12 +108,12 @@ class plot_class:
 
         dateList.sort()
         d1 = self.datetime(*time.strptime(dateList[0],"%Y%m%d")[0:5])
-        for ni in range(len(dateList)):
+        for ni,j  in enumarate(datelist):
             d2 = self.datetime(*time.strptime(dateList[ni],"%Y%m%d")[0:5])
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
-        for i in range(len(dateList)): dateDict[dateList[i]] = tbase[i]
+        for i, j in enumarate(datelist): dateDict[dateList[i]] = tbase[i]
 
         return dateDict
 
@@ -320,14 +319,14 @@ class plot_class:
         cols, mapper = self._create_colors_coh(coh_hist)
         ax.set_prop_cycle(color=cols)
 
-        lines       = ax.plot([masters, slaves],
+        ax.plot([masters, slaves],
                           [coh_hist]*2)
-        scatter     = ax.scatter(slaves, coh_hist, c='k', s=7, zorder=100)
-        master      = ax.scatter(masters, coh_hist, c='k', s=7, zorder=100)
+        ax.scatter(slaves, coh_hist, c='k', s=7, zorder=100)
+        ax.scatter(masters, coh_hist, c='k', s=7, zorder=100)
 
-        cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
+        fig.add_axes([0.91, 0.12, 0.02, 0.75])
         self.warnings.filterwarnings("ignore",category=UserWarning)
-        cbar        = fig.colorbar(mapper, cbar_ax, spacing='proportional')
+        fig.colorbar(mapper, cbar_ax, spacing='proportional')
         # cbar.set_label(lbl, rotation=90, labelpad=15)
 
         ### Make average coherence plot
@@ -395,7 +394,6 @@ class plot_class:
         '''
 
         # importing dependencies
-        from matplotlib import cm
         fig, ax = self.plt.subplots()
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
@@ -441,10 +439,10 @@ class plot_class:
 
         cols, mapper = self._create_colors_coh(coh_vals, 'autumn') # don't use hot
         ax.set_prop_cycle(color=cols)
-        lines       = ax.plot([masters, slaves], [y1, y2])
+        ax.plot([masters, slaves], [y1, y2])
         cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
         self.warnings.filterwarnings("ignore",category=UserWarning)
-        cbar        = fig.colorbar(mapper, cbar_ax)
+        fig.colorbar(mapper, cbar_ax)
         # cbar_ax.set_title('Coherence', loc='left')
         cbar_ax.set_ylabel('Coherence', rotation=-90, labelpad=17)
         ax.set_ylabel(r'$\perp$'+' Baseline (m)',weight='bold')
@@ -505,7 +503,6 @@ class plot_class:
 
 def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-    from ARIAtools.shapefile_util import open_shapefile
 
     print("***Plotting Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.

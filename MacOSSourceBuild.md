@@ -12,10 +12,9 @@ Make sure to run these in the specified order!
 4. [Jupyter Notebooks SETUP](#jupyter-notebooks-setup)
 5. [Return to back to ARIA-tools page](https://github.com/aria-tools/ARIA-tools)
 
-
 ------
 ## MacPorts
-First install **Macports** following the instructions at [https://www.macports.org/].
+First install **Macports** following the instructions at [Macports website](https://www.macports.org/).
 
 Use the **ports** package manager to install python 3.X.X and associated packages, and compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 The following instructions are tested using python 3.6.8. Note that below we default the python executable to python3.
@@ -154,7 +153,7 @@ sudo jupyter-3.X nbextension install --py hide_code
 ```
 
 RISE plugin to turn notebooks into slideshow
-```
+```.tcsh
 sudo pip-3.X install RISE
 sudo jupyter-nbextension-3.X install rise --py --sys-prefix
 ```

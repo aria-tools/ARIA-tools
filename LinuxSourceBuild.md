@@ -88,7 +88,7 @@ Conda will install all required jupyter packages plus contributed notebook exten
 Edit your private module or start-up shell and add the PROJ and GDAL environment variables.
 
 For example for csh do:
-```
+```.tcsh
 vi ~/.cshrc
 ```
 

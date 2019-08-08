@@ -8,7 +8,6 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-import sys
 import numpy as np
 
 from osgeo import gdal
@@ -117,7 +116,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
             else:
                 product_dicts = []
-                pass
         # If no bbox specified, just pass dictionaries
         else:
             product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
@@ -180,6 +178,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         datalyr_dict={}
 
         # Setup rdrmetadata_dict
+        # for i, j in enumerate(rdrmetakeys):
         for i, j in enumerate(rdrmetakeys):
             try: #If layer expected
                 rdrmetadata_dict[radarkeys[rmdkeys.index(j)]]=rdrmetadata[j][0]

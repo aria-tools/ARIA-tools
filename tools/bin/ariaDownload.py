@@ -106,8 +106,8 @@ class Downloader(object):
         for prod in j:
             if 'layer' in prod['downloadUrl']: continue
             i+=1
-            id = prod['product_file_id']
-            match = re.search(r'\d{8}_\d{8}', id).group()
+            FileId = prod['product_file_id']
+            match = re.search(r'\d{8}_\d{8}', FileId).group()
             dates = [datetime.strptime(i, '%Y%m%d').date() for i in match.split('_')]
             st, end = sorted(dates)
 
@@ -125,8 +125,8 @@ class Downloader(object):
                 if self.inps.daysgt and not (elap > self.inps.daysgt): continue
                 if self.inps.dayslt and not (elap < self.inps.dayslt): continue
 
-            prod_ids.append(id)
-            if self.inps.v: print ('Found: {}'.format(id))
+            prod_ids.append(FileId)
+            if self.inps.v: print ('Found: {}'.format(FileId))
 
         if len(prod_ids) == 0:
             raise Exception('No products found that satisfy requested conditions.')

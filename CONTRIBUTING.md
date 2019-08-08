@@ -90,11 +90,11 @@ git rebase -i master
 
 , in which case you will have to force-push your branch with
 
-```
+```.tcsh
 git push -f origin my_new_feature_branch
 ```
 
 Once a pull request is issued it will be reviewed by multiple members before it will be approved and integrated into the main.
 
 ### Things you should **NOT** do ###
-Never modify a commit or the history of anything that has been committed to [https://github.com/aria-tools/ARIA-tools] and [https://github.com/aria-tools/ARIA-tools-docs] (For anyone with push rights to both repositories).
+Anyone with push rights to [ARIA-tools](https://github.com/aria-tools/ARIA-tools) and [ARIA-tools-docs](https://github.com/aria-tools/ARIA-tools-docs), never modify a commit or the history of anything that has been committed to either repositories.

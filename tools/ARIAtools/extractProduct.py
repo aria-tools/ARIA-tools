@@ -663,7 +663,6 @@ def main(inps=None):
     '''
 
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-    from ARIAtools.shapefile_util import open_shapefile
 
     print("***Extract Product Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.

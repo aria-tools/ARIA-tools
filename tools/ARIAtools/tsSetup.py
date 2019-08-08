@@ -7,10 +7,8 @@
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import os
-import sys
 import glob
-import numpy as np
-from datetime import datetime, time
+from datetime import datetime
 from osgeo import gdal
 
 gdal.UseExceptions()
@@ -19,8 +17,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.ARIAProduct import ARIA_standardproduct
-from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, finalize_metadata, tropo_correction
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, tropo_correction
 
 
 def createParser():
