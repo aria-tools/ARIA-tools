@@ -60,6 +60,8 @@ class plot_class:
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
     import matplotlib as mpl
+    # supress matplotlib postscript warnings
+    mpl._log.setLevel('ERROR')
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
