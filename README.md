@@ -29,7 +29,6 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 5.  [Citation](#citation)
 6.  [Contributors and community contributions](#contributors)
 
-
 ------
 
 ## Software Dependencies
