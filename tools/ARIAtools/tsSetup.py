@@ -227,9 +227,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
 
 
 def main(inps=None):
-    '''
-        Main driver.
-    '''
     inps = cmdLineParse()
 
     print("***Time-series Preparation Function:***")
