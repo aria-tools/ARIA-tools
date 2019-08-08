@@ -96,5 +96,5 @@ git push -f origin my_new_feature_branch
 
 Once a pull request is issued it will be reviewed by multiple members before it will be approved and integrated into the main.
 
-### Things you should **NOT** do
-(For anyone with push rights to [https://github.com/aria-tools/ARIA-tools] or [https://github.com/aria-tools/ARIA-tools-docs]) Never modify a commit or the history of anything that has been committed to [https://github.com/aria-tools/ARIA-tools] and [https://github.com/aria-tools/ARIA-tools-docs].
+### Things you should **NOT** do ###
+Never modify a commit or the history of anything that has been committed to [https://github.com/aria-tools/ARIA-tools] and [https://github.com/aria-tools/ARIA-tools-docs] (For anyone with push rights to both repositories).
