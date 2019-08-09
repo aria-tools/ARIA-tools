@@ -503,20 +503,22 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         date_list.append(i[0][:8]); date_list.append(i[0][9:])
     date_list=list(set(date_list))
 
-    ### Determine if tropo input is single directory, a list, or wildcard.
-    # If list of directories/files
+    ### Determine if file input is single file, a list, or wildcard.
+    # If list of files
     if len([str(val) for val in tropo_products.split(',')])>1:
-        tropo_products=[str(val) for val in tropo_products.split(',')]
-    # If single directory or wildcard
+        tropo_products=[str(i) for i in tropo_products.split(',')]
+        # If wildcard
+        tropo_products=[os.path.abspath(item) for sublist in [glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in tropo_products] for item in sublist]
+    # If single file or wildcard
     else:
-        # If single directory/file
-        if os.path.exists(tropo_products):
+        # If single file
+        if os.path.isfile(tropo_products):
             tropo_products=[tropo_products]
         # If wildcard
         else:
             tropo_products=glob.glob(os.path.expanduser(os.path.expandvars(tropo_products)))
         # Convert relative paths to absolute paths
-        tropo_products=[os.path.normpath(os.path.join(os.getcwd(),i)) if not os.path.isabs(i) else i for i in tropo_products]
+        tropo_products=[os.path.abspath(i) for i in tropo_products]
     if len(tropo_products)==0:
         raise Exception('No file match found')
 
@@ -558,7 +560,8 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             os.mkdir(os.path.join(outDir,'merged_GACOS'))
 
         for i in tropo_date_dict:
-            if 'UTC' not in i:
+            # only make rsc/vrt files if valid product
+            if 'UTC' not in i and tropo_date_dict[i]!=[]:
                 outname=os.path.join(outDir,'merged_GACOS',i+'.ztd.vrt')
                 # building the VRT
                 gdal.BuildVRT(outname, tropo_date_dict[i])

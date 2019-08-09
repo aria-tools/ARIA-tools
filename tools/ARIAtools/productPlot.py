@@ -59,6 +59,8 @@ class plot_class:
     from datetime import datetime, date
     from dateutil.relativedelta import relativedelta
     import matplotlib as mpl
+    # supress matplotlib postscript warnings
+    mpl._log.setLevel('ERROR')
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
@@ -365,13 +367,7 @@ class plot_class:
         '''
             Generate average coherence raster.
         '''
-
-        # Import functions
-        import glob
-
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
-        #Delete existing average coherence file
-        for i in glob.glob(os.path.join(self.workdir,'avgcoherence*')): os.remove(i)
 
         # building the VRT
         gdal.BuildVRT(outname +'.vrt', self.product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
