@@ -15,7 +15,6 @@ import re
 import json
 import requests
 import argparse
-import subprocess
 from datetime import datetime
 
 def createParser():
