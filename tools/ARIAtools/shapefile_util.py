@@ -29,7 +29,7 @@ def open_shapefile(fname, lyrind, ftind):
     file_bbox = ogr.Open(fname)
 
     #If layer name provided
-    if isinstance(lyrind, str)
+    if isinstance(lyrind, str):
         file_bbox = file_bbox.GetLayerByName(lyrind).GetFeature(ftind)
     #If layer index provided
     else:
