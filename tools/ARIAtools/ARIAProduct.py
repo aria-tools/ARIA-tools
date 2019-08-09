@@ -43,7 +43,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         ### Determine if file input is single file, a list, or wildcard.
         # If list of files
         if len([str(val) for val in filearg.split(',')])>1:
-            self.files=[str(val) for val in filearg.split(',')]
+            self.files=[str(i) for i in filearg.split(',')]
+            # If wildcard
+            self.files=[os.path.abspath(item) for sublist in [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in self.files] for item in sublist]
         # If single file or wildcard
         else:
             # If single file
@@ -53,7 +55,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             else:
                 self.files=self.glob.glob(os.path.expanduser(os.path.expandvars(filearg)))
             # Convert relative paths to absolute paths
-            self.files=[os.path.normpath(os.path.join(os.getcwd(),i)) if not os.path.isabs(i) else i for i in self.files]
+            self.files=[os.path.abspath(i) for i in self.files]
         if len(self.files)==0:
             raise Exception('No file match found')
         # If specified workdir doesn't exist, create it
