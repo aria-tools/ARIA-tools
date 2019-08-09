@@ -15,9 +15,8 @@ import re
 import json
 import requests
 import argparse
-import importlib
-import signal
-from datetime import datetime, timedelta
+import subprocess
+from datetime import datetime
 
 def createParser():
     """ Download a bulk download script and execute it """
@@ -80,7 +79,12 @@ class Downloader(object):
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
             os.chdir(self.inps.wd)
             os.sys.argv = []
-            exec(script, globals())
+            fileName = 'ASFDataDload.txt'
+            f = open(fileName, 'w')
+            f.write(script)
+            os.system('python '+fileName)
+
+            # exec(script, globals())
         return
 
     def form_url(self):

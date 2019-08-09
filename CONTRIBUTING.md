@@ -19,7 +19,7 @@ is a great starting point if you are new to version control.
 
 Fork aria-tools/aria-tools from GitHub UI, and then
 
-```
+```.tcsh
 git clone https://github.com/aria-tools/aria-tools.git
 cd aria-tools
 git remote add my_user_name https://github.com/my_user_name/aria-tools.git
@@ -29,7 +29,7 @@ git remote add my_user_name https://github.com/my_user_name/aria-tools.git
 
 Fork aria-tools/aria-tools-docs from GitHub UI, and then
 
-```
+```.tcsh
 git clone https://github.com/aria-tools/aria-tools-docs.git
 cd aria-tools-docs
 git remote add my_user_name https://github.com/my_user_name/aria-tools-docs.git
@@ -37,7 +37,7 @@ git remote add my_user_name https://github.com/my_user_name/aria-tools-docs.git
 
 ### Updating your local master against upstream master ###
 
-```
+```.tcsh
 git checkout master
 git fetch origin
 # Be careful: this will loose all local changes you might have done now
@@ -48,7 +48,7 @@ git reset --hard origin/master
 
 [Here](https://thoughtbot.com/blog/git-interactive-rebase-squash-amend-rewriting-history) is a great tutorial if you are new to rewriting history with git.
 
-```
+```.tcsh
 git checkout master
 (potentially update your local master against upstream, as described above)
 git checkout -b my_new_feature_branch
@@ -84,7 +84,7 @@ git push my_user_name my_new_feature_branch
 ### Issue a pull request from GitHub UI ###
 commit locally and push. To get a reasonable history, you may need to
 
-```
+```.tcsh
 git rebase -i master
 ```
 

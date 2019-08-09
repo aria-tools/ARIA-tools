@@ -9,7 +9,6 @@
 
 import os
 import ogr
-import sys
 import numpy as np
 
 from osgeo import gdal, ogr
@@ -30,7 +29,7 @@ def open_shapefile(fname, lyrind, ftind):
     file_bbox = ogr.Open(fname)
 
     #If layer name provided
-    if type(lyrind) is str:
+    if isinstance(lyrind, str)
         file_bbox = file_bbox.GetLayerByName(lyrind).GetFeature(ftind)
     #If layer index provided
     else:
@@ -71,7 +70,6 @@ def plot_shapefile(fname):
 
     # Extract first layer of features from shapefile using OGR
     ds = ogr.Open(fname, gdal.GA_ReadOnly)
-    nlay = ds.GetLayerCount()
     lyr = ds.GetLayer(0)
 
     # Get extent and calculate buffer size

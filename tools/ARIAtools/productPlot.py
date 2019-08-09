@@ -393,22 +393,19 @@ class plot_class:
             Make pbaseline plot that is color-coded w.r.t. coherence.
         '''
 
-        # importing dependencies
         fig, ax = self.plt.subplots()
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
-        A,B,L,baseline_hist = self.__design_matrix__()
+        A,B,L = self.__design_matrix__()
 
         B1 = np.linalg.pinv(B)
         B1 = np.array(B1,np.float32)
         dS = np.dot(B1,L)
         dtbase = np.diff(list(dateDict.values()))
-        dt = np.zeros((len(dtbase),1))
         zero = np.array([0.],np.float32)
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
         residual = L-np.dot(B,dS)
 
-        RMSE = np.sqrt(np.sum(residual**2)/len(residual))
         if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
             print('Baseline plot warning!')
             print('Design matrix is rank deficient. Network is disconnected.')

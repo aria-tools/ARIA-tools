@@ -9,13 +9,10 @@
 
 from __future__ import division
 
-import argparse, pdb
 import numpy as np
-import os
-
-from scipy.sparse import csr_matrix, coo_matrix
-from scipy.sparse.csgraph import minimum_spanning_tree, depth_first_tree
-from scipy.spatial import Delaunay, ConvexHull
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import minimum_spanning_tree
+from scipy.spatial import Delaunay
 
 import pulp
 import timeit as T
@@ -395,9 +392,6 @@ class PhaseUnwrap(object):
       '''
       Computes spanning tree from adjcency matrix
       '''
-      from scipy.sparse import csr_matrix
-      from scipy.sparse.csgraph import minimum_spanning_tree
-
       # Spanning Tree
       spanningTree = minimum_spanning_tree(csr_matrix(self.__adjMat))
       spanningTree = spanningTree.toarray().astype(int)
@@ -493,7 +487,6 @@ class PhaseUnwrap(object):
 
     # Inefficient - need to be replaced
     def __getSequence(self, idxA, idxB):
-        from scipy.sparse import csr_matrix
         from scipy.sparse.csgraph import depth_first_order
 
         def traverseToRoot(nodeSeq, pred):

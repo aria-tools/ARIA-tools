@@ -18,7 +18,7 @@ For **Mac** see the respective installation instructions provided on the [ARIA-t
 First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
 
 Below we use a clean installation of Miniconda3. First we will download Miniconda3:
-```
+```.tcsh
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 ```
 Next execute the installer script and follow the instructions as provided by the installer.
@@ -27,28 +27,28 @@ The miniconda installation does not contain all the python module we need.
 Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
 We can add the conda-forge channel to our installation so the packages in conda-forge are indexed.
 
-```
+```.tcsh
 conda config --add channels conda-forge
 ```
 After adding conda-forge we can make the installation of required packages
 
-```
+```.tcsh
 conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
 ```
 As soon as conda is done with the installation you can run update command below and finish conda installation
-```
+```.tcsh
 conda update --all
 ```
 
 ------
 ## PROJ 4 SETUP
 Clone the **PROJ 4** repository from github and install at least the version 6 release (i.e. main branch).
-```
+```.tcsh
 git clone https://github.com/OSGeo/proj.4 proj
 ```
 
 Build the PROJ package.
-```
+```.tcsh
 cd proj
 ./autogen.sh
 setenv CXXFLAGS "-DPROJ_RENAME_SYMBOLS -O2"
@@ -61,12 +61,12 @@ make install
 ------
 ## GDAL SETUP
 Clone the GDAL repository from github with a version of at least 3.0 (i.e. main branch).
-```
+```.tcsh
 git clone https://github.com/OSGeo/gdal
 ```
 
 Build the GDAL package with the python bindings:
-```
+```.tcsh
 cd gdal/gdal/
 ./configure --without-libtool --with-proj=/my/proj/install/directory --prefix=/my/gdal/install/directory --with-python
 make -j4
@@ -77,7 +77,7 @@ make install
 ## Jupyter Notebooks Setup
 Instructions to install jupyter notebooks in a conda environment
 
-```
+```.tcsh
 conda install -c conda-forge jupyterlab jupyter_contrib_nbextensions rise --yes
 ```
 
