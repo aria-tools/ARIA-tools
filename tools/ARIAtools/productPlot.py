@@ -110,8 +110,8 @@ class plot_class:
 
         dateList.sort()
         d1 = self.datetime(*time.strptime(dateList[0],"%Y%m%d")[0:5])
-        for ni,j  in enumarate(datelist):
-            d2 = self.datetime(*time.strptime(dateList[ni],"%Y%m%d")[0:5])
+        for ni  in enumarate(datelist):
+            d2 = self.datetime(*time.strptime(dateList[ni[0]],"%Y%m%d")[0:5])
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
@@ -178,20 +178,23 @@ class plot_class:
         ax=self.plt.figure().add_subplot(111)
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
+        # A,B,L,baseline_hist = self.__design_matrix__()
         A,B,L,baseline_hist = self.__design_matrix__()
+
+        del baseline_hist
 
         # Perform inversion
         B1 = np.linalg.pinv(B)
         B1 = np.array(B1,np.float32)
         dS = np.dot(B1,L)
         dtbase = np.diff(list(dateDict.values()))
-        dt = np.zeros((len(dtbase),1))
+        # dt = np.zeros((len(dtbase),1))
         zero = np.array([0.],np.float32)
 
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
         residual = L-np.dot(B,dS)
 
-        RMSE = np.sqrt(np.sum(residual**2)/len(residual))
+        # RMSE = np.sqrt(np.sum(residual**2)/len(residual))
         if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
             print('Baseline plot warning!')
             print('Design matrix is rank deficient. Network is disconnected.')
@@ -393,14 +396,14 @@ class plot_class:
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
         A,B,L = self.__design_matrix__()
-
+        del A
         B1 = np.linalg.pinv(B)
         B1 = np.array(B1,np.float32)
         dS = np.dot(B1,L)
         dtbase = np.diff(list(dateDict.values()))
         zero = np.array([0.],np.float32)
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
-        residual = L-np.dot(B,dS)
+        # residual = L-np.dot(B,dS)
 
         if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
             print('Baseline plot warning!')

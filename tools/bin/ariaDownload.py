@@ -13,6 +13,7 @@ import os.path as op
 import math
 import re
 import json
+import subprocess
 import requests
 import argparse
 from datetime import datetime
@@ -81,9 +82,8 @@ class Downloader(object):
             fileName = 'ASFDataDload.txt'
             f = open(fileName, 'w')
             f.write(script)
-            os.system('python '+fileName)
-
-            # exec(script, globals())
+            cmd = ('python', os.getcwd()+'/'+fileName)
+            subprocess.call(cmd)
         return
 
     def form_url(self):
