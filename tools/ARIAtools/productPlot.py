@@ -115,7 +115,7 @@ class plot_class:
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
-        for i, j in enumarate(datelist): dateDict[dateList[i]] = tbase[i]
+        for i in enumarate(datelist): dateDict[dateList[i[0]]] = tbase[i[0]]
 
         return dateDict
 
@@ -192,7 +192,7 @@ class plot_class:
         zero = np.array([0.],np.float32)
 
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
-        residual = L-np.dot(B,dS)
+        # residual = L-np.dot(B,dS)
 
         # RMSE = np.sqrt(np.sum(residual**2)/len(residual))
         if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
