@@ -1,5 +1,6 @@
 # ARIA-tools
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/b69726c41ff9498882088afe57fe8391)](https://app.codacy.com/app/ehavazli/ARIA-tools?utm_source=github.com&utm_medium=referral&utm_content=ehavazli/ARIA-tools&utm_campaign=Badge_Grade_Settings)
 [![Language](https://img.shields.io/badge/python-3.5%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-GPL-yellow.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/595831e8aa014ece8cb9b81f76087db0)](https://www.codacy.com/app/bekaertdavid/ARIA-tools?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=aria-tools/ARIA-tools&amp;utm_campaign=Badge_Grade)
