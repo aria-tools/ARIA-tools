@@ -179,14 +179,12 @@ class plot_class:
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
         # A,B,L,baseline_hist = self.__design_matrix__()
-        A,B,L,baseline_hist = self.__design_matrix__()
-
-        del baseline_hist
+        desingMatrix = self.__design_matrix__()
 
         # Perform inversion
-        B1 = np.linalg.pinv(B)
+        B1 = np.linalg.pinv(desingMatrix[1])
         B1 = np.array(B1,np.float32)
-        dS = np.dot(B1,L)
+        dS = np.dot(B1,desingMatrix[2])
         dtbase = np.diff(list(dateDict.values()))
         # dt = np.zeros((len(dtbase),1))
         zero = np.array([0.],np.float32)

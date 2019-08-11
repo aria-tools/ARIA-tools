@@ -74,8 +74,8 @@ class InterpCube(object):
         '''
         from scipy.interpolate import RectBivariateSpline
         self.offset = np.mean(self.data)
-        for ind, hgt in enumerate(self.hgts):
-            self.interp.append( RectBivariateSpline(self.latobj, self.lonobj, self.data[ind]-self.offset))
+        for ind in enumerate(self.hgts):
+            self.interp.append( RectBivariateSpline(self.latobj, self.lonobj, self.data[ind[0]]-self.offset))
 
     def __call__(self, line, pix, h):
         '''
