@@ -180,10 +180,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         datalyr_dict={}
 
         # Setup rdrmetadata_dict
-        # for i, j in enumerate(rdrmetakeys):
-        for i, j in enumerate(rdrmetakeys):
+        for j in enumerate(rdrmetakeys):
             try: #If layer expected
-                rdrmetadata_dict[radarkeys[rmdkeys.index(j)]]=rdrmetadata[j][0]
+                rdrmetadata_dict[radarkeys[rmdkeys.index(j[1])]]=rdrmetadata[j[1]][0]
             except: #If new, unaccounted layer not expected in rdrmetakeys
                 print("WARNING: Radarmetadata key %s not expected in rmdkeys"%(j))
         rdrmetadata_dict['pair_name']=self.pairname
