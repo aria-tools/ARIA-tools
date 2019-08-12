@@ -178,12 +178,12 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
     # Download mask
     if maskfilename.lower()=='download':
         maskfilename=os.path.join(workdir,'watermask'+'.msk')
-
+        os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
         ###Make coastlines/islands union VRT
-        subprocess.call('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_shorelines.vrt') + ''.join(_world_watermask[::2]) + ' -field_strategy Union -f VRT -single',shell=False)
+        subprocess.call('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_shorelines.vrt') + ''.join(_world_watermask[::2]) + ' -field_strategy Union -f VRT -single',shell=True)
 
         ###Make lakes/ponds union VRT
-        subprocess.call('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_lakes.vrt') + ''.join(_world_watermask[1::2]) + ' -field_strategy Union -f VRT -single',shell=False)
+        subprocess.call('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_lakes.vrt') + ''.join(_world_watermask[1::2]) + ' -field_strategy Union -f VRT -single',shell=True)
 
         ###Initiate water-mask with coastlines/islands union VRT
         # save uncropped mask

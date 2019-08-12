@@ -110,12 +110,12 @@ class plot_class:
 
         dateList.sort()
         d1 = self.datetime(*time.strptime(dateList[0],"%Y%m%d")[0:5])
-        for ni  in enumarate(datelist):
+        for ni  in enumerate(dateList):
             d2 = self.datetime(*time.strptime(dateList[ni[0]],"%Y%m%d")[0:5])
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
-        for i in enumarate(datelist): dateDict[dateList[i[0]]] = tbase[i[0]]
+        for i in enumerate(dateList): dateDict[dateList[i[0]]] = tbase[i[0]]
 
         return dateDict
 
@@ -327,7 +327,7 @@ class plot_class:
         ax.scatter(slaves, coh_hist, c='k', s=7, zorder=100)
         ax.scatter(masters, coh_hist, c='k', s=7, zorder=100)
 
-        fig.add_axes([0.91, 0.12, 0.02, 0.75])
+        cbar_ax = fig.add_axes([0.91, 0.12, 0.02, 0.75])
         self.warnings.filterwarnings("ignore",category=UserWarning)
         fig.colorbar(mapper, cbar_ax, spacing='proportional')
         # cbar.set_label(lbl, rotation=90, labelpad=15)
@@ -393,8 +393,7 @@ class plot_class:
         fig, ax = self.plt.subplots()
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
-        A,B,L = self.__design_matrix__()
-        del A
+        A,B,L, baseline_hist = self.__design_matrix__()
         B1 = np.linalg.pinv(B)
         B1 = np.array(B1,np.float32)
         dS = np.dot(B1,L)
