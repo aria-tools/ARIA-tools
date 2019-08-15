@@ -645,7 +645,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             if os.path.exists(os.path.join(outDir,'lookAngle',product_dict[2][i][0])):
                 lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][i][0])).ReadAsArray()
             else:
-                lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][0][0])).ReadAsArray()
+                lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][i][0])).ReadAsArray()
             lookfile=np.sin(np.deg2rad(np.ma.masked_where(lookfile == 0., lookfile)))
             tropo_product=np.divide(tropo_product,lookfile)
 
