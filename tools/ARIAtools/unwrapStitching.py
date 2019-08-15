@@ -14,11 +14,10 @@ import time
 import sys
 
 import numpy as np
-from osgeo import gdal
+from osgeo import gdal,ogr
 from gdalconst import *
 import tempfile
 import shutil
-import subprocess as sp
 from shapely.geometry import Point,Polygon,shape, LinearRing
 from shapely.ops import nearest_points
 import copy
@@ -911,7 +910,7 @@ class UnwrapComponents(Stitching):
         '''
     
         # import dependecies, looks liek the general import does not percolate down to this level.
-        from phaseMinimization import Vertex, Edge, PhaseUnwrap
+        from ARIAtools.phaseMinimization import Vertex, Edge, PhaseUnwrap
         
         # generating a list to be parsed in the two-stager, not that table originally was a mixture of string and floats, so all were temporaly mapped to a string for easy parsing. Will need to undo that now when calling two stager
         x = list(self.tablePoints[:,10].astype(np.int)+1)
@@ -1031,7 +1030,15 @@ def polygonizeConn(ccFile):
     
     ## Run the GDAL polygonize functionality
     # The no-data value will be ignored by default
-    sp.check_call(['gdal_polygonize.py',ccFile,'-f', 'GeoJSON', outname])
+    drv = ogr.GetDriverByName("GeoJSON")
+    dst_ds = drv.CreateDataSource(outname)
+    dst_layer = dst_ds.CreateLayer("out", srs = None)
+    dst_layer.CreateField(ogr.FieldDefn("DN", ogr.OFTInteger))
+    dst_field = dst_layer.GetLayerDefn().GetFieldIndex("DN")
+    src_ds = gdal.Open(ccFile)
+    srcband = src_ds.GetRasterBand(1)
+    gdal.Polygonize(srcband, None, dst_layer, dst_field, [], callback=None)
+    del drv, dst_ds, dst_layer, dst_field, src_ds, srcband
     dt = json.load(open(outname))
     os.remove(outname)
     
@@ -1460,7 +1467,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     '''
 
     # import specific dependencies to this function
-    from phaseMinimization import Vertex, Edge, PhaseUnwrap
+    from ARIAtools.phaseMinimization import Vertex, Edge, PhaseUnwrap
 
     # The solver used in minimizing the stiching of products
     if unwrapper_2stage_name is None:
