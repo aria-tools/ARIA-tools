@@ -112,8 +112,8 @@ class plot_class:
 
         dateList.sort()
         d1 = self.datetime(*time.strptime(dateList[0],"%Y%m%d")[0:5])
-        for ni  in range(len(dateList)):
-            d2 = self.datetime(*time.strptime(dateList[ni],"%Y%m%d")[0:5])
+        for ni  in enumerate(dateList):
+            d2 = self.datetime(*time.strptime(dateList[ni[0]],"%Y%m%d")[0:5])
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
