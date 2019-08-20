@@ -1467,7 +1467,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     '''
 
     # import specific dependencies to this function
-    from ARIAtools.phaseMinimization import Vertex, Edge, PhaseUnwrap
+    from ARIAtools.phaseMinimization import Vertex, Edge
 
     # The solver used in minimizing the stiching of products
     if unwrapper_2stage_name is None:
