@@ -118,6 +118,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
             else:
                 product_dicts = []
+                
         # If no bbox specified, just pass dictionaries
         else:
             product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
@@ -180,21 +181,21 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         datalyr_dict={}
 
         # Setup rdrmetadata_dict
-        for j in enumerate(rdrmetakeys):
+        for i in rdrmetakeys:
             try: #If layer expected
-                rdrmetadata_dict[radarkeys[rmdkeys.index(j[1])]]=rdrmetadata[j[1]][0]
+                rdrmetadata_dict[radarkeys[rmdkeys.index(i)]]=rdrmetadata[i][0]
             except: #If new, unaccounted layer not expected in rdrmetakeys
-                print("WARNING: Radarmetadata key %s not expected in rmdkeys"%(j))
+                print("WARNING: Radarmetadata key %s not expected in rmdkeys"%(i))
         rdrmetadata_dict['pair_name']=self.pairname
 
         # Setup datalyr_dict
-        for i, j in enumerate(sdsdict.items()):
+        for i in sdsdict.items():
             #If layer expected
             try:
-                datalyr_dict[layerkeys[sdskeys.index(j[1].split(':')[-1].split('/')[-1])]]=j[1]
+                datalyr_dict[layerkeys[sdskeys.index(i[1].split(':')[-1].split('/')[-1])]]=i[1]
             #If new, unaccounted layer not expected in layerkeys
             except:
-                print("WARNING: Data layer key %s not expected in sdskeys"%(j[1]))
+                print("WARNING: Data layer key %s not expected in sdskeys"%(i[1]))
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
         datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
@@ -219,12 +220,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         track_rejected_pairs=[]
 
         # Check for (and remove) duplicate products
-        for i, j in enumerate(self.products[:-1]):
+        for i in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
-            if (self.products[i+1][0]['pair_name'][9:]==j[0]['pair_name'][9:]) and (self.products[i+1][0]['pair_name'][:8]==j[0]['pair_name'][:8]) and (open_shapefile(self.products[i+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(j[1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(j[1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
-                print("WARNING: Duplicate product captured. Rejecting scene %s"%(self.products[i+1][1]['unwrappedPhase'].split('"')[1]))
+            if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
+                print("WARNING: Duplicate product captured. Rejecting scene %s"%(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
                 # Overwrite latter scene with former
-                self.products[i+1]=j
+                self.products[i[0]+1]=i[1]
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
 
@@ -233,45 +234,45 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             sorted_products.extend([[dict(zip(self.products[0][0].keys(), [list(a) for a in zip(self.products[0][0].values())])), dict(zip(self.products[0][1].keys(), [list(a) for a in zip(self.products[0][1].values())]))]])
 
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
-        for i, j in enumerate(self.products[:-1]):
+        for i in enumerate(self.products[:-1]):
             # Get this reference product's times
-            scene_start=datetime.strptime(j[0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            scene_end=datetime.strptime(j[0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            master=datetime.strptime(j[0]['pair_name'][9:], "%Y%m%d")
-            new_scene_start=datetime.strptime(self.products[i+1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            new_scene_end=datetime.strptime(self.products[i+1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            slave=datetime.strptime(self.products[i+1][0]['pair_name'][9:], "%Y%m%d")
+            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            scene_end=datetime.strptime(i[1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            master=datetime.strptime(i[1][0]['pair_name'][9:], "%Y%m%d")
+            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            new_scene_end=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            slave=datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:], "%Y%m%d")
 
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
             # If it is within same orbit cycle, try to append scene. This accounts for day change.
             if abs(new_scene_end-scene_end)<=timedelta(minutes=100) and abs(slave-master)<=timedelta(days=1):
                 # Don't export product if it is already tracked as a rejected pair
-                if j[0]['pair_name'] in track_rejected_pairs or self.products[i+1][0]['pair_name'] in track_rejected_pairs:
-                    track_rejected_pairs.extend((j[0]['pair_name'],self.products[i+1][0]['pair_name']))
+                if i[1][0]['pair_name'] in track_rejected_pairs or self.products[i[0]+1][0]['pair_name'] in track_rejected_pairs:
+                    track_rejected_pairs.extend((i[1][0]['pair_name'],self.products[i[0]+1][0]['pair_name']))
 
                 # Only pass scene if it temporally overlaps with reference scene
                 elif ((scene_end <= new_scene_start) and (new_scene_end <= scene_start)) or ((scene_end >= new_scene_start) and (new_scene_end >= scene_start)):
                     # Check if dictionary for IFG corresponding to reference product already exists, and if it does then append values
                     try:
-                        dict_ind=sorted_products.index(next(item for item in sorted_products if j[1]['productBoundingBox'] in item[1]['productBoundingBox']))
-                        sorted_products[dict_ind]=[dict(zip(j[0].keys(), [[subitem for item in a for subitem in (item if isinstance(item, list) else [item])] for a in zip(sorted_products[dict_ind][0].values(), self.products[i+1][0].values())])), dict(zip(j[1].keys(), [[subitem for item in a for subitem in (item if isinstance(item, list) else [item])] for a in zip(sorted_products[dict_ind][1].values(), self.products[i+1][1].values())]))]
+                        dict_ind=sorted_products.index(next(item for item in sorted_products if i[1][1]['productBoundingBox'] in item[1]['productBoundingBox']))
+                        sorted_products[dict_ind]=[dict(zip(i[1][0].keys(), [[subitem for item in a for subitem in (item if isinstance(item, list) else [item])] for a in zip(sorted_products[dict_ind][0].values(), self.products[i[0]+1][0].values())])), dict(zip(i[1][1].keys(), [[subitem for item in a for subitem in (item if isinstance(item, list) else [item])] for a in zip(sorted_products[dict_ind][1].values(), self.products[i[0]+1][1].values())]))]
                     # Match IFG corresponding to reference product NOT found, so initialize dictionary for new IFG
                     except:
-                        sorted_products.extend([[dict(zip(j[0].keys(), [list(a) for a in zip(j[0].values(), self.products[i+1][0].values())])), dict(zip(j[1].keys(), [list(a) for a in zip(j[1].values(), self.products[i+1][1].values())]))]])
+                        sorted_products.extend([[dict(zip(i[1][0].keys(), [list(a) for a in zip(i[1][0].values(), self.products[i[0]+1][0].values())])), dict(zip(i[1][1].keys(), [list(a) for a in zip(i[1][1].values(), self.products[i[0]+1][1].values())]))]])
 
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
-                    print("Warning! Gap for interferogram %s"%(j[0]['pair_name']))
-                    track_rejected_pairs.extend((j[0]['pair_name'], self.products[i+1][0]['pair_name']))
+                    print("Warning! Gap for interferogram %s"%(i[1][0]['pair_name']))
+                    track_rejected_pairs.extend((i[1][0]['pair_name'], self.products[i[0]+1][0]['pair_name']))
 
             # Products correspond to different dates, so pass both as separate IFGs.
             else:
                 # Check if dictionary for IFG corresponding to reference product already exists. If not, then pass as new IFG.
-                if [item for item in sorted_products if j[1]['productBoundingBox'] in item[1]['productBoundingBox']]==[] and j[0]['pair_name'] not in track_rejected_pairs:
-                    sorted_products.extend([[dict(zip(j[0].keys(), [list(a) for a in zip(j[0].values())])), dict(zip(j[1].keys(), [list(a) for a in zip(j[1].values())]))]])
+                if [item for item in sorted_products if i[1][1]['productBoundingBox'] in item[1]['productBoundingBox']]==[] and i[1][0]['pair_name'] not in track_rejected_pairs:
+                    sorted_products.extend([[dict(zip(i[1][0].keys(), [list(a) for a in zip(i[1][0].values())])), dict(zip(i[1][1].keys(), [list(a) for a in zip(i[1][1].values())]))]])
                 # Check if dictionary for IFG corresponding to next product already exists. If not, then pass as new IFG.
-                if [item for item in sorted_products if self.products[i+1][1]['productBoundingBox'] in item[1]['productBoundingBox']]==[] and self.products[i+1][0]['pair_name'] not in track_rejected_pairs:
-                    sorted_products.extend([[dict(zip(self.products[i+1][0].keys(), [list(a) for a in zip(self.products[i+1][0].values())])), dict(zip(self.products[i+1][1].keys(), [list(a) for a in zip(self.products[i+1][1].values())]))]])
+                if [item for item in sorted_products if self.products[i[0]+1][1]['productBoundingBox'] in item[1]['productBoundingBox']]==[] and self.products[i[0]+1][0]['pair_name'] not in track_rejected_pairs:
+                    sorted_products.extend([[dict(zip(self.products[i[0]+1][0].keys(), [list(a) for a in zip(self.products[i[0]+1][0].values())])), dict(zip(self.products[i[0]+1][1].keys(), [list(a) for a in zip(self.products[i[0]+1][1].values())]))]])
 
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))

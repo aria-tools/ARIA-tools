@@ -9,7 +9,6 @@
 import os
 import numpy as np
 import glob
-import subprocess
 from osgeo import gdal
 gdal.UseExceptions()
 #Suppress warnings
@@ -74,8 +73,8 @@ class InterpCube(object):
         '''
         from scipy.interpolate import RectBivariateSpline
         self.offset = np.mean(self.data)
-        for ind in enumerate(self.hgts):
-            self.interp.append( RectBivariateSpline(self.latobj, self.lonobj, self.data[ind[0]]-self.offset))
+        for i in range(len(self.hgts)):
+            self.interp.append( RectBivariateSpline(self.latobj, self.lonobj, self.data[i]-self.offset))
 
     def __call__(self, line, pix, h):
         '''
@@ -159,6 +158,9 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
     '''
 
+    # Import functions
+    from ARIAtools.vrtmanager import renderOGRVRT
+
     _world_watermask = [' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L1.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L2.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L3.shp', ' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L4.shp',' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp']
 
     # If specified DEM subdirectory exists, delete contents
@@ -180,10 +182,10 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         maskfilename=os.path.join(workdir,'watermask'+'.msk')
         os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
         ###Make coastlines/islands union VRT
-        subprocess.call('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_shorelines.vrt') + ''.join(_world_watermask[::2]) + ' -field_strategy Union -f VRT -single',shell=True)
+        renderOGRVRT(os.path.join(workdir,'watermsk_shorelines.vrt'), _world_watermask[::2])
 
         ###Make lakes/ponds union VRT
-        subprocess.call('ogrmerge.py -o ' + os.path.join(workdir,'watermsk_lakes.vrt') + ''.join(_world_watermask[1::2]) + ' -field_strategy Union -f VRT -single',shell=True)
+        renderOGRVRT(os.path.join(workdir,'watermsk_lakes.vrt'), _world_watermask[1::2])
 
         ###Initiate water-mask with coastlines/islands union VRT
         # save uncropped mask
@@ -343,21 +345,21 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
         # Iterate through all IFGs
         print("Generating: " + key)
-        for i,j in enumerate(product_dict[0]):
-            outname=os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
+        for i in enumerate(product_dict[0]):
+            outname=os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
 
             # Extract/crop metadata layers
-            if any(":/science/grids/imagingGeometry" in s for s in j):
-                gdal.BuildVRT(outname +'.vrt', j)
+            if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
+                gdal.BuildVRT(outname +'.vrt', [i[1]][0])
 
                 if dem is None:
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
                 # Check if height layers are consistent, and if not exit with error
-                if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j]))==1:
-                    gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open(j[0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
+                if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]]))==1:
+                    gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open([i[1]][0][0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
                 else:
-                    raise Exception('Inconsistent heights for metadata layer(s) ', j, ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in j])
+                    raise Exception('Inconsistent heights for metadata layer(s) ', [i[1]][0], ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]])
 
                 # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, open_shapefile(bbox_file, 0, 0).bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
@@ -366,12 +368,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
             elif key!='unwrappedPhase' and key!='connectedComponents':
                 if outputFormat=='VRT' and mask is None:
                     # building the virtual vrt
-                    gdal.BuildVRT(outname+ "_uncropped" +'.vrt', j)
+                    gdal.BuildVRT(outname+ "_uncropped" +'.vrt', [i[1]][0])
                     # building the cropped vrt
                     gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
                 else:
                     # building the VRT
-                    gdal.BuildVRT(outname +'.vrt', j)
+                    gdal.BuildVRT(outname +'.vrt', [i[1]][0])
 
                     # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
                     if outputFormat=='VRT' and mask is not None:
@@ -390,14 +392,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
                 # Check if unw phase and connected components are already generated
-                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i][0])):
+                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])):
                     # extract the inputs required for stitching of unwrapped and connected component files
-                    unw_files = full_product_dict[i]['unwrappedPhase']
-                    conn_files = full_product_dict[i]['connectedComponents']
-                    prod_bbox_files = full_product_dict[i]['productBoundingBoxFrames']
+                    unw_files = full_product_dict[i[0]]['unwrappedPhase']
+                    conn_files = full_product_dict[i[0]]['connectedComponents']
+                    prod_bbox_files = full_product_dict[i[0]]['productBoundingBoxFrames']
                     # based on the key define the output directories
-                    outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i][0])
-                    outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i][0])
+                    outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])
+                    outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
@@ -443,10 +445,10 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     out_interpolated=np.zeros((heightsMeta.shape[0],latitudeMeta.shape[0],longitudeMeta.shape[0]))
 
     # 3D interpolation
-    for iz, hgt in enumerate(heightsMeta):
-        for iline, line in enumerate(latitudeMeta):
-            for ipix, pixel in enumerate(longitudeMeta):
-                out_interpolated[iz, iline, ipix] = interp_2d(line, pixel, hgt)
+    for hgt in enumerate(heightsMeta):
+        for line in enumerate(latitudeMeta):
+            for pixel in enumerate(longitudeMeta):
+                out_interpolated[hgt[0], line[0], pixel[0]] = interp_2d(line[1], pixel[1], hgt[1])
     out_interpolated=np.flip(out_interpolated, axis=0)
     # interpolate to interferometric grid
     interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
@@ -526,16 +528,16 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     # Setup dictionary to track for products that are to be merged
     tropo_date_dict={}
     for i in date_list: tropo_date_dict[i]=[] ; tropo_date_dict[i+"_UTC"]=[]
-    for i,j in enumerate(tropo_products):
-        if not os.path.isdir(j):
-            untar_dir=os.path.join(os.path.abspath(os.path.join(j, os.pardir)),os.path.basename(j).split('.')[0]+'_extracted')
-            if not tarfile.is_tarfile(j):
-                raise Exception('Cannot extract %s because it is not a valid tarfile. Resolve this and relaunch'%(j))
-            print('Extracting GACOS tarfile %s to %s.'%(os.path.basename(j),untar_dir))
-            tarfile.open(j).extractall(path=untar_dir)
-            tropo_products[i]=untar_dir
+    for i in enumerate(tropo_products):
+        if not os.path.isdir(i[1]):
+            untar_dir=os.path.join(os.path.abspath(os.path.join(i[1], os.pardir)),os.path.basename(i[1]).split('.')[0]+'_extracted')
+            if not tarfile.is_tarfile(i[1]):
+                raise Exception('Cannot extract %s because it is not a valid tarfile. Resolve this and relaunch'%(i[1]))
+            print('Extracting GACOS tarfile %s to %s.'%(os.path.basename(i[1]),untar_dir))
+            tarfile.open(i[1]).extractall(path=untar_dir)
+            tropo_products[i[0]]=untar_dir
         # Loop through each GACOS product file
-        for k in glob.glob(os.path.join(tropo_products[i],'*.ztd')):
+        for k in glob.glob(os.path.join(tropo_products[i[0]],'*.ztd')):
             # Only check files corresponding to standard product dates
             if os.path.basename(k)[:-4] in date_list:
                 tropo_date_dict[os.path.basename(k)[:-4]].append(k)
@@ -595,33 +597,33 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch'%(i))
 
     # Iterate through all IFGs and apply corrections
-    for i,j in enumerate(product_dict[0]):
+    for i in range(len(product_dict[0])):
         outname=os.path.join(workdir,product_dict[2][i][0])
         unwname=os.path.join(outDir,'unwrappedPhase',product_dict[2][i][0])
         tropo_reference=os.path.join(tropo_products,product_dict[2][i][0][:8]+'.ztd.vrt')
         tropo_secondary=os.path.join(tropo_products,product_dict[2][i][0][9:]+'.ztd.vrt')
         if os.path.exists(tropo_reference) and os.path.exists(tropo_secondary):
             # Check if tropo products are temporally consistent with IFG
-            for k,l in enumerate([tropo_reference, tropo_secondary]):
+            for j in [tropo_reference, tropo_secondary]:
                 # Get ARIA product times
                 aria_rsc_dict={}
-                aria_rsc_dict['azimuthZeroDopplerStartTime']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[0][0]]
-                aria_rsc_dict['azimuthZeroDopplerEndTime']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[1][0]]
+                aria_rsc_dict['azimuthZeroDopplerStartTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[0][0]]
+                aria_rsc_dict['azimuthZeroDopplerEndTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[1][0]]
                 # Get tropo product UTC times
                 tropo_rsc_dict={}
-                tropo_rsc_dict['TIME_OF_DAY']=open(l[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
+                tropo_rsc_dict['TIME_OF_DAY']=open(j[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
                 # If stitched tropo product, must account for date change (if applicable)
                 if '-' in tropo_rsc_dict['TIME_OF_DAY'][0]:
                     tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(m[:13]+'-'+str(round(float(m[13:])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
                 else:
-                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(l)[:4]+'-'+os.path.basename(l)[4:6]+'-'+os.path.basename(l)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0][:2]+'-'+str(round(float(tropo_rsc_dict['TIME_OF_DAY'][0][2:])*60)), "%Y-%m-%d-%H-%M")]
+                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0][:2]+'-'+str(round(float(tropo_rsc_dict['TIME_OF_DAY'][0][2:])*60)), "%Y-%m-%d-%H-%M")]
 
                 # Check and report if tropospheric product falls outside of standard product range
                 latest_start = max(aria_rsc_dict['azimuthZeroDopplerStartTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])
                 earliest_end = min(aria_rsc_dict['azimuthZeroDopplerEndTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
                 delta = (earliest_end - latest_start).total_seconds() + 1
                 if delta<0:
-                    print("WARNING: tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s"%(abs(delta), os.path.basename(l)[:8], product_dict[2][i][0]))
+                    print("WARNING: tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s"%(abs(delta), os.path.basename(j)[:8], product_dict[2][i][0]))
 
             # Open unwrappedPhase and mask nodata
             unwphase=gdal.Open(unwname)
@@ -643,7 +645,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             if os.path.exists(os.path.join(outDir,'lookAngle',product_dict[2][i][0])):
                 lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][i][0])).ReadAsArray()
             else:
-                lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][0][0])).ReadAsArray()
+                lookfile=gdal.Open(os.path.join(outDir,'lookAngle',product_dict[2][i][0])).ReadAsArray()
             lookfile=np.sin(np.deg2rad(np.ma.masked_where(lookfile == 0., lookfile)))
             tropo_product=np.divide(tropo_product,lookfile)
 
