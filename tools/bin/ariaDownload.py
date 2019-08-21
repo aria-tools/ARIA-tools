@@ -79,11 +79,14 @@ class Downloader(object):
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
             os.chdir(self.inps.wd)
             os.sys.argv = []
-            fileName = 'ASFDataDload.txt'
+            fileName = 'ASFDataDload.py'
             f = open(fileName, 'w')
             f.write(script)
-            cmd = ('python', os.getcwd()+'/'+fileName)
-            subprocess.call(cmd)
+            f.close()
+            from products import ASFDataDload as AD
+            downloader = AD.bulk_downloader()
+            downloader.download_files()
+            downloader.print_summary()
         return
 
     def form_url(self):
@@ -169,5 +172,4 @@ class Downloader(object):
 
 if __name__ == '__main__':
     inps = cmdLineParse()
-
     Downloader(inps)()

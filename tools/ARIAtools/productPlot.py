@@ -115,7 +115,7 @@ class plot_class:
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
-        for i in enumerate(dateList): dateDict[dateList[i[0]]] = tbase[i[0]] 
+        for i in enumerate(dateList): dateDict[dateList[i[0]]] = tbase[i[0]]
         return dateDict
 
     def __design_matrix__(self):
