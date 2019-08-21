@@ -13,7 +13,6 @@ import os.path as op
 import math
 import re
 import json
-import subprocess
 import requests
 import argparse
 from datetime import datetime
