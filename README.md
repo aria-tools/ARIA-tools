@@ -124,6 +124,6 @@ D. Bekaert, M. Karim, L. Justin, H. Hua, P. Agram, S. Owen, G. Manipon, N. Malar
 -   Simran Sangha
 -   Emre Havazli
 -   Brett Buzzanga
--   [_other community members_](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
+-   [other community members](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
 
 We welcome community contributions. For instructions see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md).
