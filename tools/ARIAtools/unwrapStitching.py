@@ -910,7 +910,7 @@ class UnwrapComponents(Stitching):
         '''
 
         # import dependecies, looks liek the general import does not percolate down to this level.
-        from ARIAtools.phaseMinimization import Vertex, PhaseUnwrap
+        from ARIAtools.phaseMinimization import PhaseUnwrap
 
         # generating a list to be parsed in the two-stager, not that table originally was a mixture of string and floats, so all were temporaly mapped to a string for easy parsing. Will need to undo that now when calling two stager
         x = list(self.tablePoints[:,10].astype(np.int)+1)
@@ -1465,9 +1465,6 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
     '''
-
-    # import specific dependencies to this function
-    from ARIAtools.phaseMinimization import Vertex
 
     # The solver used in minimizing the stiching of products
     if unwrapper_2stage_name is None:
