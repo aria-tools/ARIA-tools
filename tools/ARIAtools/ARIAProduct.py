@@ -118,7 +118,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
             else:
                 product_dicts = []
-                
         # If no bbox specified, just pass dictionaries
         else:
             product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
