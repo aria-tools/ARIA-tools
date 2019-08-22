@@ -7,10 +7,8 @@
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import os
-import sys
 import glob
-import numpy as np
-from datetime import datetime, time
+from datetime import datetime
 from osgeo import gdal
 
 gdal.UseExceptions()
@@ -19,8 +17,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.ARIAProduct import ARIA_standardproduct
-from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, finalize_metadata, tropo_correction
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, tropo_correction
 
 
 def createParser():
@@ -131,7 +128,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     else:
         print('Stacks can be created for unwrapped interferogram, coherence and connectedComponent VRT files')
 
-    for ind, data in enumerate(Dlist):
+    for data in Dlist:
         width = None
         height = None
 
@@ -163,14 +160,14 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         proj=projection,
         GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
 
-        for ind, data in enumerate(Dlist):
+        for data in enumerate(Dlist):
             metadata = {}
-            dates = data.split('/')[-1][:-4]
+            dates = data[1].split('/')[-1][:-4]
             width = None
             height = None
             path = None
 
-            ds = gdal.Open(data, gdal.GA_ReadOnly)
+            ds = gdal.Open(data[1], gdal.GA_ReadOnly)
             width = ds.RasterXSize
             height = ds.RasterYSize
             ds = None
@@ -189,7 +186,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                 print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
-            path = os.path.abspath(data)
+            path = os.path.abspath(data[1])
 
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
@@ -216,7 +213,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                                 xmin=xmin, ymin=ymin,
                                 xsize=xsize, ysize=ysize,
                                 dates=dates, acq=metadata['utcTime'],
-                                wvl=metadata['wavelength'], index=ind+1,
+                                wvl=metadata['wavelength'], index=data[0]+1,
                                 path=path, dataType=dataType, bPerp=metadata['bPerp'],
                                 incAng=metadata['incAng'],lookAng=metadata['lookAng'],azimuthAng=metadata['azimuthAng'],
                                 start_range=startRange, end_range=endRange, range_spacing=rangeSpacing, orbDir=metadata['orbit_direction'])
@@ -227,9 +224,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
 
 
 def main(inps=None):
-    '''
-        Main driver.
-    '''
     inps = cmdLineParse()
 
     print("***Time-series Preparation Function:***")

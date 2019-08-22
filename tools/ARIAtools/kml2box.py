@@ -8,7 +8,7 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-from osgeo import gdal, ogr
+from osgeo import gdal
 gdal.UseExceptions()
 
 def createParser():
@@ -38,4 +38,4 @@ def main(inps=None):
         print('Directory {0} already exists.'.format(inps.workdir))
 
     srcDS = gdal.OpenEx(inps.inFile)
-    ds = gdal.VectorTranslate(os.path.join(inps.workdir,inps.outFile), srcDS, format='GeoJSON')
+    gdal.VectorTranslate(os.path.join(inps.workdir,inps.outFile), srcDS, format='GeoJSON')

@@ -42,3 +42,27 @@ def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float
     gdalfile = None
 
     return
+
+
+###Make OGR VRT file
+def renderOGRVRT(vrt_filename, src_datasets):
+    '''
+        Generate VRT of shapefile unions.
+    '''
+
+    # Import functions
+    import os
+
+    vrt_head='<OGRVRTDataSource>\n  <OGRVRTUnionLayer name="merged">\n    <FieldStrategy>Union</FieldStrategy>\n'
+    vrt_tail='  </OGRVRTUnionLayer>\n</OGRVRTDataSource>\n'
+
+    with open(vrt_filename,'w') as vrt_write:
+        vrt_write.write(vrt_head)
+        for i in enumerate(src_datasets):
+            vrt_write.write('    <OGRVRTLayer name="Dataset%i_%s">\n'%(i[0],os.path.basename(i[1]).split('.shp')[0]))
+            vrt_write.write('      <SrcDataSource shared="1">%s</SrcDataSource>\n'%(i[1]))
+            vrt_write.write('      <SrcLayer>%s</SrcLayer>\n'%(os.path.basename(i[1]).split('.shp')[0]))
+            vrt_write.write('    </OGRVRTLayer>\n')
+        vrt_write.write(vrt_tail)
+
+    return

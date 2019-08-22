@@ -12,8 +12,5 @@
 from ARIAtools.productPlot import cmdLineParse,main
 
 if __name__ == '__main__':
-    '''
-        Main driver.
-    '''
     inps = cmdLineParse()
     main(inps)

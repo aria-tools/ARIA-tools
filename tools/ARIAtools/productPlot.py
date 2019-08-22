@@ -8,7 +8,6 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-import sys
 import numpy as np
 from osgeo import gdal
 gdal.UseExceptions()
@@ -111,13 +110,12 @@ class plot_class:
 
         dateList.sort()
         d1 = self.datetime(*time.strptime(dateList[0],"%Y%m%d")[0:5])
-        for ni in range(len(dateList)):
-            d2 = self.datetime(*time.strptime(dateList[ni],"%Y%m%d")[0:5])
+        for ni  in enumerate(dateList):
+            d2 = self.datetime(*time.strptime(dateList[ni[0]],"%Y%m%d")[0:5])
             diff = d2-d1
             tbase.append(diff.days)
         dateDict = {}
-        for i in range(len(dateList)): dateDict[dateList[i]] = tbase[i]
-
+        for i in enumerate(dateList): dateDict[dateList[i[0]]] = tbase[i[0]]
         return dateDict
 
     def __design_matrix__(self):
@@ -142,27 +140,27 @@ class plot_class:
         baseline_hist = []
 
         #Iterate through all IFGs
-        for i, j in enumerate(self.product_dict[0]):
-            date12 = self.product_dict[1][i][0]
+        for i in enumerate(self.product_dict[0]):
+            date12 = self.product_dict[1][i[0]][0]
             date = date12.split('_')
             ndxt2 = daysList.index(dateDict[date[0]])
             ndxt1 = daysList.index(dateDict[date[1]])
-            A[i,ndxt1] = -1
-            A[i,ndxt2] = 1
-            B[i,ndxt1:ndxt2] = tbase[ndxt1+1:ndxt2+1]-tbase[ndxt1:ndxt2]
-            t[i,:] = [dateDict[date[1]],dateDict[date[0]]]
+            A[[i[0]],ndxt1] = -1
+            A[[i[0]],ndxt2] = 1
+            B[[i[0]],ndxt1:ndxt2] = tbase[ndxt1+1:ndxt2+1]-tbase[ndxt1:ndxt2]
+            t[[i[0]],:] = [dateDict[date[1]],dateDict[date[0]]]
 
             # Report mean
-            pbaseline_nodata=gdal.Open(j[0])
+            pbaseline_nodata=gdal.Open(i[1][0])
             pbaseline_nodata=pbaseline_nodata.GetRasterBand(1).GetNoDataValue()
-            pbaseline_val=gdal.BuildVRT('', j).ReadAsArray()
+            pbaseline_val=gdal.BuildVRT('', i[1]).ReadAsArray()
             pbaseline_val=np.ma.masked_where(pbaseline_val == pbaseline_nodata, pbaseline_val)
             pbaseline_val=pbaseline_val.mean()
             # Record baseline val for histogram
             baseline_hist.append(pbaseline_val)
-            L[i] = float(pbaseline_val)
-            if (np.isnan(L[i])):
-                L[i] = 0.0
+            L[i[0]] = float(pbaseline_val)
+            if (np.isnan(L[i[0]])):
+                L[i[0]] = 0.0
             del pbaseline_val, pbaseline_nodata
 
         A = A[:,1:]
@@ -179,21 +177,20 @@ class plot_class:
         ax=self.plt.figure().add_subplot(111)
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
-        A,B,L,baseline_hist = self.__design_matrix__()
+        # A,B,L,baseline_hist = self.__design_matrix__()
+        desingMatrix = self.__design_matrix__()
 
         # Perform inversion
-        B1 = np.linalg.pinv(B)
+        B1 = np.linalg.pinv(desingMatrix[1])
         B1 = np.array(B1,np.float32)
-        dS = np.dot(B1,L)
+        dS = np.dot(B1,desingMatrix[2])
         dtbase = np.diff(list(dateDict.values()))
-        dt = np.zeros((len(dtbase),1))
+        # dt = np.zeros((len(dtbase),1))
         zero = np.array([0.],np.float32)
-
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
-        residual = L-np.dot(B,dS)
-
-        RMSE = np.sqrt(np.sum(residual**2)/len(residual))
-        if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
+        # residual = L-np.dot(B,dS)
+        # RMSE = np.sqrt(np.sum(residual**2)/len(residual))
+        if np.linalg.matrix_rank(B1)!=len(list(dateDict.keys()))-1:
             print('Baseline plot warning!')
             print('Design matrix is rank deficient. Network is disconnected.')
             print('Using a fully connected network is recommended.')
@@ -232,7 +229,7 @@ class plot_class:
 
         # Make Baseline histogram
         ax1=self.plt.figure().add_subplot(111)
-        ax1.hist(baseline_hist)
+        ax1.hist(desingMatrix[3])
         ax1.set_xlabel(r'$\perp$'+' Baseline (m)', weight='bold')
         ax1.set_ylabel('Number of Interferograms', weight='bold')
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
@@ -251,14 +248,14 @@ class plot_class:
         #Iterate through all IFGs
         S_extent=[]
         N_extent=[]
-        for i, j in enumerate(self.product_dict[0]):
-            prods_bbox=open_shapefile(j[0], 0, 0).bounds
+        for i in enumerate(self.product_dict[0]):
+            prods_bbox=open_shapefile(i[1][0], 0, 0).bounds
             S_extent.append(prods_bbox[1])
             N_extent.append(prods_bbox[3])
             # Plot IFG extent bounds in latitude
-            ax.plot([self.product_dict[1][i][0]]*2,list(prods_bbox[1::2]),'ko',markersize=10)
+            ax.plot([self.product_dict[1][i[0]][0]]*2,list(prods_bbox[1::2]),'ko',markersize=10)
             # Plot IFG extent line connecting bounds in latitude
-            ax.plot([self.product_dict[1][i][0]]*2,list(prods_bbox[1::2]), color='0.5', linestyle='--')
+            ax.plot([self.product_dict[1][i[0]][0]]*2,list(prods_bbox[1::2]), color='0.5', linestyle='--')
 
         # Plot bounds of common track extent
         if self.croptounion:
@@ -304,9 +301,9 @@ class plot_class:
 
         # Iterate through all IFGs
         masters = []; slaves = []
-        for i,j in enumerate(self.product_dict[0]):
+        for i in enumerate(self.product_dict[0]):
             # Open coherence file
-            coh_file=gdal.Warp('', j, options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
+            coh_file=gdal.Warp('', i[1], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
 
             # Apply mask (if specified).
             if self.mask is not None:
@@ -314,22 +311,22 @@ class plot_class:
 
             # Record average coherence val for histogram
             coh_hist.append(coh_file.GetRasterBand(1).GetStatistics(0,1)[2])
-            slaves.append(self.pd.to_datetime(self.product_dict[1][i][0][:8]))
-            masters.append(self.pd.to_datetime(self.product_dict[1][i][0][9:]))
+            slaves.append(self.pd.to_datetime(self.product_dict[1][i[0]][0][:8]))
+            masters.append(self.pd.to_datetime(self.product_dict[1][i[0]][0][9:]))
             del coh_file
 
         # Plot average coherence per IFG
         cols, mapper = self._create_colors_coh(coh_hist)
         ax.set_prop_cycle(color=cols)
 
-        lines       = ax.plot([masters, slaves],
+        ax.plot([masters, slaves],
                           [coh_hist]*2)
-        scatter     = ax.scatter(slaves, coh_hist, c='k', s=7, zorder=100)
-        master      = ax.scatter(masters, coh_hist, c='k', s=7, zorder=100)
+        ax.scatter(slaves, coh_hist, c='k', s=7, zorder=100)
+        ax.scatter(masters, coh_hist, c='k', s=7, zorder=100)
 
-        cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
+        cbar_ax = fig.add_axes([0.91, 0.12, 0.02, 0.75])
         self.warnings.filterwarnings("ignore",category=UserWarning)
-        cbar        = fig.colorbar(mapper, cbar_ax, spacing='proportional')
+        fig.colorbar(mapper, cbar_ax, spacing='proportional')
         # cbar.set_label(lbl, rotation=90, labelpad=15)
 
         ### Make average coherence plot
@@ -390,24 +387,19 @@ class plot_class:
             Make pbaseline plot that is color-coded w.r.t. coherence.
         '''
 
-        # importing dependencies
-        from matplotlib import cm
         fig, ax = self.plt.subplots()
         self.pairs=[i[0] for i in self.product_dict[1]]
         dateDict = self.__date_list__()
-        A,B,L,baseline_hist = self.__design_matrix__()
+        desingMatrix = self.__design_matrix__()
 
-        B1 = np.linalg.pinv(B)
+        # Perform inversion
+        B1 = np.linalg.pinv(desingMatrix[1])
         B1 = np.array(B1,np.float32)
-        dS = np.dot(B1,L)
+        dS = np.dot(B1,desingMatrix[2])
         dtbase = np.diff(list(dateDict.values()))
-        dt = np.zeros((len(dtbase),1))
         zero = np.array([0.],np.float32)
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
-        residual = L-np.dot(B,dS)
-
-        RMSE = np.sqrt(np.sum(residual**2)/len(residual))
-        if np.linalg.matrix_rank(B)!=len(list(dateDict.keys()))-1:
+        if np.linalg.matrix_rank(B1)!=len(list(dateDict.keys()))-1:
             print('Baseline plot warning!')
             print('Design matrix is rank deficient. Network is disconnected.')
             print('Using a fully connected network is recommended.')
@@ -419,11 +411,11 @@ class plot_class:
             master=self.pd.to_datetime(list(dateDict.keys())[i][:8])
             ax.plot(master, S[i], 'k.', markeredgewidth = 3, markersize=7, linestyle='None', zorder=10)
         slaves = []; masters = []; coh_vals = []; y1 = []; y2 = []
-        for i,j in enumerate(self.pairs): #Plot lines for each pair
-            slaves.append(self.pd.to_datetime(j[:8]))
-            masters.append(self.pd.to_datetime(j[9:]))
+        for i in enumerate(self.pairs): #Plot lines for each pair
+            slaves.append(self.pd.to_datetime(i[1][:8]))
+            masters.append(self.pd.to_datetime(i[1][9:]))
             # Open coherence file
-            coh_file=gdal.Warp('', self.product_dict[2][i], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
+            coh_file=gdal.Warp('', self.product_dict[2][i[0]], options=gdal.WarpOptions(format="MEM", cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
 
             # Apply mask (if specified).
             if self.mask is not None:
@@ -431,16 +423,16 @@ class plot_class:
 
             # Record average coherence val for histogram
             coh_vals.append(coh_file.GetRasterBand(1).GetStatistics(0,1)[2])
-            y1.append(offset_dict[j[9:]])
-            y2.append(offset_dict[j[:8]])
+            y1.append(offset_dict[i[1][9:]])
+            y2.append(offset_dict[i[1][:8]])
             del coh_file
 
         cols, mapper = self._create_colors_coh(coh_vals, 'autumn') # don't use hot
         ax.set_prop_cycle(color=cols)
-        lines       = ax.plot([masters, slaves], [y1, y2])
+        ax.plot([masters, slaves], [y1, y2])
         cbar_ax     = fig.add_axes([0.91, 0.12, 0.02, 0.75])
         self.warnings.filterwarnings("ignore",category=UserWarning)
-        cbar        = fig.colorbar(mapper, cbar_ax)
+        fig.colorbar(mapper, cbar_ax)
         # cbar_ax.set_title('Coherence', loc='left')
         cbar_ax.set_ylabel('Coherence', rotation=-90, labelpad=17)
         ax.set_ylabel(r'$\perp$'+' Baseline (m)',weight='bold')
@@ -501,7 +493,6 @@ class plot_class:
 
 def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-    from ARIAtools.shapefile_util import open_shapefile
 
     print("***Plotting Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
