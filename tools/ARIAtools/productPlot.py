@@ -10,6 +10,8 @@
 import os
 import numpy as np
 from osgeo import gdal
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 gdal.UseExceptions()
 
 # Suppress warnings
@@ -380,6 +382,24 @@ class plot_class:
             update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(outname+'.vrt').ReadAsArray())
             del update_file
 
+        ds = gdal.Open(outname+'.vrt', gdal.GA_ReadOnly)
+        ## for making ~water pixels black
+        arr = np.where(ds.ReadAsArray() < 0.01, np.nan, ds.ReadAsArray())
+        fig, axes = self.plt.subplots()
+        cmap   = self.plt.cm.autumn; cmap.set_bad('black', 0.9)
+        im   = axes.imshow(arr, cmap=cmap, extent=self._get_extent(ds), vmin=0, vmax=1)
+        axes.set_xlabel('longitude', labelpad=15, fontsize=15)
+        axes.set_ylabel('latitude', labelpad=15, fontsize=15)
+        axes.grid(False)
+        divider = make_axes_locatable(axes)
+        cax = divider.append_axes('right', size='5%', pad=0.25)
+        cbar = fig.colorbar(im, cax=cax)
+
+        axes.set_title('Temporally Averaged Coherence', fontsize=15)
+        self.plt.savefig(os.path.join(self.workdir,'temporalavgcoherence_plot{}.eps'.format(self.mask_ext)))
+        self.plt.close()
+
+
         return
 
     def plotbperpcoh(self):
@@ -490,6 +510,23 @@ class plot_class:
         xticks = [x.toordinal() for x in labels]
         return xticks, labels
 
+    def _get_extent(self, path_ds, shrink=None):
+        """ Get the bbox of path_ds; optionally zoom in with WESN degrees """
+        if isinstance(path_ds, str):
+            ds   = gdal.Open(path_ds, gdal.GA_ReadOnly)
+        else:
+            ds   = path_ds
+
+        trans    = ds.GetGeoTransform()
+        # W E S N
+        extent   = [trans[0], trans[0] + ds.RasterXSize * trans[1],
+                    trans[3] + ds.RasterYSize*trans[5], trans[3]]
+        if shrink is not None:
+            delW, delE, delS, delN = shrink
+            extent = [extent[0] + delW, extent[1] - delE, extent[2] + delS, extent[3] - delN]
+
+        del ds
+        return extent
 
 def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
