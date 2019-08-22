@@ -75,17 +75,23 @@ class Downloader(object):
             print ('Wrote .KMZ to:\n\t {}'.format(dst))
 
         elif self.inps.output == 'Download':
+            import sys
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
             os.chdir(self.inps.wd)
             os.sys.argv = []
-            fileName = 'ASFDataDload.py'
+            fileName = os.path.abspath(os.path.join(self.inps.wd,'ASFDataDload.py'))
             f = open(fileName, 'w')
             f.write(script)
             f.close()
-            from products import ASFDataDload as AD
+            sys.path.append(os.path.abspath(self.inps.wd))
+            import ASFDataDload as AD
             downloader = AD.bulk_downloader()
             downloader.download_files()
             downloader.print_summary()
+            # Delete temporary files
+            import shutil
+            shutil.rmtree(os.path.abspath(os.path.join(self.inps.wd,'__pycache__')))
+            os.remove(fileName)
         return
 
     def form_url(self):
