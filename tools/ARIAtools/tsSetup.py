@@ -113,6 +113,12 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         dataType = "Float32"
         print('Number of unwrapped interferograms discovered: ', len(intList))
         Dlist = intList
+    elif inputFiles in ['tropocorrected_products', 'tropocorrected', 'tropo']:
+        domainName = 'tropocorrected_products'
+        intList = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
+        print('Number of tropocorrected unwrapped interferograms discovered: ', len(intList))
+        Dlist = intList
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
         cohList = glob.glob(os.path.join(workdir,'coherence','[0-9]*[0-9].vrt'))
@@ -287,6 +293,9 @@ def main(inps=None):
         tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
     generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
     generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir)
+    if inps.tropo_products:
+        generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir)
+    else:
+        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
