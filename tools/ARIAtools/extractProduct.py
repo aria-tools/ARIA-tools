@@ -614,9 +614,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                 tropo_rsc_dict['TIME_OF_DAY']=open(j[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
                 # If stitched tropo product, must account for date change (if applicable)
                 if '-' in tropo_rsc_dict['TIME_OF_DAY'][0]:
-                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(m[:13]+'-'+str(round(float(m[13:])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
+                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(m[:10]+'-'+m[11:].split('.')[0]+'-'+str(round(float('0.'+m[11:].split('.')[1])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
                 else:
-                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0][:2]+'-'+str(round(float(tropo_rsc_dict['TIME_OF_DAY'][0][2:])*60)), "%Y-%m-%d-%H-%M")]
+                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[0]+'-'+str(round(float('0.'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[-1])*60)), "%Y-%m-%d-%H-%M")]
 
                 # Check and report if tropospheric product falls outside of standard product range
                 latest_start = max(aria_rsc_dict['azimuthZeroDopplerStartTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])

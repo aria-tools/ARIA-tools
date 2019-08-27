@@ -114,7 +114,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         print('Number of unwrapped interferograms discovered: ', len(intList))
         Dlist = intList
     elif inputFiles in ['tropocorrected_products', 'tropocorrected', 'tropo']:
-        domainName = 'tropocorrected_products'
+        domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
         dataType = "Float32"
         print('Number of tropocorrected unwrapped interferograms discovered: ', len(intList))
