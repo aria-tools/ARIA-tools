@@ -10,6 +10,7 @@ import os
 import numpy as np
 import glob
 from osgeo import gdal
+
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -339,14 +340,23 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
         workdir=os.path.join(outDir,key)
 
+        ##Progress bar
+        from ARIAtools import progBar
+        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),prefix='Generating: '+key+' - ')
+        ##############
+
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
+        ##############
 
         # Iterate through all IFGs
-        print("Generating: " + key)
+        # print('Generating: ' + key)
         for i in enumerate(product_dict[0]):
             outname=os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
+            ##Update progress bar
+            prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
+            #####################
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
@@ -406,9 +416,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
-
+        prog_bar.close()
     return
-
 
 def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
     '''
@@ -469,7 +478,6 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     update_file.GetRasterBand(1).WriteArray(out_interpolated)
 
     del out_interpolated, interpolator, interp_2d, data_array, update_file
-
 
 def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox, outDir='./',outputFormat='VRT', verbose=None, num_threads='2'):
     """
