@@ -182,8 +182,6 @@ class plot_class:
         # A,B,L,baseline_hist = self.__design_matrix__()
         desingMatrix = self.__design_matrix__()
 
-        del baseline_hist
-
         # Perform inversion
         B1 = np.linalg.pinv(desingMatrix[1])
         B1 = np.array(B1,np.float32)
