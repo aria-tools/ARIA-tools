@@ -343,20 +343,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
         ##Progress bar
         from ARIAtools import progBar
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),prefix='Generating: '+key+' - ')
-        ##############
 
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
-        ##############
 
         # Iterate through all IFGs
-        # print('Generating: ' + key)
         for i in enumerate(product_dict[0]):
             outname=os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
             ##Update progress bar
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
-            #####################
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):

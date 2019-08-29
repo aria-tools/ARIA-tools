@@ -103,7 +103,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     ##Progress bar
     from ARIAtools import progBar
     prog_bar = progBar.progressBar(maxValue=len(aria_prod.products[1]), print_msg='Creating stack:')
-    ##############
 
     ###Set up single stack file
     if not os.path.exists(os.path.join(workdir,'stack')):
@@ -179,7 +178,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             path = None
             ##Update progress bar
             prog_bar.update(data[0]+1, suffix=dates)
-            #####################
+
             ds = gdal.Open(data[1], gdal.GA_ReadOnly)
             width = ds.RasterXSize
             height = ds.RasterYSize
@@ -200,7 +199,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                 metadata['orbit_direction'] = 'UNKNOWN'
 
             path = os.path.abspath(data[1])
-
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
             <SourceFilename>{path}</SourceFilename>

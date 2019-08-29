@@ -1,7 +1,15 @@
+#!/usr/bin/env python3
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# Author: Emre Havazli
+# Copyright 2019, by the California Institute of Technology. ALL RIGHTS
+# RESERVED. United States Government Sponsorship acknowledged.
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import numpy as np
 import time
 import sys
-###########################Simple progress bar######################
+
 class progressBar:
     """Creates a text-based progress bar. Call the object with
     the simple print command to see the progress bar, which looks
@@ -28,9 +36,6 @@ class progressBar:
         self.prefix = prefix
 
         self.print_msg = print_msg
-        ## calculate total width based on console width
-        #rows, columns = os.popen('stty size', 'r').read().split()
-        #self.width = round(int(columns) * 0.7 / 10) * 10
         self.width = totalWidth
         self.reset()
 
@@ -101,4 +106,3 @@ class progressBar:
         of future statements."""
         if self.print_msg:
             print(' ')
-################################End of progress bar class####################################
