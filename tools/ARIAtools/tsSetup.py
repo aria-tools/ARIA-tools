@@ -100,6 +100,10 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     azimuthAng = extractMetaDict(aria_prod,'azimuthAngle')
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
+    ##Progress bar
+    from ARIAtools import progBar
+    prog_bar = progBar.progressBar(maxValue=len(aria_prod.products[1]), print_msg='Creating stack:')
+
     ###Set up single stack file
     if not os.path.exists(os.path.join(workdir,'stack')):
         print('Creating directory: {0}'.format(os.path.join(workdir,'stack')))
@@ -172,6 +176,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             width = None
             height = None
             path = None
+            ##Update progress bar
+            prog_bar.update(data[0]+1, suffix=dates)
 
             ds = gdal.Open(data[1], gdal.GA_ReadOnly)
             width = ds.RasterXSize
@@ -193,7 +199,6 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                 metadata['orbit_direction'] = 'UNKNOWN'
 
             path = os.path.abspath(data[1])
-
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
             <SourceFilename>{path}</SourceFilename>
@@ -224,8 +229,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                                 incAng=metadata['incAng'],lookAng=metadata['lookAng'],azimuthAng=metadata['azimuthAng'],
                                 start_range=startRange, end_range=endRange, range_spacing=rangeSpacing, orbDir=metadata['orbit_direction'])
             fid.write(outstr)
-
         fid.write('</VRTDataset>')
+        prog_bar.close()
         print(outputFileName, ': stack generated')
 
 
@@ -261,16 +266,16 @@ def main(inps=None):
 
     # Extract
     layers=['unwrappedPhase','coherence']
-    print('Extracting unwrapped phase, coherence, and connected components for each interferogram pair')
+    print('\nExtracting unwrapped phase, coherence, and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
 
     layers=['incidenceAngle','lookAngle','azimuthAngle']
-    print('Extracting single incidence angle, look angle and azimuth angle files valid over common interferometric grid')
+    print('\nExtracting single incidence angle, look angle and azimuth angle files valid over common interferometric grid')
     export_products([dict(zip([k for k in set(k for d in standardproduct_info.products[1] for k in d)], [[item for sublist in [list(set(d[k])) for d in standardproduct_info.products[1] if k in d] for item in sublist] for k in set(k for d in standardproduct_info.products[1] for k in d)]))], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
 
     if inps.bperp==True:
         layers=['bPerpendicular']
-        print('Extracting perpendicular baseline grids for each interferogram pair')
+        print('\nExtracting perpendicular baseline grids for each interferogram pair')
         export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Extracting other layers, if specified
@@ -285,7 +290,7 @@ def main(inps=None):
             layers=[i.replace(' ','') for i in layers]
 
         if layers!=[]:
-            print('Extracting optional, user-specified layers %s for each interferogram pair'%(layers))
+            print('\nExtracting optional, user-specified layers %s for each interferogram pair'%(layers))
             export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).

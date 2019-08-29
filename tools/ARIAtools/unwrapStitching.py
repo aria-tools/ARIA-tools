@@ -27,7 +27,6 @@ import random
 import glob
 import collections
 
-
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
 stitchMethodTypes = ['overlap','2stage']
@@ -293,7 +292,7 @@ class Stitching:
             update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
             update_file=None
 
-        cmd = "gdal_translate -of png -scale " + self.outFileUnw + ".vrt " + self.outFileUnw + ".png"
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + self.outFileUnw + ".vrt " + self.outFileUnw + ".png"
         os.system(cmd)
 
         # Remove the directory with intermediate files as they are no longer needed
@@ -517,7 +516,7 @@ class UnwrapOverlap(Stitching):
         # pass the fileMapping back into self
         self.fileMappingDict = fileMappingDict
 
-        print('MAPPING complete:')
+        # print('MAPPING complete:')
 
 
 class UnwrapComponents(Stitching):
@@ -1441,8 +1440,8 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     '''
 
     # report method to user
-    print('STITCH Settings: Product overlap approach')
-    print('Solver: Minimize overlap')
+    # print('STITCH Settings: Product overlap approach')
+    # print('Solver: Minimize overlap')
 
     # Hand over to product overlap stitch code
     unw = UnwrapOverlap()
