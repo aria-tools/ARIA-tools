@@ -20,7 +20,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 
 def createParser():
-    parser = argparse.ArgumentParser( description='Preparing preliminary plot of frame extents')
+    parser = argparse.ArgumentParser( description='Preparing preliminary plot of frame extents. First go to the ASF search page, push all SLCs over defined search area to cart, download CSV under the metadata option, and pass the CSV through to this script with the -f flag.')
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True,
             help='Full path to CSV file containing SLC frame metadata.')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
