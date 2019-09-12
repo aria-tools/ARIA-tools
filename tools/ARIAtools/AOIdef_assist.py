@@ -2,26 +2,28 @@
 
 import os
 import argparse
-import datetime
 from datetime import datetime, timedelta
 import numpy as np
 import csv
 import itertools
 import pandas as pd
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 from collections import OrderedDict
 from osgeo import ogr
+from shapely.geometry import Polygon
 
 import matplotlib as mpl
+# supress matplotlib postscript warnings
+mpl._log.setLevel('ERROR')
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-
-from shapely.geometry import Polygon, MultiPolygon
 
 def createParser():
     parser = argparse.ArgumentParser( description='Preparing preliminary plot of frame extents')
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True,
             help='Full path to CSV file containing SLC frame metadata.')
-    parser.add_argument('-w', '--workdir', dest='workdir', default='./', 
+    parser.add_argument('-w', '--workdir', dest='workdir', default='./',
             help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-m', '--min_frames', dest='min_frames', type=int, default=0,
             help='Minimum percentage of frame overlap required for dates.')
@@ -115,8 +117,8 @@ def main(iargs=None):
     OG_all_scene_frame= [list(v) for k,v in itertools.groupby(OG_all_scene_frame, key=lambda x: x[:3])]
 
     ###Cycle through tracks
-    for a in range(0,len(OG_all_scene_frame)):
-        OG_str_all_burst_lons[a]=len(OG_str_all_burst_lons[a])*[min(OG_str_all_burst_lons[a])]
+    for a in enumerate(OG_all_scene_frame):
+        OG_str_all_burst_lons[a[0]]=len(OG_str_all_burst_lons[a[0]])*[min(OG_str_all_burst_lons[a[0]])]
 
     OG_str_all_burst_lons, OG_all_scene_frame, OG_all_scene_lat_dates, OG_str_all_burst_lats, OG_tot_str_all_burst_lats, OG_all_pass, OG_metaindices, OG_frames = (list(t) for t in zip(*sorted(zip(OG_str_all_burst_lons, OG_all_scene_frame, OG_all_scene_lat_dates, OG_str_all_burst_lats, OG_tot_str_all_burst_lats, OG_all_pass, OG_metaindices, OG_frames))))
     alt_colors=[]
@@ -133,23 +135,21 @@ def main(iargs=None):
         if temp_val==0:
             alt_colors.append(len(OG_all_scene_frame[i])*['red'])
         else:
-            alt_colors.append(len(OG_all_scene_frame[i])*['blue']) 
+            alt_colors.append(len(OG_all_scene_frame[i])*['blue'])
 
     OG_all_scene_frame, OG_all_scene_lat_dates, OG_str_all_burst_lats, OG_tot_str_all_burst_lats, OG_all_pass, alt_colors, OG_str_all_burst_lons, OG_metaindices, OG_frames = (list(t) for t in zip(*sorted(zip(OG_all_scene_frame, OG_all_scene_lat_dates, OG_str_all_burst_lats, OG_tot_str_all_burst_lats, OG_all_pass, alt_colors, OG_str_all_burst_lons, OG_metaindices, OG_frames))))
-
-    
     ###Cycle through tracks
-    for a in range(0,len(OG_all_scene_frame)):
-        all_scene_lat_dates=OG_all_scene_lat_dates[a]
-        all_scene_lon_dates=OG_str_all_burst_lons[a]
-        str_all_burst_lats=OG_str_all_burst_lats[a]
-        tot_str_all_burst_lats=OG_tot_str_all_burst_lats[a]
-        all_scene_frame=OG_all_scene_frame[a]
-        all_pass=OG_all_pass[a]
-        all_colors=alt_colors[a]
-        all_metaindices=OG_metaindices[a]
-        all_frames=OG_frames[a]
+    for a in enumerate(OG_all_scene_frame):
+        all_scene_lat_dates=OG_all_scene_lat_dates[a[0]]
+        str_all_burst_lats=OG_str_all_burst_lats[a[0]]
+        tot_str_all_burst_lats=OG_tot_str_all_burst_lats[a[0]]
+        all_scene_frame=OG_all_scene_frame[a[0]]
+        all_pass=OG_all_pass[a[0]]
+        all_colors=alt_colors[a[0]]
+        all_metaindices=OG_metaindices[a[0]]
+        all_frames=OG_frames[a[0]]
 
+        print("Generating outputs for track %s%s"%(all_pass[0],all_scene_frame[0]))
         f = plt.figure(figsize=(80,11))
         ax=f.add_subplot(111)
         all_scene_lat_dates, str_all_burst_lats, tot_str_all_burst_lats, all_scene_frame, all_metaindices = (list(t) for t in zip(*sorted(zip(all_scene_lat_dates, str_all_burst_lats, tot_str_all_burst_lats, all_scene_frame, all_metaindices))))
@@ -164,7 +164,6 @@ def main(iargs=None):
         array_all_scene_lat_dates=range(len(all_scene_lat_dates))
         unique_all_scene_lat_dates=np.unique(all_scene_lat_dates).tolist()
         dateList=np.unique(all_scene_lat_dates).tolist()
-        unique_array_all_scene_lat_dates=range(len(unique_all_scene_lat_dates))
         pd_dates = pd.to_datetime(dateList)
         pd_dates = [datetime(i.year, i.month, i.day) for i in pd_dates]
         ax.set_xticks(pd_dates)
@@ -306,20 +305,22 @@ def main(iargs=None):
                             pairs.append(dateList[j]+'_'+dateList[i])
             #If user specifies addition of annual pairs. See "num_days" argument.
             if inps.num_days:
+                #Checks for leap year date
                 try:
                     date_1yr_early = datetime(pd_dates[i].year-1, pd_dates[i].month, pd_dates[i].day)
-                except:
+                except ValueError as error:
                     date_1yr_early = datetime(pd_dates[i].year-1, pd_dates[i].month, pd_dates[i].day-1)
                 pot_1yrmaster=pd_dates[pd_dates.get_loc(date_1yr_early,method='nearest')]
-                ###If date is within specified days n of a year later, then add pair to list 
+                ###If date is within specified days n of a year later, then add pair to list
                 if abs((date_1yr_early-pot_1yrmaster).days)<inps.num_days and str(dateList[pd_dates.get_loc(date_1yr_early,method='nearest')]+'_'+dateList[i]) not in pairs:
                     pairs.append(dateList[pd_dates.get_loc(date_1yr_early,method='nearest')]+'_'+dateList[i])
+                #Checks for leap year date
                 try:
                     date_1yr_later = datetime(pd_dates[i].year+1, pd_dates[i].month, pd_dates[i].day)
-                except:
+                except ValueError as error:
                     date_1yr_later = datetime(pd_dates[i].year+1, pd_dates[i].month, pd_dates[i].day-1)
                 pot_1yrslave=pd_dates[pd_dates.get_loc(date_1yr_later,method='nearest')]
-                ###If date is within specified days n of a year later, then add pair to list 
+                ###If date is within specified days n of a year later, then add pair to list
                 if abs((date_1yr_later-pot_1yrslave).days)<inps.num_days and str(dateList[i]+'_'+dateList[pd_dates.get_loc(date_1yr_later,method='nearest')]) not in pairs:
                     pairs.append(dateList[i]+'_'+dateList[pd_dates.get_loc(date_1yr_later,method='nearest')])
 
@@ -352,5 +353,5 @@ def main(iargs=None):
 
 if __name__ == "__main__":
 
-  # Main engine  
+  # Main engine
   main()
