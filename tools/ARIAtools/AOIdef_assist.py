@@ -20,7 +20,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 
 def createParser():
-    parser = argparse.ArgumentParser( description='Preparing preliminary plot of frame extents')
+    parser = argparse.ArgumentParser( description='Preparing preliminary plot of frame extents. First go to the ASF search page, push all SLCs over defined search area to cart, download CSV under the metadata option, and pass the CSV through to this script with the -f flag.')
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True,
             help='Full path to CSV file containing SLC frame metadata.')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
@@ -194,9 +194,9 @@ def main(iargs=None):
             scene_overlap=max(scene_overlap)-min(scene_overlap)
             if all_scene_lat_dates[i]==mostcommonvalue[1] and all_metaindices[i]!='RAW':
                 mostcommonvalue_array.append(tot_str_all_burst_lats[i])
-            if ((scene_overlap/stack_master_overlap)*100)>inps.min_frames and all(float(i)<1.75 for i in lat_ind)==True and all_metaindices[i]!='RAW':
-                ax.plot(pd_dates[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])],float(str_all_burst_lats[i]),'ko',markersize=10, label="valid frame")
-                ###only write to KML layer if valid frame
+
+            #If not RAW frame, initiate KML layer
+            if all_metaindices[i]!='RAW':
                 # Create a new feature (attribute and geometry)
                 feat = ogr.Feature(layer.GetLayerDefn())
                 feat.SetField('id', i)
@@ -204,6 +204,11 @@ def main(iargs=None):
                 bbox = Polygon(np.column_stack((np.array([tot_str_all_burst_lats[i][1],tot_str_all_burst_lats[i][3],tot_str_all_burst_lats[i][7],tot_str_all_burst_lats[i][5],tot_str_all_burst_lats[i][1]]),np.array([tot_str_all_burst_lats[i][0],tot_str_all_burst_lats[i][2],tot_str_all_burst_lats[i][6],tot_str_all_burst_lats[i][4],tot_str_all_burst_lats[i][0]])))) #Pass lons/lats to create polygon
                 geom = ogr.CreateGeometryFromWkb(bbox.wkb)
                 feat.SetGeometry(geom)
+
+            if ((scene_overlap/stack_master_overlap)*100)>inps.min_frames and all(float(i)<1.75 for i in lat_ind)==True and all_metaindices[i]!='RAW':
+                ax.plot(pd_dates[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])],float(str_all_burst_lats[i]),'ko',markersize=10, label="valid frame")
+                ###only write white polygon to KML layer if valid frame
+                feat.SetStyleString("PEN(c:#000000)")
                 layer.CreateFeature(feat)
 
             if ((scene_overlap/stack_master_overlap)*100)<=inps.min_frames and all_metaindices[i]!='RAW':
@@ -211,12 +216,20 @@ def main(iargs=None):
                 ax.get_xticklabels()[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])].set_color("red")
                 if all_scene_lat_dates[i] in dateList:
                     dateList.remove(all_scene_lat_dates[i])
+                ###only write red polygon to KML layer if invalid frame
+                feat.SetStyleString("BRUSH(fc:#FF0000FF);PEN(c:#00FF00FF)")
+                layer.CreateFeature(feat)
+
             if all(float(i)<1.75 for i in lat_ind)==False and all_metaindices[i]!='RAW':
-                ax.plot(pd_dates[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])],float(str_all_burst_lats[i]),'ro',markersize=20)
+                ax.plot(pd_dates[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])],float(str_all_burst_lats[i]),'ro',markersize=20, label="invalid frame")
                 ax.axvline(x=pd_dates[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])], color='r', linestyle='--')
                 ax.get_xticklabels()[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])].set_color("red")
                 if all_scene_lat_dates[i] in dateList:
                     dateList.remove(all_scene_lat_dates[i])
+                ###only write red polygon to KML layer if invalid frame
+                feat.SetStyleString("BRUSH(fc:#FF0000FF);PEN(c:#00FF00FF)")
+                layer.CreateFeature(feat)
+
             if all_metaindices[i]=='RAW':
                 ax.plot(pd_dates[unique_all_scene_lat_dates.index(all_scene_lat_dates[i])],float(str_all_burst_lats[i]),'gx',markersize=25, label="only raw available")
                 #track unprocessed raw frames
