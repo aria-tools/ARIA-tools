@@ -14,12 +14,13 @@ gdal.UseExceptions()
 def createParser():
     '''
         Convert .kml files of Google Earth polygons to GeoJSON files which can be used as bounding box.
+        Output GeoJSON file is compatible with ASF Vertex product search.
     '''
 
     import argparse
     parser = argparse.ArgumentParser(description='Function to convert Google Earth .kml files to GeoJSON files')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory for output file. Default is local directory where script is launched.')
-    parser.add_argument('-f', '--file', dest='inFile', type=str, required=True, help='Google Earth kml polygon')
+    parser.add_argument('-f', '--file', dest='inFile', type=str, required=True, help='Polygon kml/kmz from Google Earth')
     parser.add_argument('-o', '--outfile', dest='outFile', type=str, required=True, help='Output file name')
 
     return parser
@@ -38,4 +39,4 @@ def main(inps=None):
         print('Directory {0} already exists.'.format(inps.workdir))
 
     srcDS = gdal.OpenEx(inps.inFile)
-    gdal.VectorTranslate(os.path.join(inps.workdir,inps.outFile), srcDS, format='GeoJSON')
+    gdal.VectorTranslate(os.path.join(inps.workdir,inps.outFile), srcDS, format='GeoJSON', dim='XY')
