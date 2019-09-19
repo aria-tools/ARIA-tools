@@ -196,7 +196,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
         update_file.SetProjection(proj)
-        update_file.GetRasterBand(1).SetNoDataValue(0.) ; del update_file
+        update_file.GetRasterBand(1).SetNoDataValue(-1.) ; del update_file
         gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
 
         ###Must take inverse of lakes/ponds union because of opposite designation (1 for water, 0 for land) as desired (0 for water, 1 for land)
