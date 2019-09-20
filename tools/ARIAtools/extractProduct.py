@@ -43,6 +43,7 @@ def createParser():
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
+    parser.add_argument('-r', '--resolution', dest='cell_resolution', default=0.000833333333333, type=float, help='Pixel resolution in degrees. Default = 3 arcsec = 0.000833333333333 degrees.')
 
     return parser
 
@@ -87,7 +88,7 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
+def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2', cell_resolution=None):
     '''
         Function to load and export DEM, lat, lon arrays.
         If "Download" flag is specified, DEM will be donwloaded on the fly.
@@ -254,7 +255,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     return mask
 
-def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2'):
+def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', cell_resolution=None):
     '''
         Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     '''
@@ -314,7 +315,10 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
         bbox_file=prods_TOTbbox
 
     # Warp the first scene with the output-bounds defined above
-    ds=gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    if cell_resolution:
+        ds=gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds, multithread=True, xRes=cell_resolution, yRes=cell_resolution, options=['NUM_THREADS=%s'%(num_threads)]))
+    else:
+        ds=gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
     # Get shape of full res layers
     arrshape=[ds.RasterYSize, ds.RasterXSize]
     # Get projection of full res layers
@@ -323,7 +327,7 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     return product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2'):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshape=None, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2'):
     """
         Export layer and 2D meta-data layers (at the product resolution).
         The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -376,7 +380,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', [i[1]][0])
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname +'.vrt', [i[1]][0])
@@ -384,7 +388,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
                     if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
-                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
@@ -409,9 +413,22 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
-                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp=outFileConnComp,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,outputFormat = outputFormat,verbose=verbose)
+
+                    # Updating output files to specified resolution
+                    for k in [outFileUnw,outFileConnComp]:
+                        gdal.Warp(k, k+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+                        # Update VRT
+                        gdal.BuildVRT(k+'.vrt', k, options=gdal.BuildVRTOptions(options=['-overwrite']))
+                        print('Built VRT')
+
+                        # Apply mask (if specified).
+                        if mask is not None:
+                            update_file=gdal.Open(k,gdal.GA_Update)
+                            update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(k+'.vrt').ReadAsArray())
+                            del update_file
         prog_bar.close()
     return
 
