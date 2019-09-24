@@ -412,6 +412,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])
 
                     # calling the stitching methods
+                    print('Stitching')
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp=outFileConnComp,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
@@ -419,9 +420,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
 
                     # Updating output files to specified resolution
                     for k in [outFileUnw,outFileConnComp]:
-                        gdal.Warp(k, k+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+                        # Temporarily copy to separate file
+                        gdal.Warp(k+'tmp', k, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
                         # Update VRT
-                        gdal.BuildVRT(k+'.vrt', k, options=gdal.BuildVRTOptions(options=['-overwrite']))
+                        gdal.BuildVRT(k+'.vrt', k+'tmp')#, options=gdal.BuildVRTOptions(options=['-overwrite'])
                         print('Built VRT')
 
                         # Apply mask (if specified).
