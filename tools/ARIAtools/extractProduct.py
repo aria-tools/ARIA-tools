@@ -88,7 +88,7 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2', cell_resolution=None):
+def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
     '''
         Function to load and export DEM, lat, lon arrays.
         If "Download" flag is specified, DEM will be donwloaded on the fly.
@@ -424,7 +424,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                         gdal.Warp(k+'tmp', k, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
                         # Update VRT
                         gdal.BuildVRT(k+'.vrt', k+'tmp')#, options=gdal.BuildVRTOptions(options=['-overwrite'])
-                        print('Built VRT')
 
                         # Apply mask (if specified).
                         if mask is not None:
