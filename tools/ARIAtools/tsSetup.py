@@ -42,7 +42,7 @@ def createParser():
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
-    parser.add_argument('-r', '--resolution', dest='cell_resolution', default=0.000833333333333, type=float, help='Pixel resolution in degrees. Default = 3 arcsec = 0.000833333333333 degrees.')
+    parser.add_argument('-r', '--resolution', dest='cell_resolution', default=None, type=float, help='Pixel resolution in degrees. Default = 3 arcsec = 0.000833333333333 degrees.') # 0.000833333333333
 
     return parser
 
@@ -253,8 +253,12 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    print('Cell resolution: {}'.format(inps.cell_resolution))
-    standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, cell_resolution=inps.cell_resolution)
+    # if cell resolution is to be changed from default, this is where it is done
+    if inps.cell_resolution:
+        print('Cell resolution: {}'.format(inps.cell_resolution))
+        standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, cell_resolution=inps.cell_resolution)
+    else:
+        stardardproduct_into.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads)
 
     # Load or download mask (if specified).
     if inps.mask is not None:
