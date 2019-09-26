@@ -43,7 +43,6 @@ def createParser():
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
-    parser.add_argument('-r', '--resolution', dest='cell_resolution', default=0.000833333333333, type=float, help='Pixel resolution in degrees. Default = 3 arcsec = 0.000833333333333 degrees.')
 
     return parser
 
@@ -316,7 +315,9 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
 
     # Warp the first scene with the output-bounds defined above
     if cell_resolution:
+        print('Bounding box resolution specified: {}'.format(cell_resolution))
         ds=gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds, multithread=True, xRes=cell_resolution, yRes=cell_resolution, options=['NUM_THREADS=%s'%(num_threads)]))
+        print('Array shape: {}, {}'.format(ds.RasterYSize, ds.RasterXSize))
     else:
         ds=gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
     # Get shape of full res layers
@@ -380,7 +381,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', [i[1]][0])
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    if arrshape:
+                        # with resampling
+                        gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    else:
+                        # no resampling
+                        gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname +'.vrt', [i[1]][0])
@@ -388,7 +394,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                     # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
                     if outputFormat=='VRT' and mask is not None:
                        outputFormat='ENVI'
-                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+
+                    # Warp to desired format and transform
+                    if arrshape:
+                        # with resampling
+                        gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    else:
+                        # no resampling
+                        gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
@@ -411,25 +424,31 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                     outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])
                     outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])
 
+                    # change outputFormat if resampling is specified
+                    if arrshape is not None and outputFormat=='VRT':
+                        outputFormat='ENVI'
+
                     # calling the stitching methods
-                    print('Stitching')
+                    print('Stitching ({} method)'.format(stitchMethodType))
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp=outFileConnComp,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,outputFormat = outputFormat,verbose=verbose)
 
-                    # Updating output files to specified resolution
-                    for k in [outFileUnw,outFileConnComp]:
-                        # Temporarily copy to separate file
-                        gdal.Warp(k+'tmp', k, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
-                        # Update VRT
-                        gdal.BuildVRT(k+'.vrt', k+'tmp')#, options=gdal.BuildVRTOptions(options=['-overwrite'])
+                    # updating output files to specified resolution if not default
+                    if arrshape:
+                        for k in [outFileUnw,outFileConnComp]:
+                            print('Resampling: {}'.format(k))
+                            # resample
+                            gdal.Warp(k, k, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+                            # update VRT
+                            gdal.BuildVRT(k+'.vrt', k, options=gdal.BuildVRTOptions(options=['-overwrite']))
 
-                        # Apply mask (if specified).
-                        if mask is not None:
-                            update_file=gdal.Open(k,gdal.GA_Update)
-                            update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(k+'.vrt').ReadAsArray())
-                            del update_file
+                            # apply mask (if specified)
+                            if mask is not None:
+                                update_file=gdal.Open(k,gdal.GA_Update)
+                                update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(k+'.vrt').ReadAsArray())
+                                del update_file
         prog_bar.close()
     return
 
@@ -511,7 +530,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
        outputFormat='ENVI'
 
     user_bbox=open_shapefile(bbox_file, 0, 0)
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
+    bounds=user_bbox.bounds
 
     product_dict=[[j['unwrappedPhase'] for j in full_product_dict[1]], [j['lookAngle'] for j in full_product_dict[1]], [j["pair_name"] for j in full_product_dict[1]]]
     metadata_dict=[[j['azimuthZeroDopplerStartTime'] for j in full_product_dict[0]], [j['azimuthZeroDopplerEndTime'] for j in full_product_dict[0]], [j['wavelength'] for j in full_product_dict[0]]]
@@ -520,12 +539,13 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
         os.mkdir(workdir)
+        print('Created directory: {}'.format(workdir))
 
     # Get list of all dates for which standard products exist
     date_list=[]
     for i in product_dict[2]:
         date_list.append(i[0][:8]); date_list.append(i[0][9:])
-    date_list=list(set(date_list))
+    date_list=list(set(date_list)) # trim to unique dates only
 
     ### Determine if file input is single file, a list, or wildcard.
     # If list of files
@@ -651,12 +671,13 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             unwphase=gdal.Open(unwname)
             geotrans=unwphase.GetGeoTransform() ; proj=unwphase.GetProjection() ; unwnodata=unwphase.GetRasterBand(1).GetNoDataValue()
             unwphase=unwphase.ReadAsArray()
+            arrshape=unwphase.shape # shape of output array to match ifgs
             unwphase=np.ma.masked_where(unwphase == unwnodata, unwphase)
 
             # Open corresponding tropo products and pass the difference
-            tropo_product=gdal.Warp('', tropo_reference, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+            tropo_product=gdal.Warp('', tropo_reference, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
             tropo_product=np.ma.masked_where(tropo_product == 0., tropo_product)
-            tropo_secondary=gdal.Warp('', tropo_secondary, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+            tropo_secondary=gdal.Warp('', tropo_secondary, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
             tropo_secondary=np.ma.masked_where(tropo_secondary == 0., tropo_secondary)
             tropo_product=np.subtract(tropo_secondary,tropo_product)
 
