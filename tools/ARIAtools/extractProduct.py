@@ -43,6 +43,7 @@ def createParser():
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
+    parser.add_argument('-r', '--resolution', dest='cell_resolution', default=0.000833333333333, type=float, help='Pixel resolution in degrees. Default = 3 arcsec = 0.000833333333333 degrees.')
 
     return parser
 
@@ -399,7 +400,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                     if arrshape:
                         # with resampling
                         gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-                    else:
+                    else: 
                         # no resampling
                         gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
@@ -437,18 +438,29 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
 
                     # updating output files to specified resolution if not default
                     if arrshape:
-                        for k in [outFileUnw,outFileConnComp]:
-                            print('Resampling: {}'.format(k))
-                            # resample
-                            gdal.Warp(k, k, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
-                            # update VRT
-                            gdal.BuildVRT(k+'.vrt', k, options=gdal.BuildVRTOptions(options=['-overwrite']))
+                        print('Resampling unwrapped phase: {}'.format(outFileUnw))
+                        # resample
+                        gdal.Warp(outFileUnw, outFileUnw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+                        # update VRT
+                        gdal.BuildVRT(outFileUnw+'.vrt', outFileUnw, options=gdal.BuildVRTOptions(options=['-overwrite']))
 
-                            # apply mask (if specified)
-                            if mask is not None:
-                                update_file=gdal.Open(k,gdal.GA_Update)
-                                update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(k+'.vrt').ReadAsArray())
-                                del update_file
+                        # apply mask (if specified)
+                        if mask is not None:
+                            update_file=gdal.Open(outFileUnw,gdal.GA_Update)
+                            update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outFileUnw+'.vrt').ReadAsArray())
+                            del update_file
+
+                        print('Resampling connected components: {}'.format(outFileConnComp))
+                        # resample
+                        gdal.Warp(outFileConnComp, outFileConnComp, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+                        # update VRT
+                        gdal.BuildVRT(outFileConnComp+'.vrt', outFileConnComp, options=gdal.BuildVRTOptions(options=['-overwrite']))
+
+                        # apply mask (if specified)
+                        if mask is not None:
+                            update_file=gdal.Open(outFileConnComp,gdal.GA_Update)
+                            update_file.GetRasterBand(1).WriteArray(mask*gdal.Open(outFileConnComp+'.vrt').ReadAsArray())
+                            del update_file
         prog_bar.close()
     return
 
