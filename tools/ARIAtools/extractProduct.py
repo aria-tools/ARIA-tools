@@ -255,7 +255,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     return mask
 
-def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', cell_resolution=None):
+def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', min_percent_frame_overlap=50, cell_resolution=None):
     '''
         Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     '''
@@ -267,20 +267,48 @@ def merged_productbbox(product_dict, workdir='./', bbox_file=None, croptounion=F
     if not os.path.exists(workdir):
         os.mkdir(workdir)
 
+    # Load bbox_file if given
+    if bbox_file:
+        user_bbox=open_shapefile(bbox_file, 0, 0)
+
     # Extract/merge productBoundingBox layers
+    validation_array=[]
     for scene in product_dict:
         # Get pair name, expected in dictionary
         pair_name=scene["pair_name"][0]
         outname=os.path.join(workdir, pair_name+'.shp')
 
         # Create union of productBoundingBox layers
+        frames_in_scene=0 # keep running tally of number of valid frames
         for frame in scene["productBoundingBox"]:
             prods_bbox=open_shapefile(frame, 'productBoundingBox', 1)
+
+            # Check if frames fall within bounds of bbox file
+            if bbox_file:
+                # find area of intersection between user bbox and frame extent
+                prod_in_user_bbox=prods_bbox.intersection(user_bbox)
+
+                # report percent of frame within user bbox
+                per_in_user_bbox=prod_in_user_bbox.area/prods_bbox.area*100
+
+                # remove frame if area less than some limit
+                if per_in_user_bbox>min_percent_frame_overlap:
+                    frames_in_scene+=1
+
             if os.path.exists(outname):
                 union_bbox=open_shapefile(outname, 0, 0)
                 prods_bbox=prods_bbox.union(union_bbox)
-            save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
+            save_shapefile(outname, prods_bbox, 'GeoJSON')
         scene["productBoundingBox"]=[outname]
+        if frames_in_scene>0:
+            validation_array.append(True)
+        else:
+            validation_array.append(False)
+
+    # Sort valid products
+    valid_products=[] # new list of valid products
+    [valid_products.append(product_dict[i]) for i,b in enumerate(validation_array) if b is True]
+    product_dict=valid_products # overwrite old list
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.shp')
     # Initiate intersection file with first product
@@ -400,7 +428,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, arrshap
                     if arrshape:
                         # with resampling
                         gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-                    else: 
+                    else:
                         # no resampling
                         gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
