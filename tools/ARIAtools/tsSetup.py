@@ -41,6 +41,8 @@ def createParser():
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
+    parser.add_argument('-cr', '--cellResolution', dest='cellResolution', type=float, default=None, help='Resolution input WRT percentage of original dimensions. E.g. 50. = 50%%"')
+    parser.add_argument('-po', '--percentOverlap', dest='percentOverlap', type=float, default=5., help='Minimum percentage of overlap of scenes wrt specified bounding box. Default 5. = 5%%"')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
     return parser
@@ -252,7 +254,7 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads)
+    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, percentOverlap=inps.percentOverlap)
 
     # Load or download mask (if specified).
     if inps.mask is not None:
@@ -267,16 +269,16 @@ def main(inps=None):
     # Extract
     layers=['unwrappedPhase','coherence']
     print('\nExtracting unwrapped phase, coherence, and connected components for each interferogram pair')
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, cellResolution=inps.cellResolution)
 
     layers=['incidenceAngle','lookAngle','azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle files valid over common interferometric grid')
-    export_products([dict(zip([k for k in set(k for d in standardproduct_info.products[1] for k in d)], [[item for sublist in [list(set(d[k])) for d in standardproduct_info.products[1] if k in d] for item in sublist] for k in set(k for d in standardproduct_info.products[1] for k in d)]))], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+    export_products([dict(zip([k for k in set(k for d in standardproduct_info.products[1] for k in d)], [[item for sublist in [list(set(d[k])) for d in standardproduct_info.products[1] if k in d] for item in sublist] for k in set(k for d in standardproduct_info.products[1] for k in d)]))], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, cellResolution=inps.cellResolution)
 
     if inps.bperp==True:
         layers=['bPerpendicular']
         print('\nExtracting perpendicular baseline grids for each interferogram pair')
-        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, cellResolution=inps.cellResolution)
 
     # Extracting other layers, if specified
     if inps.layers:
@@ -291,7 +293,20 @@ def main(inps=None):
 
         if layers!=[]:
             print('\nExtracting optional, user-specified layers %s for each interferogram pair'%(layers))
-            export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+            export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, cellResolution=inps.cellResolution)
+
+    # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
+    if inps.cellResolution is not None:
+        # Import functions
+        from ARIAtools.shapefile_util import open_shapefile
+        from ARIAtools.vrtmanager import resampleRaster
+        bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
+        # Resample mask
+        if inps.mask is not None:
+            resampleRaster(inps.mask.GetDescription(), inps.cellResolution, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        # Resample DEM
+        if demfile is not None:
+            resampleRaster(demfile.GetDescription(), inps.cellResolution, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:

@@ -276,7 +276,7 @@ class Stitching:
         # Apply mask (if specified).
         if self.mask is not None:
             update_file=gdal.Open(self.outFileUnw,gdal.GA_Update)
-            update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
+            update_file=update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
             update_file=None
 
         # remove existing output file(s)
@@ -289,7 +289,7 @@ class Stitching:
         # Apply mask (if specified).
         if self.mask is not None:
             update_file=gdal.Open(self.outFileConnComp,gdal.GA_Update)
-            update_file=update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
+            update_file=update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
             update_file=None
 
         cmd = "gdal_translate -of png -scale -ot Byte -q " + self.outFileUnw + ".vrt " + self.outFileUnw + ".png"

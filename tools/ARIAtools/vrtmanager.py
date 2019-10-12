@@ -66,3 +66,31 @@ def renderOGRVRT(vrt_filename, src_datasets):
         vrt_write.write(vrt_tail)
 
     return
+
+
+###Resample raster
+def resampleRaster(fname, cellResolution, bounds, prods_TOTbbox, outputFormat='ENVI', num_threads='2'):
+    '''
+        Resample rasters and update corresponding VRTs.
+    '''
+
+    if outputFormat=='VRT':
+       outputFormat='ENVI'
+
+    # Access original shape
+    ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    arrshape=[ds.RasterYSize, ds.RasterXSize] # Get shape of full res layers
+    arrshape=[int(i*(cellResolution/100.)) for i in arrshape]
+
+    # Must resample mask/connected components files with nearest-neighbor
+    if fname.split('/')[-2]=='mask' or fname.split('/')[-2]=='connectedComponents':
+        # Resample raster
+        gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+    # Resample all other files with lanczos
+    else:
+        # Resample raster
+        gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+    # update VRT
+    gdal.BuildVRT(fname+'.vrt', fname, options=gdal.BuildVRTOptions(options=['-overwrite']))
+
+    return
