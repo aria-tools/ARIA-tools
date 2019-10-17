@@ -433,8 +433,13 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        
+                    #If necessary, resample both unw/conn_comp files
+                    if cellResolution is not None:
+                        resampleRaster(outFileUnw, cellResolution, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+                        resampleRaster(outFileConnComp, cellResolution, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
             #If necessary, resample raster
-            if cellResolution is not None:
+            if cellResolution is not None and key!='unwrappedPhase' and key!='connectedComponents':
                 resampleRaster(outname, cellResolution, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
 
         prog_bar.close()
