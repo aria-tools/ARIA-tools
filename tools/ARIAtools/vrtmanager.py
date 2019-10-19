@@ -75,7 +75,7 @@ def resampleRaster(fname, cellResolution, bounds, prods_TOTbbox, outputFormat='E
     '''
 
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        fname+='.vrt'
 
     # Access original shape
     ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
@@ -89,7 +89,9 @@ def resampleRaster(fname, cellResolution, bounds, prods_TOTbbox, outputFormat='E
     else:
         # Resample raster
         gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
-    # update VRT
-    gdal.BuildVRT(fname+'.vrt', fname, options=gdal.BuildVRTOptions(options=['-overwrite']))
+
+    if outputFormat!='VRT':
+        # update VRT
+        gdal.BuildVRT(fname+'.vrt', fname, options=gdal.BuildVRTOptions(options=['-overwrite']))
 
     return
