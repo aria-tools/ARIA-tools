@@ -69,7 +69,7 @@ def renderOGRVRT(vrt_filename, src_datasets):
 
 
 ###Resample raster
-def resampleRaster(fname, cellResolution, bounds, prods_TOTbbox, outputFormat='ENVI', num_threads='2'):
+def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENVI', num_threads='2'):
     '''
         Resample rasters and update corresponding VRTs.
     '''
@@ -79,7 +79,7 @@ def resampleRaster(fname, cellResolution, bounds, prods_TOTbbox, outputFormat='E
 
     # Access original shape
     ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-    arrshape=[abs(ds.GetGeoTransform()[1])/(cellResolution/100.), abs(ds.GetGeoTransform()[-1])/(cellResolution/100.)] # Get output res
+    arrshape=[abs(ds.GetGeoTransform()[1])*multilooking, abs(ds.GetGeoTransform()[-1])*multilooking] # Get output res
 
     # Must resample mask/connected components files with nearest-neighbor
     if fname.split('/')[-2]=='mask' or fname.split('/')[-2]=='connectedComponents':

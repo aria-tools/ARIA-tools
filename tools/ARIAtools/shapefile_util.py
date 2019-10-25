@@ -63,6 +63,26 @@ def save_shapefile(fname, polygon, drivername):
 
     return
 
+def shapefile_area(file_bbox):
+    '''
+        Compute km\u00b2 area of shapefile.
+    '''
+
+    # import dependencies
+    from pyproj import Proj
+    from shapely.geometry import shape
+
+    #get coords
+    lon, lat=file_bbox.exterior.coords.xy
+
+    #use equal area projection centered on/bracketing AOI
+    pa = Proj("+proj=aea +lat_1=%f +lat_2=%f +lat_0=%f +lon_0=%f"%(min(lat),max(lat), (max(lat)+min(lat))/2, (max(lon)+min(lon))/2))
+    x, y = pa(lon, lat)
+    cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+    shape_area=shape(cop).area/1e6  # area in km^2
+
+    return shape_area
+
 def plot_shapefile(fname):
     import matplotlib.path as mpath
     import matplotlib.patches as mpatches

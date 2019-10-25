@@ -42,8 +42,8 @@ def createParser():
 #    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-cr', '--cellResolution', dest='cellResolution', type=float, default=None, help='Resolution input WRT percentage of original dimensions. E.g. 50. = 50%%"')
-    parser.add_argument('-po', '--percentOverlap', dest='percentOverlap', type=float, default=5., help='Minimum percentage of overlap of scenes wrt specified bounding box. Default 5. = 5%%"')
+    parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
+    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
     return parser
@@ -255,13 +255,13 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     return mask
 
-def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', percentOverlap=50):
+def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081):
     '''
         Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     '''
 
     # Import functions
-    from ARIAtools.shapefile_util import save_shapefile
+    from ARIAtools.shapefile_util import save_shapefile, shapefile_area
 
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
@@ -306,10 +306,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene['productBoundingBox'][0])
             else:
-                per_overlap=(prods_bbox.area/total_bbox.area)*100
+                overlap_area=shapefile_area(prods_bbox)
                 # Kick out scenes below specified overlap threshold
-                if per_overlap<percentOverlap:
-                    print("Rejected scene %s has only %.2f%% overlap with bbox"%(scene['productBoundingBox'][0],per_overlap))
+                if overlap_area<minimumOverlap:
+                    print("Rejected scene %s has only %fkm\u00b2 overlap with bbox"%(scene['productBoundingBox'][0],overlap_area))
                     rejected_scenes.append(product_dict.index(scene))
                     os.remove(scene['productBoundingBox'][0])
                 else:
@@ -341,7 +341,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', cellResolution=None):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """
         Export layer and 2D meta-data layers (at the product resolution).
         The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -368,6 +368,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
+        # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+        if outputFormat=='VRT' and mask is not None:
+           outputFormat='ENVI'
 
         # Iterate through all IFGs
         for i in enumerate(product_dict[0]):
@@ -401,10 +404,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname +'.vrt', [i[1]][0])
-
-                    # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-                    if outputFormat=='VRT' and mask is not None:
-                       outputFormat='ENVI'
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
                     # Update VRT
@@ -435,12 +434,13 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
 
                     #If necessary, resample both unw/conn_comp files
-                    if cellResolution is not None:
-                        resampleRaster(outFileUnw, cellResolution, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
-                        resampleRaster(outFileConnComp, cellResolution, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+                    if multilooking is not None:
+                        resampleRaster(outFileUnw, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+                        resampleRaster(outFileConnComp, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
             #If necessary, resample raster
-            if cellResolution is not None and key!='unwrappedPhase' and key!='connectedComponents':
-                resampleRaster(outname, cellResolution, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+            if multilooking is not None and key!='unwrappedPhase' and key!='connectedComponents':
+                resampleRaster(outname, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+                print("outname",outname)
 
         prog_bar.close()
     return
@@ -741,7 +741,7 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, percentOverlap=inps.percentOverlap)
+    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
     # Load or download mask (if specified).
     if inps.mask is not None:
         inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
@@ -755,19 +755,19 @@ def main(inps=None):
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, cellResolution=inps.cellResolution)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
-    if inps.cellResolution is not None:
+    if inps.multilooking is not None:
         # Import functions
         from ARIAtools.vrtmanager import resampleRaster
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.cellResolution, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         # Resample DEM
         if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.cellResolution, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:
