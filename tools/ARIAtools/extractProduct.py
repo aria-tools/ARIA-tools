@@ -435,12 +435,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
                     #If necessary, resample both unw/conn_comp files
                     if multilooking is not None:
-                        resampleRaster(outFileUnw, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
                         resampleRaster(outFileConnComp, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+
             #If necessary, resample raster
             if multilooking is not None and key!='unwrappedPhase' and key!='connectedComponents':
                 resampleRaster(outname, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
-                print("outname",outname)
 
         prog_bar.close()
     return
