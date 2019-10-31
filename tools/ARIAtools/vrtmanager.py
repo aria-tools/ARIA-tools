@@ -132,7 +132,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
             concompmap.append(concompmap_row)
 
         #finalize arrays
-        unwmap=np.array(unwmap) 
+        unwmap=np.array(unwmap)
         unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
         concompmap=np.array(concompmap)
         concompmap=np.ma.masked_where(concompmap == ds_concomp_nodata, concompmap) ; np.ma.set_fill_value(concompmap, ds_concomp_nodata)
