@@ -74,8 +74,19 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
         Resample rasters and update corresponding VRTs.
     '''
 
-    if outputFormat=='VRT':
+    # Import functions
+    import os
+    from scipy import stats
+
+    # Check if physical raster exists and needs to be updated
+    # Also get datasource name (inputname)
+    if outputFormat=='VRT' and os.path.exists(fname.split('.vrt')[0]):
+        outputFormat='ENVI'
+    if os.path.exists(fname.split('.vrt')[0]):
+        inputname=fname
+    else:
         fname+='.vrt'
+        inputname=gdal.Open(fname).GetFileList()[-1]
 
     # Access original shape
     ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
@@ -84,11 +95,11 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
     # Must resample mask/connected components files with nearest-neighbor
     if fname.split('/')[-2]=='mask' or fname.split('/')[-2]=='connectedComponents':
         # Resample raster
-        gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+        gdal.Warp(fname, inputname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
     # Resample all other files with lanczos
     else:
         # Resample raster
-        gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+        gdal.Warp(fname, inputname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
     if outputFormat!='VRT':
         # update VRT
