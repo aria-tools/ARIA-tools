@@ -83,6 +83,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
     # Also get datasource name (inputname)
     if outputFormat=='VRT' and os.path.exists(fname.split('.vrt')[0]):
         outputFormat='ENVI'
+    if os.path.exists(fname.split('.vrt')[0]):
         inputname=fname
     else:
         fname+='.vrt'
