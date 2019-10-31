@@ -76,7 +76,6 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
 
     # Import functions
     import os
-    from scipy import stats
 
     # Check if physical raster exists and needs to be updated
     # Also get datasource name (inputname)
