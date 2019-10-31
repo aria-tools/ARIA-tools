@@ -79,23 +79,32 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
     from scipy import stats
     import numpy as np
 
-    if outputFormat=='VRT':
+    # Check if physical raster exists and needs to be updated
+    # Also get datasource name (inputname)
+    if outputFormat=='VRT' and os.path.exists(fname.split('.vrt')[0]):
+        outputFormat='ENVI'
+        inputname=fname
+    else:
         fname+='.vrt'
+        inputname=gdal.Open(fname).GetFileList()[-1]
 
     # Access original shape
     ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
     arrshape=[abs(ds.GetGeoTransform()[1])*multilooking, abs(ds.GetGeoTransform()[-1])*multilooking] # Get output res
+    #get geotrans/proj
+    ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    geotrans=ds.GetGeoTransform() ; proj=ds.GetProjection()
 
     # Must resample mask with nearest-neighbor
     if fname.split('/')[-2]=='mask':
         # Resample raster
-        gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+        gdal.Warp(fname, inputname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
     # Use pixel function to downsample connected components/unw files based off of frequency of connected components in each window
     elif fname.split('/')[-2]=='connectedComponents' or fname.split('/')[-2]=='unwrappedPhase':
         #open connected components/unw files
-        fnameunw=os.path.join('/'.join(fname.split('/')[:-2]),'unwrappedPhase',''.join(fname.split('/')[-1]))
-        fnameconcomp=os.path.join('/'.join(fname.split('/')[:-2]),'connectedComponents',''.join(fname.split('/')[-1]))
+        fnameunw=os.path.join('/'.join(fname.split('/')[:-2]),'unwrappedPhase',''.join(fname.split('/')[-1]).split('.vrt')[0])
+        fnameconcomp=os.path.join('/'.join(fname.split('/')[:-2]),'connectedComponents',''.join(fname.split('/')[-1]).split('.vrt')[0])
         ds_concomp=gdal.Open(fnameconcomp)
         ds_concomp_nodata=ds_concomp.GetRasterBand(1).GetNoDataValue()
         ds_concomp=ds_concomp.ReadAsArray()
@@ -107,10 +116,6 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
         ds_unw=ds_unw.ReadAsArray()
         ds_unw=np.ma.masked_where(ds_unw == ds_unw_nodata, ds_unw)
         np.ma.set_fill_value(ds_unw, ds_unw_nodata)
-
-        #get geotrans/proj
-        ds=gdal.Warp('', fnameconcomp, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        geotrans=ds.GetGeoTransform() ; proj=ds.GetProjection()
 
         unwmap=[]
         concompmap=[]
@@ -145,7 +150,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
     # Resample all other files with lanczos
     else:
         # Resample raster
-        gdal.Warp(fname, fname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+        gdal.Warp(fname, inputname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
     if outputFormat!='VRT':
         # update VRT
