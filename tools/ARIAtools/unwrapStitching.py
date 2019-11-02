@@ -1454,17 +1454,17 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setMask(mask)
     unw.setOutputFormat(outputFormat)
-    unw.setOutFileUnw(outFileUnw)
-    unw.setOutFileConnComp(outFileConnComp)
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
-def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+def product_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
     '''
 
+    import pdb
+    
     # The solver used in minimizing the stiching of products
     if unwrapper_2stage_name is None:
         unwrapper_2stage_name = 'REDARC0'
@@ -1479,20 +1479,37 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     print('Name: %s'%unwrapper_2stage_name)
     print('Solver: %s'%solver_2stage)
 
-    # Hand over to 2Stage unwrap
-    unw = UnwrapComponents()
-    unw._legacy_flag = True
+    '''
+    # First, run the regular sticher, this will
+    # (1) correct for range offset
+    # (2) minimize the phase jump between adjacent product
+    unw = UnwrapOverlap()
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
+    unw.setOutFileConnComp(outFileConnComp + "_intermediate")
+    unw.setOutFileUnw(outFileUnw + "_intermediate")
+    unw.setProdBBoxFile(prod_bbox_files)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setVerboseMode(verbose)
+    unw.UnwrapOverlap()
+    '''
+
+    # Second, run the 2stafger to minimizes phase jumps across connected component boundaries
+    unw = UnwrapComponents()
+    unw._legacy_flag = True
+    unw.setInpFile(outFileUnw + "_intermediate")
+    unw.setConnCompFile(outFileConnComp + "_intermediate")
     unw.setOutFileConnComp(outFileConnComp)
     unw.setOutFileUnw(outFileUnw)
     unw.setSolver(solver_2stage)
     unw.setRedArcs(unwrapper_2stage_name)
     unw.setMask(mask)
     unw.setOutputFormat(outputFormat)
-    unw.setOutFileUnw(outFileUnw)
-    unw.setOutFileConnComp(outFileConnComp)
     unw.setBBoxFile(bbox_file)
     unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setVerboseMode(verbose)
+    pdb.set_trace()
     unw.unwrapComponents()

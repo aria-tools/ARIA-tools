@@ -39,7 +39,7 @@ def createParser():
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
     parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-#    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='2stage', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
@@ -411,7 +411,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_2stage(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        #product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
         prog_bar.close()
     return
 
@@ -723,7 +724,8 @@ def main(inps=None):
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+    #export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType=inps.stitchMethodType, verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:
