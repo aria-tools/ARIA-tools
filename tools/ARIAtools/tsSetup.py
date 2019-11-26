@@ -156,19 +156,19 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     ysize = ymax - ymin
 
     # extraction of radar meta-data
-    wavelength = aria_prod.products[0][0]['wavelength'][0].data
-    startRange = aria_prod.products[0][0]['slantRangeStart'][0].data
-    endRange = aria_prod.products[0][0]['slantRangeEnd'][0].data
-    rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0].data
+    wavelength = aria_prod.products[0][0]['wavelength'][0]
+    startRange = aria_prod.products[0][0]['slantRangeStart'][0]
+    endRange = aria_prod.products[0][0]['slantRangeEnd'][0]
+    rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbitDirection = str.split(os.path.basename(aria_prod.files[0]),'-')[2]
 
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
-        <SRS>{proj}</SRS>">
-        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>
-        '''.format(xsize=xsize, ysize=ysize,
-        proj=projection,
-        GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
+        <SRS>{proj}</SRS>
+        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n'''.format(
+            xsize=xsize, ysize=ysize,
+            proj=projection,
+            GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
 
         for data in enumerate(Dlist):
             metadata = {}
