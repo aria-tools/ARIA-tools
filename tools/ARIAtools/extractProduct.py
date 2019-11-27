@@ -107,7 +107,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        outputFormat='ENVI'
 
     # Download DEM
     if demfilename.lower()=='download':
@@ -176,7 +176,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        outputFormat='ENVI'
 
     # Download mask
     if maskfilename.lower()=='download':
