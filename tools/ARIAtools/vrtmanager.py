@@ -69,7 +69,7 @@ def renderOGRVRT(vrt_filename, src_datasets):
 
 
 ###Resample raster
-def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENVI', num_threads='2'):
+def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=False, outputFormat='ENVI', num_threads='2'):
     '''
         Resample rasters and update corresponding VRTs.
     '''
@@ -103,50 +103,68 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, outputFormat='ENV
 
     # Use pixel function to downsample connected components/unw files based off of frequency of connected components in each window
     elif fname.split('/')[-2]=='connectedComponents' or fname.split('/')[-2]=='unwrappedPhase':
-        #open connected components/unw files
+        from datetime import datetime
+        startTime=datetime.now()
+        # Resample unw phase based off of mode of connected components
         fnameunw=os.path.join('/'.join(fname.split('/')[:-2]),'unwrappedPhase',''.join(fname.split('/')[-1]).split('.vrt')[0])
         fnameconcomp=os.path.join('/'.join(fname.split('/')[:-2]),'connectedComponents',''.join(fname.split('/')[-1]).split('.vrt')[0])
-        ds_concomp=gdal.Open(fnameconcomp)
-        ds_concomp_nodata=ds_concomp.GetRasterBand(1).GetNoDataValue()
-        ds_concomp=ds_concomp.ReadAsArray()
-        ds_concomp=np.ma.masked_where(ds_concomp == ds_concomp_nodata, ds_concomp)
-        np.ma.set_fill_value(ds_concomp, ds_concomp_nodata)
+        if rankedResampling:
+            #open connected components/unw files
+            ds_concomp=gdal.Open(fnameconcomp)
+            ds_concomp_nodata=ds_concomp.GetRasterBand(1).GetNoDataValue()
+            ds_concomp=ds_concomp.ReadAsArray()
+            ds_concomp=np.ma.masked_where(ds_concomp == ds_concomp_nodata, ds_concomp)
+            np.ma.set_fill_value(ds_concomp, ds_concomp_nodata)
 
-        ds_unw=gdal.Open(fnameunw)
-        ds_unw_nodata=ds_unw.GetRasterBand(1).GetNoDataValue()
-        ds_unw=ds_unw.ReadAsArray()
-        ds_unw=np.ma.masked_where(ds_unw == ds_unw_nodata, ds_unw)
-        np.ma.set_fill_value(ds_unw, ds_unw_nodata)
+            ds_unw=gdal.Open(fnameunw)
+            ds_unw_nodata=ds_unw.GetRasterBand(1).GetNoDataValue()
+            ds_unw=ds_unw.ReadAsArray()
+            ds_unw=np.ma.masked_where(ds_unw == ds_unw_nodata, ds_unw)
+            np.ma.set_fill_value(ds_unw, ds_unw_nodata)
 
-        unwmap=[]
-        concompmap=[]
-        for row in range(multilooking,ds_unw.shape[0]+multilooking,multilooking):
-            unwmap_row=[]
-            concompmap_row=[]
-            for column in range(multilooking,ds_unw.shape[1]+multilooking,multilooking):
-                #get subset values
-                subset_concomp = ds_concomp[row-multilooking:row+multilooking,column-multilooking:column+multilooking]
-                subset_unw = ds_unw[row-multilooking:row+multilooking,column-multilooking:column+multilooking]
-                concomp_mode = stats.mode(subset_concomp.flatten()).mode[0]
-                #average only phase values coinciding with concomp mode
-                subset_concomp = np.where(subset_concomp != concomp_mode, 0, 1)
-                subset_unw=subset_unw*subset_concomp
-                #assign downsampled pixel values
-                unwmap_row.append(subset_unw.mean())
-                concompmap_row.append(concomp_mode)
-            unwmap.append(unwmap_row)
-            concompmap.append(concompmap_row)
+            unwmap=[]
+            concompmap=[]
+            for row in range(multilooking,ds_unw.shape[0]+multilooking,multilooking):
+                unwmap_row=[]
+                concompmap_row=[]
+                for column in range(multilooking,ds_unw.shape[1]+multilooking,multilooking):
+                    #get subset values
+                    subset_concomp = ds_concomp[row-multilooking:row,column-multilooking:column]
+                    subset_unw = ds_unw[row-multilooking:row,column-multilooking:column]
+                    concomp_mode = stats.mode(subset_concomp.flatten()).mode[0]
+                    #average only phase values coinciding with concomp mode
+                    subset_concomp = np.where(subset_concomp != concomp_mode, 0, 1)
+                    subset_unw=subset_unw*subset_concomp
+                    #assign downsampled pixel values
+                    unwmap_row.append(subset_unw.mean())
+                    concompmap_row.append(concomp_mode)
+                unwmap.append(unwmap_row)
+                concompmap.append(concompmap_row)
 
-        #finalize arrays
-        unwmap=np.array(unwmap)
-        unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
-        concompmap=np.array(concompmap)
-        concompmap=np.ma.masked_where(concompmap == ds_concomp_nodata, concompmap) ; np.ma.set_fill_value(concompmap, ds_concomp_nodata)
+            #finalize arrays
+            unwmap=np.array(unwmap)
+            unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
+            concompmap=np.array(concompmap)
+            concompmap=np.ma.masked_where(concompmap == ds_concomp_nodata, concompmap) ; np.ma.set_fill_value(concompmap, ds_concomp_nodata)
 
-        #unwphase
-        renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
-        #conn comp, mode resampling through gdal
-        renderVRT(fnameconcomp, concompmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='int16', proj=proj, nodata=ds_concomp_nodata)
+            #unwphase
+            renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+            #conn comp, mode resampling through gdal
+            renderVRT(fnameconcomp, concompmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='int16', proj=proj, nodata=ds_concomp_nodata)
+            print('RR time of completion:',datetime.now()-startTime)
+        # Default: resample unw phase with gdal lanczos algorithm
+        else:
+            from datetime import datetime
+            startTime=datetime.now()
+            # Resample unwphase
+            gdal.Warp(fnameunw, fnameunw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='average',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            # update VRT
+            gdal.BuildVRT(fnameunw+'.vrt', fnameunw, options=gdal.BuildVRTOptions(options=['-overwrite']))
+            # Resample connected components
+            gdal.Warp(fnameconcomp, fnameconcomp, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            # update VRT
+            gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp, options=gdal.BuildVRTOptions(options=['-overwrite']))
+            print('default time of completion:',datetime.now()-startTime)
 
     # Resample all other files with lanczos
     else:

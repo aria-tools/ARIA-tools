@@ -43,6 +43,7 @@ def createParser():
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
+    parser.add_argument('-rr', '--rankedResampling', action='store_true', dest='rankedResampling', help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
@@ -109,7 +110,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        outputFormat='ENVI'
 
     # Download DEM
     if demfilename.lower()=='download':
@@ -179,7 +180,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        outputFormat='ENVI'
 
     # Download mask
     if maskfilename.lower()=='download':
@@ -341,7 +342,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, arrshape, proj
 
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """
         Export layer and 2D meta-data layers (at the product resolution).
         The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
@@ -435,11 +436,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
 
                     #If necessary, resample both unw/conn_comp files
                     if multilooking is not None:
-                        resampleRaster(outFileConnComp, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+                        resampleRaster(outFileConnComp, multilooking, bounds, prods_TOTbbox, rankedResampling, outputFormat=outputFormat, num_threads=num_threads)
 
             #If necessary, resample raster
             if multilooking is not None and key!='unwrappedPhase' and key!='connectedComponents':
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox, outputFormat=outputFormat, num_threads=num_threads)
+                resampleRaster(outname, multilooking, bounds, prods_TOTbbox, rankedResampling, outputFormat=outputFormat, num_threads=num_threads)
 
         prog_bar.close()
     return
@@ -457,7 +458,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        outputFormat='ENVI'
 
     # Check and buffer bounds if <4pix in x/y, which would raise interpolation error
     geotrans=gdal.Open(outname+'.vrt').GetGeoTransform()
@@ -519,7 +520,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
-       outputFormat='ENVI'
+        outputFormat='ENVI'
 
     user_bbox=open_shapefile(bbox_file, 0, 0)
     bounds=user_bbox.bounds
@@ -754,7 +755,7 @@ def main(inps=None):
         demfile=None ; Latitude=None ; Longitude=None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
@@ -763,10 +764,10 @@ def main(inps=None):
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         # Resample DEM
         if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:

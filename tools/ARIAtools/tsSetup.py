@@ -42,6 +42,7 @@ def createParser():
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
     parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
+    parser.add_argument('-rr', '--rankedResampling', action='store_true', dest='rankedResampling', help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
@@ -158,19 +159,19 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     ysize = ymax - ymin
 
     # extraction of radar meta-data
-    wavelength = aria_prod.products[0][0]['wavelength'][0].data
-    startRange = aria_prod.products[0][0]['slantRangeStart'][0].data
-    endRange = aria_prod.products[0][0]['slantRangeEnd'][0].data
-    rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0].data
+    wavelength = aria_prod.products[0][0]['wavelength'][0]
+    startRange = aria_prod.products[0][0]['slantRangeStart'][0]
+    endRange = aria_prod.products[0][0]['slantRangeEnd'][0]
+    rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbitDirection = str.split(os.path.basename(aria_prod.files[0]),'-')[2]
 
     with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
-        <SRS>{proj}</SRS>">
-        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>
-        '''.format(xsize=xsize, ysize=ysize,
-        proj=projection,
-        GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
+        <SRS>{proj}</SRS>
+        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n'''.format(
+            xsize=xsize, ysize=ysize,
+            proj=projection,
+            GT0=gt[0],GT1=gt[1],GT2=gt[2],GT3=gt[3],GT4=gt[4],GT5=gt[5]))
 
         for data in enumerate(Dlist):
             metadata = {}
@@ -303,10 +304,10 @@ def main(inps=None):
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         # Resample DEM
         if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:
