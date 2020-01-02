@@ -9,6 +9,9 @@
 
 import os
 import numpy as np
+from joblib import Parallel, delayed, dump, load
+
+import pdb
 
 from osgeo import gdal
 gdal.UseExceptions()
@@ -19,6 +22,11 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile,save_shapefile
 
+
+# Unpacking class fuction of readproduct to be become global fucntion that can be called in parallel
+def unwrap_self_readproduct(arg):
+    # arg is the self argument and the filename is of the file to be read
+    return ARIA_standardproduct.__readproduct__(arg[0], arg[1])
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
     '''
@@ -294,10 +302,20 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
     def __run__(self):
         # Only populate list of dictionaries if the file intersects with bbox
-        for file in self.files:
-            self.products += self.__readproduct__(file)
-            self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime'])) #Sort by pair and start time.
+        # will try multi-core version and default to for loop in case of failure
+        
+        try:
+            print('Multi-core version')
+            # would probably be better not to write to the same self, and concatenate at completion.
+            self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
+        except:
+            print('Multi-core version failed, will try single for loop')
+            for file in self.files:
+                self.products += self.__readproduct__(file)
 
+        # Sort by pair and start time.
+        pdb.set_trace()
+        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime']))
         self.products=list(self.products)
 
         # Check if any pairs meet criteria
@@ -310,7 +328,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 print("Specifically, the following GUNW products were rejected:")
                 print([i for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]])
         else:
-            print("All (%d) GUNW products meet spatial bbox criteria."%(len(self.files)))
+            print("All (%d) GUNW ddddproducts meet spatial bbox criteria."%(len(self.files)))
 
         ### Split products in spatiotemporally continuous groups
         print("Group GUNW products into spatiotemporally continuous interferograms.")
