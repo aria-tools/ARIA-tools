@@ -43,6 +43,7 @@ def createParser():
     parser.add_argument('-plotcoh', '--plotcoh', action='store_true', dest='plotcoh', help="Make an average IFG coherence plot in time, and histogram of IFG average coherence.")
     parser.add_argument('-makeavgoh', '--makeavgoh', action='store_true', dest='makeavgoh', help="Generate a 2D raster of average IFG coherence.")
     parser.add_argument('-plotall', '--plotall', action='store_true', dest='plotall', help="Generate all above plots.")
+    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
     return parser
 
@@ -556,7 +557,7 @@ def main(inps=None):
 
         # extract/merge productBoundingBox layers for each pair and update dict,
         # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-        standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion)
+        standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
 
         # Load or download mask (if specified).
         if inps.mask is not None:
