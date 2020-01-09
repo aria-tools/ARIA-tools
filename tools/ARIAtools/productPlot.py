@@ -310,7 +310,7 @@ class plot_class:
 
             # Apply mask (if specified).
             if self.mask is not None:
-                coh_file.GetRasterBand(1).WriteArray(self.mask*coh_file.ReadAsArray())
+                coh_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*coh_file.ReadAsArray())
 
             # Record average coherence val for histogram
             coh_hist.append(coh_file.GetRasterBand(1).GetStatistics(0,1)[2])
@@ -380,7 +380,7 @@ class plot_class:
         # Apply mask (if specified).
         if self.mask is not None:
             update_file=gdal.Open(outname,gdal.GA_Update)
-            update_file.GetRasterBand(1).WriteArray(self.mask*gdal.Open(outname+'.vrt').ReadAsArray())
+            update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(outname+'.vrt').ReadAsArray())
             del update_file
 
         ds = gdal.Open(outname+'.vrt', gdal.GA_ReadOnly)
@@ -438,7 +438,7 @@ class plot_class:
 
             # Apply mask (if specified).
             if self.mask is not None:
-                coh_file.GetRasterBand(1).WriteArray(self.mask*coh_file.ReadAsArray())
+                coh_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*coh_file.ReadAsArray())
 
             # Record average coherence val for histogram
             coh_vals.append(coh_file.GetRasterBand(1).GetStatistics(0,1)[2])
