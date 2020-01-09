@@ -11,8 +11,6 @@ import os
 import numpy as np
 from joblib import Parallel, delayed, dump, load
 
-import pdb
-
 from osgeo import gdal
 gdal.UseExceptions()
 
@@ -26,7 +24,7 @@ from ARIAtools.shapefile_util import open_shapefile,save_shapefile
 # Unpacking class fuction of readproduct to be become global fucntion that can be called in parallel
 def unwrap_self_readproduct(arg):
     # arg is the self argument and the filename is of the file to be read
-    return ARIA_standardproduct.__readproduct__(arg[0], arg[1])
+    return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
     '''
@@ -283,19 +281,22 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
-        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
-
-        ###Report dictionaries for all valid products
-        if sorted_products==[[], []]: #Check if pairs were successfully selected
-            raise Exception('No valid interferogram meet spatial criteria due to gaps and/or invalid input, nothing to export.')
         if len(track_rejected_pairs)>0:
             print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
             # Provide report of which files were kept vs. which were not.
             if self.verbose:
                 print("Specifically, the following interferograms were rejected:")
-                print([item[1]['productBoundingBox'].split('"')[1] for item in sorted_products[1] if (item[1]['pair_name'][0] in track_rejected_pairs)])
+                for item in sorted_products:
+                    if item[1]['pair_name'][0] in track_rejected_pairs:
+                        print(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
         else:
             print("All (%d) interferograms are spatially continuous."%(len(sorted_products[1])))
+
+        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
+
+        ###Report dictionaries for all valid products
+        if sorted_products==[[], []]: #Check if pairs were successfully selected
+            raise Exception('No valid interferogram meet spatial criteria due to gaps and/or invalid input, nothing to export.')
 
         return sorted_products
 
@@ -314,7 +315,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.products += self.__readproduct__(file)
 
         # Sort by pair and start time.
-        pdb.set_trace()
         self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime']))
         self.products=list(self.products)
 
@@ -328,7 +328,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 print("Specifically, the following GUNW products were rejected:")
                 print([i for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]])
         else:
-            print("All (%d) GUNW ddddproducts meet spatial bbox criteria."%(len(self.files)))
+            print("All (%d) GUNW products meet spatial bbox criteria."%(len(self.files)))
 
         ### Split products in spatiotemporally continuous groups
         print("Group GUNW products into spatiotemporally continuous interferograms.")
