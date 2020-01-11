@@ -9,6 +9,7 @@
 
 import os
 import numpy as np
+from joblib import Parallel, delayed
 
 from osgeo import gdal
 gdal.UseExceptions()
@@ -19,6 +20,11 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile,save_shapefile
 
+
+# Unpacking class fuction of readproduct to be become global fucntion that can be called in parallel
+def unwrap_self_readproduct(arg):
+    # arg is the self argument and the filename is of the file to be read
+    return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
     '''
@@ -275,29 +281,42 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
-        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
-
-        ###Report dictionaries for all valid products
-        if sorted_products==[[], []]: #Check if pairs were successfully selected
-            raise Exception('No valid interferogram meet spatial criteria due to gaps and/or invalid input, nothing to export.')
         if len(track_rejected_pairs)>0:
             print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
             # Provide report of which files were kept vs. which were not.
             if self.verbose:
                 print("Specifically, the following interferograms were rejected:")
-                print([item[1]['productBoundingBox'].split('"')[1] for item in sorted_products[1] if (item[1]['pair_name'][0] in track_rejected_pairs)])
+                for item in sorted_products:
+                    if item[1]['pair_name'][0] in track_rejected_pairs:
+                        print(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
         else:
-            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[1])))
+            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[0])))
+
+        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], \
+            [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
+
+        ###Report dictionaries for all valid products
+        if sorted_products==[[], []]: #Check if pairs were successfully selected
+            raise Exception('No valid interferogram meet spatial criteria due to gaps and/or invalid input, nothing to export.')
 
         return sorted_products
 
 
     def __run__(self):
         # Only populate list of dictionaries if the file intersects with bbox
-        for file in self.files:
-            self.products += self.__readproduct__(file)
-            self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime'])) #Sort by pair and start time.
+        # will try multi-core version and default to for loop in case of failure
 
+        try:
+            print('Multi-core version')
+            # would probably be better not to write to the same self, and concatenate at completion.
+            self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
+        except Exception:
+            print('Multi-core version failed, will try single for loop')
+            for file in self.files:
+                self.products += self.__readproduct__(file)
+
+        # Sort by pair and start time.
+        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime']))
         self.products=list(self.products)
 
         # Check if any pairs meet criteria
