@@ -139,7 +139,8 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
             #finalize unw array
             unwmap=np.array(unwmap)
             #finalize unw array shape
-            unwmap=unwmap[0:int(Decimal(ds_unw.shape[0]/multilooking).quantize(0, ROUND_HALF_UP)),0:int(Decimal(ds_unw.shape[1]/multilooking).quantize(0, ROUND_HALF_UP))]
+            unwmap=unwmap[0:int(Decimal(ds_unw.shape[0]/multilooking).quantize(0, ROUND_HALF_UP)), \
+                0:int(Decimal(ds_unw.shape[1]/multilooking).quantize(0, ROUND_HALF_UP))]
             unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
             #unwphase
             renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
