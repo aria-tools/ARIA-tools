@@ -78,6 +78,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
     import os
     from scipy import stats
     import numpy as np
+    from decimal import Decimal, ROUND_HALF_UP
 
     # Check if physical raster exists and needs to be updated
     # Also get datasource name (inputname)
@@ -121,9 +122,9 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
             np.ma.set_fill_value(ds_unw, ds_unw_nodata)
 
             unwmap=[]
-            for row in range(multilooking,ds_unw.shape[0]+multilooking,multilooking):
+            for row in range(multilooking,(ds_unw.shape[0])+multilooking,multilooking):
                 unwmap_row=[]
-                for column in range(multilooking,ds_unw.shape[1]+multilooking,multilooking):
+                for column in range(multilooking,(ds_unw.shape[1])+multilooking,multilooking):
                     #get subset values
                     subset_concomp = ds_concomp[row-multilooking:row,column-multilooking:column]
                     subset_unw = ds_unw[row-multilooking:row,column-multilooking:column]
@@ -137,6 +138,8 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
 
             #finalize unw array
             unwmap=np.array(unwmap)
+            #finalize unw array shape
+            unwmap=unwmap[0:int(Decimal(ds_unw.shape[0]/multilooking).quantize(0, ROUND_HALF_UP)),0:int(Decimal(ds_unw.shape[1]/multilooking).quantize(0, ROUND_HALF_UP))]
             unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
             #unwphase
             renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
