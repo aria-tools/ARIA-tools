@@ -290,9 +290,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     if item[1]['pair_name'][0] in track_rejected_pairs:
                         print(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
         else:
-            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[1])))
+            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[0])))
 
-        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
+        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], \
+            [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
 
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs were successfully selected
@@ -304,12 +305,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     def __run__(self):
         # Only populate list of dictionaries if the file intersects with bbox
         # will try multi-core version and default to for loop in case of failure
-        
+
         try:
             print('Multi-core version')
             # would probably be better not to write to the same self, and concatenate at completion.
             self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
-        except:
+        except Exception:
             print('Multi-core version failed, will try single for loop')
             for file in self.files:
                 self.products += self.__readproduct__(file)
