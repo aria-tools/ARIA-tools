@@ -151,7 +151,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
         # Default: resample unw phase with gdal lanczos algorithm
         else:
             # Resample unwphase
-            gdal.Warp(fnameunw, fnameunw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='average',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            gdal.Warp(fnameunw, fnameunw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
             gdal.BuildVRT(fnameunw+'.vrt', fnameunw, options=gdal.BuildVRTOptions(options=['-overwrite']))
             # Resample connected components
