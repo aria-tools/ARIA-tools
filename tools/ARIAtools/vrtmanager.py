@@ -79,6 +79,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
     from scipy import stats
     import numpy as np
     from decimal import Decimal, ROUND_HALF_UP
+    import glob
 
     # Check if physical raster exists and needs to be updated
     # Also get datasource name (inputname)
@@ -144,16 +145,37 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
             unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
             #unwphase
             renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+            #temp workaround for gdal bug
+            try:
+                gdal.Open(fnameunw)
+            except RuntimeError:
+                for f in glob.glob(fnameunw+"*"):
+                    os.remove(f)
+                unwmap[0,0]=unwmap[0,0]-1e-6
+                renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+            del unwmap
             # Resample connected components
             gdal.Warp(fnameconcomp, fnameconcomp, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='mode',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
             gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp, options=gdal.BuildVRTOptions(options=['-overwrite']))
-        # Default: resample unw phase with gdal lanczos algorithm
+        # Default: resample unw phase with gdal average algorithm
         else:
             # Resample unwphase
-            gdal.Warp(fnameunw, fnameunw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            ds_unw_nodata=gdal.Open(fnameunw)
+            ds_unw_nodata=ds_unw_nodata.GetRasterBand(1).GetNoDataValue()
+            gdal.Warp(fnameunw, fnameunw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='average',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
             gdal.BuildVRT(fnameunw+'.vrt', fnameunw, options=gdal.BuildVRTOptions(options=['-overwrite']))
+            #temp workaround for gdal bug
+            try:
+                gdal.Open(fnameunw)
+            except RuntimeError:
+                unwmap=np.fromfile(fnameunw,dtype=np.float32).reshape(ds.GetRasterBand(1).ReadAsArray().shape)
+                for f in glob.glob(fnameunw+"*"):
+                    os.remove(f)
+                unwmap[0,0]=unwmap[0,0]-1e-6
+                renderVRT(fnameunw, unwmap, geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+                del unwmap
             # Resample connected components
             gdal.Warp(fnameconcomp, fnameconcomp, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
