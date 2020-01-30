@@ -17,6 +17,7 @@ import requests
 import argparse
 from datetime import datetime
 
+
 def createParser():
     """ Download a bulk download script and execute it """
     parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add “ARIA Product Search” to their URS approved applications.',
@@ -95,7 +96,7 @@ class Downloader(object):
         return
 
     def form_url(self):
-        url = '{}asfplatform=Sentinel-1%20Interferogram%20(BETA)&output=JSON'.format(self.url_base)
+        url = '{}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'.format(self.url_base)
         if self.inps.track:
             url += '&relativeOrbit={}'.format(self.inps.track)
         if self.inps.bbox:
@@ -178,3 +179,4 @@ class Downloader(object):
 if __name__ == '__main__':
     inps = cmdLineParse()
     Downloader(inps)()
+    
