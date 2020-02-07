@@ -17,7 +17,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.ARIAProduct import ARIA_standardproduct
-from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, tropo_correction
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, tropo_correction, solidtide_correction
 
 
 def createParser():
@@ -28,22 +28,43 @@ def createParser():
     import argparse
     parser = argparse.ArgumentParser(description='Get DEM')
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
-    parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies) or tar file(s) containing GACOS products.')
-    parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
+    parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs.'\
+                        'Default is local directory where script is launched.')
+    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies)'\
+                        'or tar file(s) containing GACOS products.')
+    parser.add_argument('-st', '--solid_tide', action='store_true', dest='solid_tide', help='If turned, solid Earth tide corrections will be applied.')
+    parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list'\
+                        'bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular",'\
+                        '"bParallel", "incidenceAngle", "lookAngle","azimuthAngle". If "all" is specified, then all layers are extracted.'\
+                        'If blank, will only extract bounding box,"incidenceAngle","lookAngle","azimuthAngle","unwrappedPhase", and "coherence".')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str, default='download', help='DEM file. Default is to download new DEM.')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str, help='projection for DEM. By default WGS84.')
-    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
-    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
-    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
+    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE."\
+                        "-- Example : '19 20 -99.5 -98.5'")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL"\
+                        "compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively."\
+                        "If 'Download', will use GSHHS water mask")
+    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask.'\
+                        'Specify "None" to not use amplitude mask. By default "None".')
+    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for'\
+                        'multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
 #    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
-    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
-    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids. Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
-    parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
-    parser.add_argument('-rr', '--rankedResampling', action='store_true', dest='rankedResampling', help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
-    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
+    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format'\
+                        '(e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel",'\
+                        '"incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection'\
+                        'or corrections to be applied.')
+    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds"\
+                        "based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection"\
+                        "and bbox (if specified).")
+    parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp', help="If turned on, extracts perpendicular baseline grids."\
+                        "Default: A single perpendicular baseline value is calculated and included in the metadata of stack cubes for each pair.")
+    parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of'\
+                        'standard resolution. E.g. 2 = 90m*2 = 180m')
+    parser.add_argument('-rr', '--rankedResampling', action='store_true', dest='rankedResampling', help="If turned on, IFGs resampled"\
+                        "based off of the average of pixels in a given resampling window corresponding to the connected component mode"\
+                        "(if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
+    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes'\
+                        'wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
 
     return parser
@@ -124,7 +145,13 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
         dataType = "Float32"
-        print('Number of tropocorrected unwrapped interferograms discovered: ', len(intList))
+        print('Number of tropo corrected unwrapped interferograms discovered: ', len(intList))
+        Dlist = intList
+    elif inputFiles in ['earthtidecorrected_products', 'earthtidecorrected', 'earthtide']:
+        domainName = 'unwrappedPhase'
+        intList = glob.glob(os.path.join(workdir,'earthtidecorrected_products','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
+        print('Number of earth-tide corrected unwrapped interferograms discovered: ', len(intList))
         Dlist = intList
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
@@ -255,38 +282,53 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
+    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = \
+        merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), \
+        standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
 
     # Load or download mask (if specified).
     if inps.mask is not None:
-        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]],inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] \
+            for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] \
+            for item in sublist]],inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, \
+            workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
     if inps.demfile is not None:
         print('Download/cropping DEM')
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, \
+            arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Extract
     layers=['unwrappedPhase','coherence']
     print('\nExtracting unwrapped phase, coherence, and connected components for each interferogram pair')
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, \
+        lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, \
+        num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     layers=['incidenceAngle','lookAngle','azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle files valid over common interferometric grid')
-    export_products([dict(zip([k for k in set(k for d in standardproduct_info.products[1] for k in d)], [[item for sublist in [list(set(d[k])) for d in standardproduct_info.products[1] if k in d] for item in sublist] for k in set(k for d in standardproduct_info.products[1] for k in d)]))], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+    export_products([dict(zip([k for k in set(k for d in standardproduct_info.products[1] for k in d)], [[item for sublist in [list(set(d[k])) \
+        for d in standardproduct_info.products[1] if k in d] for item in sublist] for k in set(k for d in standardproduct_info.products[1] \
+        for k in d)]))], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, \
+        outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, \
+        multilooking=inps.multilooking)
 
     if inps.bperp==True:
         layers=['bPerpendicular']
         print('\nExtracting perpendicular baseline grids for each interferogram pair')
-        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+        export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, \
+            lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, \
+            num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     # Extracting other layers, if specified
     if inps.layers:
         if inps.layers.lower()=='all':
             inps.layers=list(standardproduct_info.products[1][0].keys())
             # Must also remove productBoundingBoxes & pair-names because they are not raster layers
-            layers=[i for i in inps.layers if i not in ['unwrappedPhase','coherence','incidenceAngle','lookAngle','azimuthAngle','bPerpendicular','productBoundingBox','productBoundingBoxFrames','pair_name']]
+            layers=[i for i in inps.layers if i not in ['unwrappedPhase','coherence','incidenceAngle','lookAngle','azimuthAngle', \
+                'bPerpendicular','productBoundingBox','productBoundingBoxFrames','pair_name']]
         else:
             inps.layers=list(inps.layers.split(','))
             layers=[i for i in inps.layers if i not in ['unwrappedPhase','coherence','incidenceAngle','lookAngle','azimuthAngle','bPerpendicular']]
@@ -294,7 +336,9 @@ def main(inps=None):
 
         if layers!=[]:
             print('\nExtracting optional, user-specified layers %s for each interferogram pair'%(layers))
-            export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+            export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, \
+                lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, \
+                num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
@@ -304,19 +348,29 @@ def main(inps=None):
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, \
+                outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         # Resample DEM
         if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, \
+                outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+
+    # Track reference IFG directory, so corrections are sequentially performed
+    ref_IFGdir='unwrappedPhase'
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:
-        tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+        tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, \
+            outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+        ref_IFGdir='tropocorrected_products'
+
+    # Perform solid Earth tide corrections (if specified).
+    if inps.solid_tide:
+        solidtide_correction(standardproduct_info.products, standardproduct_info.bbox_file, prods_TOTbbox, inDir=ref_IFGdir, outDir=inps.workdir, \
+            outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+        ref_IFGdir='earthtidecorrected_products'
 
     # Generate Stack
     generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
     generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir)
-    if inps.tropo_products:
-        generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir)
-    else:
-        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
+    generateStack(standardproduct_info,ref_IFGdir,'unwrapStack',workdir=inps.workdir)
