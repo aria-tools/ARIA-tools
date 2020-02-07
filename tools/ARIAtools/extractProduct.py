@@ -309,7 +309,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081):
     '''
-        Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, 
+        Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection,
         but user may specify union), and expected shape for DEM.
     '''
 
@@ -790,7 +790,6 @@ def solidtide_correction(full_product_dict, bbox_file, prods_TOTbbox, inDir='unw
     # Import functions
     from ARIAtools.vrtmanager import renderVRT
     from datetime import datetime, timedelta
-    import shutil
     import pandas as pd
     from solid_grid import solidwrapped
 
@@ -847,7 +846,7 @@ def solidtide_correction(full_product_dict, bbox_file, prods_TOTbbox, inDir='unw
     #in y-dim
     dim_buffer=np.arange(ds_bounds[1],ds_bounds[-1],abs(ds_geotrans[-1]))
     ds_bounds[-1]=(2*abs(ds_geotrans[-1]))+dim_buffer[-1]
-   
+
     # Run solid_grid program
     for i in date_list:
         #arguments=yyyy, mm, dd, hh, mm, ss, latmin, lonmin, latmax, lonmax, spacingx, spacingy, increment, path to output file
@@ -890,7 +889,7 @@ def solidtide_correction(full_product_dict, bbox_file, prods_TOTbbox, inDir='unw
         df_reference['AZvalue'] = df_reference.index.map(azfile_lookup['AZvalue'])
         df_secondary['INCvalue'] = df_secondary.index.map(incfile_lookup['INCvalue'])
         df_secondary['AZvalue'] = df_secondary.index.map(azfile_lookup['AZvalue'])
-        #project to LOS, formula=-(x(k)*cos(dlos)+y(k)*sin(dlos))*sin(inc)-z(k)*cos(inc) 
+        #project to LOS, formula=-(x(k)*cos(dlos)+y(k)*sin(dlos))*sin(inc)-z(k)*cos(inc)
         df_reference['PROJvalue'] = (-((df_reference['ut']*np.cos(df_reference['AZvalue']))+(df_reference['vt']*np.sin(df_reference['AZvalue'])))* \
             np.sin(df_reference['INCvalue']))-(df_reference['wt']*np.cos(df_reference['INCvalue']))
         df_secondary['PROJvalue'] = (-((df_secondary['ut']*np.cos(df_secondary['AZvalue']))+(df_secondary['vt']*np.sin(df_secondary['AZvalue'])))* \
@@ -905,9 +904,9 @@ def solidtide_correction(full_product_dict, bbox_file, prods_TOTbbox, inDir='unw
         ds_geotrans[-1]=(min(df_reference['lat'])-max(df_reference['lat']))/se_product.shape[0]
         renderVRT(outname+'_sediff', se_product, geotrans=ds_geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=0.)
         #extrapolate through nodata
-        src_ds = gdal.Open(outname+'_sediff', gdal.GA_Update) 
+        src_ds = gdal.Open(outname+'_sediff', gdal.GA_Update)
         srcband=src_ds.GetRasterBand(1)
-        result = gdal.FillNodata(targetBand=srcband,maskBand=None, maxSearchDist=100, smoothingIterations=1)
+        gdal.FillNodata(targetBand=srcband,maskBand=None, maxSearchDist=100, smoothingIterations=1)
         src_ds = None
         #oversample to full-res
         gdal.Warp(outname+'_sediff', outname+'_sediff', options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, xRes=abs(geotrans[1]), \
