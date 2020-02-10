@@ -12,6 +12,7 @@ dependencies:
   - cartopy
   - gdal>=3.0
   - hdf5
+  - pulp
   - joblib
   - jupyterlab
   - jupyter_contrib_nbextensions
