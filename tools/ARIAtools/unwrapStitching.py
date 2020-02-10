@@ -213,7 +213,7 @@ class Stitching:
         '''
             This function will write the final merged unw and conencted component file. As intermediate step tiff   files are generated with integer values which will represent the shift to be applied to connected componenet and the moduli shift to be applied to the unwrapped phase.
         '''
-
+        
         ## Will first make intermediate files in a temp folder.
         # For each product there will be a connComp file and 3 files related unw files.
         # The connected component file will show the unique wrt to all merged files
@@ -267,9 +267,15 @@ class Stitching:
 
         ## Will now merge the unwrapped and connected component files
         # remove existing output file(s)
-        for file in glob.glob(self.outFileUnw + "*"):
+        if os.path.exists(self.outFileUnw):
+            os.remove(self.outFileUnw)
+        for file in glob.glob(self.outFileUnw + ".*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
+
+        if self.stitchMethodType=='2stage':
+            gdal.Translate(self.outFileUnw+'.vrt', unwFiles[0], options=gdal.TranslateOptions(format="VRT"))
+        else:
+            gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
         gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
         # Update VRT
         gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
@@ -296,7 +302,7 @@ class Stitching:
         os.system(cmd)
 
         # Remove the directory with intermediate files as they are no longer needed
-        shutil.rmtree(tempdir)
+        #shutil.rmtree(tempdir)
 
 
 class UnwrapOverlap(Stitching):
@@ -536,7 +542,7 @@ class UnwrapComponents(Stitching):
 
         ## setting the method
         self.setStitchMethod("2stage")
-        self.region=5
+        self.region=7
 
         if self.inpFile is None:
             print("Error. Input unwrapped file(s) is (are) not set.")
@@ -564,15 +570,17 @@ class UnwrapComponents(Stitching):
         #       "connFile" = Original connected component file
         #       "connCompID" = Original ID connected component id (wrt original connected component file)
         #       "unwFile" = Original unwrapped file
-        self.__populatePolyTable__()
+        #self.__populatePolyTable__()
+        self.__populatePolyTablenew__()
+
 
         ## Populate a table where each unique polygon is matches with all other (not same component) polygons, and keep in the table the points that represent the closest two points between these polygons.
         # The table is populated with columns as:
         #       Source Unique CC ID, Source CC ID, Source CC FILE, Source UNW FILE, Source X-geocoordinate, Source Y-geocoordinate, Source geoTrans, Partner Unique CC, Dist to partner, Source unw phase, Source X-coordinate, Source Y-coordinate
-        self.__populatePointTable__()
+        self.__populatePointTablenew__()
 
         ## Calculating the number of phase cycles needed to miminize the residual between connected components. Minimization is only done between the tablePoints (i.e. X-coordinate, Y-coordinate, unw phase).
-        self.__calculateCycles__()
+        self.__calculateCyclesnew__()
 
         ## Write out merged phase and connected component files
         self.__createImages__()
@@ -580,87 +588,289 @@ class UnwrapComponents(Stitching):
 
         return
 
-    def __populatePolyTable__(self):
+    def __populatePolyTablenew__(self):
         '''
             Build a dictionary with connected component polygon information
             columns: key is a unique polygon [1, max number of unique polygons of all products]
             each key will have a corresponding dictionary with keys:
-                "connCompFile" = Original connected component file
-                "conmCompID" = Original ID connected component id (wrt original connected component file)
-                "unwFile" = Original unwrapped file
+            "connCompFile" = Original connected component file
+            "conmCompID" = Original ID connected component id (wrt original connected component file)
+            "unwFile" = Original unwrapped file
         '''
+        
+       
+        # polygonize each connected component file
+        # outputs polygons for all connected components differnt than 0 and no-data value
+        print('Generating Connected Component polygons')
+        poly,ccomp,geoTrans,proj,sizeData = polygonizeConn(self.ccFile[0])
+        print('...Done')
 
-        # template of the dictionary for each polygon
-        polygonDict_tmpl = {}
-        polygonDict_tmpl['connFile'] = []
-        polygonDict_tmpl['connCompID'] = []
-        polygonDict_tmpl['connCompID_unique'] = []
-        polygonDict_tmpl['unwFile'] = []
-        polygonDict_tmpl['poly'] = []
-        polygonDict_tmpl['geoTrans'] = []
-
-        # template of the dictionary for each unique connected component
-        componentDict_tmpl = {}
-        componentDict_tmpl['connFile'] = []
-        componentDict_tmpl['connCompMapping'] = []
-        componentDict_tmpl['unwFile'] = []
-
-
+        
         # populate table dictionary of all polygons
         tableDict = {}
-
-        fileMappingDict ={}
-        polygon_offset = 0
-        connComp_offset = 0
-        for k_file in range(self.nfiles):
-
-            # polygonize each connected component file
-            # outputs polygons for all connected components differnt than 0 and no-data value
-            poly,ccomp,geoTrans,proj,sizeData = polygonizeConn(self.ccFile[k_file])
-
-            # tracking for each file the mapping of connected component to a unique connected component defined below.
-            componentDict = copy.deepcopy(componentDict_tmpl)
-            componentDict['connFile'] = self.ccFile[k_file]
-            componentDict['unwFile'] = self.inpFile[k_file]
-            connCompMapping = [[0 , 0]]
-
-            connComp_offset_increment = 0
-            for poly_counter in range(len(poly)):
-                # populate the dict with information specific to this polygon
-                polygonDict =  copy.deepcopy(polygonDict_tmpl)
-                polygonDict['connFile'] = self.ccFile[k_file]
-                polygonDict['unwFile'] = self.inpFile[k_file]
-                polygonDict['connCompID'] = ccomp[poly_counter]
-                polygonDict['connCompID_unique'] = ccomp[poly_counter]+connComp_offset
-                polygonDict['poly'] = poly[poly_counter]
-                polygonDict['geoTrans'] = geoTrans
-                polygonDict['sizeData'] = sizeData
-
-                # Track the mapping from connCompID to connCompID_unique
-                connCompMapping.append([ccomp[poly_counter] , ccomp[poly_counter]+connComp_offset])
-
-                # tracking how much the next file needs to be offsetted in connComp count
-                connComp_offset_increment = np.max([connComp_offset_increment,ccomp[poly_counter]])
-
-                # store the polygonDict for each unigue polygon
-                tableDict[poly_counter+polygon_offset]=polygonDict
-
-            # storing the information for the file mapping
-            # as there might be some repetition in the mapping (gdal polygonize might have >1 polygon for a given component)
-            connCompMapping = np.array(connCompMapping)
-            connCompMapping = np.unique(connCompMapping, axis=0)
-            componentDict['connCompMapping'] = connCompMapping
-            fileMappingDict[k_file]=componentDict
-
-            # increment the polygon count for polygons to remain unique
-            polygon_offset = polygon_offset+poly_counter+1
-            # increment the connected component count for it to remain unique
-            connComp_offset = connComp_offset + connComp_offset_increment
-
+        
+        # template of the dictionary for each polygon
+        polygonDict_tmpl = {}
+        polygonDict_tmpl['connFile'] = self.ccFile[0]
+        polygonDict_tmpl['connCompID'] = []
+        polygonDict_tmpl['unwFile'] = self.inpFile[0]
+        polygonDict_tmpl['poly'] = []
+        polygonDict_tmpl['geoTrans'] = []
+        
+        for poly_counter in range(len(poly)):
+            # populate the dict with information specific to this polygon
+            polygonDict =  copy.deepcopy(polygonDict_tmpl)
+            polygonDict['connCompID'] = ccomp[poly_counter]
+            polygonDict['poly'] = poly[poly_counter]
+            polygonDict['geoTrans'] = geoTrans
+            polygonDict['sizeData'] = sizeData
+            
+            # store the polygonDict for each unigue polygon
+            tableDict[poly_counter]=polygonDict
+        
         # return the dictionary of all unique polygons
         self.polyTableDict = tableDict
-        # return the dictionary of all unqiue connected component id
-        self.fileMappingDict = fileMappingDict
+
+    def __populatePointTablenew__(self):
+        '''
+            Function that populates a table of points which maps two closest points between two connected components. Loops over all possible connected component pairings.
+            The table is populated with columns as: Source Unique CC ID, Source CC ID, Source CC FILE, Source UNW FILE, Source X-geocoordinate, Source Y-geocoordinate, Source geoTrans, Partner Unique CC, Dist to partner, Source unw phase, Source X-coordinate, Source Y-coordinate
+            '''
+        
+        import pdb
+
+            
+        # only proceed if there are polygons that needs mapping to a closest polygon
+        if len(self.polyTableDict) <=1:
+            raise Exception("Nothing to do as all are from same connected component")
+        
+        ## Calculate the minimum distance between connected components.
+        # Will loop over each polygon and compute the distance to other polygons.
+        # 1) ignore polygons that are within its own connected component
+        # 2) ignore reverse mapping, i.e. 1-2 and ignore 2-1
+        # 3) ignore connected component mapping if spanning more than 1 product.
+        connFile = self.polyTableDict[0]['connFile']
+        unwFile = self.polyTableDict[0]['unwFile']
+        geoTrans = self.polyTableDict[0]['geoTrans']
+        sizeData = self.polyTableDict[0]['sizeData']
+        
+        # item 1) and 2) implementation using two for loops
+        for poly_counter_1 in range(0,len(self.polyTableDict)):
+            # polygon 1
+            poly1 = self.polyTableDict[poly_counter_1]['poly']
+            connCompID1 = self.polyTableDict[poly_counter_1]['connCompID']
+
+            # loop over all poygons and keep track of min distance polygon not of own component
+            for poly_counter_2 in range(poly_counter_1+1,len(self.polyTableDict)):
+                # polygon 2
+                poly2 = self.polyTableDict[poly_counter_2]['poly']
+                connCompID2 = self.polyTableDict[poly_counter_2]['connCompID']
+
+                
+                # item 3) implementation: ignore connected component mapping if spanning more than 1 product.
+                # note there were orginally up to 20 connected components per product
+                if np.abs(np.floor(connCompID1/20)-np.floor(connCompID2/20))>1:
+                    print('to far away:' + str(connCompID1) + ' ' + str(connCompID2))
+                    continue
+                
+                
+                # finding the minMatch of closest points between two polygons lists
+                # will try multi-core version and default to for loop in case of failure
+                try:
+                    print('Multi-core')
+                    start = time.time()
+                    points = []
+                    pointDistance = []
+                    pairings =  ()
+                    for polygon1 in poly1:
+                        for polygon2 in poly2:
+                            # parse inputs as a tuple
+                            pairing = (polygon1,polygon2)
+                            # append all tuples in a single tuple
+                            pairings = pairings + (pairing,)
+                    temp = Parallel(n_jobs=-1,max_nbytes=1e6)(delayed(minDistancePointsnew)(ii) for ii in pairings)
+                    # unpackign the tuple back to a numpy array of two variables
+                    for line in temp:
+                        pointDistance.append(line[0])
+                        points.append(line[1])
+                    stop = time.time()
+                except:
+                    print('For loop')
+                    # for loop instead of multi-core
+                    start = time.time()
+                    points = []
+                    pointDistance = []
+      
+                    for polygon1 in poly1:
+                        for polygon2 in poly2:
+                            # parse inputs as a tuple
+                            pairing = (polygon1,polygon2)
+                            pointDistance_temp, points_temp = minDistancePointsnew(pairing)
+                            points.append(points_temp)
+                            pointDistance.append(pointDistance_temp)
+                    stop = time.time()
+                
+                print('DONE min distance points')
+                # now find the point pair with the shortest distance and keep the correpsonding points
+                min_ix = np.where(pointDistance ==np.min(pointDistance))[0]
+                dist = pointDistance[min_ix[0]]
+                points = points[min_ix[0]]
+                
+                # track the coordinates of the closest points in geocoordinates
+                point1 = np.array(points[0])
+                point2 = np.array(points[1])
+                
+                
+                # generate plots to verify min distance calculation for connected components
+                if self.verbose:
+                    # generate unique filename based on connected component combination being solved for
+                    savename = os.path.join(os.path.abspath(self.outFileUnw + '_2stagePlots'),str(connCompID1) + '_' + str(connCompID2) + '.png')
+                    dirname = os.path.dirname(savename)
+                    if not os.path.isdir(dirname):
+                        os.makedirs(dirname)
+                    plotPolygons([poly1],[poly2],(point1,point2),savename)
+
+                # The list of points are defined from one polygon point to another.
+                # Therefore each polygon mapping will consist out of two Source points.
+                # The columns for each point are populated as:
+                # Source CC ID, Source X-coordinate, Source Y-coordinate, Partner CC ID, Dist to partner
+                # Starting from point 1
+                point1_array=[]
+                point1_array.append(connCompID1)
+                point1_array.append(point1[0])
+                point1_array.append(point1[1])
+                point1_array.append(connCompID2)
+                point1_array.append(dist)
+                point1_array = np.array(point1_array)
+                point1_array = point1_array.reshape((1,point1_array.shape[0]))
+
+                # starting from point 2
+                point2_array=[]
+                point2_array.append(connCompID2)
+                point2_array.append(point2[0])
+                point2_array.append(point2[1])
+                point2_array.append(connCompID1)
+                point2_array.append(dist)
+                point2_array = np.array(point2_array)
+                point2_array = point2_array.reshape((1,point2_array.shape[0]))
+                
+                # append the list of points
+                try:
+                    tablePoints = np.concatenate((tablePoints,point1_array, point2_array), axis=0)
+                except:
+                    tablePoints = np.concatenate((point1_array, point2_array), axis=0)
+
+
+
+        ## making sure the points are unique based on coordinate and unique connected compoenent id
+        tablePoints_unique, unique_indices = np.unique(tablePoints[:, (0,1,2) ], axis=0,return_index=True)
+        self.tablePoints =tablePoints[unique_indices[:],:]
+        
+        # compute the phase values
+        print('Calculating the phase values for ' + str(self.tablePoints.shape[0]) + ' points')
+        # will try multi-core version and default to for loop in case of failure
+        '''
+        try:
+            start = time.time()
+            # need to combine all inputs together as single argument tuple
+            all_inputs = ()
+            for counter in range(self.tablePoints.shape[0]):
+                connCompID1_temp = self.tablePoints[counter,1]
+                connFile1_temp = self.tablePoints[counter,2]
+                unwFile1_temp = self.tablePoints[counter,3]
+                point1_temp = np.array([self.tablePoints[counter,3], self.tablePoints[counter,4]])
+                geoTrans1_temp =self.tablePoints[counter,6]
+                # parse inputs as a tuple
+                inputs = (connCompID1_temp,connFile1_temp,unwFile1_temp,point1_temp,geoTrans1_temp,self.region)
+                # append all tuples in a single tuple
+                all_inputs = all_inputs + (inputs,)
+            # compute the phase value using multi-thread functionality
+            unwPhase_value = Parallel(n_jobs=-1,max_nbytes=1e6)(delayed(point2unwPhase)(ii) for ii in all_inputs)
+            # end timer
+            end = time.time()
+        except:
+            print('Multi-core version failed, will try single for loop')
+
+        '''
+        
+        connFile = self.polyTableDict[0]['connFile']
+        unwFile = self.polyTableDict[0]['unwFile']
+        geoTrans = self.polyTableDict[0]['geoTrans']
+        sizeData = self.polyTableDict[0]['sizeData']
+
+
+        # will track processing time
+        start = time.time()
+        unwPhase_value = []
+        for counter in range(self.tablePoints.shape[0]):
+            connCompID1_temp = self.tablePoints[counter,0]
+            point1_temp = np.array([self.tablePoints[counter,1], self.tablePoints[counter,2]])
+            # parse inputs as a tuple
+            inputs = (connCompID1_temp,connFile,unwFile,point1_temp,str(geoTrans),self.region)
+            # compute the phase value
+            unwPhase_temp = point2unwPhase(inputs)
+            unwPhase_value.append(unwPhase_temp)
+        # end timer
+        end = time.time()
+        print("runtime phase value calculation: " + str(end - start) + " sec")
+
+
+        # Appending the phase to the table stored in self with the points, vector looks like:
+        # position: 0       1   2   3     4 5
+        # variable: ccID1   P1x P1y ccID2 d phase
+        unwPhase_value = np.array(unwPhase_value)
+        unwPhase_value = unwPhase_value.reshape((unwPhase_value.shape[0],1))
+        self.tablePoints = np.concatenate((self.tablePoints, unwPhase_value), axis=1)
+
+        
+        # will plot the intermediate results to verify
+        if self.verbose:
+            plotInversionInput(self.tablePoints[:, (1,2,5)],'inversion.png')
+
+        ## The two-stager only works with integer coordinate system in its triangulation, and needs unique points for each node. Will apply two steps to ensure this
+        # STEP 1) will convert the geo-coordiantes with respect to the most southwest point and normalize with respect to original grid sampling
+        # STEP 2) for non-unique points will shift by a pixel to get uniquesness back
+        
+        # step 1: generating raster coordinates
+        geoTrans_global = list(geoTrans)
+        X_coordinate = ((self.tablePoints[:,1].astype(np.float64) - geoTrans_global[0])/geoTrans_global[1]).astype(np.int)
+        Y_coordinate = ((self.tablePoints[:,2].astype(np.float64) - geoTrans_global[3])/geoTrans_global[5]).astype(np.int)
+        X_coordinate = X_coordinate.reshape((X_coordinate.shape[0],1))
+        Y_coordinate = Y_coordinate.reshape((Y_coordinate.shape[0],1))
+
+
+        # step 2: making the nodes unqiue
+        test_unique =  np.array([])
+        test = np.array([1,1])
+        while_count = 1
+        while test_unique.shape!=test.shape:
+            for count in range(X_coordinate.shape[0]):
+                # find all the points that have the same coordiante as this one
+                point = np.array([X_coordinate[count][0], Y_coordinate[count][0]])
+                points = np.concatenate((X_coordinate, Y_coordinate), axis=1)
+                matches = np.where(np.all(point==points,axis=1))[0]
+                if matches.shape[0]>1:
+                    #print('Found ' + str(matches.shape[0]) + ' non-unique points')
+                    X_coordinate[matches[1:],0] = X_coordinate[matches[1:],0] + random.sample(range(-3,3),matches.shape[0]-1)
+                    Y_coordinate[matches[1:],0] = Y_coordinate[matches[1:],0] + random.sample(range(-3,3),matches.shape[0]-1)
+        
+            test = np.concatenate((X_coordinate, Y_coordinate), axis=1)
+            test_unique, test_unique_indices = np.unique(test, axis=0,return_index=True)
+            print('Shifting coordinates by a pixel to make all points unique: iteration ' + str(while_count))
+        while_count = while_count+1
+
+
+        if test_unique.shape!=test.shape:
+            print('Coordinates are not-unique, need to implement a while loop, run again for another random sample...')
+            import pdb
+            pdb.set_trace()
+        else:
+            print('Coordinates are unique')
+
+        # appending the X and Y-coordinates to the points table.
+        self.tablePoints = np.concatenate((self.tablePoints, X_coordinate), axis=1)
+        self.tablePoints = np.concatenate((self.tablePoints, Y_coordinate), axis=1)
+            
 
 
     def __populatePointTable__(self):
@@ -673,8 +883,14 @@ class UnwrapComponents(Stitching):
         if len(self.polyTableDict) <=1:
             raise Exception("Nothing to do as all are from same connected component")
 
+        import pdb
+        #pdb.set_trace()
+        
         # populate table  of all polygons
         polygon_pair_counter = 0
+        test_old = 0
+        test_new = 0
+
         # loop over each polygon and compute the distance to all polygons.
         #print('Calculating the phase values for polygon pairs')
         for poly_counter_1 in range(0,len(self.polyTableDict)):
@@ -701,12 +917,24 @@ class UnwrapComponents(Stitching):
                 # will skip the pairing of the two polygons under the following two conditions:
                 # 1) when mapping two of the same polyons, i.e. i==j or a diagonal element of the matrix of combinations
                 # 2) when the two polygons are from the same connected component and originate from the same connected comp file
+                # 3) if the connected component pair spans more than a product apart
+                #pdb.set_trace()
+                if (poly_counter_1==poly_counter_2) or (connCompID_unique1==connCompID_unique2) or (np.abs(np.floor(connCompID_unique1/20)-np.floor(connCompID_unique2/20))>1):
+                    #print("new rule")
+                  
+                    continue
                 if poly_counter_1==poly_counter_2 and connCompID1==connCompID2 and connFile1==connFile2:
+                    #print("old rule")
                     continue
 
+                    #pdb.set_trace()
+                
+
+                
                 # finding the minMatch of closest points between two polygons lists
                 # will try multi-core version and default to for loop in case of failure
                 try:
+                    erer
                     print('Multi-core')
                     start = time.time()
                     points = []
@@ -787,6 +1015,11 @@ class UnwrapComponents(Stitching):
                     tablePoints = np.concatenate((point1_array, point2_array), axis=0)
 
 
+        print("test_old " + str(test_old))
+        print("test_new " + str(test_new))
+
+        pdb.set_trace()
+        
         ## making sure the points are unique based on coordinate and unique connected compoenent id
         tablePoints_unique, unique_indices = np.unique(tablePoints[:, (0,4,5) ], axis=0,return_index=True)
         self.tablePoints =tablePoints[unique_indices[:],:]
@@ -902,15 +1135,76 @@ class UnwrapComponents(Stitching):
 
         return compMap
 
+    def __calculateCyclesnew__(self):
+        '''
+            Function that will calculate the number of cycles each component needs to be shifted in order to minimize the two-pi modulu residual between a neighboring component. Outputs a fileMappingDict with as key a file number. Within fileMappingDict with a integer phase shift value for each unique connected component.
+            '''
+        
+        # import dependecies, looks like the general import does not percolate down to this level.
+        from ARIAtools.phaseMinimization import PhaseUnwrap
+        
+        import pdb
+        
+        # generating a list to be parsed in the two-stager, not that table originally was a mixture of string and floats, so all were temporaly mapped to a string for easy parsing. Will need to undo that now when calling two stager
+        x = list(self.tablePoints[:,6].astype(np.int)+1)
+        y = list(self.tablePoints[:,7].astype(np.int)+1)
+        phase = (self.tablePoints[:,5].astype(np.float32))
+        compNum = list(self.tablePoints[:,0].astype(np.int))
+        
+        #pdb.set_trace()
+        phaseunwrap = PhaseUnwrap(x=x, y=y, phase=phase, compNum=compNum, redArcs=redarcsTypes[self.redArcs])
+        phaseunwrap.solve(self.solver)
+        cycles = phaseunwrap.unwrapLP()
+
+        # Map unique component to integer number of cycles
+        compMap = self.__compToCycle__(cycles, compNum)
+        
+        # Generate a mapping function for all connected components
+        # get maximum count from the original connected component file
+        n_comp = 20
+        ccDataFile = gdal.Open(self.ccFile[0])
+        n_comp = int(ccDataFile.GetRasterBand(1).GetStatistics(0,1)[1])
+        ccDataFile = None
+
+        
+        # The cyclemapping of product using a single offset (i.e. all connectedComponents have the same mapping)
+        connComp = np.array(range(0,n_comp+1))
+        connComp = connComp.reshape((n_comp+1,1))
+        cycleMapping = np.zeros((n_comp+1,1))
+        rangeOffsetMapping = np.zeros((n_comp+1,1))
+        for conmCompID in compMap:
+            cycleMapping[conmCompID]=compMap[conmCompID]
+
+        
+        # concatenate and generate a connComponent based mapping matrix
+        # [original comp, new component, 2Pi scaling factor, range correction]
+        connCompMapping = np.concatenate((connComp, connComp,cycleMapping,rangeOffsetMapping), axis=1)
+
+        
+        # populate mapping dictionary for each product
+        fileMappingDict_temp = {}
+        fileMappingDict_temp['connCompMapping'] = connCompMapping
+        fileMappingDict_temp['connFile'] =  self.ccFile[0]
+        fileMappingDict_temp['unwFile'] = self.inpFile[0]
+        # store it in the general mapping dictionary
+        fileMappingDict = {}
+        fileMappingDict[0]=fileMappingDict_temp
+        # pass the fileMapping back into self
+        self.fileMappingDict=fileMappingDict
+    
+        print('MAPPING complete:')
+            
+
 
     def __calculateCycles__(self):
         '''
             Function that will calculate the number of cycles each component needs to be shifted in order to minimize the two-pi modulu residual between a neighboring component. Outputs a fileMappingDict with as key a file number. Within fileMappingDict with a integer phase shift value for each unique connected component.
         '''
 
-        # import dependecies, looks liek the general import does not percolate down to this level.
+        # import dependecies, looks like the general import does not percolate down to this level.
         from ARIAtools.phaseMinimization import PhaseUnwrap
 
+        
         # generating a list to be parsed in the two-stager, not that table originally was a mixture of string and floats, so all were temporaly mapped to a string for easy parsing. Will need to undo that now when calling two stager
         x = list(self.tablePoints[:,10].astype(np.int)+1)
         y = list(self.tablePoints[:,11].astype(np.int)+1)
@@ -948,78 +1242,155 @@ class UnwrapComponents(Stitching):
 
 
 
-def minDistancePoints(pairing):
+def plotInversionInput(points,save_name=[]):
+    '''
+        Routine for plotting xy coordinates and phase offset inputed into the inversion
+    '''
+    
+    import matplotlib.pyplot as plt
+    from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+    import cartopy.io.img_tiles as cimgt
+    import cartopy.crs as ccrs
+    from matplotlib  import cm
+
+    basemap   = cimgt.Stamen('terrain-background')
+    #convert basemap to black-and-white mode
+    basemap.desired_tile_form='L'
+    fig, axes = plt.subplots(subplot_kw={'projection':basemap.crs})
+    im = axes.scatter(points[:,0],points[:,1],s=20,c=points[:,2], marker = 'o', cmap = cm.jet );
+    axes.set_xlabel('longitude',weight='bold', zorder=2)
+    axes.set_ylabel('latitude',weight='bold', zorder=2)
+    cbar = fig.colorbar(im, ax=axes)
+    cbar.set_label("Phase (rad)", labelpad=+1)
+
+    # optionally save the figure too
+    if save_name:
+        plt.savefig(save_name, format='png')
+    else:
+        plt.show()
+    plt.close(fig)
+
+def plotPolygons(polylist1, polylist2=[],points=(),save_name=[]):
+    '''
+        Routine for plotting list of polygon, where each polylist has a differnt colour.
+        Points is a two point tuple which will be drawn as markers and a line.
+        Save_name is optiopnal to generate a plot without display.
+    '''
+
+    import matplotlib.pyplot as plt
+    from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+    import cartopy.io.img_tiles as cimgt
+    import cartopy.crs as ccrs
+
+    
+    basemap   = cimgt.Stamen('terrain-background')
+    #convert basemap to black-and-white mode
+    basemap.desired_tile_form='L'
+    fig, axes = plt.subplots(subplot_kw={'projection':basemap.crs})
+    
+    # loop over the polygons for plotting.
+    for poly in polylist1:
+        for subpoly in poly:
+            xy = subpoly.coords.xy
+            axes.plot(xy[0], xy[1], 'g-')
+    for poly in polylist2:
+        for subpoly in poly:
+            xy = subpoly.coords.xy
+            axes.plot(xy[0], xy[1], 'r-')
+    if points:
+        point1 = points[0]
+        point2 = points[1]
+        axes.plot(point1[0], point1[1], 'k.')
+        axes.plot(point2[0], point2[1], 'k.')
+        axes.plot([point1[0],point2[0]], [point1[1] ,point2[1]], 'k-')
+    axes.set_xlabel('longitude',weight='bold', zorder=2)
+    axes.set_ylabel('latitude',weight='bold', zorder=2)
+
+    # optionally save the figure too
+    if save_name:
+        plt.savefig(save_name, format='png')
+    else:
+        plt.show()
+    plt.close(fig)
+
+def minDistancePointsnew(pairing):
     '''
         Finding closest two points between a list of two polygons
     '''
-
-    poly1= pairing[0]
+    
+    # converting to a polygon so we can leverage nearest and area calculations
+    poly1 = pairing[0]
     poly2 = pairing[1]
-    poly1_source = pairing[2]
-    poly2_source = pairing[3]
-
-    # Shapely nearest_point behaves well when two polygons do not overlap.
-    # in case one polygon is contained within another, it will return the point on the inner polygon
-    # the latter is not good behaviour in case of nested components within components
-    # whill handle this manully by checking if the polygons have intersection.
-    # However, note that in case of stiching multiple products, there will be a case that polygons intersect in along the edges in the overlap region.
-    # We will track this by also including a check if the polygons originate form the same connected component file.
-
-    ## check of the polygon has an intersection, two scenario's exist
-    # 1) if from the same connected component file, then one component is within anoher, nearest points will return incorrect points
-    # 2) if from differnt connected component files, then its form the overlap region, nearest poitns will not give an incorrect estimate as there is overlap
-
-    #pdb.set_trace()
+    Poly1=  Polygon(poly1)
     Poly2 = Polygon(poly2)
-    Poly1 = Polygon(poly1)
 
-    if Poly1.intersection(Poly2).area > 0 and  poly1_source == poly2_source:
-    #if poly1.intersects(poly2) and poly1_source == poly2_source:
-        # will manully find the nearest points by looping over each vertex of polygon 2 and finding the minimum distance to polygon 1.
+    
+    ### two scenario's exist
+    # 1) polygons do not intersect and do not overlap. Use nearest_point shapely functionality
+    # 2) polygons do overlap or intersect. nearest_point shapely functionality fails as it provides one and the same point. Instead will interpolate the edge of one polygone and do a point wize distance calculation.
+    
+    # only proceed if both polygons are valid defined
+    if Poly2.is_valid and Poly1.is_valid:
+        # checking if polygons intersect
+        if Poly1.intersection(Poly2).area == 0:                         # scenario 1)
+            # leverage shapely distance function
+            dist = poly1.distance(poly2)
+            
+            # track the coordinates of the closest points in geocoordinates
+            points = nearest_points(poly1,poly2)
+            point1 = np.array(points[0])
+            point2 = np.array(points[1])
+            points = tuple([point1,point2])
+                
+        else:                                                            # scenario 2)
+            # Looping over each vertex of polygon 2 and finding the minimum distance to polygon 1.
+            point1_list = []
+            point2_list = []
+            dist_list = []
+            for point_coordinate in poly2.coords:
+                point2 = Point(point_coordinate)
+                d = poly1.project(point2)
+                point1 = poly1.interpolate(d)
+                dist = point1.distance(point2)
+                # track the parameters in a list
+                dist_list.append(dist)
+                point1_list.append(point1)
+                point2_list.append(point2)
 
-        point1_list = []
-        point2_list = []
-        dist_list = []
-        for point_coordinate in poly2.coords:
-            point2 = Point(point_coordinate)
-            d = poly1.project(point2)
-            point1 = poly1.interpolate(d)
-            dist = point1.distance(point2)
-            # track the paramters in a list
-            dist_list.append(dist)
-            point1_list.append(point1)
-            point2_list.append(point2)
-
-        # selecting only the points closest to each other
-        min_ix = np.where(dist_list ==np.min(dist_list))[0]
-        dist = dist_list[min_ix[0]]
-        points = tuple([point1_list[min_ix[0]], point2_list[min_ix[0]]])
-        print('intersect: min distance ' + str(dist) )
+            # selecting only the points closest to each other
+            min_ix = np.where(dist_list ==np.min(dist_list))[0]
+            dist = dist_list[min_ix[0]]
+            points = tuple([point1_list[min_ix[0]], point2_list[min_ix[0]]])
+            print('intersect: min distance ' + str(dist) )
 
     else:
-        if Poly1.intersection(Poly2).area > 0:
-            print("product overlap")
-            pdb.set_trace()
-
-        # leverage shapely distance function
-        dist = poly1.distance(poly2)
-
-        # track the coordinates of the closest points in geocoordinates
-        points = nearest_points(poly1,poly2)
-        point1 = np.array(points[0])
-        point2 = np.array(points[1])
-
-    #pdb.set_trace()
-
+        dist = 99999
+        print("Should not really occur often")
+        point1 =  np.zeros((1, 2))[0]
+        point2 =  np.zeros((1, 2))[0]
+        points = tuple([point1,point2])
+        
+        
     return dist, points
 
-def polygonizeConn(ccFile):
+
+
+def polygonizeConn(ccFile,minsize=6000):
     """
         Polygonize a connected component image.
         Ignores polygons for no-data value and connected component 0
         Takes a GDAL compatible file as input, and returns shaply polygons and a list of corresponding connected components
     """
 
+    # track the projection and geotransform
+    data =  gdal.Open(ccFile, gdal.GA_ReadOnly)
+    geoTrans = data.GetGeoTransform()
+    proj = data.GetProjection()
+    cols = data.RasterXSize
+    rows = data.RasterYSize
+    sizeData = [cols,rows]
+    data = None
+    
     # will save the geojson under a temp local filename
     tmfile = tempfile.NamedTemporaryFile(mode='w+b',suffix='.json', prefix='ConnPolygonize_', dir='.')
     outname = tmfile.name
@@ -1040,6 +1411,7 @@ def polygonizeConn(ccFile):
     del drv, dst_ds, dst_layer, dst_field, src_ds, srcband
     dt = json.load(open(outname))
     os.remove(outname)
+    print('...Done, loading polygons')
 
     # create a list of polygons and connected components asociated with them
     poly = []
@@ -1049,10 +1421,42 @@ def polygonizeConn(ccFile):
         # Connected component 0 is an actual data value, but not used for 2-stager and is removed here
         if ft['properties']['DN'] <= 0:
             continue
-        ccomp.append(ft['properties']['DN'])
         polygon_complete = shape(ft['geometry'])
-        # only take the outer shell of the polygon in consideration
-        poly.append(LinearRing(polygon_complete.exterior.coords))
+        
+        # Loop over the inner and outer shell and only keep polygons meeting min size requirement
+        # Also ensure polygon is a valid polygon.
+        polyExt = Polygon(polygon_complete.exterior.coords)
+        
+        
+        buffer_amount = 1/110/1000*90
+    
+    
+        polyExt = polyExt.simplify(buffer_amount*2, preserve_topology=True)
+    
+        if polyExt.area*110*110*1000*1000/90/90>minsize:
+            # check if the polygon is valid
+            if not polyExt.is_valid:
+                polyExt = polyExt.buffer(+buffer_amount)
+                print('modified outer')
+            else:
+                print('outer valid')
+
+            poly.append(LinearRing(polyExt.exterior))
+            ccomp.append(ft['properties']['DN'])
+
+        for inner in polygon_complete.interiors:
+            innerPoly = Polygon(inner)
+            innerPoly = innerPoly.simplify(buffer_amount*2, preserve_topology=True)
+
+            if innerPoly.area*110*110*1000*1000/90/90>minsize:
+                # check if the polygon is valid
+                if not innerPoly.is_valid:
+                    innerPoly = innerPoly.buffer(+buffer_amount)
+                    print('modified inner')
+                else:
+                    print('inner valid')
+                poly.append(LinearRing(innerPoly.exterior))
+                ccomp.append(ft['properties']['DN'])
 
     # Generate a list of line objects, with one list per connected component
     poly_unique = []
@@ -1065,15 +1469,6 @@ def polygonizeConn(ccFile):
         for it in index:
             polylist.append(poly[it])
         poly_unique.append(polylist)
-
-    # track the projection and geotransform
-    data =  gdal.Open(ccFile, gdal.GA_ReadOnly)
-    geoTrans = data.GetGeoTransform()
-    proj = data.GetProjection()
-    cols = data.RasterXSize
-    rows = data.RasterYSize
-    sizeData = [cols,rows]
-    data = None
 
     return poly_unique,ccomp_unique,geoTrans,proj,sizeData
 
@@ -1156,11 +1551,14 @@ def createConnComp_Int(inputs):
     # writing out the unqiue ID connected component file
     connDataName = os.path.abspath(os.path.join(saveDir,'connComp', saveNameID + '_connComp.tif'))
     write_ambiguity(connData,connDataName,connProj,connGeoTrans,connNoData)
-
+    cmd = "gdal_translate -of png -scale -ot Byte -q " + connDataName+ " " + os.path.abspath(os.path.join(saveDir,'connComp', saveNameID + '_connComp.png'))
+    os.system(cmd)
+    
     # writing out the integer map as tiff file
     intShiftName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_intShift.tif'))
     write_ambiguity(intShift,intShiftName,connProj,connGeoTrans)
-
+    cmd = "gdal_translate -of png -scale -ot Byte -q " + intShiftName+ " " + os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_intShift.png'))
+    os.system(cmd)
 
     # writing out the scalled vrt => 2PI * integer map
     length = intShift.shape[0]
@@ -1344,6 +1742,7 @@ def point2unwPhase(inputs):
     point = inputs[3].astype('float64')
     geoTrans = tuple(map(np.float64, inputs[4][1:-1].split(',')))
     region = int(inputs[5])
+    region=7
 
     # the region needs to be odd
     if region % 2 == 0:
@@ -1479,7 +1878,7 @@ def product_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, pro
     print('Name: %s'%unwrapper_2stage_name)
     print('Solver: %s'%solver_2stage)
 
-    '''
+
     # First, run the regular sticher, this will
     # (1) correct for range offset
     # (2) minimize the phase jump between adjacent product
@@ -1495,13 +1894,13 @@ def product_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, pro
     unw.setOutputFormat(outputFormat)
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
-    '''
-
-    # Second, run the 2stafger to minimizes phase jumps across connected component boundaries
+    
+    #pdb.set_trace()
+    # Second, run the 2stager to minimizes phase jumps across connected component boundaries
     unw = UnwrapComponents()
     unw._legacy_flag = True
-    unw.setInpFile(outFileUnw + "_intermediate")
-    unw.setConnCompFile(outFileConnComp + "_intermediate")
+    unw.setInpFile(os.path.abspath(outFileUnw + "_intermediate"))
+    unw.setConnCompFile(os.path.abspath(outFileConnComp + "_intermediate"))
     unw.setOutFileConnComp(outFileConnComp)
     unw.setOutFileUnw(outFileUnw)
     unw.setSolver(solver_2stage)
@@ -1511,5 +1910,4 @@ def product_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, pro
     unw.setBBoxFile(bbox_file)
     unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setVerboseMode(verbose)
-    pdb.set_trace()
     unw.unwrapComponents()
