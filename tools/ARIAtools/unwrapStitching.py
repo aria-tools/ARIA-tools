@@ -1516,6 +1516,8 @@ def createConnComp_Int(inputs):
     saveNameID = inputs['saveNameID']
     connFile = inputs['connFile']
     unwFile = inputs['unwFile']
+    print("connFile",connFile)
+    print("unwFile",unwFile)
     connCompMapping = inputs['connCompMapping']
 
     ## Generating the intermediate files
@@ -1530,12 +1532,15 @@ def createConnComp_Int(inputs):
     # i.e. num comp  + 1 = Nodata connected component which gets mapped to no-data value again
     NoDataMapping = len(connIDMapping)
     connIDMapping = np.append(connIDMapping, [connNoData])
+    print("connCompMapping",connCompMapping)
+    print("connIDMapping",connIDMapping)
 
     # setting up the connected component integer 2PI shift mapping
     intMapping = connCompMapping[:,2]
     # Will add the no-data to the mapping as well (such we can handle no-data region)
     # i.e. max comp ID + 1 = Nodata connected component which gets mapped to 0 integer shift such no-data region remains unaffected
     intMapping = np.append(intMapping, [0])
+    print("intMapping",intMapping)
 
     # update the connected component with the new no-data value used in the mapping
     connData[connData==connNoData]=NoDataMapping
@@ -1544,6 +1549,7 @@ def createConnComp_Int(inputs):
     # interger 2PI scaling mapping for unw phase
 
     intShift = intMapping[connData.astype('int')]
+    print("intShift",intShift)
     # connected component mapping to unique ID
     connData = connIDMapping[connData.astype('int')]
 
@@ -1885,6 +1891,135 @@ def product_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, pro
     unw = UnwrapOverlap()
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
+    unw.setOutFileConnComp(outFileConnComp + "_intermediate")
+    unw.setOutFileUnw(outFileUnw + "_intermediate")
+    unw.setProdBBoxFile(prod_bbox_files)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setVerboseMode(verbose)
+    unw.UnwrapOverlap()
+    
+    #pdb.set_trace()
+    # Second, run the 2stager to minimizes phase jumps across connected component boundaries
+    unw = UnwrapComponents()
+    unw._legacy_flag = True
+    unw.setInpFile(os.path.abspath(outFileUnw + "_intermediate"))
+    unw.setConnCompFile(os.path.abspath(outFileConnComp + "_intermediate"))
+    unw.setOutFileConnComp(outFileConnComp)
+    unw.setOutFileUnw(outFileUnw)
+    unw.setSolver(solver_2stage)
+    unw.setRedArcs(unwrapper_2stage_name)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setVerboseMode(verbose)
+    unw.unwrapComponents()
+
+def testproduct_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+    '''
+        Temporary function to manually assign homogeneous unw/concomp values between
+        2 halves of images.
+        Stitching of products using the two-stage unwrapper approach
+        i.e. minimize the discontinuities between connected components
+    '''
+
+    import pdb
+    
+    # The solver used in minimizing the stiching of products
+    if unwrapper_2stage_name is None:
+        unwrapper_2stage_name = 'REDARC0'
+
+    if solver_2stage is None:
+        # If unwrapper_2state_name is MCF then solver is ignored
+        # and relaxIV MCF solver is used by default
+        solver_2stage = 'pulp'
+
+    # report method to user
+    print('STITCH Settings: Connected component approach')
+    print('Name: %s'%unwrapper_2stage_name)
+    print('Solver: %s'%solver_2stage)
+
+    # check if the folder exist to which files are being generated.
+    if not os.path.isdir(os.path.dirname(os.path.abspath(outFileUnw))):
+        os.makedirs(os.path.dirname(os.path.abspath(outFileUnw)))
+    if not os.path.isdir(os.path.dirname(os.path.abspath(outFileConnComp))):
+        os.makedirs(os.path.dirname(os.path.abspath(outFileConnComp)))
+
+    # overwrite unw-files as simulations
+    sim_unw_files=[]
+    sim_conn_files=[]
+    for i in enumerate(unw_files):
+    # extracting phase data (1 band file is the target, so if you are using ENVI make sure to take the right band!)
+        file_unw=outFileUnw+'part%s_phase'%(str(i[0]))
+        # building the VRT
+        gdal.BuildVRT(file_unw +'.vrt', i[1])
+        gdal.Translate(file_unw, file_unw +'.vrt', options=gdal.TranslateOptions(format=outputFormat))
+        gdal.BuildVRT(file_unw +'.vrt', file_unw)
+        sim_unw_files.append(file_unw)
+        # extracting connected component data (1 band file is the target!)
+        file_conn=outFileConnComp+'part%s_connComp'%(str(i[0]))
+        gdal.BuildVRT(file_conn +'.vrt', conn_files[i[0]])
+        gdal.Translate(file_conn, file_conn +'.vrt', options=gdal.TranslateOptions(format=outputFormat))
+        gdal.BuildVRT(file_conn +'.vrt', file_conn)
+        sim_conn_files.append(file_conn)
+
+        #create simulations
+        # doing the phase     
+        data = gdal.Open(file_unw,gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        phase = data_band.ReadAsArray()
+        data = None
+
+        #get 0. phase indices
+        phase_0s=np.nonzero(phase==0.)
+
+        width=int(phase.shape[1]/2)
+        length=int(phase.shape[0]/2)
+
+        # doing the connected component
+        data = gdal.Open(file_conn,gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        connComp = data_band.ReadAsArray() 
+        data = None
+        #get 0/1 conncomp indices
+        connComp_0s=np.nonzero(connComp==0)
+        connComp_nodatas=np.nonzero(connComp==-1)
+
+        # manipulating the connected component
+        phase = phase*0.0+np.pi
+        phase[0:length,:] = phase[0:length,:]+(2+i[0])*np.pi
+        phase[length-1:,:] = phase[length-1:,:]+(-4+i[0])*np.pi
+        phase[phase_0s]=0.
+
+        connComp = connComp*0 + 1 
+        connComp[length-1:,:]  = connComp[length-1:,:] +1
+        connComp[connComp_0s]=0
+        connComp[connComp_nodatas]=-1
+        connComp = connComp.astype('int')
+
+        # writing put new phase 
+        ds=gdal.Open(file_unw,gdal.GA_Update)
+        ds.GetRasterBand(1).WriteArray(phase)
+        del ds
+
+        # writing out new conncomp 
+        ds=gdal.Open(file_conn,gdal.GA_Update)
+        ds.GetRasterBand(1).WriteArray(connComp)
+        del ds
+
+    # First, run the regular sticher, this will
+    # (1) correct for range offset
+    # (2) minimize the phase jump between adjacent product
+    unw = UnwrapOverlap()
+    #pass simulations instead of original unw/concomp files
+    #unw.setInpFile(unw_files)
+    #unw.setConnCompFile(conn_files)
+    #unw.setStitchMethod('2stage')
+    unw.setInpFile(sim_unw_files)
+    unw.setConnCompFile(sim_conn_files)
     unw.setOutFileConnComp(outFileConnComp + "_intermediate")
     unw.setOutFileUnw(outFileUnw + "_intermediate")
     unw.setProdBBoxFile(prod_bbox_files)

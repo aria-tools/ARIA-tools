@@ -1,0 +1,65 @@
+<imageFile>
+  <property name="WIDTH">
+    <value>3485</value>
+  </property>
+  <property name="LENGTH">
+    <value>4211</value>
+  </property>
+  <property name="NUMBER_BANDS">
+    <value>1</value>
+  </property>
+  <property name="DATA_TYPE">
+    <value>SHORT</value>
+  </property>
+  <property name="SCHEME">
+    <value>BIP</value>
+  </property>
+  <property name="BYTE_ORDER">
+    <value>l</value>
+  </property>
+  <property name="ACCESS_MODE">
+    <value>read</value>
+  </property>
+  <property name="FILE_NAME">
+    <value>20141210_20141023</value>
+  </property>
+  <component name="Coordinate1">
+    <factorymodule>isceobj.Image</factorymodule>
+    <factoryname>createCoordinate</factoryname>
+    <doc>First coordinate of a 2D image (witdh).</doc>
+    <property name="name">
+      <value>ImageCoordinate_name</value>
+    </property>
+    <property name="family">
+      <value>ImageCoordinate</value>
+    </property>
+    <property name="size">
+      <value>3485</value>
+    </property>
+    <property name="startingValue">
+      <value>38.9649</value>
+    </property>
+    <property name="delta">
+      <value>0.000833341</value>
+    </property>
+  </component>
+  <component name="Coordinate2">
+    <factorymodule>isceobj.Image</factorymodule>
+    <factoryname>createCoordinate</factoryname>
+    <property name="name">
+      <value>ImageCoordinate_name</value>
+    </property>
+    <property name="family">
+      <value>ImageCoordinate</value>
+    </property>
+    <property name="size">
+      <value>4211</value>
+    </property>
+    <property name="startingValue">
+      <value>14.4058</value>
+    </property>
+    <property name="delta">
+      <value>-0.000833417</value>
+    </property>
+  </component>
+</imageFile>
