@@ -411,6 +411,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, dem=Non
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
+                        print("unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw,outFileConnComp,mask,outputFormat,verbose",unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw,outFileConnComp,mask,outputFormat,verbose)
                         product_stitch_2stage(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
                         #product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp,mask=mask,outputFormat = outputFormat,verbose=verbose)
         prog_bar.close()
