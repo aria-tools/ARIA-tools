@@ -1948,6 +1948,7 @@ def testproduct_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file,
     if not os.path.isdir(os.path.dirname(os.path.abspath(outFileConnComp))):
         os.makedirs(os.path.dirname(os.path.abspath(outFileConnComp)))
 
+    '''
     # overwrite unw-files as simulations
     sim_unw_files=[]
     sim_conn_files=[]
@@ -2009,17 +2010,18 @@ def testproduct_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file,
         ds=gdal.Open(file_conn,gdal.GA_Update)
         ds.GetRasterBand(1).WriteArray(connComp)
         del ds
-
+    '''
     # First, run the regular sticher, this will
     # (1) correct for range offset
     # (2) minimize the phase jump between adjacent product
     unw = UnwrapOverlap()
     #pass simulations instead of original unw/concomp files
-    #unw.setInpFile(unw_files)
-    #unw.setConnCompFile(conn_files)
-    #unw.setStitchMethod('2stage')
+    unw.setInpFile(unw_files)
+    unw.setConnCompFile(conn_files)
+    '''
     unw.setInpFile(sim_unw_files)
     unw.setConnCompFile(sim_conn_files)
+    '''
     unw.setOutFileConnComp(outFileConnComp + "_intermediate")
     unw.setOutFileUnw(outFileUnw + "_intermediate")
     unw.setProdBBoxFile(prod_bbox_files)
