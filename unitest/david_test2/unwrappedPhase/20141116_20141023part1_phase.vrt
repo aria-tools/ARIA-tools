@@ -1,0 +1,15 @@
+<VRTDataset rasterXSize="3177" rasterYSize="2435">
+  <SRS dataAxisToSRSAxisMapping="2,1">GEOGCS["unknown",DATUM["unnamed",SPHEROID["Spheroid",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]</SRS>
+  <GeoTransform>  3.8886249999999997e+01,  8.3333333333333382e-04,  0.0000000000000000e+00,  1.2923750000000000e+01,  0.0000000000000000e+00, -8.3333333333333295e-04</GeoTransform>
+  <VRTRasterBand dataType="Float32" band="1">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">20141116_20141023part1_phase</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3177" RasterYSize="2435" DataType="Float32" BlockXSize="3177" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3177" ySize="2435" />
+      <DstRect xOff="0" yOff="0" xSize="3177" ySize="2435" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>

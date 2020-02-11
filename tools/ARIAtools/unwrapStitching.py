@@ -1516,6 +1516,8 @@ def createConnComp_Int(inputs):
     saveNameID = inputs['saveNameID']
     connFile = inputs['connFile']
     unwFile = inputs['unwFile']
+    print("connFile",connFile)
+    print("unwFile",unwFile)
     connCompMapping = inputs['connCompMapping']
 
     ## Generating the intermediate files
@@ -1530,12 +1532,15 @@ def createConnComp_Int(inputs):
     # i.e. num comp  + 1 = Nodata connected component which gets mapped to no-data value again
     NoDataMapping = len(connIDMapping)
     connIDMapping = np.append(connIDMapping, [connNoData])
+    print("connCompMapping",connCompMapping)
+    print("connIDMapping",connIDMapping)
 
     # setting up the connected component integer 2PI shift mapping
     intMapping = connCompMapping[:,2]
     # Will add the no-data to the mapping as well (such we can handle no-data region)
     # i.e. max comp ID + 1 = Nodata connected component which gets mapped to 0 integer shift such no-data region remains unaffected
     intMapping = np.append(intMapping, [0])
+    print("intMapping",intMapping)
 
     # update the connected component with the new no-data value used in the mapping
     connData[connData==connNoData]=NoDataMapping
@@ -1544,6 +1549,7 @@ def createConnComp_Int(inputs):
     # interger 2PI scaling mapping for unw phase
 
     intShift = intMapping[connData.astype('int')]
+    print("intShift",intShift)
     # connected component mapping to unique ID
     connData = connIDMapping[connData.astype('int')]
 
@@ -2005,7 +2011,6 @@ def testproduct_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file,
         ds.GetRasterBand(1).WriteArray(connComp)
         del ds
     '''
-
     # First, run the regular sticher, this will
     # (1) correct for range offset
     # (2) minimize the phase jump between adjacent product
