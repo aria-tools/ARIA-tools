@@ -1155,6 +1155,7 @@ class UnwrapComponents(Stitching):
         phaseunwrap = PhaseUnwrap(x=x, y=y, phase=phase, compNum=compNum, redArcs=redarcsTypes[self.redArcs])
         phaseunwrap.solve(self.solver)
         cycles = phaseunwrap.unwrapLP()
+        cycles = -1*np.array(cycles)
 
         # Map unique component to integer number of cycles
         compMap = self.__compToCycle__(cycles, compNum)
