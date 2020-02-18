@@ -17,7 +17,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage, testproduct_stitch_2stage
+from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
 def createParser():
     '''
