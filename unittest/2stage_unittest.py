@@ -1,128 +1,254 @@
 import os
 from osgeo import gdal
 
-from ARIAtools.unwrapStitching import testproduct_stitch_2stage
+from ARIAtools.unwrapStitching import product_stitch_2stage, product_stitch_overlap
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 from ARIAtools.extractProduct import merged_productbbox
 import numpy as np
-
-#set workdirectory and make directories
-workdir=os.path.abspath('unittest')
-os.mkdir(workdir)
-productworkdir=os.path.join(workdir,'products')
-os.mkdir(productworkdir)
-os.mkdir(os.path.join(workdir,'unwrappedPhase'))
-os.mkdir(os.path.join(workdir,'connectedComponents'))
-os.mkdir(os.path.join(workdir,'productBoundingBox'))
-
-#set some input variables
-croptounion=True
-outFileUnw=os.path.join(workdir,'unwrappedPhase/20141116_20141023')
-outFileConnComp=os.path.join(workdir,'connectedComponents/20141116_20141023')
-mask=None
-outputFormat='ISCE'
-verbose=True
-
-#get products
-os.chdir(productworkdir)
-os.system('wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2.nc')
-os.system('wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2.nc')
-os.system('wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141210_20141023-030745-14420N_12396N-PP-ec61-v2_0_2/S1-GUNW-D-R-079-tops-20141210_20141023-030745-14420N_12396N-PP-ec61-v2_0_2.nc')
-os.system('wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141210_20141023-030810-12923N_10895N-PP-477c-v2_0_2/S1-GUNW-D-R-079-tops-20141210_20141023-030810-12923N_10895N-PP-477c-v2_0_2.nc')
-os.chdir(workdir)
+import pdb
 
 
-#get more input variables
-unw_files=['S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2.nc','S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2.nc']
-unw_files=[os.path.join(productworkdir,i) for i in unw_files]
-conn_files=['NETCDF:"%s":/science/grids/data/connectedComponents'%(i) for i in unw_files]
-prod_bbox_files=['NETCDF:"%s":productBoundingBox'%(i) for i in unw_files]
-unw_files=['NETCDF:"%s":/science/grids/data/unwrappedPhase'%(i) for i in unw_files]
 
 
-#get bounding boxes
-#bounds=(38.9649142686367, 10.8963088229126, 41.8691085466474, 14.4058259783288)
-prods_TOTbbox=os.path.join(workdir, 'productBoundingBox/productBoundingBox.shp')
-# Initiate intersection file with first product
-# this is for different scenes
-save_shapefile(prods_TOTbbox, open_shapefile(prod_bbox_files[0], 'productBoundingBox', 1), 'GeoJSON')
-for scene in prod_bbox_files[1:]:
-    prods_bbox=open_shapefile(scene, 'productBoundingBox', 1)
-    total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
-    # Generate footprint for the union of all products
-    if croptounion:
-        prods_bbox=prods_bbox.union(total_bbox)
-    # Generate footprint for the common intersection of all products
-    else:
-        prods_bbox=prods_bbox.intersection(total_bbox)
-    # Check if there is any common overlap
-    if prods_bbox.bounds==():
-        raise Exception('No common overlap, footprint cannot be generated. Last scene checked: %s'%(scene['productBoundingBox'][0]))
-    save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
 
-bounds=open_shapefile(prods_TOTbbox, 0, 0).bounds
 
-# overwrite unw-files as simulations
-sim_unw_files=[]
-sim_conn_files=[]
-for i in enumerate(unw_files):
-# extracting phase data (1 band file is the target, so if you are using ENVI make sure to take the right band!)
-    file_unw=outFileUnw+'part%s_phase'%(str(i[0]))
-    # building the VRT
-    gdal.BuildVRT(file_unw +'.vrt', i[1])
-    gdal.Warp(file_unw, file_unw +'.vrt', options=gdal.WarpOptions(format=outputFormat))
-    gdal.BuildVRT(file_unw +'.vrt', file_unw)
-    sim_unw_files.append(file_unw)
-    # extracting connected component data (1 band file is the target!)
-    file_conn=outFileConnComp+'part%s_connComp'%(str(i[0]))
-    gdal.BuildVRT(file_conn +'.vrt', conn_files[i[0]])
-    gdal.Warp(file_conn, file_conn +'.vrt', options=gdal.WarpOptions(format=outputFormat))
-    gdal.BuildVRT(file_conn +'.vrt', file_conn)
-    sim_conn_files.append(file_conn)
 
-    #create simulations
-    # doing the phase     
-    data = gdal.Open(file_unw,gdal.GA_ReadOnly)
-    data_band = data.GetRasterBand(1)
-    phase = data_band.ReadAsArray()
-    data = None
+def mkdirs(dirlist):
+    '''
+        Checks if directory exists, if not creates them
+    '''
 
-    #get 0. phase indices
-    phase_0s=np.nonzero(phase==0.)
+    if not isinstance(dirlist, list):
+        dirlist = [dirlist]
+    for dir in dirlist:
+        if not os.path.exists(dir):
+            os.makedirs(dir)
 
-    width=int(phase.shape[1]/2)
-    length=int(phase.shape[0]/2)
 
-    # doing the connected component
-    data = gdal.Open(file_conn,gdal.GA_ReadOnly)
-    data_band = data.GetRasterBand(1)
-    connComp = data_band.ReadAsArray() 
-    data = None
-    #get 0/1 conncomp indices
-    connComp_0s=np.nonzero(connComp==0)
-    connComp_nodatas=np.nonzero(connComp==-1)
+def unitTest1(files,workdir='unittest1',croptounion='True',outputFormat='Envi',verbose=True):
+    
+    # selecting the files which will be used in the test
+    files = files[0:2]
 
-    # manipulating the connected component
-    phase = phase*0.0+np.pi
-    phase[0:length,:] = phase[0:length,:]+(2+i[0])*np.pi
-    phase[length-1:,:] = phase[length-1:,:]+(-4+i[0])*np.pi
-    phase[phase_0s]=0.
+    workdir = os.path.abspath(workdir)
+    curdir = os.path.abspath(os.path.curdir)
+    
+    # stage expected files
+    sim_conn_files,sim_unw_files,bounds,prods_TOTbbox,prod_bbox_files = stageExpectedFiles(files,workdir,croptounion)
+    
+    # overwrite unw-files and connected component file with specific simualtion for unit test 1.
+    for file_counter in range(len(sim_unw_files)):
+        # extracting phase data (1 band file is the target, so if you are using ENVI make sure to take the right band!)
+        
+        
+        #create simulations
+        # doing the phase
+        data = gdal.Open(sim_unw_files[file_counter],gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        phase = data_band.ReadAsArray()
+        data = None
+        
+        # get 0. phase indices
+        phase_0s=np.nonzero(phase==0.)
+        
+        width=int(phase.shape[1]/2)
+        length=int(phase.shape[0]/2)
+        
+        # doing the connected component
+        data = gdal.Open(sim_conn_files[file_counter],gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        connComp = data_band.ReadAsArray()
+        data = None
+        #get 0/1 conncomp indices
+        connComp_0s=np.nonzero(connComp==0)
+        connComp_nodatas=np.nonzero(connComp==-1)
+        
+        # manipulating the connected component
+        phase = phase*0.0+np.pi
+        phase[0:length,:] = phase[0:length,:]+(2+file_counter)*np.pi
+        phase[length-1:,:] = phase[length-1:,:]+(-4+file_counter)*np.pi
+        phase[phase_0s]=0.
+        
+        connComp = connComp*0 + 1
+        connComp[length-1:,:]  = connComp[length-1:,:] +1
+        connComp[connComp_0s]=0
+        connComp[connComp_nodatas]=-1
+        connComp = connComp.astype('int')
+        
+        
+        # writing put new phase
+        ds=gdal.Open(sim_unw_files[file_counter],gdal.GA_Update)
+        ds.GetRasterBand(1).WriteArray(phase)
+        del ds
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + sim_unw_files[file_counter] + " " + sim_unw_files[file_counter] + ".png"
+        os.system(cmd)
+        
+        
+        # writing out new conncomp
+        ds=gdal.Open(sim_conn_files[file_counter],gdal.GA_Update)
+        ds.GetRasterBand(1).WriteArray(connComp)
+        del ds
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + sim_conn_files[file_counter] + " " + sim_conn_files[file_counter] + ".png"
+        os.system(cmd)
+    
+    #run test
+    os.chdir(workdir)
+    product_stitch_2stage(sim_unw_files,sim_conn_files,prod_bbox_files,bounds,prods_TOTbbox,outFileUnw=os.path.join(workdir,'unwrap'),outFileConnComp=os.path.join(workdir,'conncomp'), mask=mask, outputFormat=outputFormat,verbose=verbose)
+    os.chdir(curdir)
 
-    connComp = connComp*0 + 1 
-    connComp[length-1:,:]  = connComp[length-1:,:] +1
-    connComp[connComp_0s]=0
-    connComp[connComp_nodatas]=-1
-    connComp = connComp.astype('int')
+    #print('testproduct_stitch_2stage(' + str(sim_unw_files) + ',' + str(sim_conn_files) + ',' + str(prod_bbox_files) + ',' + str(bounds) + ',' + str(prods_TOTbbox) + ', mask=' + str(mask) + ', outputFormat=' + str(outputFormat) + ',verbose=' + str(verbose) +')')
 
-    # writing put new phase 
-    ds=gdal.Open(file_unw,gdal.GA_Update)
-    ds.GetRasterBand(1).WriteArray(phase)
-    del ds
+def unitTest2(files,workdir='.',croptounion='True',outputFormat='Envi',verbose=True):
+    
+    testproduct_stitch_2stage(sim_unw_files,sim_conn_files,prod_bbox_files,bounds,prods_TOTbbox, mask=mask, outputFormat=outputFormat,verbose=verbose)
+    
+    print('testproduct_stitch_2stage(' + str(sim_unw_files) + ',' + str(sim_conn_files) + ',' + str(prod_bbox_files) + ',' + str(bounds) + ',' + str(prods_TOTbbox) + ', mask=' + str(mask) + ', outputFormat=' + str(outputFormat) + ',verbose=' + str(verbose) +')')
 
-    # writing out new conncomp 
-    ds=gdal.Open(file_conn,gdal.GA_Update)
-    ds.GetRasterBand(1).WriteArray(connComp)
-    del ds
 
-#run test
-testproduct_stitch_2stage(sim_unw_files,sim_conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw, outFileConnComp=outFileConnComp, mask=mask, outputFormat=outputFormat,verbose=verbose)
+def stageExpectedFiles(files,workdir='.',croptounion='True'):
+    '''
+        Normally ARIA tools class has been pre-run, this function will generate the necessery intermediate files
+    '''
+    
+    # generate the working directories
+    UnwDir=os.path.join(os.path.abspath(workdir),'unwrappedPhase')
+    ConnCompDir=os.path.join(os.path.abspath(workdir),'connectedComponents')
+    mkdirs([UnwDir,ConnCompDir])
+    
+    conn_files = []
+    prod_bbox_files = []
+    unw_files = []
+    file_counter = 0
+    for file in files:
+        # the datasets which needs to be extracted
+        conn_file_in = 'NETCDF:"%s":/science/grids/data/connectedComponents'%(file)
+        unw_file_in = 'NETCDF:"%s":/science/grids/data/unwrappedPhase'%(file)
+        prod_bbox_file_in ='NETCDF:"%s":productBoundingBox'%(file)
+        # staging names of output datasets
+        unw_file_out = os.path.join(UnwDir,'part_' + str(file_counter))
+        conn_file_out = os.path.join(ConnCompDir,'part_' + str(file_counter))
+
+        # staging unwrapped files
+        gdal.BuildVRT(unw_file_out +'.vrt', unw_file_in )
+        gdal.Warp(unw_file_out, unw_file_out +'.vrt', options=gdal.WarpOptions(format=outputFormat))
+        gdal.BuildVRT(unw_file_out +'.vrt', unw_file_out)
+        # staging connected component files
+        gdal.BuildVRT(conn_file_out +'.vrt', conn_file_in )
+        gdal.Warp(conn_file_out, conn_file_out +'.vrt', options=gdal.WarpOptions(format=outputFormat))
+        gdal.BuildVRT(conn_file_out +'.vrt', conn_file_out)
+        
+        # tracking the staged list
+        conn_files.append(conn_file_out)
+        unw_files.append(unw_file_out)
+        prod_bbox_files.append(prod_bbox_file_in)
+    
+        # increment the file counter
+        file_counter += 1
+    
+    
+    # get bounding boxes
+    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox','productBoundingBox.shp')
+    mkdirs(os.path.dirname(prods_TOTbbox))
+
+    # Initiate intersection file with first product
+    # this is for different scenes
+    save_shapefile(prods_TOTbbox, open_shapefile(prod_bbox_files[0], 'productBoundingBox', 1), 'GeoJSON')
+    for scene in prod_bbox_files[1:]:
+        prods_bbox=open_shapefile(scene, 'productBoundingBox', 1)
+        total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
+        # Generate footprint for the union of all products
+        if croptounion:
+            prods_bbox=prods_bbox.union(total_bbox)
+        # Generate footprint for the common intersection of all products
+        else:
+            prods_bbox=prods_bbox.intersection(total_bbox)
+        # Check if there is any common overlap
+        if prods_bbox.bounds==():
+            raise Exception('No common overlap, footprint cannot be generated. Last scene checked: %s'%(scene['productBoundingBox'][0]))
+        save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
+    
+    bounds=open_shapefile(prods_TOTbbox, 0, 0).bounds
+
+    return conn_files,unw_files,bounds,prods_TOTbbox, prod_bbox_files
+
+
+
+def downloadProducts(downloadFiles,downloadDir='.'):
+    '''
+        Download files if not-existent to the downloadDir location
+        Returns the files and their local path.
+    '''
+    
+    # Create downloadDir if needed
+    downloadDir = os.path.abspath(downloadDir)
+    mkdirs(downloadDir)
+    localDir = os.path.abspath(os.path.curdir)
+    
+    # create mapping of local download file name
+    localFiles=[]
+    for downloadFile in downloadFiles:
+        localFile = os.path.join(downloadDir,os.path.basename(downloadFile))
+        localFiles.append(localFile)
+    
+    for downloadFile in downloadFiles:
+        os.chdir(downloadDir)
+        if not os.path.exists(localFile):
+            os.system('wget ' + downloadFile)
+    os.chdir(localDir)
+
+    return localFiles
+
+
+
+
+
+
+
+
+if __name__ == '__main__':
+
+
+    #set workdirectory
+    workdir=os.path.abspath('unittestsStitching')
+    
+    # setting variables
+    croptounion=True
+    mask=None
+    outputFormat='ISCE'
+    verbose=True
+
+    # pre-staged files
+    downloadDate = ['20141116_20141023']
+    downloadFiles = ['https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2.nc',
+             'https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2.nc',
+             'https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141210_20141023-030745-14420N_12396N-PP-ec61-v2_0_2/S1-GUNW-D-R-079-tops-20141210_20141023-030745-14420N_12396N-PP-ec61-v2_0_2.nc',
+             'https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141210_20141023-030810-12923N_10895N-PP-477c-v2_0_2/S1-GUNW-D-R-079-tops-20141210_20141023-030810-12923N_10895N-PP-477c-v2_0_2.nc']
+
+
+    # download the data into a toplevel folder
+    localFiles = downloadProducts(downloadFiles,'products')
+    
+    # looping over all the different unitTests
+    unitTests = ['unitTest1()', 'unitTests2()']
+    if not isinstance(unitTests, list):
+        unitTests = [unitTests]
+
+
+    unitTest1(localFiles)
+
+    '''
+    for unitTest in unitTests:
+        # setting up the uwrapped and connected component directory that will be used for stitching
+        UnwDir=os.path.join(workdir,unitTest,'unwrappedPhase')
+        ConnCompDir=os.path.join(workdir,unitTest,'connectedComponents')
+        mkdirs([UnwDir,ConnCompDir])
+        
+        # setting up the inputs for the unit tests
+        input_dict = {}
+        input_dict['files']=localFiles
+        eval(unitTest,input_dict)
+    
+        pdb.set_trace()
+    '''
+    
+
