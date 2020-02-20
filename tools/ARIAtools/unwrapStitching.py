@@ -396,6 +396,15 @@ class UnwrapOverlap(Stitching):
                 unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
 
 
+
+                # Calculation of the range correction from the wrapped phases
+                unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
+                unwData1[(unwData1==unwNoData1)]=np.nan
+                unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
+                unwData2[(unwData2==unwNoData2)]=np.nan
+                range_temp =  np.angle(np.nanmean(np.exp(1j*(unwData1-unwData2))))
+
+                
                 # finding the component with the largest overlap
                 connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
                 connCompData1[(connCompData1==connCompNoData1) | (connCompData1==0)]=np.nan
@@ -414,40 +423,19 @@ class UnwrapOverlap(Stitching):
                             maxCount=keyCount
 
                 # if the max key count is 0, this means there is no good overlap region between products.
-                # In that scenario default to different stitching approach.
+                # In that scenario default to not attempt to correct the 2pi phase jump.
+                import pdb
                 if maxKey!=0 and maxCount>75:
                     # masking the unwrapped phase and only use the largest overlapping connected component
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     unwData1[(unwData1==unwNoData1) | (temp!=maxKey)]=np.nan
                     unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
                     unwData2[(unwData2==unwNoData2) | (temp!=maxKey)]=np.nan
-
-                    # Calculation of the range correction
-                    unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
-                    unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
-                    arr =unwData1_wrapped-unwData2_wrapped
-
-                    # data is not fully decorrelated
-                    arr = arr - np.round(arr/(2*np.pi))*2*np.pi
-                    range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
-
+                    
                     # calculation of the number of 2 pi cycles accounting for range correction
                     cycles_temp = np.round((np.nanmean(unwData1-(unwData2+range_temp)))/(2*np.pi))
 
                 else:
-                    # account for the case that no-data was left, e.g. fully decorrelated
-                    # in that scenario use all data and estimate from wrapped, histogram will be broader...
-                    unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
-                    unwData1[(unwData1==unwNoData1)]
-                    unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
-                    unwData2[(unwData2==unwNoData2)]
-                    # Calculation of the range correction
-                    unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
-                    unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
-                    arr =unwData1_wrapped-unwData2_wrapped
-                    arr = arr - np.round(arr/(2*np.pi))*2*np.pi
-                    range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
-
                     # data is decorelated assume no 2-pi cycles
                     cycles_temp = 0
 
@@ -1023,6 +1011,7 @@ class UnwrapComponents(Stitching):
         ## making sure the points are unique based on coordinate and unique connected compoenent id
         tablePoints_unique, unique_indices = np.unique(tablePoints[:, (0,4,5) ], axis=0,return_index=True)
         self.tablePoints =tablePoints[unique_indices[:],:]
+        
 
         # compute the phase values
         print('Calculating the phase values for ' + str(self.tablePoints.shape[0]) + ' points')
@@ -1151,18 +1140,22 @@ class UnwrapComponents(Stitching):
         phase = (self.tablePoints[:,5].astype(np.float32))
         compNum = list(self.tablePoints[:,0].astype(np.int))
         
-        #pdb.set_trace()
-        phaseunwrap = PhaseUnwrap(x=x, y=y, phase=phase, compNum=compNum, redArcs=redarcsTypes[self.redArcs])
-        phaseunwrap.solve(self.solver)
-        cycles = phaseunwrap.unwrapLP()
-        cycles = -1*np.array(cycles)
-
+        if len(x)>4:
+            phaseunwrap = PhaseUnwrap(x=x, y=y, phase=phase, compNum=compNum, redArcs=redarcsTypes[self.redArcs])
+            phaseunwrap.solve(self.solver)
+            cycles = phaseunwrap.unwrapLP()
+            cycles = -1*np.array(cycles)
+    
+        else:
+            print('Not Enough points to perform a triangulation')
+            cycles = [0]
+            compNum = [0]
+        
         # Map unique component to integer number of cycles
         compMap = self.__compToCycle__(cycles, compNum)
-        
+
         # Generate a mapping function for all connected components
         # get maximum count from the original connected component file
-        n_comp = 20
         ccDataFile = gdal.Open(self.ccFile[0])
         n_comp = int(ccDataFile.GetRasterBand(1).GetStatistics(0,1)[1])
         ccDataFile = None
