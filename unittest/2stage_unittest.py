@@ -186,6 +186,93 @@ def unitTest1(files,workdir='unittest1',croptounion='True',outputFormat='Envi',v
     #print('testproduct_stitch_2stage(' + str(sim_unw_files) + ',' + str(sim_conn_files) + ',' + str(prod_bbox_files) + ',' + str(bounds) + ',' + str(prods_TOTbbox) + ', mask=' + str(mask) + ', outputFormat=' + str(outputFormat) + ',verbose=' + str(verbose) +')')
 
 
+def unitTest2(files,workdir='unittest2',croptounion='True',outputFormat='Envi',verbose=True):
+    
+    # selecting the files which will be used in the test
+    files = files[0:2]
+    
+    workdir = os.path.abspath(workdir)
+    curdir = os.path.abspath(os.path.curdir)
+    
+    # stage expected files
+    sim_conn_files,sim_unw_files,bounds,prods_TOTbbox,prod_bbox_files = stageExpectedFiles(files,workdir,croptounion)
+    
+    # overwrite unw-files and connected component file with specific simualtion for unit test 1.
+    for file_counter in range(len(sim_unw_files)):
+        # extracting phase data (1 band file is the target, so if you are using ENVI make sure to take the right band!)
+        
+        
+        #create simulations
+        # doing the phase
+        data = gdal.Open(sim_unw_files[file_counter],gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        phase = data_band.ReadAsArray()
+        data = None
+        
+        # get 0. phase indices
+        phase_0s=np.nonzero(phase==0.)
+        
+        width=int(phase.shape[1]/2)
+        length=int(phase.shape[0]/2)
+        
+        # doing the connected component
+        data = gdal.Open(sim_conn_files[file_counter],gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        connComp = data_band.ReadAsArray()
+        data = None
+        #get 0/1 conncomp indices
+        connComp_0s=np.nonzero(connComp==0)
+        connComp_nodatas=np.nonzero(connComp==-1)
+        
+        # manipulating the connected component
+        range_offsets = [np.pi ,-0.1, 0 ,0.2]        # radians
+        
+        
+        phase = phase*0.0+range_offsets[file_counter]
+        phase[0:length,:] = 2*np.pi +range_offsets[file_counter]
+        phase[length-1:,:] = -4*np.pi +range_offsets[file_counter]
+        phase[np.int(length/3):np.int(length/3)+600,np.int(width/3):np.int(width/3)+600] = 6*np.pi +range_offsets[file_counter]
+        phase[np.int(2*length/3):length,np.int(2*width/3):width] = -12*np.pi+range_offsets[file_counter]
+        phase[np.int(length*5/3):2*np.int(length),np.int(width*5/3):2*np.int(width) ] = -2*np.pi+range_offsets[file_counter]
+        
+        phase_noise_degrees= 90
+        phase = phase + np.random.randn(phase.shape[0],phase.shape[1])*phase_noise_degrees*2*np.pi/360
+        phase[phase_0s]=0
+        
+        connComp = connComp*0 + 1
+        connComp[length-1:,:]  = 2
+        connComp[np.int(length/3):np.int(length/3)+600,np.int(width/3):np.int(width/3)+600] = 3
+        connComp[np.int(2*length/3):length,np.int(2*width/3):width] =  4
+        connComp[np.int(length*5/3):2*np.int(length),np.int(width*5/3):2*np.int(width) ] = 5
+        
+        connComp[connComp_0s]=0
+        connComp[connComp_nodatas]=-1
+        connComp = connComp.astype('int')
+        
+        
+        # writing put new phase
+        ds=gdal.Open(sim_unw_files[file_counter],gdal.GA_Update)
+        ds.GetRasterBand(1).WriteArray(phase)
+        del ds
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + sim_unw_files[file_counter] + " " + sim_unw_files[file_counter] + ".png"
+        os.system(cmd)
+        
+        
+        # writing out new conncomp
+        ds=gdal.Open(sim_conn_files[file_counter],gdal.GA_Update)
+        ds.GetRasterBand(1).WriteArray(connComp)
+        del ds
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + sim_conn_files[file_counter] + " " + sim_conn_files[file_counter] + ".png"
+        os.system(cmd)
+    
+    #run test
+    os.chdir(workdir)
+    product_stitch_2stage(sim_unw_files,sim_conn_files,prod_bbox_files,bounds,prods_TOTbbox,outFileUnw=os.path.join(workdir,'unwrap'),outFileConnComp=os.path.join(workdir,'conncomp'), mask=mask, outputFormat=outputFormat,verbose=verbose)
+    os.chdir(curdir)
+
+#print('testproduct_stitch_2stage(' + str(sim_unw_files) + ',' + str(sim_conn_files) + ',' + str(prod_bbox_files) + ',' + str(bounds) + ',' + str(prods_TOTbbox) + ', mask=' + str(mask) + ', outputFormat=' + str(outputFormat) + ',verbose=' + str(verbose) +')')
+
+
 
 def stageExpectedFiles(files,workdir='.',croptounion='True'):
     '''
@@ -316,8 +403,10 @@ if __name__ == '__main__':
         unitTests = [unitTests]
 
 
-    unitTest0(localFiles)
-    unitTest1(localFiles)
+    unitTest2(localFiles)
+    #unitTest1(localFiles)
+    #    unitTest2(localFiles)
+
     '''
     for unitTest in unitTests:
         # setting up the uwrapped and connected component directory that will be used for stitching
