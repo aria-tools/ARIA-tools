@@ -1,0 +1,22 @@
+var NAVTREEINDEX2 =
+{
+"group__ZIB__MACROS.html":[1,4],
+"group__ZIB__MACROS.html#ga154a3667a09a1ae51a40b3df801f560b":[1,4,2],
+"group__ZIB__MACROS.html#ga154a3667a09a1ae51a40b3df801f560b":[4,0,6,1],
+"group__ZIB__MACROS.html#gab5246c28170b575137f3260e9c5b8c0b":[4,0,6,0],
+"group__ZIB__MACROS.html#gab5246c28170b575137f3260e9c5b8c0b":[1,4,1],
+"hierarchy.html":[3,1],
+"index.html":[],
+"index.html":[0],
+"index.html#The":[0,0],
+"index.html#contents":[0,0,2],
+"index.html#intro":[0,0,0],
+"index.html#license":[0,0,1],
+"modules.html":[1],
+"namespaceOPTtypes__di__unipi__it.html":[2,0,0],
+"namespaceOPTtypes__di__unipi__it.html":[3,0,0],
+"namespacemembers.html":[2,1,0],
+"namespacemembers_func.html":[2,1,1],
+"namespaces.html":[2,0],
+"pages.html":[]
+};

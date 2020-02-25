@@ -1,0 +1,53 @@
+##############################################################################
+############################### makefile-inc #################################
+##############################################################################
+#                                                                            #
+#   makefile of libMCFCl as a pre-built library                              #
+#                                                                            #
+#   Input:  $(libMCFClDIR) = the directory where the libMCFCl source is      #
+#                                                                            #
+#   Output: accordingly, there is no in output, since there is no need to    #
+#           check for changes in the .h and rebuild the .o / .a. Also, the   #
+#           *OBJ is just the library                                         #
+#           $(libMCFClINC) = the -I$(include directories) for libMCFCl       #
+#           $(libMCFClLIB) = external libreries + -L<libdirs> for libMCFCl   #
+#           $(libMCFClOBJ) = the libMCFCl library itself                     #
+#                                                                            #
+#   Indeed, the makefile only calls makefile-c and strips away the *H and    #  
+#   *OBJ macros. This is not even necessary, it is only made for clarity.    #
+#                                                                            #
+#                                VERSION 1.00                                #
+#                               13 - 11 - 2018                               #
+#                                                                            #
+#                              Antonio Frangioni                             #
+#                          Operations Research Group                         #
+#                         Dipartimento di Informatica                        #
+#                             Universita' di Pisa                            #
+#									     #
+##############################################################################
+
+# include the libMCFCl makefile internally defining all external modules - - - -
+
+include $(libMCFClDIR)lib/makefile-c
+
+# re-define the OBJ as the library- - - - - - - - - - - - - - - - - - - - - -
+
+libMCFClOBJ = $(libMCFClDIR)lib/libMCFCl.a
+
+# ensure that the library is properly constructed - - - - - - - - - - - - - -
+# force the make to be always executed
+
+$(libMCFClOBJ): FORCE
+	make -f $(libMCFClDIR)lib/makefile-lib libMCFClDIR=$(libMCFClDIR)
+FORCE:
+
+# clean-up unrequired things- - - - - - - - - - - - - - - - - - - - - - - - -
+
+libMCFClH =
+
+# clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+clean::
+	make -f $(libMCFClDIR)lib/makefile-lib clean libMCFClDIR=$(libMCFClDIR) 
+
+########################## End of makefile-inc ###############################

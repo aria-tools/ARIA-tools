@@ -1,0 +1,40 @@
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+#
+# MCFZIB configuration file
+#
+# Current version: 1.0, 02/01/2010
+#
+# Authors: Alessandro Bertolini, Antonio Frangioni
+#
+# This file allows to set some important parameters for the MCFSimplex solver.
+# The set of parameteres is divided in two parts: those of the base class
+# MCFClass (described by the enum MCFClass::MCFParam in MCFClass.h) and
+# those of the derived class in MCFSimplex (described by enum
+# MCFSimplex::SimplexParam in MCFSimplex.h).
+#
+# The configuration file is divided in two parts: an integer parameters region
+# and a float parameters region. Each region has the following form:
+#
+# < number of parameters > = n
+# < parameter 1 code >
+# < parameter 1 value > 
+#     ...
+# < parameter n code >
+# < parameter n value > 
+#
+# Initial blanks on each line are ignored. Lines starting with '#' (like these
+# ones) are comment lines and are ignored. Only the first value of each line
+# is read; all other characters are ignored, hence can be used fof comments.
+#
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+# first part: int parameters - - - - - - - - - - - - - - - - - - - - - - - - - -
+1     # Number of int parameters
+1     # MCFClass::kMaxIter: max number of possible iterations
+0     # Value of kMaxIter: '0' means no iteration limit
+# second part: float parameters - - - - - - - - - - - - - - - - - - - - - - - -
+1     # Number of float parameters
+0     # MCFClass::kMaxTime: max time for the solver to find the solution
+0     # Value of kMaxTime: '0' means no time limit
+#-------------------------------------------------------------------------------

@@ -1,0 +1,54 @@
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+#
+# MCFSimplex configuration file
+#
+# Current version: 1.0, 02/01/2010
+#
+# Authors: Alessandro Bertolini, Antonio Frangioni
+#
+# This file allows to set some important parameters for the MCFSimplex solver.
+# The set of parameteres is divided in two parts: those of the base class
+# MCFClass (described by the enum MCFClass::MCFParam in MCFClass.h) and
+# those of the derived class in MCFSimplex (described by enum
+# MCFSimplex::SimplexParam in MCFSimplex.h).
+#
+# The configuration file is divided in two parts: an integer parameters region
+# and a float parameters region. Each region has the following form:
+#
+# < number of parameters > = n
+# < parameter 1 code >
+# < parameter 1 value > 
+#     ...
+# < parameter n code >
+# < parameter n value > 
+#
+# Initial blanks on each line are ignored. Lines starting with '#' (like these
+# ones) are comment lines and are ignored. Only the first value of each line
+# is read; all other characters are ignored, hence can be used fof comments.
+#
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+# first part: int parameters - - - - - - - - - - - - - - - - - - - - - - - - - -
+6     # Number of int parameters
+6     # MCFSimplex::kAlgPrimal: choice of Primal or Dual Simplex
+1     # Value of kAlgPrimal: Primal Simplex
+7     # MCFSimplex::kAlgPricing: choice of pricing method
+2     # Value of kAlgPricing: Candidate List Pivot
+8     # MCFSimplex::kNumCandList (if kAlgPricing == 2): number of candidate list 
+30    # Value of kNumCandList
+9     # MCFSimplex::kHotListSize (if kAlgPricing == 2): size of hot list
+5     # Value of kHotListSize
+1     # MCFClass::kMaxIter: max number of possible iterations
+0     # Value of kMaxIter: '0' means no iteration limit
+10    # MCFSimplex::kRecomputeFOLimits (only for the quadratic case): number
+      # of iterations after which the Primal Simplex recomputes the o.f. value
+100   # Value for kRecomputeFOLimits 
+# second part: float parameters - - - - - - - - - - - - - - - - - - - - - - - -
+2     # Number of float parameters
+11    # MCFSimplex::kEpsOpt (only in the quadratic case):
+      # the precision of the objective function value
+1e-13 # Value of kEpsOpt
+0     # MCFClass::kMaxTime: max time for the solver to find the solution
+0     # Value of kMaxTime: '0' means no time limit
+#-------------------------------------------------------------------------------

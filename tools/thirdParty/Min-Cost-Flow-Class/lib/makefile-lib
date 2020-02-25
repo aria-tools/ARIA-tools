@@ -1,0 +1,76 @@
+##############################################################################
+############################## makefile-lib ##################################
+##############################################################################
+#                                                                            #
+#   makefile of libSMS++ - frontend for building the library                 #
+#                                                                            #
+#   Input:  $(libMCFClDIR) = the directory where the core SMS++ source is    #
+#           If the variable is not defined, "../" is used since it is        #
+#           assumed that the makefile is ran in the lib/ sub-folder.         #
+#                                                                            #
+#   Output: none, just the library being built                               #
+#                                                                            #
+#                                VERSION 1.00                                #
+#                               12 - 11 - 2018                               #
+#                                                                            #
+#                              Implementation by:                            #
+#                                                                            #
+#                              Antonio Frangioni                             #
+#                           Operations Research Group                        #
+#                          Dipartimento di Informatica                       #
+#                              Universita' di Pisa                           #
+#                                                                            #
+##############################################################################
+
+ifndef libMCFClDIR
+libMCFClDIR = ../
+endif
+
+# module name
+NAME = $(libMCFClDIR)lib/libMCFCl.a
+
+# debug switches
+SW = -g -std=c++14
+# production switches
+#SW = -O3 -DNDEBUG -std=c++11
+
+# compiler
+CC = clang++
+
+# default target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+default: $(NAME)
+
+# build = default - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+build: $(NAME)
+
+# clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+clean::
+	rm -f $(NAME)
+
+# install - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+install:
+	mv $(NAME) $(libMCFClDIR)../lib
+	cp $(libMCFClH) $(libMCFClDIR)../include
+
+# define & include the necessary modules- - - - - - - - - - - - - - - - - - -
+# if a module is not used in the current configuration, just comment out the
+# corresponding include line
+# each module outputs some macros to be used here:
+# *OBJ is the final object(s) / library
+# *LIB is the external libreries + -L<libdirs>
+# *H   is the list of all include files
+# *INC is the -I<include directories>
+
+# libMCFCl (complete with external libraries)
+include $(libMCFClDIR)lib/makefile-c
+
+# archive the library - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+$(NAME): $(libMCFClOBJ)
+	ar -ruv $(NAME) $(libMCFClOBJ)
+
+########################## End of makefile-lib ###############################

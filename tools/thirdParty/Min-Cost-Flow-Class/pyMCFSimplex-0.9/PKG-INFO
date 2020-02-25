@@ -1,0 +1,15 @@
+Metadata-Version: 1.0
+Name: pyMCFSimplex
+Version: 0.9
+Summary: pyMCFSimplex is a Python Wrapper for MCFSimplex
+Home-page: http:\\www.sommer-forst.de\blog
+Author: G#.Blog - Johannes Sommer
+Author-email: info@sommer-forst.de
+License: LGPL 2.1
+Description: 
+        pyMCFSimplex is a Python Wrapper for the Minimum Cost Flow Problem Solver 
+        'MCFSimplex' coded and maintained at the 
+        Operations Research Group of the University of Pisa.
+        
+Platform: win32
+Platform: linux-x86_64

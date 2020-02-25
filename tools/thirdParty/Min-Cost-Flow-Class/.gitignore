@@ -1,0 +1,12 @@
+CS2
+MCFZIB
+**/*~
+**/*.o
+**/*.a
+**/.DS_Store
+**/*.dSYM
+.DS_Store
+*.sw[oprst]
+????-*.patch
+/TAGS
+XCode/

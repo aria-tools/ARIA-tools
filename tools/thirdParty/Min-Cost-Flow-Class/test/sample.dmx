@@ -1,0 +1,27 @@
+c this is a sample file for a tiny network in DIMACS standard fromat
+c every line beginning with 'c' is a comment and it is ignored
+c
+c the first non-comment line has to be the unique 'p' line in the file;
+c on this line there must be the problem type (which is ignored in the
+c sample Main), a three-char string, and the number of nodes and arcs
+c
+p min 4 4
+c
+c after the 'p' line there must be at most <number of nodes> lines starting
+c with 'n' and containing a node name `i' and the supply of node i; note
+c that node names go from 1 to <number of nodes>; nodes which are given no
+c supply are assigned a default supply 0
+c
+n 1 3
+n 4 -3
+c
+c other than 'n' lines, there can be 'a' lines which describe arcs: the
+c description of an arc is composed of the starting and ending node, the
+c lower and upper bound on the flow and the cost of the flow, and there
+c *must* be *exactly* <number of arcs> 'a' lines; although in this example
+c arc and node lines are separate, in general they can be mixed
+c
+a 1 2 0 2 3
+a 2 3 0 2 1
+a 3 4 0 2 1
+a 1 4 0 2 2
