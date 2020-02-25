@@ -20,7 +20,7 @@ from datetime import datetime
 
 def createParser():
     """ Download a bulk download script and execute it """
-    parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add “ARIA Product Search” to their URS approved applications.',
+    parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add "ARIA Product Search" to their URS approved applications.',
                                      epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", and "Kmz" are currently supported.')
