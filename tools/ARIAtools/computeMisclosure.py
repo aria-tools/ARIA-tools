@@ -169,7 +169,7 @@ def loadARIA(inps):
         pairLabel=fname.split('.')[0] # remove extension
         pair=pairLabel.split('_')[::-1] # reverse for older-younger
         data.pairLabels.append(pairLabel)
-        data.pairs.append(pairName)
+        data.pairs.append(pair)
 
     # Convert IFG list to array
     data.ifgs=np.array(data.ifgs)
@@ -468,6 +468,8 @@ class dataSet:
     # Plot cumulative misclosure
     def plotMisclosure(self,inps):
         ## Plot cumulative misclosure
+        self.cumMiscTitle='Cumulative misclosure ({} triplets)'.format(self.nTriplets)
+
         # Prep image by masking background and determining percentiles
         if self.verbose == True: print('Plotting cumulative misclosure')
         self.cumMiscFig=plt.figure(); self.cumMiscAx=self.cumMiscFig.add_subplot(111)
@@ -475,13 +477,15 @@ class dataSet:
         self.cumMiscStats=self.imgMinMax(self.cumMisclosure,[inps.pctMinClip,inps.pctMaxClip])
 
         # Plot cumulative misclosure
-        cax=self.miscMapPlot(self.cumMiscFig,self.cumMiscAx,self.cumMisclosure,title=None,
+        cax=self.miscMapPlot(self.cumMiscFig,self.cumMiscAx,self.cumMisclosure,title=self.cumMiscTitle,
             cmap='plasma',minVal=self.cumMiscStats['min'],maxVal=self.cumMiscStats['max'])
         cbar=self.cumMiscFig.colorbar(cax,orientation='horizontal')
         cbar.set_label('radians')
 
 
         ## Plot cumulative absolute misclosure
+        self.cumAbsMiscTitle='Cumulative misclosure ({} triplets)'.format(self.nTriplets)
+
         # Prep image by masking background and determining percentiles
         if self.verbose == True: print('Plotting cumulative absolute misclosure')
         self.cumAbsMiscFig=plt.figure(); self.cumAbsMiscAx=self.cumAbsMiscFig.add_subplot(111)
@@ -489,7 +493,7 @@ class dataSet:
         self.cumAbsMiscStats=self.imgMinMax(self.cumAbsMisclosure,[0,inps.pctMaxClip])
 
         # Plot cumulative absolute misclosure
-        cax=self.miscMapPlot(self.cumAbsMiscFig,self.cumAbsMiscAx,self.cumMisclosure,title=None,
+        cax=self.miscMapPlot(self.cumAbsMiscFig,self.cumAbsMiscAx,self.cumAbsMisclosure,title=self.cumAbsMiscTitle,
             cmap='plasma',minVal=self.cumAbsMiscStats['min'],maxVal=self.cumAbsMiscStats['max'])
         cbar=self.cumAbsMiscFig.colorbar(cax,orientation='horizontal')
         cbar.set_label('radians')
@@ -521,12 +525,12 @@ class dataSet:
 
         # Plot query points on maps
         self.cumMiscAx.cla()
-        self.miscMapPlot(self.cumMiscFig,self.cumMiscAx,self.cumMisclosure,title=None,
+        self.miscMapPlot(self.cumMiscFig,self.cumMiscAx,self.cumMisclosure,title=self.cumMiscTitle,
             cmap='plasma',minVal=self.cumMiscStats['min'],maxVal=self.cumMiscStats['max'])
         self.cumMiscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
         self.cumAbsMiscAx.cla()
-        self.miscMapPlot(self.cumAbsMiscFig,self.cumAbsMiscAx,self.cumAbsMisclosure,title=None,
+        self.miscMapPlot(self.cumAbsMiscFig,self.cumAbsMiscAx,self.cumAbsMisclosure,title=self.cumAbsMiscTitle,
             cmap='plasma',minVal=self.cumAbsMiscStats['min'],maxVal=self.cumAbsMiscStats['max'])
         self.cumAbsMiscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
