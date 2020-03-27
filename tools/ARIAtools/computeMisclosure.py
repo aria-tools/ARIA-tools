@@ -18,7 +18,9 @@ from datetime import datetime
 
 ### PARSER ---
 Description='''Compute the cumulative misclosure of phase triplets based on a set of interferograms saved in the MintPy HDF5 data stucture.
-This program assumes that all files are coregistered and cover the same area.
+This program assumes that all files are cover the same area in space, with the same spatial resolution. During triplet computation,
+values at a reference point are removed from the interferograms prior to misclosure computation to account for abiguities in 
+the unwrapped phase that might arise during pairwise computation.
 
 The code works by reading in a list of triplets and their date pairs, and from those:
 
