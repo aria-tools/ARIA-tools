@@ -39,7 +39,7 @@ Examples='''EXAMPLES
 computeCumMisclosure.py ifgramStack.h5 --exclude-pairs 20190103_20190115 20160530_20170724 20160530_20170618 20160530_20170606 20160530_20160810 -refX 38 -refY 212
 
 [from an ARIA-tools "unwrappedPhase" directory]
-computeCumMisclosure.py '2017.vrt' -refX 40 -refY 220 --plot-pairs
+computeCumMisclosure.py '*.vrt' -refX 40 -refY 220 --plot-pairs
 
 [from an ISCE stack "merged/interferograms" directory]
 computeCumMisclosure.py '*' --print-files
