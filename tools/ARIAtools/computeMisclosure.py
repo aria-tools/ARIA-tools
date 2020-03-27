@@ -36,13 +36,13 @@ Once the (absolute) misclosure is calculated, the user can view the time history
 
 Examples='''EXAMPLES
 [from a MintPy "inputs" directory]
-computeCumMisclosure.py ifgramStack.h5 --exclude-pairs 20190103_20190115 20160530_20170724 20160530_20170618 20160530_20170606 20160530_20160810 -refX 38 -refY 212
+ariaMisclosure.py ifgramStack.h5 --exclude-pairs 20190103_20190115 20160530_20170724 20160530_20170618 20160530_20170606 20160530_20160810 -refX 38 -refY 212
 
 [from an ARIA-tools "unwrappedPhase" directory]
-computeCumMisclosure.py '*.vrt' -refX 40 -refY 220 --plot-pairs
+ariaMisclosure.py '*.vrt' -refX 40 -refY 220
 
 [from an ISCE stack "merged/interferograms" directory]
-computeCumMisclosure.py '*' --print-files
+ariaMisclosure.py '*' --print-triplets
 '''
 
 def createParser():
