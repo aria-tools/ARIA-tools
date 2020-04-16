@@ -10,6 +10,7 @@
 
 import os
 import os.path as op
+import shutil
 import math
 import re
 import json
@@ -23,7 +24,7 @@ def createParser():
     parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add "ARIA Product Search" to their URS approved applications.',
                                      epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", and "Kmz" are currently supported.')
+    parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", "Url" and "Kmz" are currently supported. Use "Url" for ingestion to aria*.py')
     parser.add_argument('-t', '--track', dest='track', default=None, type=str, help='track to download; single number (including leading zeros) or comma separated')
     parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str, help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON geometry.')
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
@@ -47,11 +48,10 @@ def cmdLineParse(iargs=None):
     if not inps.track and not inps.bbox:
         raise Exception('Must specify either a bbox or track')
 
-    if not inps.output.lower() in ['count', 'kml', 'kmz', 'download']:
+    if not inps.output.lower() in ['count', 'kml', 'kmz', 'url', 'download']:
         raise Exception ('Incorrect output keyword. Choose "count", "kmz", or "download"')
 
-    if inps.output.lower() == 'kmz': inps.output = 'Kml'
-
+    inps.output = 'Kml' if inps.output.lower() == 'kmz' else inps.output.title()
     return inps
 
 class Downloader(object):
@@ -62,12 +62,12 @@ class Downloader(object):
         self.url_base    = 'https://api.daac.asf.alaska.edu/services/search/param?'
 
     def __call__(self):
-        url       = self.form_url()
-        dict_prod = self.parse_json(url)
-        script = requests.post('{}&output={}'.format(self.url_base,
+        url              = self.form_url()
+        dict_prod, urls  = self.parse_json(url)
+        script           = requests.post('{}&output={}'.format(self.url_base,
                                         self.inps.output), data=dict_prod).text
         if self.inps.output == 'Count':
-            print ('\nFound -- {} -- products'.format(script.strip()))
+            print ('\nFound -- {} -- products'.format(len(urls)))
 
         elif self.inps.output == 'Kml':
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
@@ -75,25 +75,30 @@ class Downloader(object):
             print (script, file=open(dst, 'w'))
             print ('Wrote .KMZ to:\n\t {}'.format(dst))
 
+        elif self.inps.output == 'Url':
+            if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
+            dst = self._fmt_dst()
+            with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) for url in urls]
+            print ('Wrote -- {} -- product urls to: {}'.format(len(urls), dst))
+
         elif self.inps.output == 'Download':
-            import sys
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
             os.chdir(self.inps.wd)
             os.sys.argv = []
             fileName = os.path.abspath(os.path.join(self.inps.wd,'ASFDataDload.py'))
-            f = open(fileName, 'w')
-            f.write(script)
-            f.close()
-            sys.path.append(os.path.abspath(self.inps.wd))
+            with open(fileName, 'w') as fh:
+                f.write(script)
+
+            os.sys.path.append(os.path.abspath(self.inps.wd))
             import ASFDataDload as AD
             downloader = AD.bulk_downloader()
             downloader.download_files()
             downloader.print_summary()
             # Delete temporary files
-            import shutil
             shutil.rmtree(os.path.abspath(os.path.join(self.inps.wd,'__pycache__')))
             os.remove(fileName)
-        return
+
+        return urls
 
     def form_url(self):
         url = '{}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'.format(self.url_base)
@@ -113,7 +118,7 @@ class Downloader(object):
         if len(j) == 0:
             raise Exception('No products found with given url; check inputs for errors.')
 
-        prod_ids = []
+        prod_ids = []; dl_urls = []
         i=0
         for prod in j:
             if 'layer' in prod['downloadUrl']: continue
@@ -137,14 +142,15 @@ class Downloader(object):
                 if self.inps.daysgt and not (elap > self.inps.daysgt): continue
                 if self.inps.dayslt and not (elap < self.inps.dayslt): continue
 
-            prod_ids.append(FileId)
+            prod_ids.append(FileId); dl_urls.append(prod['downloadUrl'])
+
             if self.inps.v: print ('Found: {}'.format(FileId))
 
         if len(prod_ids) == 0:
             raise Exception('No products found that satisfy requested conditions.')
 
         data = {'product_list': ','.join(prod_ids)}
-        return data
+        return data, dl_urls
 
     ## utility functions
     def _get_bbox(self):
@@ -161,6 +167,7 @@ class Downloader(object):
 
     def _fmt_dst(self):
         dst_base = op.join(self.inps.wd, 'download_products')
+        ext      = '.kmz' if self.inps.output == 'Kmz' else '.txt'
         if self.inps.track:
             dst = '{}_{}'.format(dst_base, self.inps.track).replace(',', '-')
 
@@ -172,11 +179,15 @@ class Downloader(object):
                     WSEN_fmt.append(math.floor(float(coord)))
                 else:
                     WSEN_fmt.append(math.ceil(float(coord)))
-            dst = '{}_{}W{}S{}E{}N'.format(dst_base, *WSEN_fmt)
-        dst += '.kmz'
+            dst = '{}_bbox'.format(dst_base)
+        dst  += '0{}'.format(ext)
+        count = 1 # don't overwrite if already exists
+        while op.exists(dst):
+            basen  = '{}{}{}'.format(re.split('\d', op.basename(dst))[0], count, ext)
+            dst    = op.join(op.dirname(dst), basen)
+            count += 1
         return dst
 
 if __name__ == '__main__':
     inps = cmdLineParse()
     Downloader(inps)()
-    
