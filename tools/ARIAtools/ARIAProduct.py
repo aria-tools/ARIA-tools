@@ -110,10 +110,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             print ('{} is not a supported file type... skipping'.format(file))
             return []
 
-        # If netcdf with nogroups
-        if version==str(None):
-            version=str(gdal.Open(file).GetMetadataItem('version'))
-
         ### Get lists of radarmetadata/layer keys for this file version
         rmdkeys, sdskeys = self.__mappingVersion__(file, version)
         if self.bbox is not None:
@@ -131,7 +127,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         return product_dicts
 
 
-    def __mappingVersion__(self, file, version):
+    def __OGmappingVersion__(self, file, version):
         '''
             Track the mapping of ARIA standard product versions.
             The order of the keys needs to be consistent with the keys in the mappingData function.
@@ -158,7 +154,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         return rmdkeys, sdskeys
 
 
-    def __mappingData__(self, file, rmdkeys, sdskeys):
+    def __OGmappingData__(self, file, rmdkeys, sdskeys):
         '''
             Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
             The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
@@ -211,6 +207,74 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         return [rdrmetadata_dict, datalyr_dict]
 
 
+    def __mappingVersion__(self, file, version):
+        '''
+            Track the mapping of ARIA standard product versions.
+            The order of the keys needs to be consistent with the keys in the mappingData function.
+            E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
+        '''
+
+        # ARIA standard product version 1a and 1b have same mapping
+        rdrmetadata_dict={}
+        if version=='1a' or version=='1b':
+            #Pass pair name
+            self.pairname=os.path.basename(file)[21:29] +'_'+ os.path.basename(file)[30:38]
+
+            # Radarmetadata names for these versions
+            rdrmetadata_dict['missionID']='Sentinel-1'
+            rdrmetadata_dict['productType']='UNW GEO IFG'
+            rdrmetadata_dict['azimuthZeroDopplerMidTime']=os.path.basename(file)[21:25]+'-'+os.path.basename(file)[25:27]+'-' \
+                +os.path.basename(file)[27:29]+'T'+os.path.basename(file)[39:41]+':'+os.path.basename(file)[41:43]+':' \
+                +os.path.basename(file)[43:45]
+            #hardcoded key meant to gauge temporal connectivity of scenes
+            rdrmetadata_dict['sceneLength']=27
+            rdrmetadata_dict['wavelength']=0.05546576
+            rdrmetadata_dict['pair_name']=self.pairname
+            test=self.netCDF4.Dataset(file, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
+
+            # Layer names for these versions
+            sdskeys=['productBoundingBox','unwrappedPhase','coherence',
+            'connectedComponents','amplitude','perpendicularBaseline',
+            'parallelBaseline','incidenceAngle','lookAngle','azimuthAngle','ionosphere']
+
+        return rdrmetadata_dict, sdskeys
+
+
+    def __mappingData__(self, file, rdrmetadata_dict, sdskeys):
+        '''
+            Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
+            The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
+        '''
+
+        # Expected layers
+        layerkeys=['productBoundingBox','unwrappedPhase',
+        'coherence','connectedComponents','amplitude','bPerpendicular',
+        'bParallel','incidenceAngle','lookAngle',
+        'azimuthAngle','ionosphere']
+
+        # Parse layers
+        sdsdict = gdal.Open(file).GetMetadata('SUBDATASETS')
+        sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
+        datalyr_dict={}
+
+        # Setup datalyr_dict
+        for i in sdsdict.items():
+            #If layer expected
+            try:
+                datalyr_dict[layerkeys[sdskeys.index(i[1].split(':')[-1].split('/')[-1])]]=i[1]
+            #If new, unaccounted layer not expected in layerkeys
+            except:
+                print("WARNING: Data layer key %s not expected in sdskeys"%(i[1]))
+        datalyr_dict['pair_name']=self.pairname
+        # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
+        datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
+
+        # remove temp variables
+        del sdsdict
+
+        return [rdrmetadata_dict, datalyr_dict]
+
+
     def __continuous_time__(self):
         '''
             Split the products into spatiotemporally continuous groups (i.e. by individual, continuous interferograms). Input must be already sorted by pair and start-time to fit the logic scheme below.
@@ -241,11 +305,11 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i in enumerate(self.products[:-1]):
             # Get this reference product's times
-            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            scene_end=datetime.strptime(i[1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S")
+            scene_end=scene_start+timedelta(seconds=27)
             master=datetime.strptime(i[1][0]['pair_name'][9:], "%Y%m%d")
-            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            new_scene_end=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S")
+            new_scene_end=new_scene_start+timedelta(seconds=27)
             slave=datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:], "%Y%m%d")
 
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
@@ -290,7 +354,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     if item[1]['pair_name'][0] in track_rejected_pairs:
                         print(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
         else:
-            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[0])))
+            print("All (%d) interferograms are spatially continuous."%(len(sorted_products)))
 
         sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], \
             [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
@@ -316,7 +380,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.products += self.__readproduct__(file)
 
         # Sort by pair and start time.
-        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime']))
+        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
         self.products=list(self.products)
 
         # Check if any pairs meet criteria

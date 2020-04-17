@@ -73,24 +73,18 @@ def extractUTCtime(aria_prod):
         #Grab pair name of the product
         pairName = aria_prod.products[1][i]['pair_name']
 
-        #Grab start times, append to a list and find minimum start time
-        startTimeList = aria_prod.products[0][i]['azimuthZeroDopplerStartTime']
-        startTime=[]
-        for j in startTimeList:
-            startTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S.%fZ'))
-        minStartTime = min(startTime)
-
-        #Grab end times, append to a list and find maximum end time
-        endTimeList = aria_prod.products[0][i]['azimuthZeroDopplerEndTime']
-        endTime=[]
-        for k in endTimeList:
-            endTime.append(datetime.strptime(k,'%Y-%m-%dT%H:%M:%S.%fZ'))
-        maxEndTime = max(endTime)
+        #Grab mid-times, append to a list and find minimum and maximum mid-times
+        midTimeList = aria_prod.products[0][i]['azimuthZeroDopplerMidTime']
+        midTime=[]
+        for j in midTimeList:
+            midTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S'))
+        minMidTime = min(midTime)
+        maxMidTime = max(midTime)
 
         #Calculate time difference between minimum start and maximum end time, and add it to mean start time
         #Write calculated UTC time into a dictionary with associated pair names as keys
-        timeDelta = (maxEndTime - minStartTime)/2
-        utcTime = (minStartTime+timeDelta).time()
+        timeDelta = (maxMidTime - minMidTime)/2
+        utcTime = (minMidTime+timeDelta).time()
         utcDict[pairName[0]] = utcTime
     return utcDict
 
