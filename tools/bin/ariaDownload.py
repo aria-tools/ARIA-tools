@@ -86,7 +86,7 @@ class Downloader(object):
             os.chdir(self.inps.wd)
             os.sys.argv = []
             fileName = os.path.abspath(os.path.join(self.inps.wd,'ASFDataDload.py'))
-            with open(fileName, 'w') as fh:
+            with open(fileName, 'w') as f:
                 f.write(script)
 
             os.sys.path.append(os.path.abspath(self.inps.wd))
