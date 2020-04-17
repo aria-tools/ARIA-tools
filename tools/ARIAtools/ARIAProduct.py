@@ -221,16 +221,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             self.pairname=os.path.basename(file)[21:29] +'_'+ os.path.basename(file)[30:38]
 
             # Radarmetadata names for these versions
-            rdrmetadata_dict['missionID']='Sentinel-1'
-            rdrmetadata_dict['productType']='UNW GEO IFG'
+            rdrmetadata_dict['pair_name']=self.pairname
             rdrmetadata_dict['azimuthZeroDopplerMidTime']=os.path.basename(file)[21:25]+'-'+os.path.basename(file)[25:27]+'-' \
                 +os.path.basename(file)[27:29]+'T'+os.path.basename(file)[39:41]+':'+os.path.basename(file)[41:43]+':' \
                 +os.path.basename(file)[43:45]
+            #hardcoded keys
+            rdrmetadata_dict['missionID']='Sentinel-1'
+            rdrmetadata_dict['productType']='UNW GEO IFG'
+            rdrmetadata_dict['wavelength']=0.05546576
+            rdrmetadata_dict['slantRangeSpacing']=2.329562187194824
+            rdrmetadata_dict['slantRangeStart']=798980.125
+            rdrmetadata_dict['slantRangeEnd']=956307.125
             #hardcoded key meant to gauge temporal connectivity of scenes
             rdrmetadata_dict['sceneLength']=27
-            rdrmetadata_dict['wavelength']=0.05546576
-            rdrmetadata_dict['pair_name']=self.pairname
-            test=self.netCDF4.Dataset(file, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
 
             # Layer names for these versions
             sdskeys=['productBoundingBox','unwrappedPhase','coherence',
