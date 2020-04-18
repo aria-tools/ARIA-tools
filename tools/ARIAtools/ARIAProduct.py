@@ -32,7 +32,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     '''
 
     # import dependencies
-    import netCDF4
     import glob
 
     def __init__(self, filearg, bbox=None, workdir='./', verbose=False):
@@ -134,6 +133,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
         '''
 
+        import netCDF4
         # ARIA standard product version 1a and 1b have same mapping
         if version=='1a' or version=='1b':
             # Radarmetadata names for these versions
@@ -147,7 +147,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             'parallelBaseline','incidenceAngle','lookAngle','azimuthAngle','ionosphere']
 
             #Pass pair name
-            read_file=self.netCDF4.Dataset(fname, keepweakref=True).groups['science'].groups['radarMetaData'].groups['inputSLC']
+            read_file=netCDF4.Dataset(fname, keepweakref=True).groups['science'].groups['radarMetaData'].groups['inputSLC']
             self.pairname=read_file.groups['reference']['L1InputGranules'][:][0][17:25] +'_'+ read_file.groups['secondary']['L1InputGranules'][:][0][17:25]
             del read_file
 
@@ -159,7 +159,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
             The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
         '''
-
+        import netCDF4
         # Expected radarmetadata
         radarkeys=['missionID', 'wavelength', 'centerFrequency', 'productType',
         'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime',
@@ -172,7 +172,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         'azimuthAngle','ionosphere']
 
         # Parse radarmetadata
-        rdrmetadata = self.netCDF4.Dataset(fname, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
+        rdrmetadata = netCDF4.Dataset(fname, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
         rdrmetakeys = list(rdrmetadata.variables.keys())
         rdrmetadata_dict={}
 
