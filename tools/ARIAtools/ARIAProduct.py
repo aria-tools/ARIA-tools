@@ -51,6 +51,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             self.files=[str(i) for i in filearg.split(',')]
             # If wildcard
             self.files=[os.path.abspath(item) for sublist in [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in self.files] for item in sublist]
+        elif os.path.basename(filearg).startswith('download'):
+            with open(filearg, 'r') as fh:
+                self.files = [f.rstrip('\n') for f in fh.readlines()]
+
         # If single file or wildcard
         else:
             # If single file
@@ -103,17 +107,29 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         ### Get standard product version from file
         # If netcdf with groups
-        try:
-            version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
-        except:
-            print ('{} is not a supported file type... skipping'.format(fname))
-            return []
+        if fname.startswith('http'):
+            fname_orig = fname
+            gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
+
+            fname   = '/vsicurl/{}'.format(fname)
+            version ='URL'
+            fmt     = 'HDF5:"'
+        else:
+            try:
+                version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+                fmt    ='NETCDF:"'
+            except:
+                print ('{} is not a supported file type... skipping'.format(fname))
+                return []
 
         ### Get lists of radarmetadata/layer keys for this file version
         rmdkeys, sdskeys = self.__mappingVersion__(fname, version)
+
         if self.bbox is not None:
             # Open standard product bbox
-            file_bbox = open_shapefile('NETCDF:"' + fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            if fmt == 'HDF5:"': raise Exception ('Not implemented yet due to gdal issue')
+            file_bbox = open_shapefile(fmt + fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            # file_bbox = open_shapefile(fname, 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
             # Only generate dictionaries if there is spatial overlap with user bbox
             if file_bbox.intersects(self.bbox):
                 product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys)]
@@ -216,15 +232,16 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # ARIA standard product version 1a and 1b have same mapping
         rdrmetadata_dict={}
-        if version=='1a' or version=='1b':
+        if version.lower() in ['1a', '1b', 'url']:
             #Pass pair name
-            self.pairname=os.path.basename(fname)[21:29] +'_'+ os.path.basename(fname)[30:38]
+            basename     = os.path.basename(fname)
+            self.pairname=basename[21:29] +'_'+ basename[30:38]
 
             # Radarmetadata names for these versions
             rdrmetadata_dict['pair_name']=self.pairname
-            rdrmetadata_dict['azimuthZeroDopplerMidTime']=os.path.basename(fname)[21:25]+'-'+os.path.basename(fname)[25:27]+'-' \
-                +os.path.basename(fname)[27:29]+'T'+os.path.basename(fname)[39:41]+':'+os.path.basename(fname)[41:43]+':' \
-                +os.path.basename(fname)[43:45]
+            rdrmetadata_dict['azimuthZeroDopplerMidTime']=basename[21:25]+'-'+basename[25:27]+'-' \
+                +basename[27:29]+'T'+basename[39:41]+':'+basename[41:43]+':'+basename[43:45]
+
             #hardcoded keys
             rdrmetadata_dict['missionID']='Sentinel-1'
             rdrmetadata_dict['productType']='UNW GEO IFG'
@@ -254,7 +271,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle',
         'azimuthAngle','ionosphere']
-
         # Parse layers
         sdsdict = gdal.Open(fname).GetMetadata('SUBDATASETS')
         sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
