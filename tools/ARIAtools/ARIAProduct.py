@@ -32,7 +32,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     '''
 
     # import dependencies
-    import netCDF4
     import glob
 
     def __init__(self, filearg, bbox=None, workdir='./', verbose=False):
@@ -52,6 +51,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             self.files=[str(i) for i in filearg.split(',')]
             # If wildcard
             self.files=[os.path.abspath(item) for sublist in [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in self.files] for item in sublist]
+        elif os.path.basename(filearg).startswith('download'):
+            with open(filearg, 'r') as fh:
+                self.files = [f.rstrip('\n') for f in fh.readlines()]
+
         # If single file or wildcard
         else:
             # If single file
@@ -97,47 +100,56 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         self.__run__()
 
 
-    def __readproduct__(self, file):
+    def __readproduct__(self, fname):
         '''
             Read product, determine expected layer names based off of version number, and populate corresponding product dictionary accordingly.
         '''
 
         ### Get standard product version from file
         # If netcdf with groups
-        try:
-            version=str(gdal.Open(file).GetMetadataItem('NC_GLOBAL#version'))
-        except:
-            print ('{} is not a supported file type... skipping'.format(file))
-            return []
+        if fname.startswith('http'):
+            fname_orig = fname
+            gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
 
-        # If netcdf with nogroups
-        if version==str(None):
-            version=str(gdal.Open(file).GetMetadataItem('version'))
+            fname   = '/vsicurl/{}'.format(fname)
+            version ='URL'
+            fmt     = 'HDF5:"'
+        else:
+            try:
+                version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+                fmt    ='NETCDF:"'
+            except:
+                print ('{} is not a supported file type... skipping'.format(fname))
+                return []
 
         ### Get lists of radarmetadata/layer keys for this file version
-        rmdkeys, sdskeys = self.__mappingVersion__(file, version)
+        rmdkeys, sdskeys = self.__mappingVersion__(fname, version)
+
         if self.bbox is not None:
             # Open standard product bbox
-            file_bbox = open_shapefile('NETCDF:"' + file + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            if fmt == 'HDF5:"': raise Exception ('Not implemented yet due to gdal issue')
+            file_bbox = open_shapefile(fmt + fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            # file_bbox = open_shapefile(fname, 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
             # Only generate dictionaries if there is spatial overlap with user bbox
             if file_bbox.intersects(self.bbox):
-                product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
+                product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys)]
             else:
                 product_dicts = []
         # If no bbox specified, just pass dictionaries
         else:
-            product_dicts = [self.__mappingData__(file, rmdkeys, sdskeys)]
+            product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys)]
 
         return product_dicts
 
 
-    def __mappingVersion__(self, file, version):
+    def __OGmappingVersion__(self, fname, version):
         '''
             Track the mapping of ARIA standard product versions.
             The order of the keys needs to be consistent with the keys in the mappingData function.
             E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
         '''
 
+        import netCDF4
         # ARIA standard product version 1a and 1b have same mapping
         if version=='1a' or version=='1b':
             # Radarmetadata names for these versions
@@ -151,19 +163,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             'parallelBaseline','incidenceAngle','lookAngle','azimuthAngle','ionosphere']
 
             #Pass pair name
-            read_file=self.netCDF4.Dataset(file, keepweakref=True).groups['science'].groups['radarMetaData'].groups['inputSLC']
+            read_file=netCDF4.Dataset(fname, keepweakref=True).groups['science'].groups['radarMetaData'].groups['inputSLC']
             self.pairname=read_file.groups['reference']['L1InputGranules'][:][0][17:25] +'_'+ read_file.groups['secondary']['L1InputGranules'][:][0][17:25]
             del read_file
 
         return rmdkeys, sdskeys
 
 
-    def __mappingData__(self, file, rmdkeys, sdskeys):
+    def __OGmappingData__(self, fname, rmdkeys, sdskeys):
         '''
             Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
             The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
         '''
-
+        import netCDF4
         # Expected radarmetadata
         radarkeys=['missionID', 'wavelength', 'centerFrequency', 'productType',
         'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime',
@@ -176,12 +188,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         'azimuthAngle','ionosphere']
 
         # Parse radarmetadata
-        rdrmetadata = self.netCDF4.Dataset(file, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
+        rdrmetadata = netCDF4.Dataset(fname, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
         rdrmetakeys = list(rdrmetadata.variables.keys())
         rdrmetadata_dict={}
 
         # Parse layers
-        sdsdict = gdal.Open(file).GetMetadata('SUBDATASETS')
+        sdsdict = gdal.Open(fname).GetMetadata('SUBDATASETS')
         sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
         datalyr_dict={}
 
@@ -207,6 +219,77 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # remove temp variables
         del rdrmetadata, sdsdict
+
+        return [rdrmetadata_dict, datalyr_dict]
+
+
+    def __mappingVersion__(self, fname, version):
+        '''
+            Track the mapping of ARIA standard product versions.
+            The order of the keys needs to be consistent with the keys in the mappingData function.
+            E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
+        '''
+
+        # ARIA standard product version 1a and 1b have same mapping
+        rdrmetadata_dict={}
+        if version.lower() in ['1a', '1b', 'url']:
+            #Pass pair name
+            basename     = os.path.basename(fname)
+            self.pairname=basename[21:29] +'_'+ basename[30:38]
+
+            # Radarmetadata names for these versions
+            rdrmetadata_dict['pair_name']=self.pairname
+            rdrmetadata_dict['azimuthZeroDopplerMidTime']=basename[21:25]+'-'+basename[25:27]+'-' \
+                +basename[27:29]+'T'+basename[39:41]+':'+basename[41:43]+':'+basename[43:45]
+
+            #hardcoded keys
+            rdrmetadata_dict['missionID']='Sentinel-1'
+            rdrmetadata_dict['productType']='UNW GEO IFG'
+            rdrmetadata_dict['wavelength']=0.05546576
+            rdrmetadata_dict['slantRangeSpacing']=2.329562187194824
+            rdrmetadata_dict['slantRangeStart']=798980.125
+            rdrmetadata_dict['slantRangeEnd']=956307.125
+            #hardcoded key meant to gauge temporal connectivity of scenes
+            rdrmetadata_dict['sceneLength']=27
+
+            # Layer names for these versions
+            sdskeys=['productBoundingBox','unwrappedPhase','coherence',
+            'connectedComponents','amplitude','perpendicularBaseline',
+            'parallelBaseline','incidenceAngle','lookAngle','azimuthAngle','ionosphere']
+
+        return rdrmetadata_dict, sdskeys
+
+
+    def __mappingData__(self, fname, rdrmetadata_dict, sdskeys):
+        '''
+            Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
+            The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
+        '''
+
+        # Expected layers
+        layerkeys=['productBoundingBox','unwrappedPhase',
+        'coherence','connectedComponents','amplitude','bPerpendicular',
+        'bParallel','incidenceAngle','lookAngle',
+        'azimuthAngle','ionosphere']
+        # Parse layers
+        sdsdict = gdal.Open(fname).GetMetadata('SUBDATASETS')
+        sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
+        datalyr_dict={}
+
+        # Setup datalyr_dict
+        for i in sdsdict.items():
+            #If layer expected
+            try:
+                datalyr_dict[layerkeys[sdskeys.index(i[1].split(':')[-1].split('/')[-1])]]=i[1]
+            #If new, unaccounted layer not expected in layerkeys
+            except:
+                print("WARNING: Data layer key %s not expected in sdskeys"%(i[1]))
+        datalyr_dict['pair_name']=self.pairname
+        # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
+        datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
+
+        # remove temp variables
+        del sdsdict
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -241,11 +324,11 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i in enumerate(self.products[:-1]):
             # Get this reference product's times
-            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            scene_end=datetime.strptime(i[1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S")
+            scene_end=scene_start+timedelta(seconds=27)
             master=datetime.strptime(i[1][0]['pair_name'][9:], "%Y%m%d")
-            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-            new_scene_end=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerEndTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S")
+            new_scene_end=new_scene_start+timedelta(seconds=27)
             slave=datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:], "%Y%m%d")
 
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
@@ -290,7 +373,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     if item[1]['pair_name'][0] in track_rejected_pairs:
                         print(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
         else:
-            print("All (%d) interferograms are spatially continuous."%(len(sorted_products[0])))
+            print("All (%d) interferograms are spatially continuous."%(len(sorted_products)))
 
         sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], \
             [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
@@ -312,11 +395,11 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
         except Exception:
             print('Multi-core version failed, will try single for loop')
-            for file in self.files:
-                self.products += self.__readproduct__(file)
+            for f in self.files:
+                self.products += self.__readproduct__(f)
 
         # Sort by pair and start time.
-        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerStartTime']))
+        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
         self.products=list(self.products)
 
         # Check if any pairs meet criteria

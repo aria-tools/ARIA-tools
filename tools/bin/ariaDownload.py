@@ -49,7 +49,7 @@ def cmdLineParse(iargs=None):
         raise Exception('Must specify either a bbox or track')
 
     if not inps.output.lower() in ['count', 'kml', 'kmz', 'url', 'download']:
-        raise Exception ('Incorrect output keyword. Choose "count", "kmz", or "download"')
+        raise Exception ('Incorrect output keyword. Choose "count", "kmz", "url", or "download"')
 
     inps.output = 'Kml' if inps.output.lower() == 'kmz' else inps.output.title()
     return inps
@@ -86,7 +86,7 @@ class Downloader(object):
             os.chdir(self.inps.wd)
             os.sys.argv = []
             fileName = os.path.abspath(os.path.join(self.inps.wd,'ASFDataDload.py'))
-            with open(fileName, 'w') as fh:
+            with open(fileName, 'w') as f:
                 f.write(script)
 
             os.sys.path.append(os.path.abspath(self.inps.wd))
