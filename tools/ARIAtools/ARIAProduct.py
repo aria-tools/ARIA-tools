@@ -51,10 +51,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             self.files=[str(i) for i in filearg.split(',')]
             # If wildcard
             self.files=[os.path.abspath(item) for sublist in [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in self.files] for item in sublist]
-        elif os.path.basename(filearg).startswith('download'):
+        # If list of URLs provided
+        elif os.path.basename(filearg).endswith('.txt'):
             with open(filearg, 'r') as fh:
                 self.files = [f.rstrip('\n') for f in fh.readlines()]
-
         # If single file or wildcard
         else:
             # If single file
@@ -65,6 +65,17 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.files=self.glob.glob(os.path.expanduser(os.path.expandvars(filearg)))
             # Convert relative paths to absolute paths
             self.files=[os.path.abspath(i) for i in self.files]
+
+        # If URLs, append with '/vsicurl/'
+        self.files=['/vsicurl/{}'.format(i) if 'https://' in i else i for i in self.files]
+        # must configure gdal to load URLs
+        if any("https://" in i for i in self.files):
+            gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
+            #check if reader is being captured as netcdf
+            [s for s in self.files if 'https://' in s][0]
+            fmt=gdal.Open([s for s in self.files if 'https://' in s][0]).GetDriver().GetDescription()
+            if fmt != 'netCDF': raise Exception ('Your GDAL install is not configured to handle virtual files')
+
         if len(self.files)==0:
             raise Exception('No file match found')
         # If specified workdir doesn't exist, create it
@@ -106,29 +117,23 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         '''
 
         ### Get standard product version from file
-        # If netcdf with groups
-        if fname.startswith('http'):
-            fname_orig = fname
-            gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
-
-            fname   = '/vsicurl/{}'.format(fname)
-            version ='URL'
-            fmt     = 'HDF5:"'
-        else:
-            try:
+        try:
+            #version accessed differently between URL vs downloaded product
+            if 'https://' in fname:
+                version=str(gdal.Open(fname).GetMetadata_Dict()['version'])
+            else:
                 version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
-                fmt    ='NETCDF:"'
-            except:
-                print ('{} is not a supported file type... skipping'.format(fname))
-                return []
+        except:
+            print ('{} is not a supported file type... skipping'.format(fname))
+            return []
 
         ### Get lists of radarmetadata/layer keys for this file version
+        fname = 'NETCDF:"' + fname
         rmdkeys, sdskeys = self.__mappingVersion__(fname, version)
 
+        # Open standard product bbox
         if self.bbox is not None:
-            # Open standard product bbox
-            if fmt == 'HDF5:"': raise Exception ('Not implemented yet due to gdal issue')
-            file_bbox = open_shapefile(fmt + fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            file_bbox = open_shapefile(fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
             # file_bbox = open_shapefile(fname, 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
             # Only generate dictionaries if there is spatial overlap with user bbox
             if file_bbox.intersects(self.bbox):
@@ -232,7 +237,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # ARIA standard product version 1a and 1b have same mapping
         rdrmetadata_dict={}
-        if version.lower() in ['1a', '1b', 'url']:
+        if version.lower() in ['1a', '1b']:
             #Pass pair name
             basename     = os.path.basename(fname)
             self.pairname=basename[21:29] +'_'+ basename[30:38]
@@ -253,9 +258,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             rdrmetadata_dict['sceneLength']=27
 
             # Layer names for these versions
-            sdskeys=['productBoundingBox','unwrappedPhase','coherence',
-            'connectedComponents','amplitude','perpendicularBaseline',
-            'parallelBaseline','incidenceAngle','lookAngle','azimuthAngle','ionosphere']
+            sdskeys=['productBoundingBox','/science/grids/data/unwrappedPhase','/science/grids/data/coherence',
+            '/science/grids/data/connectedComponents','/science/grids/data/amplitude','/science/grids/imagingGeometry/perpendicularBaseline',
+            '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle','/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle','/science/grids/imagingGeometry/ionosphere']
 
         return rdrmetadata_dict, sdskeys
 
@@ -271,25 +276,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle',
         'azimuthAngle','ionosphere']
-        # Parse layers
-        sdsdict = gdal.Open(fname).GetMetadata('SUBDATASETS')
-        sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
-        datalyr_dict={}
 
         # Setup datalyr_dict
-        for i in sdsdict.items():
+        datalyr_dict={}
+        for i in enumerate(layerkeys):
             #If layer expected
             try:
-                datalyr_dict[layerkeys[sdskeys.index(i[1].split(':')[-1].split('/')[-1])]]=i[1]
+                datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
             #If new, unaccounted layer not expected in layerkeys
             except:
                 print("WARNING: Data layer key %s not expected in sdskeys"%(i[1]))
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
         datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
-
-        # remove temp variables
-        del sdsdict
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -387,16 +386,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
     def __run__(self):
         # Only populate list of dictionaries if the file intersects with bbox
-        # will try multi-core version and default to for loop in case of failure
+        # will try multi-core version (if multiple files are passed) and default to for loop in case of failure
 
-        try:
-            print('Multi-core version')
-            # would probably be better not to write to the same self, and concatenate at completion.
-            self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
-        except Exception:
-            print('Multi-core version failed, will try single for loop')
-            for f in self.files:
-                self.products += self.__readproduct__(f)
+        if len(self.files)>1:
+            try:
+                print('Multi-core version')
+                # would probably be better not to write to the same self, and concatenate at completion.
+                self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
+            except Exception:
+                print('Multi-core version failed, will try single for loop')
+                for f in self.files:
+                    self.products += self.__readproduct__(f)
+        else:
+            self.products += self.__readproduct__(self.files[0])
 
         # Sort by pair and start time.
         self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
