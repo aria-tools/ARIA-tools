@@ -68,13 +68,16 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # If URLs, append with '/vsicurl/'
         self.files=['/vsicurl/{}'.format(i) if 'https://' in i else i for i in self.files]
-        # must configure gdal to load URLs
+        #check if virtual file reader is being captured as netcdf
         if any("https://" in i for i in self.files):
+            # must configure gdal to load URLs
             gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
-            #check if reader is being captured as netcdf
-            [s for s in self.files if 'https://' in s][0]
             fmt=gdal.Open([s for s in self.files if 'https://' in s][0]).GetDriver().GetDescription()
-            if fmt != 'netCDF': raise Exception ('Your GDAL install is not configured to handle virtual files')
+            if fmt != 'netCDF': raise Exception ('System update required to read requested virtual products: Linux kernel >=4.3 and libnetcdf >=4.5')
+        #check if local file reader is being captured as netcdf
+        if any("https://" not in i for i in self.files):
+            fmt=gdal.Open([s for s in self.files if 'https://' not in s][0]).GetDriver().GetDescription()
+            if fmt != 'netCDF': raise Exception ('System update required to read requested local products: Linux kernel >=4.3 and libnetcdf >=4.5')
 
         if len(self.files)==0:
             raise Exception('No file match found')
