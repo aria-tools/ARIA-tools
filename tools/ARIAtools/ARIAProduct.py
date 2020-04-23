@@ -33,7 +33,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
     # import dependencies
     import glob
-
     def __init__(self, filearg, bbox=None, workdir='./', verbose=False):
         # If user wants verbose mode
         self.verbose=verbose
@@ -72,6 +71,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         if any("https://" in i for i in self.files):
             # must configure gdal to load URLs
             gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
+            gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', 'cookies.txt')
+            #gdal.SetConfigOption('CPL_VSIL_CURL_CHUNK_SIZE','10485760')
+            gdal.SetConfigOption('VSI_CACHE','YES')
+
             fmt=gdal.Open([s for s in self.files if 'https://' in s][0]).GetDriver().GetDescription()
             if fmt != 'netCDF': raise Exception ('System update required to read requested virtual products: Linux kernel >=4.3 and libnetcdf >=4.5')
         #check if local file reader is being captured as netcdf
@@ -122,10 +125,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         ### Get standard product version from file
         try:
             #version accessed differently between URL vs downloaded product
-            if 'https://' in fname:
-                version=str(gdal.Open(fname).GetMetadata_Dict()['version'])
-            else:
-                version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+            version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
         except:
             print ('{} is not a supported file type... skipping'.format(fname))
             return []
