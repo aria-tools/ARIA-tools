@@ -1,4 +1,4 @@
-#!/anaconda3/envs/ARIA-tools/bin/python3
+#!/usr/bin/env python3
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
@@ -43,7 +43,7 @@ def createParser():
     parser.add_argument('--flag_partial_coverage', dest='flagPartialCoverage', action='store_true',
             help='Flag dates that do not cover the full lat/lon extent. This does not remove dates from the lat centers plot, only highlights the dates in red.')
     parser.add_argument('--remove_incomplete_dates', dest='removeIncomplete', action='store_true',
-            help='Automatically detect and remove dates that do not entirely fill the given latitude bounds.')
+            help='Automatically detect and remove dates that do not entirely fill the given latitude bounds. Note that if lat bounds are left as default, only dates with gaps will be automatically excluded.')
 
     return parser
 
@@ -167,6 +167,9 @@ class SentinelMetadata:
 
         # Record track direction
         self.trackDir=list(self.metadata['Ascending or Descending?'])[0]
+
+        # Short name comprising track number and track direction, e.g., "A41"
+        self.trackCode='{}{}'.format(self.trackDir[0],self.track)
 
     def __filterByBeamMode__(self):
         '''
@@ -308,12 +311,17 @@ class SentinelMetadata:
                     # Update subgroup
                     self.metadata.loc[satPass.index[i+1],'subgroup']=currentSubgroup+1
 
-            # Check that max/min latitude extents are covered
-            latMax=satPass['maxLat'].to_numpy().max() # max of all frames at this date
-            latMin=satPass['minLat'].to_numpy().min() # min of all frames at this date
+            # Check that max/min latitude extents are covered if lat bounds are
+            # user-specified
+            if (self.maxLat<60) and (self.minLat>-60):
+                latExtremesMet=False
+                latMax=satPass['maxLat'].to_numpy().max() # max of all frames at this date
+                latMin=satPass['minLat'].to_numpy().min() # min of all frames at this date
 
-            latExtremesMet=False
-            if (latMax>self.maxLat) and (latMin<self.minLat):
+                if (latMax>self.maxLat) and (latMin<self.minLat):
+                    latExtremesMet=True
+            else:
+                # Ignore lat criteria if bounds are left at default +- 60 degrees
                 latExtremesMet=True
 
             # If there are no gaps and latitude extremes are covered, consider coverage complete
@@ -325,6 +333,16 @@ class SentinelMetadata:
             for frameNdx,frame in self.metadata.iterrows():
                 if frame['Extent Covered']==False:
                     self.excludeDates.append(frame['Common Date'])
+            self.excludeDates=list(set(self.excludeDates))
+            self.excludeDates.sort()
+
+            # Save updated date list to text file
+            exclDatesName='{}_auto-excluded_dates.txt'.format(self.trackCode)
+            exclDatesPath=os.path.join(self.workdir,exclDatesName)
+            with open(exclDatesPath,'w') as exclDatesFile:
+                for date in self.excludeDates:
+                    exclDatesFile.write(date+'\n')
+                exclDatesFile.close()
 
 
     # Plotting
@@ -385,14 +403,14 @@ class SentinelMetadata:
                 date in partialDates]
 
         # Other formatting
-        title='Track {}{}'.format(self.trackDir[0],self.track)
+        title='Track {}'.format(self.trackCode)
         self.ax.set_title(title,weight='bold')
         self.ax.set_ylabel('Latitude (degrees)')
         self.ax.margins(x=0)
         self.Fig.tight_layout()
 
         # Save to file
-        figname='{}{}_lat_extents.eps'.format(self.trackDir[0],self.track)
+        figname='{}_lat_extents.eps'.format(self.trackCode)
         self.Fig.savefig(os.path.join(self.workdir,figname))
 
 
@@ -402,7 +420,7 @@ class SentinelMetadata:
             Save outputs to kml file - use only SLC frames and non-exluded dates
         '''
         # Open KML data set
-        kmlname='track{}{}_frames.kml'.format(self.trackDir[0],self.track)
+        kmlname='track{}_frames.kml'.format(self.trackCode)
         kmlpath=os.path.join(self.workdir,kmlname)
         DS=ogr.GetDriverByName('LIBKML').CreateDataSource(kmlpath)
 
@@ -412,6 +430,7 @@ class SentinelMetadata:
         # Loop by date
         dates=list(set(self.metadata.loc[slcIndices,'Common Date']))
         dates=[date for date in dates if date not in self.excludeDates]
+        dates.sort() # sort oldest-most recent
 
         for date in dates:
             dateIndices=self.metadata[self.metadata['Common Date']==date].index
