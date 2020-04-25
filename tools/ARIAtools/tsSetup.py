@@ -77,7 +77,7 @@ def extractUTCtime(aria_prod):
         midTimeList = aria_prod.products[0][i]['azimuthZeroDopplerMidTime']
         midTime=[]
         for j in midTimeList:
-            midTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S'))
+            midTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S.%f'))
         minMidTime = min(midTime)
         maxMidTime = max(midTime)
 
