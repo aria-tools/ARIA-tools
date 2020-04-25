@@ -526,7 +526,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     bounds=user_bbox.bounds
 
     product_dict=[[j['unwrappedPhase'] for j in full_product_dict[1]], [j['lookAngle'] for j in full_product_dict[1]], [j["pair_name"] for j in full_product_dict[1]]]
-    metadata_dict=[[j['azimuthZeroDopplerStartTime'] for j in full_product_dict[0]], [j['azimuthZeroDopplerEndTime'] for j in full_product_dict[0]], [j['wavelength'] for j in full_product_dict[0]]]
+    metadata_dict=[[j['azimuthZeroDopplerMidTime'] for j in full_product_dict[0]], [j['wavelength'] for j in full_product_dict[0]]]
     workdir=os.path.join(outDir,'tropocorrected_products')
 
     # If specified workdir doesn't exist, create it
@@ -642,8 +642,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             for j in [tropo_reference, tropo_secondary]:
                 # Get ARIA product times
                 aria_rsc_dict={}
-                aria_rsc_dict['azimuthZeroDopplerStartTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[0][0]]
-                aria_rsc_dict['azimuthZeroDopplerEndTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%fZ") for m in metadata_dict[1][0]]
+                aria_rsc_dict['azimuthZeroDopplerMidTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S") for m in metadata_dict[0][0]]
                 # Get tropo product UTC times
                 tropo_rsc_dict={}
                 tropo_rsc_dict['TIME_OF_DAY']=open(j[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
@@ -654,8 +653,8 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                     tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[0]+'-'+str(round(float('0.'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[-1])*60)), "%Y-%m-%d-%H-%M")]
 
                 # Check and report if tropospheric product falls outside of standard product range
-                latest_start = max(aria_rsc_dict['azimuthZeroDopplerStartTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])
-                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerEndTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
+                latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])
+                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
                 delta = (earliest_end - latest_start).total_seconds() + 1
                 if delta<0:
                     print("WARNING: tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s"%(abs(delta), os.path.basename(j)[:8], product_dict[2][i][0]))
@@ -675,7 +674,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             tropo_product=np.subtract(tropo_secondary,tropo_product)
 
             # Convert troposphere to rad
-            tropo_product=np.divide(tropo_product,float(metadata_dict[2][i][0])/(4*np.pi))
+            tropo_product=np.divide(tropo_product,float(metadata_dict[1][i][0])/(4*np.pi))
             # Account for lookAngle
             # if in TS mode, only 1 lookfile would be generated, so check for this
             if os.path.exists(os.path.join(outDir,'lookAngle',product_dict[2][i][0])):
