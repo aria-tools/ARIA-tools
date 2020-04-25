@@ -248,7 +248,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             # Radarmetadata names for these versions
             rdrmetadata_dict['pair_name']=self.pairname
             rdrmetadata_dict['azimuthZeroDopplerMidTime']=basename[21:25]+'-'+basename[25:27]+'-' \
-                +basename[27:29]+'T'+basename[39:41]+':'+basename[41:43]+':'+basename[43:45]
+                +basename[27:29]+'T'+basename[39:41]+':'+basename[41:43]+':'+basename[43:45] + '.0'
 
             #hardcoded keys
             rdrmetadata_dict['missionID']='Sentinel-1'
