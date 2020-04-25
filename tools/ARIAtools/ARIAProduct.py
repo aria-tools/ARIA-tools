@@ -263,7 +263,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             # Layer names for these versions
             sdskeys=['productBoundingBox','/science/grids/data/unwrappedPhase','/science/grids/data/coherence',
             '/science/grids/data/connectedComponents','/science/grids/data/amplitude','/science/grids/imagingGeometry/perpendicularBaseline',
-            '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle','/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle','/science/grids/imagingGeometry/ionosphere']
+            '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle','/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle']
 
         return rdrmetadata_dict, sdskeys
 
@@ -278,7 +278,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         layerkeys=['productBoundingBox','unwrappedPhase',
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle',
-        'azimuthAngle','ionosphere']
+        'azimuthAngle']
 
         # Setup datalyr_dict
         datalyr_dict={}
