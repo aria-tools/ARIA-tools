@@ -326,10 +326,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i in enumerate(self.products[:-1]):
             # Get this reference product's times
-            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S")
+            scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S.%f")
             scene_end=scene_start+timedelta(seconds=27)
             master=datetime.strptime(i[1][0]['pair_name'][9:], "%Y%m%d")
-            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S")
+            new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S.%f")
             new_scene_end=new_scene_start+timedelta(seconds=27)
             slave=datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:], "%Y%m%d")
 
