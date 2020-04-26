@@ -1,42 +1,80 @@
 version: 2.1
 jobs:
-  test:
+  build:
     docker:
-      - image: hysds/pge-base:latest
+      - image: ubuntu:bionic
+    environment:
+      PYTHON_VERSION: 3.6.7
+      myUsername: username
+      myPassword: password
     steps:
       - checkout
       - run:
-          name: Test
+          name: Setup Miniconda
           command: |
-            source $HOME/verdi/bin/activate
-            sudo yum -y update
-            sudo yum -y install gcc
-            #pip install -U pytest jsonschema
-            mkdir test-reports
-            #pytest --junitxml=test-reports/junit.xml
-
-      - store_test_results:
-          path: test-reports
-
-      - store_artifacts:
-          path: test-reports    
-
-
-workflows:
-  version: 2
-  test:
-    jobs:
-      - test
-  weekly:
-    triggers:
-      - schedule:
-          cron: "0 7 * * 0"
-          filters:
-            branches:
-              only:
-                - dev
-    jobs:
-      - test:
-          filters:
-            branches:
-              only: dev
+            apt update
+            apt install -y wget
+            apt-get update --yes && apt-get upgrade --yes
+            apt-get install g++ --yes
+            cd $HOME
+            wget "https://repo.anaconda.com/miniconda/Miniconda3-4.7.12.1-Linux-x86_64.sh" -O miniconda.sh
+            printf '%s' "bfe34e1fa28d6d75a7ad05fd02fa5472275673d5f5621b77380898dee1be15d2  miniconda.sh" | sha256sum -c
+            bash miniconda.sh -b -p $HOME/miniconda
+      - run:
+          name: Setup environment and run tests
+          command: |
+            export PATH="$HOME/miniconda/bin:$PATH"
+            source $HOME/miniconda/etc/profile.d/conda.sh
+            conda update -y conda
+            conda create -n myenv python=$PYTHON_VERSION -c conda-forge
+            conda activate myenv
+            conda env create -f environment.yml
+            conda activate ARIA-tools
+            echo "machine urs.earthdata.nasa.gov login $myUsername password $myPassword" > ~/.netrc
+            chmod 600 ~/.netrc
+            git clone https://github.com/insarlab/MintPy.git $HOME/miniconda/MintPy
+            python --version
+            python -c "import numpy; print(numpy.__version__)"
+            python -c "import pyproj; print(pyproj.__version__)"
+      - run:
+          name: Install ARIA-tools and test the install
+          command: |
+            source $HOME/miniconda/etc/profile.d/conda.sh
+            conda activate myenv
+            conda activate ARIA-tools
+            export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
+            export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            export GDAL_HTTP_COOKIEFILE=/tmp/cookies.txt
+            export GDAL_HTTP_COOKIEJAR=/tmp/cookies.txt
+            export VSI_CACHE=YES
+            python setup.py build
+            python setup.py install
+            ariaDownload.py -h
+            prep_aria.py -h
+      - run:
+          name: Run unit tests
+          command: |
+            source $HOME/miniconda/etc/profile.d/conda.sh
+            conda activate myenv
+            conda activate ARIA-tools
+            export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
+            export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            cd test
+            #product count
+            ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v -o count
+            #product url
+            ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v -o url
+            #product download
+            #ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v
+            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.1_s1-gunw-released/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1.nc products/
+            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.1_s1-gunw-released/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1.nc products/
+            #extraction of 3D metadata layer
+            ariaExtract.py -f "products/*.nc" -l azimuthAngle -d download
+            #extraction and mosaicking of coherence data layer
+            ariaExtract.py -f "products/*.nc" -l coherence
+            #extraction and mosaicking of unwrappedPhase data layer
+            ariaExtract.py -f "products/*.nc" -l unwrappedPhase
+            #time-series prep
+            ariaTSsetup.py -d download -m download -f "products/*.nc"
+            #run loading of aria products in mintpy
+            prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180502_20180408.vrt -a azimuthAngle/20180502_20180408.vrt
