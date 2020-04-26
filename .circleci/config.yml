@@ -65,8 +65,10 @@ jobs:
             ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v -o url
             #product download
             #ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v
-            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.1_s1-gunw-released/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1.nc products/
-            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.1_s1-gunw-released/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1.nc products/
+            cd products
+            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.1_s1-gunw-released/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1.nc
+            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.1_s1-gunw-released/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1.nc
+            cd ../
             #extraction of 3D metadata layer
             ariaExtract.py -f "products/*.nc" -l azimuthAngle -d download
             #extraction and mosaicking of coherence data layer
