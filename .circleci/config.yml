@@ -28,6 +28,7 @@ jobs:
             conda update -y conda
             conda create -n myenv python=$PYTHON_VERSION -c conda-forge
             conda activate myenv
+            conda install -c anaconda git
             conda env create -f environment.yml
             conda activate ARIA-tools
             echo "machine urs.earthdata.nasa.gov login $myUsername password $myPassword" > ~/.netrc
