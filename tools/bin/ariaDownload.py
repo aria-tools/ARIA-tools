@@ -1,4 +1,4 @@
-#!/data2/ssangha/conda_installation/stable_feb14_2020/envs/ARIA-tools/bin/python
+#! /usr/bin/env python3
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
