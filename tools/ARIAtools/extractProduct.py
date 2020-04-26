@@ -642,7 +642,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             for j in [tropo_reference, tropo_secondary]:
                 # Get ARIA product times
                 aria_rsc_dict={}
-                aria_rsc_dict['azimuthZeroDopplerMidTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S") for m in metadata_dict[0][0]]
+                aria_rsc_dict['azimuthZeroDopplerMidTime']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+m[11:], "%Y-%m-%d-%H:%M:%S.%f") for m in metadata_dict[0][0]]
                 # Get tropo product UTC times
                 tropo_rsc_dict={}
                 tropo_rsc_dict['TIME_OF_DAY']=open(j[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
