@@ -72,7 +72,6 @@ Below we list the dependencies for ARIA-tools
 ## Installation
 ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. Easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and use the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
 
-
 ### Conda
 Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
@@ -147,7 +146,7 @@ See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-do
 
 ------
 ## Citation
-D. Bekaert, M. Karim, L. Justin, H. Hua, P. Agram, S. Owen, G. Manipon, N. Malarout, M. Lucas, G. Sacco, L. Pan, S. Sangha, and ARIA team (2019), *Development and Dissemination of Standardized Geodetic Products by the Advanced Rapid Imaging and Analysis (ARIA) Center for Natural Hazards*, The International Union of Geodesy and Geophysics (IUGG), Montreal
+Buzzanga, B., Bekaert, D. P. S., Hamlington, B. D., & Sangha, S. S. (2020). Towards Sustained Monitoring of Subsidence at the Coast using InSAR and GPS: An Application in Hampton Roads, Virginia. Geophysical Research Letters, 47, e2020GL090013. [https://doi.org/10.1029/2020GL090013](https://doi.org/10.1029/2020GL090013)
 
 ------
 ## Contributors
