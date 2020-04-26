@@ -166,12 +166,12 @@ class Downloader(object):
         return ','.join([W,S,E,N])
 
     def _fmt_dst(self):
-        dst_base = op.join(self.inps.wd, 'download_products')
+        dst = op.join(self.inps.wd, 'download_products')
         ext      = '.kmz' if self.inps.output == 'Kmz' else '.txt'
         if self.inps.track:
-            dst = '{}_{}'.format(dst_base, self.inps.track).replace(',', '-')
+            dst = '{}_{}track'.format(dst, self.inps.track).replace(',', '-')
 
-        elif self.inps.bbox:
+        if self.inps.bbox:
             WSEN     = self._get_bbox().split(',')
             WSEN_fmt = []
             for i, coord in enumerate(WSEN):
@@ -179,11 +179,11 @@ class Downloader(object):
                     WSEN_fmt.append(math.floor(float(coord)))
                 else:
                     WSEN_fmt.append(math.ceil(float(coord)))
-            dst = '{}_bbox'.format(dst_base)
-        dst  += '0{}'.format(ext)
+            dst = '{}_{}W{}S{}E{}Nbbox'.format(dst, str(WSEN_fmt[0]), str(WSEN_fmt[1]), str(WSEN_fmt[2]), str(WSEN_fmt[3]))
+        dst  += '_0{}'.format(ext)
         count = 1 # don't overwrite if already exists
         while op.exists(dst):
-            basen  = '{}{}{}'.format(re.split('\d', op.basename(dst))[0], count, ext)
+            basen  = '{}{}{}'.format(re.split(str(count-1)+ext, op.basename(dst))[0], count, ext)
             dst    = op.join(op.dirname(dst), basen)
             count += 1
         return dst

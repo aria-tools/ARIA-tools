@@ -77,7 +77,7 @@ def extractUTCtime(aria_prod):
         midTimeList = aria_prod.products[0][i]['azimuthZeroDopplerMidTime']
         midTime=[]
         for j in midTimeList:
-            midTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S'))
+            midTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S.%f'))
         minMidTime = min(midTime)
         maxMidTime = max(midTime)
 
@@ -85,7 +85,7 @@ def extractUTCtime(aria_prod):
         #Write calculated UTC time into a dictionary with associated pair names as keys
         timeDelta = (maxMidTime - minMidTime)/2
         utcTime = (minMidTime+timeDelta).time()
-        utcDict[pairName[0]] = utcTime
+        utcDict[pairName[0]] = utcTime.strftime("%H:%M:%S.%f")
     return utcDict
 
 def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
