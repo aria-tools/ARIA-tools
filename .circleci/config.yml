@@ -57,7 +57,7 @@ jobs:
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
-            mkdir
+            mkdir test
             cd test
             #product count
             ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v -o count
