@@ -26,10 +26,8 @@ jobs:
             export PATH="$HOME/miniconda/bin:$PATH"
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda update -y conda
-            conda create -n myenv python=$PYTHON_VERSION -c conda-forge
-            conda activate myenv
-            conda install -c anaconda git
             conda env create -f environment.yml
+            conda install -c anaconda git
             conda activate ARIA-tools
             echo "machine urs.earthdata.nasa.gov login $myUsername password $myPassword" > ~/.netrc
             chmod 600 ~/.netrc
@@ -41,7 +39,6 @@ jobs:
           name: Install ARIA-tools and test the install
           command: |
             source $HOME/miniconda/etc/profile.d/conda.sh
-            conda activate myenv
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
@@ -56,7 +53,6 @@ jobs:
           name: Run unit tests
           command: |
             source $HOME/miniconda/etc/profile.d/conda.sh
-            conda activate myenv
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
