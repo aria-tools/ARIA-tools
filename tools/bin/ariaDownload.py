@@ -48,10 +48,10 @@ def cmdLineParse(iargs=None):
     if not inps.track and not inps.bbox:
         raise Exception('Must specify either a bbox or track')
 
-    if not inps.output.lower() in ['count', 'kmz', 'url', 'download']:
+    if not inps.output.lower() in ['count', 'kmz', 'kml', 'url', 'download']:
         raise Exception ('Incorrect output keyword. Choose "count", "kmz", "url", or "download"')
 
-    inps.output = 'Kmz' if inps.output.lower() == 'kmz' else inps.output.title()
+    inps.output = 'Kml' if inps.output.lower() == 'kmz' or inps.output.lower() == 'kml' else inps.output.title()
     return inps
 
 class Downloader(object):
@@ -69,7 +69,7 @@ class Downloader(object):
         if self.inps.output == 'Count':
             print ('\nFound -- {} -- products'.format(len(urls)))
 
-        elif self.inps.output == 'Kmz':
+        elif self.inps.output == 'Kml':
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
             dst = self._fmt_dst()
             print (script, file=open(dst, 'w'))
@@ -167,7 +167,7 @@ class Downloader(object):
 
     def _fmt_dst(self):
         dst = op.join(self.inps.wd, 'download_products')
-        ext      = '.kmz' if self.inps.output == 'Kmz' else '.txt'
+        ext      = '.kmz' if self.inps.output == 'Kml' else '.txt'
         if self.inps.track:
             dst = '{}_{}track'.format(dst, self.inps.track).replace(',', '-')
 
