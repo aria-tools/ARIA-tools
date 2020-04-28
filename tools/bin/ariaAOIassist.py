@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 from osgeo import ogr
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
 
 
 
@@ -40,10 +40,14 @@ def createParser():
             help='End date. Default : None')
     parser.add_argument('-x', '--exclude_dates', dest='excludeDates', type=str, default=None,
             help='List of dates to exclude from kml generation. This can be provided as space-separated string in format YYYYMMDD (e.g., \'20180101 20181213 20190428\'), or as a text file with one date to exclude per line. Default : None')
+    parser.add_argument('--plot_raw', dest='plotRaw', action='store_true',
+            help='Plot raw frames if included in .csv')
     parser.add_argument('--flag_partial_coverage', dest='flagPartialCoverage', action='store_true',
             help='Flag dates that do not cover the full lat/lon extent. This does not remove dates from the lat centers plot, only highlights the dates in red.')
     parser.add_argument('--remove_incomplete_dates', dest='removeIncomplete', action='store_true',
             help='Automatically detect and remove dates that do not entirely fill the given latitude bounds. Note that if lat bounds are left as default, only dates with gaps will be automatically excluded.')
+    parser.add_argument('--approximate_AOI', dest='approxAOI', action='store_true',
+            help='Create KML of approximate AOI. NOTE: ~20 km or 1 burst must be removed from either end of the AOI--this must be confirmed by the user.')
 
     return parser
 
@@ -63,7 +67,7 @@ class SentinelMetadata:
         parameters and flags are added without removing metadata entries.
     '''
     # Load data from csv and pre-format
-    def __init__(self,imgfile,track,workdir='./',excludeDates=None,
+    def __init__(self,imgfile,track,workdir='./',excludeDates=None,plotRaw=False,
         flag_partial_coverage=False,remove_incomplete_dates=False):
         # Record parameters
         self.track=track
@@ -71,6 +75,7 @@ class SentinelMetadata:
         self.maxLat=60
         self.workdir=workdir
         self.excludeDates=excludeDates
+        self.plotRaw=plotRaw
         self.flagPartialCoverage=flag_partial_coverage
         self.removeIncomplete=remove_incomplete_dates
 
@@ -358,30 +363,38 @@ class SentinelMetadata:
         SLCindices=self.metadata[self.metadata['Processing Level']=='SLC'].index
 
         # Loop through each SLC acqusition
+        labels=[]
         for frameNdx,frame in self.metadata.loc[SLCindices,:].iterrows():
             # Color based on gaps
             if (self.flagPartialCoverage==True) and (frame['gaps']>0):
                 color='r'
+                label='Incomplete track'
             else:
                 color='k'
+                label='Complete track'
 
             # Color based on spatial extent, if extent is not automatic
             if (self.flagPartialCoverage==True) and (frame['Extent Covered']==False):
                 color='r'
+                label='Incomplete track'
 
             # Gray if excluded
             if frame['Common Date'] in self.excludeDates:
                 color=(0.6,0.6,0.6)
+                label='Excluded date'
 
             # Plot frame
-            self.ax.scatter(frame['Common Datetime'],frame['Center Lat'],s=100,color=color)
+            self.ax.scatter(frame['Common Datetime'],frame['Center Lat'],s=100,color=color,
+                label=label)
 
-        # Plot RAW frames
-        RAWindices=self.metadata[self.metadata['Processing Level']=='RAW'].index
+        # Plot RAW frames if specified
+        if self.plotRaw==True:
+            RAWindices=self.metadata[self.metadata['Processing Level']=='RAW'].index
 
-        # Loop through each RAW acquisition
-        for frameNdx,frame in self.metadata.loc[RAWindices,:].iterrows():
-            self.ax.scatter(frame['Common Datetime'],frame['Center Lat'],s=100,color='b')
+            # Loop through each RAW acquisition
+            for frameNdx,frame in self.metadata.loc[RAWindices,:].iterrows():
+                self.ax.scatter(frame['Common Datetime'],frame['Center Lat'],s=100,color='m',
+                    label='Raw frame')
 
         # Format x-axis
         dates=list(set(self.metadata['Common Datetime'])); dates.sort()
@@ -402,6 +415,12 @@ class SentinelMetadata:
             [self.ax.get_xticklabels()[n].set_color('r') for n,date in enumerate(datelabels) if
                 date in partialDates]
 
+        # Format legend
+        handles,labels=self.ax.get_legend_handles_labels()
+        uniqueLabels = dict(zip(labels,handles))
+        self.ax.legend(uniqueLabels.values(),uniqueLabels.keys(),
+            bbox_to_anchor=(1.005,1),loc='upper left',borderaxespad=0.)
+
         # Other formatting
         title='Track {}'.format(self.trackCode)
         self.ax.set_title(title,weight='bold')
@@ -415,9 +434,9 @@ class SentinelMetadata:
 
 
     # Save spatial extents
-    def save2kml(self,remove_incomplete_dates=False):
+    def save2kml(self):
         '''
-            Save outputs to kml file - use only SLC frames and non-exluded dates
+            Save frame boundaries to kml file - use only SLC frames and non-exluded dates.
         '''
         # Open KML data set
         kmlname='track{}_frames.kml'.format(self.trackCode)
@@ -458,6 +477,190 @@ class SentinelMetadata:
         DS=layer=feat=geom=None
 
 
+    # Suggested AOI based on intersection of all polygons
+    def __polygonFromFrame__(self,frame):
+        '''
+            Create a Shapely polygon from the coordinates of a frame.
+        '''
+        P=Polygon([(float(frame['Near Start Lon']),float(frame['Near Start Lat'])),
+                    (float(frame['Far Start Lon']),float(frame['Far Start Lat'])),
+                    (float(frame['Far End Lon']),float(frame['Far End Lat'])),
+                    (float(frame['Near End Lon']),float(frame['Near End Lat']))])
+        return P
+
+    def __mergeFramesbyDate__(self,date):
+        '''
+            For a given date, merge all valid (SLC) frames into a polygon.
+        '''
+        # Use only SLCs
+        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+
+        # Collect indices of date
+        dateIndices=self.metadata[self.metadata['Common Date']==date].index
+        dateIndices=set(slcIndices).intersection(dateIndices)
+
+        # Compute polygons
+        datePolygons=[]
+        for frameNdx,frame in self.metadata.loc[dateIndices,:].iterrows():
+            # Convert frame coords to polygon
+            datePolygons.append(self.__polygonFromFrame__(frame))
+
+        # Find union of polygons
+        dateUnion=datePolygons[0]
+        for datePolygon in datePolygons:
+            dateUnion=dateUnion.union(datePolygon)
+
+        return dateUnion
+
+    def __simplifyAOI__(self,AOI):
+        '''
+            Simplify AOI polygon by removing points within several hundred meters of each other.
+        '''
+        # Assign search distance
+        d=0.05 # 0.01 degrees ~ 1 km
+        dsq=d**2
+
+        # Convert polygon vertices to "nodes"
+        nodes=np.column_stack(AOI.exterior.xy)
+        N=nodes.shape[0] # number of nodes
+
+        # Start with first node
+        d2all=(nodes[0,0]-nodes[:,0])**2+(nodes[0,1]-nodes[:,1])**2
+        nodeCluster=nodes[d2all<dsq,:]
+        clusterCenter=np.mean(nodeCluster,axis=0)
+        simpleNodes=np.array(clusterCenter).reshape(1,2)
+
+        # Loop through all nodes to find cluster centers
+        for n in range(1,N):
+            currentNode=nodes[n,:]
+
+            # First, check if a nearby node already exists
+            d2simple=(currentNode[0]-simpleNodes[:,0])**2+(currentNode[1]-simpleNodes[:,1])**2
+            if np.min(d2simple)>dsq:
+                # Compute distance from given node to all other nodes
+                d2all=(nodes[:,0]-currentNode[0])**2+(nodes[:,1]-currentNode[1])**2
+
+                # Identify cluster of all nodes within squared search distance
+                nodeCluster=nodes[d2all<dsq]
+                clusterCenter=np.mean(nodeCluster,axis=0)
+
+                # Add to simple nodes
+                simpleNodes=np.vstack([simpleNodes,clusterCenter])
+
+        # Convert simplified nodes back to Shapely Polygon
+        simpleNodes=Polygon(simpleNodes)
+
+        return simpleNodes
+
+    def __trimAOIedges__(self,AOI):
+        '''
+            Remove ~20 km or 1 burst from the N-S edges of the suggested AOI.
+            First, remove data centroid. Then, rotate into a semi-vertical orientation.
+            Remove ~20 km from top and bottom points.
+        '''
+        # Assign trim distance
+        trimDist=0.2 # degrees
+
+        # Convert polygon vertices to "nodes"
+        nodes=np.column_stack(AOI.exterior.xy)
+
+        # Remove centroid
+        nodeMeans=np.mean(nodes,axis=0)
+        nodes-=nodeMeans # temporarily remove centroid
+
+        # Solve for polygon axes and rotate to horizontal
+        U,s,VT=np.linalg.svd(nodes)
+
+        # Rotate into N-S orientation
+        R=np.array([[0,-1],[1, 0]]) # 90-degree rotation matrix
+        nodes=R.dot(VT).dot(nodes.T).T
+
+        # Remove 20 km from top and bottom
+        sortNdx=np.argsort(nodes[:,1])
+        nodes[sortNdx[:2],1]+=trimDist
+        nodes[sortNdx[-2:],1]-=trimDist
+
+        # Rotate back to original orientation
+        nodes=VT.T.dot(R.T).dot(nodes.T).T
+
+        # Add centroid back
+        nodes+=nodeMeans
+
+        # Convert back to Shapely Polygon
+        AOI=Polygon(nodes)
+
+        return AOI
+
+    def __saveAOI__(self,AOI):
+        '''
+            Save AOI to kml file.
+        '''
+        # Open kml data set
+        kmlname='track{}_suggestedAOI.kml'.format(self.trackCode)
+        kmlpath=os.path.join(self.workdir,kmlname)
+        DS=ogr.GetDriverByName('LIBKML').CreateDataSource(kmlpath)
+
+        # Create KML layer
+        layer=DS.CreateLayer('suggestedAOI',None,ogr.wkbPolygon)
+        layer.CreateField(ogr.FieldDefn('id',ogr.OFTInteger))
+
+        # Create feature
+        feat=ogr.Feature(layer.GetLayerDefn())
+        feat.SetField('id',0)
+        geom=ogr.CreateGeometryFromWkb(AOI.wkb)
+        feat.SetGeometry(geom)
+        feat.SetStyleString('PEN(c:#000000)')
+        layer.CreateFeature(feat)
+
+        # Close layer
+        layer=feat=geom=None
+
+        # Close KML
+        DS=layer=feat=geom=None
+
+    def intersectionAOI(self):
+        '''
+            Create a "suggested" AOI based on the intersection of all frame polygons.
+            This function does not guarantee a result.
+        '''
+        # Use only SLCs
+        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+
+        # Unique dates
+        dates=list(set(self.metadata.loc[slcIndices,'Common Date']))
+        dates=[date for date in dates if date not in self.excludeDates]
+
+        # Use first date as initial polygon
+        dateUnion=self.__mergeFramesbyDate__(dates[0])
+        sceneIntersection=dateUnion
+
+        validOverlap=True # assume all frames overlap until detected otherwise
+        for date in dates[1:]:
+            # Take union of frames in date
+            dateUnion=self.__mergeFramesbyDate__(date)
+
+            # Take intersection of dates
+            sceneIntersection=sceneIntersection.intersection(dateUnion)
+
+            # Check whether area of intersection remains a single polygon, or if it is broken into
+            # multiple pieces
+            if isinstance(sceneIntersection,MultiPolygon):
+                print('COULD NOT AUTOMATICALLY DETERMINE AOI DUE TO GAPS.')
+                print('Area of frame overlap not continuous, beginning on {}'.format(date))
+                validOverlap=False
+                break
+
+        # Remove ~20km from either end and save suggested AOI
+        if validOverlap==True:
+            # Simply polygon by removing points within several hundred meters of each other
+            sceneIntersection=self.__simplifyAOI__(sceneIntersection)
+
+            # Remove 20 km from edges
+            sceneIntersection=self.__trimAOIedges__(sceneIntersection)
+
+            # Save AOI to KML
+            self.__saveAOI__(sceneIntersection)
+
 
 # Main
 if __name__ == "__main__":
@@ -496,6 +699,7 @@ if __name__ == "__main__":
         # Instantiate metadata object and load metadata from csv
         track_metadata=SentinelMetadata(imgfile=inps.imgfile,track=track,workdir=inps.workdir,
             excludeDates=inps.excludeDates,
+            plotRaw=inps.plotRaw,
             flag_partial_coverage=inps.flagPartialCoverage,
             remove_incomplete_dates=inps.removeIncomplete)
 
@@ -506,12 +710,10 @@ if __name__ == "__main__":
         # Filter by latitude bounds
         track_metadata.filterByLatitude(minLat=inps.latBounds[0],maxLat=inps.latBounds[1])
 
-
         # Check spatial criteria -- does not remove scenes, only highlights potentially problematic
         # ones
         # Check for gaps
         track_metadata.checkContinuity()
-
 
         # Outputs
         # Plot frame centers
@@ -519,6 +721,10 @@ if __name__ == "__main__":
 
         # Save to Google Earth KML
         track_metadata.save2kml()
+
+        # Create suggested AOI based on intersection of all polygons
+        if inps.approxAOI==True:
+            track_metadata.intersectionAOI()
 
 
     print('Products generated.')
