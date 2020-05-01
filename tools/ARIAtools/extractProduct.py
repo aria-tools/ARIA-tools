@@ -494,9 +494,9 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
 
     # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
     # Crop to track extents
-    out_interpolated=gdal.Warp('', outname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+    out_interpolated=gdal.Warp('', outname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=dem.ReadAsArray().shape[1], height=dem.ReadAsArray().shape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
 
-    # Apply mask (if specified).
+    # Apply mask (if specified)
     if mask is not None:
         out_interpolated = mask.ReadAsArray()*out_interpolated
 
