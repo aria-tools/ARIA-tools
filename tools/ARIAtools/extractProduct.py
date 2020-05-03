@@ -234,6 +234,10 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         del lake_masks, amp_file, mask_file
         os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
 
+    if os.path.basename(maskfilename).lower().startswith('nlcd') and maskfilename.lower().endswith('img'):
+        from ariaNLCDmask import NLCDMasker
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(maskfilename) ## write mask to disk
+
     # Load mask
     try:
         # Check if uncropped/cropped maskfiles exist in 'mask' subdirectory
@@ -249,8 +253,8 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
             gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
         #pass cropped DEM
         mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        mask.SetProjection(proj)
-        mask.SetDescription(maskfilename)
+        # mask.SetProjection(proj)
+        # mask.SetDescription(maskfilename)
     except:
         raise Exception('Failed to open user mask')
 
@@ -340,7 +344,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     del ds
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, arrshape, proj
-
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """
@@ -695,7 +698,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         else:
             print("WARNING: Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s"%(product_dict[2][i][0],tropo_products))
 
-
 def main(inps=None):
     '''
         Main workflow for extracting layers from ARIA products
@@ -741,10 +743,6 @@ def main(inps=None):
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
     standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
-    # Load or download mask (if specified).
-    if inps.mask is not None:
-        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
-
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
     if inps.demfile is not None:
@@ -752,6 +750,10 @@ def main(inps=None):
         inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
     else:
         demfile=None ; Latitude=None ; Longitude=None
+
+    # Load or download mask (if specified).
+    if inps.mask is not None:
+        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Extract user expected layers
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
