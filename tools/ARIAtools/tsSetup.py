@@ -159,7 +159,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbitDirection = str.split(os.path.basename(aria_prod.files[0]),'-')[2]
 
-    with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
+    stack_dir = os.path.join(workdir, 'stack')
+    with open( os.path.join(stack_dir, outputFileName+'.vrt'), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
         <SRS>{proj}</SRS>
         <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n'''.format(
@@ -195,7 +196,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                 print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
-            path = os.path.abspath(data[1])
+            path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
             <SourceFilename>{path}</SourceFilename>
