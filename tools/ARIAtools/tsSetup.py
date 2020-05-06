@@ -199,7 +199,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
             path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
-            <SourceFilename>{path}</SourceFilename>
+            <SourceFilename relativeToVRT="1">{path}</SourceFilename>
             <SourceBand>1</SourceBand>
             <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{dataType}"/>
             <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
