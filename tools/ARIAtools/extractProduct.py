@@ -90,7 +90,7 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
+def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
     '''
         Function to load and export DEM, lat, lon arrays.
         If "Download" flag is specified, DEM will be donwloaded on the fly.
@@ -140,12 +140,12 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, proj, arrshape=None, workdir
             gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT"))
             print('Saved DEM cropped to interferometric grid here: '+ demfilename)
 
-        #pass cropped DEM
-        demfile = gdal.Warp('', demfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        #pass expanded DEM for metadata field interpolation
+        bounds=list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
+        demfile = gdal.Warp('', _world_dem, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         demfile.SetProjection(proj)
         demfile.SetDescription(demfilename)
 
-        ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
         # Define lat/lon arrays for fullres layers
         Latitude=np.linspace(demfile.GetGeoTransform()[3],demfile.GetGeoTransform()[3]+(demfile.GetGeoTransform()[5]*demfile.RasterYSize),demfile.RasterYSize)
         Latitude=np.repeat(Latitude[:, np.newaxis], demfile.RasterXSize, axis=1)
@@ -258,7 +258,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081):
     '''
-        Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
+        Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), report common track union to accurately interpolate metadata fields, and expected shape for DEM.
     '''
 
     # Import functions
@@ -284,22 +284,27 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
         scene["productBoundingBox"]=[outname]
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.shp')
+    # Need to track bounds of max extent to avoid metadata interpolation issues
+    prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.shp')
+    sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
+    save_shapefile(prods_TOTbbox_metadatalyr, open_shapefile(product_dict[sceneareas.index(max(sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
         save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0), 'GeoJSON')
     # Intiate intersection with largest scene, if bbox NOT specified
     else:
-        sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
         save_shapefile(prods_TOTbbox, open_shapefile(product_dict[sceneareas.index(max(sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     rejected_scenes=[]
     for scene in product_dict:
         prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
         total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
+        total_bbox_metadatalyr=open_shapefile(prods_TOTbbox_metadatalyr, 0, 0)
         # Generate footprint for the union of all products
         if croptounion:
             prods_bbox=prods_bbox.union(total_bbox)
         # Generate footprint for the common intersection of all products
         else:
+            # Now pass track intersection for cutline
             prods_bbox=prods_bbox.intersection(total_bbox)
             # Estimate percentage of overlap with bbox
             if prods_bbox.bounds==():
@@ -315,6 +320,9 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
                     os.remove(scene['productBoundingBox'][0])
                 else:
                     save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
+                    # Need to track bounds of max extent to avoid metadata interpolation issues
+                    total_bbox_metadatalyr=total_bbox_metadatalyr.union(open_shapefile(scene['productBoundingBox'][0], 0, 0))
+                    save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     metadata_dict = [i for j, i in enumerate(metadata_dict) if j not in rejected_scenes]
@@ -339,7 +347,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     proj=ds.GetProjection()
     del ds
 
-    return metadata_dict, product_dict, bbox_file, prods_TOTbbox, arrshape, proj
+    return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
 
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
@@ -460,12 +468,10 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
     if outputFormat=='VRT':
         outputFormat='ENVI'
 
-    # Check and buffer bounds if <4pix in x/y, which would raise interpolation error
-    geotrans=gdal.Open(outname+'.vrt').GetGeoTransform()
-    if round((max(bbox_bounds[0::2])-min(bbox_bounds[0::2])),2)<round((abs(geotrans[1])*4),2) or round((max(bbox_bounds[1::2])-min(bbox_bounds[1::2])),2)<round((abs(geotrans[-1])*4),2):
-        data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-    else:
-        data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=bbox_bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    # get final shape
+    arrshape=gdal.Open(dem.GetDescription()).ReadAsArray().shape
+    # load layered metadata array
+    data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
@@ -486,7 +492,7 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
                 out_interpolated[hgt[0], line[0], pixel[0]] = interp_2d(line[1], pixel[1], hgt[1])
     out_interpolated=np.flip(out_interpolated, axis=0)
     # interpolate to interferometric grid
-    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
+    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue(), bounds_error=False)
     out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
 
     # Save file
@@ -494,16 +500,18 @@ def finalize_metadata(outname, bbox_bounds, prods_TOTbbox, dem, lat, lon, mask=N
 
     # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
     # Crop to track extents
-    out_interpolated=gdal.Warp('', outname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=dem.ReadAsArray().shape[1], height=dem.ReadAsArray().shape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+    gdal.Warp(outname, outname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite'])).ReadAsArray()
 
     # Apply mask (if specified)
     if mask is not None:
+        out_interpolated = gdal.Open(outname).ReadAsArray()
         out_interpolated = mask.ReadAsArray()*out_interpolated
+        # Update VRT with new raster
+        update_file=gdal.Open(outname,gdal.GA_Update)
+        update_file.GetRasterBand(1).WriteArray(out_interpolated)
+        del update_file
 
-    update_file=gdal.Open(outname,gdal.GA_Update)
-    update_file.GetRasterBand(1).WriteArray(out_interpolated)
-
-    del out_interpolated, interpolator, interp_2d, data_array, update_file
+    del out_interpolated, interpolator, interp_2d, data_array
 
 def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox, outDir='./',outputFormat='VRT', verbose=None, num_threads='2'):
     """
@@ -740,7 +748,7 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
+    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
     # Load or download mask (if specified).
     if inps.mask is not None:
         inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
@@ -749,7 +757,7 @@ def main(inps=None):
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
     if inps.demfile is not None:
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
     else:
         demfile=None ; Latitude=None ; Longitude=None
 
