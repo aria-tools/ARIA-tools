@@ -498,9 +498,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
 
     #chunk data to conserve memory
     out_interpolated = []
-    dem_array=np.array_split(dem.ReadAsArray(), 12) ; dem_array=[x for x in dem_array if x.size > 0]
-    lat=np.array_split(lat, 12) ; dem_array=[x for x in lat if x.size > 0]
-    lon=np.array_split(lon, 12) ; dem_array=[x for x in lon if x.size > 0]
+    dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
+    lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
+    lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
     for i in enumerate(dem_array):
         out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
     out_interpolated=np.concatenate(out_interpolated, axis=0)
