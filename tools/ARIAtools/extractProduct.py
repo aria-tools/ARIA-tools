@@ -142,7 +142,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
 
         #pass expanded DEM for metadata field interpolation
         bounds=list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
-        demfile = gdal.Warp('', _world_dem, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        arr_res=[abs(gdal.Open(demfilename).GetGeoTransform()[1]), abs(gdal.Open(demfilename).GetGeoTransform()[-1])] # Get output res
+        demfile = gdal.Warp('', _world_dem, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, xRes=arr_res[0], yRes=arr_res[1], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         demfile.SetProjection(proj)
         demfile.SetDescription(demfilename)
 
@@ -496,15 +497,18 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     # interpolate to interferometric grid
     interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
 
-    #chunk data to conserve memory
-    out_interpolated = []
-    dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
-    lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
-    lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
-    for i in enumerate(dem_array):
-        out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
-    out_interpolated=np.concatenate(out_interpolated, axis=0)
-    del dem_array
+    try:
+        out_interpolated = interpolator(np.stack((np.flip(dem, axis=0), lat, lon), axis=-1))
+    except:
+        #chunk data to conserve memory
+        out_interpolated = []
+        dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
+        lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
+        lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
+        for i in enumerate(dem_array):
+            out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
+        out_interpolated=np.concatenate(out_interpolated, axis=0)
+        del dem_array
 
     # Save file
     renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
