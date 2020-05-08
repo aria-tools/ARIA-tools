@@ -495,7 +495,16 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     out_interpolated=np.flip(out_interpolated, axis=0)
     # interpolate to interferometric grid
     interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue())
-    out_interpolated = interpolator(np.stack((np.flip(dem.ReadAsArray(), axis=0), lat, lon), axis=-1))
+
+    #chunk data to conserve memory
+    out_interpolated = []
+    dem_array=np.array_split(dem.ReadAsArray(), 12) ; dem_array=[x for x in dem_array if x.size > 0]
+    lat=np.array_split(lat, 12) ; dem_array=[x for x in lat if x.size > 0]
+    lon=np.array_split(lon, 12) ; dem_array=[x for x in lon if x.size > 0]
+    for i in enumerate(dem_array):
+        out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
+    out_interpolated=np.concatenate(out_interpolated, axis=0)
+    del dem_array
 
     # Save file
     renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
