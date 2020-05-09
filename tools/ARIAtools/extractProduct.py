@@ -257,7 +257,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     return mask
 
-def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081):
+def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     '''
         Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), report common track union to accurately interpolate metadata fields, and expected shape for DEM.
     '''
@@ -268,6 +268,13 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
         os.mkdir(workdir)
+
+    # If specified, check if user's bounding box meets minimum threshold area
+    if bbox_file is not None:
+        user_bbox=open_shapefile(bbox_file, 0, 0)
+        overlap_area=shapefile_area(user_bbox)
+        if overlap_area<minimumOverlap:
+            raise Exception("User bound box '%s' has an area of only %fkm\u00b2, below specified minimum threshold area %fkm\u00b2"%(bbox_file,overlap_area,minimumOverlap))
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
@@ -309,14 +316,16 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             prods_bbox=prods_bbox.intersection(total_bbox)
             # Estimate percentage of overlap with bbox
             if prods_bbox.bounds==():
-                print('Rejected scene %s has no common overlap with bbox'%(scene['productBoundingBox'][0]))
+                if verbose:
+                    print('Rejected scene %s has no common overlap with bbox'%(scene['productBoundingBox'][0]))
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene['productBoundingBox'][0])
             else:
                 overlap_area=shapefile_area(prods_bbox)
                 # Kick out scenes below specified overlap threshold
                 if overlap_area<minimumOverlap:
-                    print("Rejected scene %s has only %fkm\u00b2 overlap with bbox"%(scene['productBoundingBox'][0],overlap_area))
+                    if verbose:
+                        print("Rejected scene %s has only %fkm\u00b2 overlap with bbox"%(scene['productBoundingBox'][0],overlap_area))
                     rejected_scenes.append(product_dict.index(scene))
                     os.remove(scene['productBoundingBox'][0])
                 else:
@@ -326,6 +335,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
                     save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
 
     # Remove scenes with insufficient overlap w.r.t. bbox
+    if rejected_scenes!=[]:
+        print("%d out of %d interferograms rejected for not meeting specified spatial thresholds"%(len(rejected_scenes),len(product_dict)))
     metadata_dict = [i for j, i in enumerate(metadata_dict) if j not in rejected_scenes]
     product_dict = [i for j, i in enumerate(product_dict) if j not in rejected_scenes]
     if product_dict==[]:
@@ -763,7 +774,7 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
+    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
     # Load or download mask (if specified).
     if inps.mask is not None:
         inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)

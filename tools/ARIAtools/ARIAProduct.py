@@ -310,14 +310,20 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         track_rejected_pairs=[]
 
         # Check for (and remove) duplicate products
+        num_prods=len(self.products)
+        num_dups=[]
         for i in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
             if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
-                print("WARNING: Duplicate product captured. Rejecting scene %s"%(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
+                if self.verbose:
+                    print("WARNING: Duplicate product captured. Rejecting scene %s"%(os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1])))
                 # Overwrite latter scene with former
                 self.products[i[0]+1]=i[1]
+                num_dups.append(i[0])
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
+        if num_dups!=0:
+            print("%d out of %d products rejected since they are duplicates"%(len(num_dups),num_prods))
 
         # If only one pair in list, add it to list.
         if len(self.products)==1:
@@ -352,8 +358,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
-                    print("Warning! Gap for interferogram %s"%(i[1][0]['pair_name']))
                     track_rejected_pairs.extend((i[1][0]['pair_name'], self.products[i[0]+1][0]['pair_name']))
+                    if self.verbose:
+                        print("WARNING: Gap for interferogram %s"%(i[1][0]['pair_name']))
 
             # Products correspond to different dates, so pass both as separate IFGs.
             else:
@@ -367,9 +374,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
-            # Provide report of which files were kept vs. which were not.
+            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products)+len(track_rejected_pairs)))
             if self.verbose:
+                # Provide report of which files were kept vs. which were not.
                 print("Specifically, the following interferograms were rejected:")
                 for item in sorted_products:
                     if item[1]['pair_name'][0] in track_rejected_pairs:
