@@ -390,7 +390,7 @@ class plot_class:
         arr = np.where(ds.ReadAsArray() < 0.01, np.nan, ds.ReadAsArray())
         fig, axes = self.plt.subplots()
         cmap   = self.plt.cm.autumn; cmap.set_bad('white', 0.9)
-        im   = axes.imshow(arr, cmap=cmap, extent=get_extent(ds), vmin=0, vmax=1)
+        im   = axes.imshow(arr, cmap=cmap, extent=get_extent(ds), vmin=0, vmax=1, interpolation='nearest')
         axes.set_xlabel('longitude',weight='bold')
         axes.set_ylabel('latitude',weight='bold')
         axes.grid(False)
