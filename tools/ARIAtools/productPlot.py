@@ -562,7 +562,7 @@ def main(inps=None):
         standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, \
             prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], \
             os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, \
-            minimumOverlap=inps.minimumOverlap)
+            minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
 
         # Load or download mask (if specified).
         if inps.mask is not None:
