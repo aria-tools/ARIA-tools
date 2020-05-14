@@ -528,6 +528,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     # Crop to track extents
     gdal.Warp(outname, outname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite'])).ReadAsArray()
 
+    # Update VRT
+    gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
+
     # Apply mask (if specified)
     if mask is not None:
         out_interpolated = gdal.Open(outname).ReadAsArray()
