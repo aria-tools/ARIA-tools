@@ -31,6 +31,7 @@ def open_shapefile(fname, lyrind, ftind):
     #If layer name provided
     if isinstance(lyrind, str):
         file_bbox = file_bbox.GetLayerByName(lyrind).GetFeature(ftind)
+
     #If layer index provided
     else:
         file_bbox = file_bbox.GetLayerByIndex(lyrind).GetFeature(ftind)

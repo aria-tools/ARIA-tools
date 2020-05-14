@@ -73,25 +73,19 @@ def extractUTCtime(aria_prod):
         #Grab pair name of the product
         pairName = aria_prod.products[1][i]['pair_name']
 
-        #Grab start times, append to a list and find minimum start time
-        startTimeList = aria_prod.products[0][i]['azimuthZeroDopplerStartTime']
-        startTime=[]
-        for j in startTimeList:
-            startTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S.%fZ'))
-        minStartTime = min(startTime)
-
-        #Grab end times, append to a list and find maximum end time
-        endTimeList = aria_prod.products[0][i]['azimuthZeroDopplerEndTime']
-        endTime=[]
-        for k in endTimeList:
-            endTime.append(datetime.strptime(k,'%Y-%m-%dT%H:%M:%S.%fZ'))
-        maxEndTime = max(endTime)
+        #Grab mid-times, append to a list and find minimum and maximum mid-times
+        midTimeList = aria_prod.products[0][i]['azimuthZeroDopplerMidTime']
+        midTime=[]
+        for j in midTimeList:
+            midTime.append(datetime.strptime(j,'%Y-%m-%dT%H:%M:%S.%f'))
+        minMidTime = min(midTime)
+        maxMidTime = max(midTime)
 
         #Calculate time difference between minimum start and maximum end time, and add it to mean start time
         #Write calculated UTC time into a dictionary with associated pair names as keys
-        timeDelta = (maxEndTime - minStartTime)/2
-        utcTime = (minStartTime+timeDelta).time()
-        utcDict[pairName[0]] = utcTime
+        timeDelta = (maxMidTime - minMidTime)/2
+        utcTime = (minMidTime+timeDelta).time()
+        utcDict[pairName[0]] = utcTime.strftime("%H:%M:%S.%f")
     return utcDict
 
 def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
@@ -165,7 +159,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbitDirection = str.split(os.path.basename(aria_prod.files[0]),'-')[2]
 
-    with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
+    stack_dir = os.path.join(workdir, 'stack')
+    with open( os.path.join(stack_dir, outputFileName+'.vrt'), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
         <SRS>{proj}</SRS>
         <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n'''.format(
@@ -201,10 +196,10 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                 print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
-            path = os.path.abspath(data[1])
+            path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
-            <SourceFilename>{path}</SourceFilename>
+            <SourceFilename relativeToVRT="1">{path}</SourceFilename>
             <SourceBand>1</SourceBand>
             <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{dataType}"/>
             <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
@@ -255,7 +250,7 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap)
+    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
 
     # Load or download mask (if specified).
     if inps.mask is not None:
@@ -265,7 +260,8 @@ def main(inps=None):
     if inps.demfile is not None:
         print('Download/cropping DEM')
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, \
+            prods_TOTbbox_metadatalyr, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Extract
     layers=['unwrappedPhase','coherence']

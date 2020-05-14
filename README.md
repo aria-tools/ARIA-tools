@@ -22,6 +22,9 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 
 1.  [Software Dependencies](#software-dependencies)
 2.  [Installation](#installation)
+-   [Conda](#conda)
+-   [Other installation options](#other-installation-options)
+-   [ARIA-tools with support for S3 virtual data access](#aria-tools-with-support-for-s3-virtual-data-access)
 3.  [Running ARIA-tools](#running-aria-tools)
 -   [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
 -   [Manipulating GUNW Products](#manipulating-gunw-products)
@@ -69,6 +72,7 @@ Below we list the dependencies for ARIA-tools
 ## Installation
 ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. Easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and use the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
 
+### Conda
 Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
 
 ```.tcsh
@@ -93,6 +97,30 @@ set PATH $PATH:'/ARIAtoolsREPO/tools/bin'
 The following pages might be of use to those trying to build third party packages from source.
 -   [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/Linux_source_build.md)
 -   [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOS_source_build.md)
+
+
+### ARIA-tools with support for S3 virtual data access
+GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools to avoid download of product during processing. 
+
+Minimum requirements:
+```
+* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0
+* Linux kernel >=4.3 
+* libnetcdf >=4.5 
+```
+
+A '~/.netrc' file with earthdata credential included
+```
+echo "machine urs.earthdata.nasa.gov login myUsername password myPassword" > ~/.netrc
+chmod 600 ~/.netrc
+```
+
+In addition, users should set the following environment variables:
+```.bash
+export GDAL_HTTP_COOKIEFILE=/tmp/cookies.txt
+export GDAL_HTTP_COOKIEJAR=/tmp/cookies.txt
+export VSI_CACHE=YES
+```
 
 ------
 ## Running ARIA-tools
