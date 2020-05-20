@@ -2,84 +2,111 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # For a given set of interferograms, compute the cumulative phase
 #  misclosure.
-# 
+#
 # Rob Zinke 2020
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ### IMPORT MODULES ---
+import argparse
 import os
 from glob import glob
-import numpy as np 
+from datetime import datetime, timedelta
+import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
+from osgeo import gdal
 from scipy.stats import mode
-from datetime import datetime
 
 
 ### PARSER ---
-Description='''Compute the cumulative misclosure of phase triplets based on a set of interferograms saved in the MintPy HDF5 data stucture.
-This program assumes that all files are cover the same area in space, with the same spatial resolution. During triplet computation,
-values at a reference point are removed from the interferograms prior to misclosure computation to account for abiguities in 
-the unwrapped phase that might arise during pairwise computation.
+Description='''Compute the cumulative misclosure of phase triplets based on a set of interferograms
+saved in the stack/unwrapStack.vrt data set. During triplet computation, values at a reference point
+are removed from the interferograms prior to misclosure computation to account for abiguities in the
+unwrapped phase that might arise during pairwise computation.
 
-The code works by reading in a list of triplets and their date pairs, and from those:
+The code works by generating a list of triplets from the available pairs.
+From the list of triplets, the routine will:
 
     1. Formulate a list of viable triplet combinations (IJ, JK, IK)
     2. Subtract the reference point from those interferograms
     3. Compute the disagreement based on IJ+JK-IK
        ... continue through the list of triplets.
 
-Both the misclosure values (positive or negative) and the absolute misclosure values (always positive) are computed and stored in 3D arrays, where each slice represents a triplet. The "cumulative" misclosure and absolute misclosure are computed by summing the 3D arrays.
+Both the misclosure values (positive or negative) and the absolute misclosure values
+(always positive) are computed and stored in 3D arrays, where each slice represents a triplet. The
+"cumulative" misclosure and absolute misclosure are computed by summing the 3D arrays.
 
-Once the (absolute) misclosure is calculated, the user can view the time history of any pixel by clicking on either map.
+Once the (absolute) misclosure is calculated, the user can view the time history of any pixel by
+clicking on the maps.
+
+Thumbnail images of the misclosure associated with any given triplet are saved in the MisclosureFigs
+folder. Additionally, georeferenced tiffs of the cumulative misclosure and absolute cumulative
+misclosure maps are saved.
 '''
 
 Examples='''EXAMPLES
-[from a MintPy "inputs" directory]
-ariaMisclosure.py ifgramStack.h5 --exclude-pairs 20190103_20190115 20160530_20170724 20160530_20170618 20160530_20170606 20160530_20160810 -refX 38 -refY 212
 
-[from an ARIA-tools "unwrappedPhase" directory]
-ariaMisclosure.py '*.vrt' -refX 40 -refY 220
+# Using the unwrapStack.vrt to call all interferograms, automatically find a reference point
+ariaMisclosure.py -f stack/unwrapStack.vrt
 
-[from an ISCE stack "merged/interferograms" directory]
-ariaMisclosure.py '*' --print-triplets
+# Provide a predefined reference point
+ariaMisclosure.py -f stack/unwrapStack.vrt -refLon 89.358 -refLat 32.621
+
+# Limit triplet selection by time interval (12 days to 48 days)
+ariaMisclosure.py -f stack/unwrapStack.vrt --mintime 12 --maxtime 48
+
 '''
 
 def createParser():
-    import argparse
-    parser = argparse.ArgumentParser(description=Description, formatter_class=argparse.RawTextHelpFormatter, epilog=Examples)
+    parser = argparse.ArgumentParser(description=Description,
+        formatter_class=argparse.RawTextHelpFormatter, epilog=Examples)
 
     # Input data
-    parser.add_argument(dest='dataset', type=str, help='Name of folders, files, or HDF5 dataset')
-    parser.add_argument('-t','--dataType', dest='dataType', type=str, default=None, help='(Recommended) Manually specify data type (ARIA, ISCE, MintPy, [None])')
-    parser.add_argument('-s','--subDS', dest='subDS', type=str, default='unwrapPhase', help='Sub-data set [e.g., unwrapPhase_phaseClosure, default=unwrapPhase]')
-    parser.add_argument('--exclude-pairs', dest='exclPairs', type=str, nargs='+', default=None, help='Pairs to exclude \"YYYYMMDD_YYYYMMDD\"')
+    parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True,
+        help='ARIA files. Specify the stack/unwrapStack.vrt file, or a wildcard operator in the unwrappedPhase folder (see EXAMPLES)')
+    parser.add_argument('-w', '--workdir', dest='workdir', type=str, default='./',
+        help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
 
-    # Reference point
-    parser.add_argument('-refX', dest='refX', default='auto', help='Reference X pixel')
-    parser.add_argument('-refY', dest='refY', default='auto', help='Reference Y pixel')
+    parser.add_argument('--startdate', dest='startDate', type=str, default='20140615',
+        help='Start date for data series')
+    parser.add_argument('--enddate', dest='endDate', type=str, default=None,
+        help='End date for data series')
+    parser.add_argument('--exclude-pairs', dest='excludePairs', type=str, default=None,
+        help='List of pairs to exclude, e.g., \'20160116_20160101 20171031_20161030\'. This can also be provided in as a text file with one line per date pair.')
+    parser.add_argument('--plot-pairs', dest='plotPairs', action='store_true',
+        help='Plot the timespans of date pairs')
 
     # Triplet formulation
-    parser.add_argument('-l','--lags', dest='lags', type=int, default=1, help='Number of lags, e.g., 1 lags = [n1-n0, n2-n1, n2-n0]')
-    parser.add_argument('--mintime', dest='minTime', type=str, default=None, help='Minimum time span of pairs in triplets (days)')
-    parser.add_argument('--maxtime', dest='maxTime', type=str, default=None, help='Maximum time span of pairs in triplets (days)')
+    parser.add_argument('--mintime', dest='minTime', type=int, default=None,
+        help='Minimum time span of pairs in triplets (days)')
+    parser.add_argument('--maxtime', dest='maxTime', type=int, default=None,
+        help='Maximum time span of pairs in triplets (days)')
+    parser.add_argument('--print-triplets', dest='printTriplets', action='store_true',
+        help='Print list of existing triplets (i.e., those included in the data set).')
+    parser.add_argument('--plot-triplets', dest='plotTriplets', action='store_true',
+        help='Plot existing triplets')
+
+    # Reference point
+    parser.add_argument('-refX', dest='refX', type=int, default=None, help='Reference X pixel')
+    parser.add_argument('-refY', dest='refY', type=int, default=None, help='Reference Y pixel')
+    parser.add_argument('-refLon', dest='refLon', type=float, default=None,
+        help='Reference longitude')
+    parser.add_argument('-refLat', dest='refLat', type=float, default=None,
+        help='Reference latitude')
 
     # Vocalization
     parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
-    parser.add_argument('--print-files', dest='printFiles', action='store_true', help='Print list of detected files')
-    parser.add_argument('--print-dates', dest='printDates', action='store_true', help='Print list of unique dates')
-    parser.add_argument('--print-poss-triplets', dest='printPossTriplets', action='store_true', help='Print list of all possible triplets (not just those included in the data set)')
-    parser.add_argument('--print-triplets', dest='printTriplets', action='store_true', help='Print list of triplets validated against existing date pairs')
-
-    # Plots
-    parser.add_argument('--pctmin', dest='pctMinClip', type=float, default=1, help='Minimum percent clip value for cumulative misclosure plot')
-    parser.add_argument('--pctmax', dest='pctMaxClip', type=float, default=99, help='Maximum percent clip value for cumulative misclosure plot')
-
-    parser.add_argument('--plot-inputs', dest='plotInputs', action='store_true', help='Plot input interferograms')
 
     # Misclosure map formatting
-    parser.add_argument('--misclosure-limits', dest='miscLims', type=float, nargs=2, default=None, help='Cumulative misclosure plot color limits')
-    parser.add_argument('--abs-misclosure-limit', dest='absMiscLim', type=float, default=None, help='Absolute cumulative misclosure plot color limits')
+    parser.add_argument('--pctmin', dest='pctMinClip', type=float, default=1,
+        help='Minimum percent clip value for cumulative misclosure plot')
+    parser.add_argument('--pctmax', dest='pctMaxClip', type=float, default=99,
+        help='Maximum percent clip value for cumulative misclosure plot')
+    parser.add_argument('--plot-time-intervals', dest='plotTimeIntervals', action='store_true',
+        help='Plot triplet intervals in misclosure analysis figure.')
 
     return parser
 
@@ -90,431 +117,610 @@ def cmdLineParse(iargs = None):
 
 
 
-### LOAD DATA ---
-## Detect data type
-def detectDataType(inps):
-    # Search for specified data files
-    inps.files=glob(inps.dataset)
-    if inps.printFiles == True: print('Files detected:\n{}'.format(inps.files))
+### STACK OBJECT ---
+class stack:
+    '''
+        Class for loading and storing stack data.
+    '''
 
-    # Summarize file detection
-    inps.nFiles=len(inps.files)
-    if inps.verbose == True: print('{} files detected'.format(inps.nFiles))
-
-    # Determine data type (ARIA, ISCE, MintPy)
-    if inps.dataType:
-        # User-specified data type
-        assert inps.dataType.lower() in ['aria','isce','mintpy'], \
-            'Data type not found. Must be ARIA, ISCE, MintPy'
-    else:
-        # Auto-detect data type
-        if inps.dataset[-3:]=='.h5': 
-            inps.dataType='MintPy'
-        elif inps.dataset[-4:]=='.vrt':
-            inps.dataType='ARIA'
-        else:
-            # Check if files are directories
-            try:
-                os.listdir(inps.files[0])
-                inps.dataType='ISCE'
-            except:
-                print('Data type unrecognized. Please specify explicitly'); exit()
-
-    # Report if requested
-    if inps.verbose == True: print('Data type: {}'.format(inps.dataType))
-
-
-## Load data as 3D array
-def loadData(inps):
-    if inps.verbose == True: print('Loading data...')
-
-    # Detect data type (ARIA, ISCE, MintPy)
-    detectDataType(inps)
-
-    # Load data based on filetype
-    if inps.dataType.lower()=='aria':
-        data=loadARIA(inps)
-    elif inps.dataType.lower()=='isce':
-        data=loadISCE(inps)
-    elif inps.dataType.lower()=='mintpy':
-        data=loadMintPy(inps)
-    else:
-        print('Could not identify data type - please specify explicityly.\nNo data loaded.'); exit()
-
-    # Update variables to reflect map size, epochs, etc.
-    data.updateVariables()
-
-    return data
-
-
-## Load ARIA data set
-def loadARIA(inps):
-    from osgeo import gdal
-    data=dataSet(verbose=inps.verbose) # instatiate data set object
-
-    # Exclude files
-    if inps.exclPairs:
-        inps.files=[file for file in inps.files if file.split('.')[0] not in inps.exclPairs]
-
-    # Loop through to load each file and append to list
-    for file in inps.files:
-        # Load using gdal
-        DS=gdal.Open(file,gdal.GA_ReadOnly)
-
-        # Append IFG to list
-        data.ifgs.append(DS.GetRasterBand(1).ReadAsArray())
-
-        # Append pair name to list
-        fname=os.path.basename(file)
-        pairLabel=fname.split('.')[0] # remove extension
-        pair=pairLabel.split('_')[::-1] # reverse for older-younger
-        data.pairLabels.append(pairLabel)
-        data.pairs.append(pair)
-
-    # Convert IFG list to array
-    data.ifgs=np.array(data.ifgs)
-    data.M,data.N=data.ifgs[0,:,:].shape # map dimensions
-    if inps.verbose == True: print('Data array shape: {}'.format(data.ifgs.shape))
-
-    return data
-
-
-## Load ISCE data set
-def loadISCE(inps):
-    from osgeo import gdal
-    data=dataSet(verbose=inps.verbose) # instatiate data set object
-
-    # Exclude files
-    if inps.exclPairs:
-        inps.files=[file for file in inps.files if file not in inps.exclPairs]
-
-    # Loop through to load each file and append to list
-    for file in inps.files:
-        # Load using gdal
-        ifgName='{}/filt_fine.unw.vrt'.format(file) # format name
-        DS=gdal.Open(ifgName,gdal.GA_ReadOnly) # open
-
-        # Append IFG to list
-        data.ifgs.append(DS.GetRasterBand(1).ReadAsArray())
-
-        # Append pair name to list
-        fname=os.path.basename(file)
-        pairLabel=fname
-        pairName=pairLabel.split('_')
-        data.pairLabels.append(pairLabel)
-        data.pairs.append(pairName)
-
-    # Convert IFG list to array
-    data.ifgs=np.array(data.ifgs)
-    data.M,data.N=data.ifgs[0,:,:].shape # map dimensions
-    if inps.verbose == True: print('Data array shape: {}'.format(data.ifgs.shape))
-
-    return data
-
-
-## Load MintPy data set
-def loadMintPy(inps):
-    import h5py
-    data=dataSet(verbose=inps.verbose) # instatiate dataset object
-
-    # Load HDF5 file
-    with h5py.File(inps.files[0],'r') as DS:
-        # Report keys and data sets if requested
-        if inps.verbose == True: 
-            print('Data sets: {}'.format(DS.keys()))
-            print('Using subset: {}'.format(inps.subDS))
-
-        # Load data cube
-        data.ifgs=DS[inps.subDS][:]
-
-        # Load dates
-        pairs=DS['date'][:].astype(str)
-        data.pairs=[[pair[0],pair[1]] for pair in pairs]
-        data.pairLabels=['{}_{}'.format(pair[0],pair[1]) for pair in pairs]
-
-        # Close data set
-        DS.close()    
-
-    # Exclude interferograms
-    if inps.exclPairs:
-        # Formatted list of pair names
-        pairList=['{}_{}'.format(pair[0],pair[1]) for pair in data.pairs]
-
-        # Rebuild data cube and date list based on non-excluded pairs
-        validPairs=[]; validIFGs=[]
-        for n,pair in enumerate(pairList):
-            if pair not in inps.exclPairs:
-                validPairs.append(data.pairs[n])
-                validIFGs.append(data.ifgs[n,:,:])
-        # Reassign valid pairs and ifgs to data object
-        data.pairs=validPairs
-        data.ifgs=np.array(validIFGs)
-
-    # Format IFGs
-    data.M,data.N=data.ifgs[0,:,:].shape # map dimensions
-    if inps.verbose == True: print('Data array shape: {}'.format(data.ifgs.shape))
-
-    return data
-
-
-
-### DATA CLASS ---
-## Class containing input data and dates, etc.
-class dataSet:
-    ## Initialize
-    def __init__(self,verbose):
-        # Initial values, to be changed later
-        # Inputs
-        self.verbose=verbose
-
-        self.refY=0
-        self.refX=0
-
-        # Data
-        self.ifgs=[]
-        self.pairs=[]
-        self.pairLabels=[]
-        self.dates=[]
-
-
-    ## Update variables from data set
-    def updateVariables(self,printDates=False):
-        # List of epochs (unique dates of acquisition)
-        allDates=[] # all dates, including redundant
-        [allDates.extend(pair) for pair in self.pairs]
-        [self.dates.append(date) for date in allDates if date not in self.dates]
-        self.dates.sort() # chronological order
-        self.nDates=len(self.dates)
-
-        if printDates == True: print('Unique dates:\n{}'.format(self.dates))
-        if self.verbose == True: print('Nb unique dates: {}'.format(self.nDates))
-
-        # Data dimensions
-        self.K,self.M,self.N=self.ifgs.shape
-
-        if self.verbose == True: 
-            print('Nb ifgs: {}'.format(self.K))
-            print('Map dimensions: {} x {}'.format(self.M,self.N))
-
-
-    ## Create list of triplets
-    # Create list of all possible triplets given date list
-    def createTriplets(self,lags=1,minTime=None,maxTime=None,printTriplets=False):
+    ## Load data
+    def __init__(self,imgfile,workdir='./',
+                    startDate='20140615',endDate=None,excludePairs=None,
+                    verbose=False):
         '''
-            Provide a list of unique dates in format YYYYMMDD. This
-             function will create a list of the (n1-n0, n2-n1, n2-n0)
-             date combinations. 
-            Lags is the minimum interval from one acquisition to the 
-             next. For instance:
-                lags=1 gives [n1-n0, n2-n1, n0-n2]
-                lags=2 gives [n2-n0, n4-n2, n0-n4]
-                lags=3 gives [n3-n0, n6-n3, n0-n6]
+            Initialize object. Store essential info for posterity.
+            loadStackData() - Load data from unwrapStack.vrt using gdal.
+            formatDates() - Determine the IFG pairs and list of unique dates from the data set.
+            formatExcludePairs() - Load and format pairs to exclude, if provided.
+        '''
+        # Files and directories
+        self.imgfile = os.path.abspath(imgfile)
+        self.basename = os.path.basename(self.imgfile)
+        self.imgdir = os.path.dirname(self.imgfile)
+        self.workdir = os.path.abspath(workdir)
+
+        # Dates and pairs
+        self.startDate = datetime.strptime(startDate,'%Y%m%d')
+        if not endDate:
+            self.endDate = datetime.now()
+        else:
+            self.endDate = datetime.strptime(endDate,'%Y%m%d')
+
+        self.excludePairs = excludePairs
+
+        # Other
+        self.verbose = verbose
+
+        # Read stack data and retrieve list of dates
+        self.__loadStackData__()
+
+        # Format dates
+        self.__formatDates__()
+
+        # Format pairs to exclude, if provided
+        self.__formatExcludePairs__()
+
+
+    # Load data from unwrapStack.vrt
+    def __loadStackData__(self,):
+        '''
+            Load data from unwrapStack.vrt file.
+        '''
+        # Open dataset
+        self.IFGs = gdal.Open(self.imgfile,gdal.GA_ReadOnly)
+
+        # Report if requested
+        if self.verbose == True: print('{} bands detected'.format(self.IFGs.RasterCount))
+
+    # Convert date pair to string
+    def __datePair2strPair__(self,datePair):
+        '''
+            Convert pair in format [master, slave] to date in format 'master_slave'
+        '''
+        masterStr = datePair[0].strftime('%Y%m%d')
+        secondaryStr = datePair[1].strftime('%Y%m%d')
+        strPair = '{}_{}'.format(masterStr, secondaryStr)
+        return strPair
+
+    # Convert pair string to date list
+    def __strPair2datePair__(self,pair):
+        '''
+            Convert pair in format 'master_slave' to date in format [master, slave]
+        '''
+        pair = pair.split('_')
+        masterDate = datetime.strptime(pair[0],'%Y%m%d')
+        secondaryDate = datetime.strptime(pair[1],'%Y%m%d')
+        datePair = [masterDate, secondaryDate]
+        return datePair
+
+    # Convert pair list to date lists
+    def __pairList2dateList__(self,pairList):
+        '''
+            Convert list of pairs in format ['master_slave','master_slave',...] to dates in format
+            [[master, slave], [master, slave], ...]
+        '''
+        pairDates = []
+        for pair in pairList:
+            datePair = self.__strPair2datePair__(pair)
+            pairDates.append(datePair)
+        return pairDates
+
+    # Date pairs and unique dates
+    def __formatDates__(self):
+        '''
+            Retrieve list of date pairs and unique dates (epochs).
+            The "pairs" attribute is a formatted list of interferogram date pairs **in the order in
+            which they are stored in the unwrapStack.vrt** file. This list should not be modified.
+            Constrain the list of epochs available for triplet determination using the "startDate"
+            and "endDate" provided in the __init__ function.
+        '''
+        # Pairs - list of pairs composing the data set, in the order they are written
+        pairs = [os.path.basename(fname) for fname in self.IFGs.GetFileList()]
+        pairs = [pair.split('.')[0] for pair in pairs] # remove extensions
+        pairs.remove('unwrapStack') # remove extra file name
+        self.pairs = self.__pairList2dateList__(pairs)
+
+        # Get unique dates from date pairs
+        self.epochs = []
+        [self.epochs.extend(pair) for pair in self.pairs]
+        self.epochs = list(set(self.epochs)) # unique dates only
+        self.epochs.sort() # sort oldest-youngest
+
+        self.nEpochs = len(self.epochs)
+        if self.verbose == True:
+            print('{} unique dates detected'.format(self.nEpochs))
+
+        # Limit dates available for triplet formulation by start and end date
+        self.tripletEpochs = [epoch for epoch in self.epochs if epoch >= self.startDate]
+        self.tripletEpochs = [epoch for epoch in self.epochs if epoch <= self.endDate]
+        self.nTripletEpochs = len(self.tripletEpochs)
+
+        # Update start and end dates
+        self.startDate = self.tripletEpochs[0]
+        self.endDate = self.tripletEpochs[-1]
+
+        # Ticks for plots
+        self.dateTicks = pd.date_range(self.startDate-timedelta(days=30),
+            self.endDate+timedelta(days=30),freq='MS')
+        self.dateTickLabels = [date.strftime('%Y-%m') for date in self.dateTicks]
+
+    # Format dates in list to exclude
+    def __formatExcludePairs__(self):
+        '''
+            Check that exclude dates are in one of two formats:
+            1. a string containing the pairs in YOUNGER_OLDER format, space-separated
+            2. a .txt file with lines of the same formatting
+            Formatting should match "pair" formatting: [[master,slave]]
+        '''
+        if self.excludePairs is not None:
+            # Determine whether list or text file
+            if self.excludePairs[-4:] == '.txt':
+                # Treat as text file with list
+                with open(self.excludePairs,'r') as exclFile:
+                    excludePairs = exclFile.readlines()
+                    excludePairs = [pair.strip('\n') for pair in excludePairs]
+                    self.excludePairs = self.__pairList2dateList__(excludePairs)
+                    exclFile.close()
+            else:
+                # Treat as list - split at spaces
+                excludePairs = self.excludePairs.split(' ')
+                self.excludePairs = self.__pairList2dateList__(excludePairs)
+        else:
+            # Include as empty list
+            self.excludePairs = []
+
+
+    ## Plot pairs
+    def plotPairs(self):
+        '''
+            Plot the timespans of interferogram pairs.
+        '''
+        # Copy the list of pairs and sort them in time order
+        pairs = self.pairs[:] # copy to separate object
+        pairs.sort(key=lambda s: s[1]) # sort by secondary date
+
+        # Plot pairs in time
+        pairFig = plt.figure()
+        pairAx = pairFig.add_subplot(111)
+        for n,pair in enumerate(pairs):
+            # Color based on whether included or excluded
+            if pair not in self.excludePairs:
+                color = 'k'
+                label = 'valid pair'
+                linestyle = '-'
+            else:
+                color = (0.6,0.6,0.6)
+                label = 'excluded pair'
+                linestyle = '--'
+            # Convert to datetime format
+            pairAx.plot([pair[0],pair[1]],[n,n],color=color,label=label,linestyle=linestyle)
+
+        # Format x-axis
+        pairAx.set_xticks(self.dateTicks)
+        pairAx.set_xticklabels(self.dateTickLabels, rotation=90)
+
+        # Legend
+        handles,labels=pairAx.get_legend_handles_labels()
+        uniqueLabels = dict(zip(labels,handles))
+        pairAx.legend(uniqueLabels.values(),uniqueLabels.keys(),
+            bbox_to_anchor=(0.005,0.99),loc='upper left',borderaxespad=0.)
+
+        # Other formatting
+        pairAx.set_yticks([])
+        pairAx.set_title('IFG pairs')
+        pairFig.tight_layout()
+
+
+    ## Create triplet list
+    def createTriplets(self,minTime=None,maxTime=None,printTriplets=False):
+        '''
+            Create a list of triplets given the date list and user-specified parameters.
+            First generate a list of all possible triplets based on the available dates.
+            Then validate that list across the list of existing pairs.
+
+            The stack object retains an ordered list of dates in both YYYYMMDD format and datetime
+            format, and pairList, based on the __format_dates__ function.
         '''
         if self.verbose == True: print('Creating list of all possible triplets')
 
-        # Loop through dates to create possible triplet combinations
-        triplets=[]
-        for n in range(self.nDates-2*lags):
-            dateI=self.dates[n] # first date in sequence
-            dateJ=self.dates[n+lags] # second date in sequence
-            dateK=self.dates[n+2*lags] # third date in sequence
-            pairList=[[dateI,dateJ],[dateJ,dateK],[dateI,dateK]]
-            triplets.append(pairList) # add to list
+        # Loop through dates to create all possible triplet combinations
+        self.triplets = []
+        for i in range(self.nTripletEpochs-2):
+            for j in range(i+1,self.nTripletEpochs-1):
+                for k in range(j+1,self.nTripletEpochs):
+                    epochI = self.tripletEpochs[i] # first date in sequence
+                    epochJ = self.tripletEpochs[j] # second date in sequence
+                    epochK = self.tripletEpochs[k] # third date in sequence
+                    self.triplets.append([[epochJ,epochI],[epochK,epochJ],[epochK,epochI]])
+
+        # Remove triplets with pairs in "exclude pairs" list
+        self.__checkExcludedTriplets__()
 
         # Check that pairs meet time requirements
-        if minTime:
-            # Convert pairs to intervals in days
-            intervals=[]
-            for triplet in triplets:
-                intervalSet=[(datetime.strptime(pair[1],'%Y%m%d')-datetime.strptime(pair[0],'%Y%m%d')).days for pair in triplet]
-                intervals.append(min(intervalSet))
-            validTriplets=[triplet for ndx,triplet in enumerate(triplets) if intervals[ndx]>=int(minTime)]
-            triplets=validTriplets
+        self.__checkTripletsMinTime__(minTime)
 
-        if maxTime:
-            # Convert pairs to intervals in days
-            intervals=[]
-            for triplet in triplets:
-                intervalSet=[(datetime.strptime(pair[1],'%Y%m%d')-datetime.strptime(pair[0],'%Y%m%d')).days for pair in triplet]
-                intervals.append(max(intervalSet))
-            print(intervals)
-            validTriplets=[triplet for ndx,triplet in enumerate(triplets) if intervals[ndx]<=int(maxTime)]
-            triplets=validTriplets
+        self.__checkTripletsMaxTime__(maxTime)
 
-        # Write to data object
-        self.triplets=triplets
-        self.nTriplets=len(self.triplets)
+        # Check against list of existing interferograms
+        self.__checkTripletsExist__()
+
+        # Finished sorting
+        self.nTriplets = len(self.triplets)
+
+
+        # Print to text file
+        with open(os.path.join(self.workdir,'ValidTriplets.txt'), 'w') as tripletFile:
+            for triplet in self.triplets:
+                strPair = [self.__datePair2strPair__(pair) for pair in triplet]
+                tripletFile.write('{}\n'.format(strPair))
+            tripletFile.close()
 
         # Report if requested
         if printTriplets == True:
-            print('All possible triplets:')
-            [print(triplet) for triplet in self.triplets]
+            # Print to screen
+            print('Existing triplets:')
+            for triplet in self.triplets:
+                print([self.__datePair2strPair__(pair) for pair in triplet])
         if self.verbose == True:
-            print('{} possible triplets'.format(self.nTriplets))
+            print('{} existing triplets found based on search criteria'.format(self.nTriplets))
 
-        # Trim list to only "valid" triplets
-        self.validateTriplets()
+        # Reference dates
+        self.tripletDates = [[triplet[0][1],triplet[1][1],triplet[2][0]] for triplet in self.triplets]
 
-    # Limit list of triplets to only combinations for which data exist
-    def validateTriplets(self):
-        validTriplets=[]
+    # Check triplets against excluded pairs
+    def __checkExcludedTriplets__(self):
+        '''
+            Check triplet list against excluded pairs list. Remove the triplet if any of the pairs
+            is listed in "exclude pairs".
+        '''
+        validTriplets = []
         for triplet in self.triplets:
-            count=0
+            # If no pairs are excluded, append to the valid triplets list
+            invalidTriplets = 0 # reset counter
             for pair in triplet:
-                if pair in self.pairs: count+=1
-            if count==3: validTriplets.append(triplet)
-        self.triplets=validTriplets
-        self.nTriplets=len(self.triplets)
+                if pair in self.excludePairs:
+                    invalidTriplets += 1
+            if invalidTriplets == 0:
+                validTriplets.append(triplet)
+        self.triplets = validTriplets # update triplets list
 
-        if self.verbose == True: print('{} valid triplets'.format(self.nTriplets))
+    # Check triplets against minTime
+    def __checkTripletsMinTime__(self,minTime):
+        '''
+            Check that all pairs in a triplet are longer in duration than the minimum time interval
+            specified.
+        '''
+        if minTime:
+            validTriplets = []
+            for triplet in self.triplets:
+                # Determine intervals between dates in days
+                intervals = [(pair[0]-pair[1]).days for pair in triplet]
+                if min(intervals) >= minTime:
+                    validTriplets.append(triplet)
+            self.triplets = validTriplets # update triplets list
+
+    # Check triplets against maxTime
+    def __checkTripletsMaxTime__(self,maxTime):
+        '''
+            Check that all pairs in a triplet are shorter in duration than the maximum time interval
+            specified.
+        '''
+        if maxTime:
+            validTriplets = []
+            for triplet in self.triplets:
+                # Determine intervals between dates in days
+                intervals = [(pair[0]-pair[1]).days for pair in triplet]
+                if max(intervals) <= maxTime:
+                    validTriplets.append(triplet)
+            self.triplets = validTriplets # update triplets list
+
+    # Check triplets exist
+    def __checkTripletsExist__(self):
+        '''
+            Check list of all possible triplets against the list of pairs that actually exist.
+        '''
+        existingTriplets = []
+        for triplet in self.triplets:
+            existing = 0 # reset count of existing pairs
+            # Check that each pair of the triplet has a corresponding interferogram
+            for tripletPair in triplet:
+                if tripletPair in self.pairs:
+                    existing += 1 # update if ifg exists
+            if existing == 3:
+                existingTriplets.append(triplet)
+        self.triplets = existingTriplets # update triplet list
+
+
+    ## Plot triplets
+    def plotTriplets(self):
+        '''
+            Plot triplets.
+        '''
+        # Setup figure
+        tripletFig = plt.figure()
+        tripletAx = tripletFig.add_subplot(111)
+
+        # Plot triplets
+        for i in range(self.nTriplets):
+            tripletAx.plot(self.triplets[i],[i,i,i],'k',marker='o')
+
+        # Format x-axis
+        tripletAx.set_xticks(self.dateTicks)
+        tripletAx.set_xticklabels(self.dateTickLabels, rotation=90)
+
+        # Other formatting
+        tripletAx.set_yticks([])
+        tripletAx.set_title('Triplets in data set')
+        tripletFig.tight_layout()
 
 
     ## Compute misclosure
-    def computeMisclosure(self):
-        if self.verbose == True: print('Calculating misclosure...')
+    # Geo to map coordinates
+    def LoLa2XY(self,lon,lat):
+        '''
+            Convert lon/lat coordinates to XY.
+        '''
+        tnsf = self.IFGs.GetGeoTransform()
+        x = (lon - tnsf[0])/tnsf[1]
+        y = (lat - tnsf[3])/tnsf[5]
+        return x, y
 
-        # Empty placeholders
-        self.miscStack=[]
-        self.absMiscStack=[]
+    # Map to geo coordinates
+    def XY2LoLa(self,x,y):
+        '''
+            Convert X/Y to lon/lat.
+        '''
+        tnsf = self.IFGs.GetGeoTransform()
+        lon = tnsf[0] + tnsf[1]*x
+        lat = tnsf[3] + tnsf[5]*y
+        return lon, lat
 
-        # Compute misclosure map for each triplet
+    # Reference point formatting
+    def __referencePoint__(self,refXY,refLoLa):
+        '''
+            Determine the reference point in XY coordinates. The reference point can be
+            automatically or manually selected by the user and is subtracted
+            from each interferogram.
+            The point can be given in pixels or lon/lat coordinates. If given in Lat/Lon, determine
+            the location in XY.
+        '''
+        if self.verbose == True: print('Determining reference point...')
+
+        if refLoLa.count(None) == 0:
+            # Determine the XY coordinates from the given lon/lat
+            self.refLon = refLoLa[0]
+            self.refLat = refLoLa[1]
+            x,y = self.LoLa2XY(refLoLa[0],refLoLa[1])
+            self.refX = int(x)
+            self.refY = int(y)
+            if self.verbose == True:
+                print('Reference point given as: X {} / Y {}; Lon {} / Lat {}'. \
+                    format(self.refX,self.refY,self.refLon,self.refLat))
+
+        elif refXY.count(None) == 0:
+            # Use the provided XY coordinates
+            self.refX = refXY[0]
+            self.refY = refXY[1]
+            self.refLon,self.refLat = self.XY2LoLa(refXY[0],refXY[1])
+            if self.verbose == True:
+                print('Reference point given as: X {} / Y {}; Lon {:.4f} / Lat {:.4f}'. \
+                    format(self.refX,self.refY,self.refLon,self.refLat))
+
+        else:
+            # Use a random reference point
+            self.__autoReferencePoint__()
+
+    # Random reference point
+    def __autoReferencePoint__(self):
+        '''
+            Use the coherence stack to automatically determine a suitable reference point.
+        '''
+        # Load coherence data from cohStack.vrt
+        cohfile = os.path.join(self.imgdir,'cohStack.vrt')
+        cohDS = gdal.Open(cohfile, gdal.GA_ReadOnly)
+        cohMap = np.zeros((cohDS.RasterYSize,cohDS.RasterXSize))
+
+        for n in range(1,cohDS.RasterCount+1):
+            cohMap += cohDS.GetRasterBand(n).ReadAsArray()
+        aveCoherence = cohMap/cohDS.RasterCount
+        cohMask = (aveCoherence >= 0.7)
+
+        # Start with initial guess for reference point
+        self.refX = np.random.randint(cohDS.RasterXSize)
+        self.refY = np.random.randint(cohDS.RasterYSize)
+
+        # Loop until suitable reference point is found
+        n = 0
+        while cohMask[self.refY,self.refX] == False:
+            # Reselect reference points
+            self.refX = np.random.randint(cohDS.RasterXSize)
+            self.refY = np.random.randint(cohDS.RasterYSize)
+
+            # Break loop after 10000 iterations
+            if n == 10000:
+                print('WARNING: No reference point with coherence >= 0.7 found')
+                exit()
+
+        # Convert to lon/lat
+        self.refLon,self.refLat = self.XY2LoLa(self.refX,self.refY)
+
+        if self.verbose == True:
+            print('Reference point chosen randomly as: X {} / Y {}; Lon {:.4f} / Lat {:.4f}'.\
+                format(self.refX,self.refY,self.refLon,self.refLat))
+
+    # Compute misclosure
+    def computeMisclosure(self,refXY=None,refLoLa=None):
+        '''
+            Compute the misclosure of the phase triplets.
+            A common reference point is required because the ifgs are not coregistered.
+        '''
+        # Determine reference point
+        self.__referencePoint__(refXY,refLoLa)
+
+        # Misclosure placeholders
+        self.mscStack = []
+        self.absMscStack = []
+
+        # Compute phase triplets
+        if self.verbose == True: print('Calculating misclosure')
+
         for triplet in self.triplets:
             # Triplet date pairs
-            IJdates=triplet[0]
-            JKdates=triplet[1]
-            IKdates=triplet[2]
+            JIdates = triplet[0]
+            KJdates = triplet[1]
+            KIdates = triplet[2]
 
-            # Triplet ifg indices
-            IJndx=self.pairs.index(IJdates)
-            JKndx=self.pairs.index(JKdates)
-            IKndx=self.pairs.index(IKdates)
+            # Triplet indices - add 1 because raster bands start at 1
+            JIndx = self.pairs.index(JIdates)+1
+            KJndx = self.pairs.index(KJdates)+1
+            KIndx = self.pairs.index(KIdates)+1
 
             # Interferograms
-            IJ=self.ifgs[IJndx,:,:]
-            JK=self.ifgs[JKndx,:,:]
-            IK=self.ifgs[IKndx,:,:]
+            JI = self.IFGs.GetRasterBand(JIndx).ReadAsArray()
+            KJ = self.IFGs.GetRasterBand(KJndx).ReadAsArray()
+            KI = self.IFGs.GetRasterBand(KIndx).ReadAsArray()
 
             # Normalize to reference point
-            IJ-=IJ[self.refY,self.refX]
-            JK-=JK[self.refY,self.refX]
-            IK-=IK[self.refY,self.refX]
+            JI -= JI[self.refY,self.refX]
+            KJ -= KJ[self.refY,self.refX]
+            KI -= KI[self.refY,self.refX]
 
             # Compute (abs)misclosure
-            misclosure=IJ+JK-IK
-            absMisclosure=np.abs(misclosure)
+            misclosure = JI+KJ-KI
+            absMisclosure = np.abs(misclosure)
 
             # Append to stack
-            self.miscStack.append(misclosure)
-            self.absMiscStack.append(absMisclosure)
+            self.mscStack.append(misclosure)
+            self.absMscStack.append(absMisclosure)
 
         # Convert lists to 3D arrays
-        self.miscStack=np.array(self.miscStack)
-        self.absMiscStack=np.array(self.absMiscStack)
+        self.mscStack = np.array(self.mscStack)
+        self.absMscStack = np.array(self.absMscStack)
 
         # Cumulative misclosure
-        self.cumMisclosure=np.sum(self.miscStack,axis=0)
-        self.cumAbsMisclosure=np.sum(self.absMiscStack,axis=0)
-
-        # Use first datum from each triplet as reference date
-        self.refDates=[str(triplet[0][0]) for triplet in self.triplets]
-        self.refDatetimes=[datetime.strptime(str(triplet[0][0]),'%Y%m%d') for triplet in self.triplets]
+        self.cumMisclosure = np.sum(self.mscStack,axis=0)
+        self.cumAbsMisclosure = np.sum(self.absMscStack,axis=0)
 
 
-    ## Plot misclosure
-    # Detect background values
-    def maskBackground(self,img):
+    ## Plot and analyze misclosure
+    # Plotting miscellaneous functions
+    def __backgroundDetect__(self,img):
+        '''
+            Detect the background value of an image.
+        '''
         edges=np.concatenate([img[:,0].flatten(),
             img[0,:].flatten(),
             img[-1,:].flatten(),
             img[:,-1].flatten()])
-        background=mode(edges)[0][0]
+        backgroundValue=mode(edges)[0][0]
 
-        img=np.ma.array(img,mask=(img==background))
+        return backgroundValue
 
-        return img
+    def __imgClipValues__(self,img,percentiles):
+        '''
+            Find values at which to clip the images (min/max) based on histogram percentiles.
+        '''
+        clipValues={}
+        clipValues['min'],clipValues['max']=np.percentile(img.flatten(),percentiles)
 
-    # Image percentiles
-    def imgMinMax(self,img,percentiles):
-        clipVals={}
-        clipVals['min'],clipVals['max']=np.percentile(img.flatten(),percentiles)
+        return clipValues
 
-        print('Clipping values to:\nMin {} % = {}\nMax {} % = {}'.format(\
-                percentiles[0],clipVals['min'],percentiles[1],clipVals['max']))        
-
-        return clipVals
-
-    # Plotting function for cumulative misclosure
-    def miscMapPlot(self,Fig,ax,img,title,cmap,minVal,maxVal):
-        cax=ax.imshow(img,cmap=cmap,vmin=minVal,vmax=maxVal)
-        ax.plot(self.refX,self.refY,'ks')
-        ax.set_xticks([]); ax.set_yticks([])
-        ax.set_title(title)
+    def __plotCumMisclosure__(self):
+        '''
+            Plot cumulative misclosure.
+        '''
+        cax = self.mscAx.imshow(self.cumMsc,cmap='plasma',
+            vmin=self.cumMscClips['min'],vmax=self.cumMscClips['max'],zorder=1)
+        self.mscAx.plot(self.refX,self.refY,'ks',zorder=2)
+        self.mscAx.set_xticks([]); self.mscAx.set_yticks([])
+        self.mscAx.set_title('Cumulative misclosure')
 
         return cax
 
-    # Plot timeseries
-    def plotSeries(self,Fig,ax,series,name,timeAxis=False):
+    def __plotCumAbsMisclosure__(self):
+        '''
+            Plot cumulative absolute misclosure.
+        '''
+        cax = self.absMscAx.imshow(self.cumAbsMsc,cmap='plasma',
+            vmin=self.cumAbsMscClips['min'],vmax=self.cumAbsMscClips['max'],zorder=1)
+        self.absMscAx.plot(self.refX,self.refY,'ks',zorder=2)
+        self.absMscAx.set_xticks([]); self.absMscAx.set_yticks([])
+        self.absMscAx.set_title('Cumulative absolute misclosure')
+
+        return cax
+
+    def __plotSeries__(self,ax,data,title):
+        '''
+            Plot misclosure timeseries.
+        '''
         # Plot data
-        ax.plot(self.refDatetimes,series,'-k.')
-
-        # Format axis
-        ax.set_ylabel(name+'\nradians')
-        if timeAxis == False:
-            ax.set_xticklabels([])
+        if self.plotTimeIntervals == False:
+            ax.plot([tripletDate[1] for tripletDate in self.tripletDates],data,'-k.')
         else:
-            ax.set_xticks(self.refDatetimes)
-            ax.set_xticklabels(self.refDates,rotation=80)
+            for n in range(self.nTriplets):
+                ax.plot([self.tripletDates[n][0],self.tripletDates[n][2]],
+                    [data[n],data[n]],'k')
+                ax.plot(self.tripletDates[n][1],data[n],'ko')
 
-    # Plot cumulative misclosure
-    def plotMisclosure(self,inps):
-        ## Plot cumulative misclosure
-        self.cumMiscTitle='Cumulative misclosure ({} triplets)'.format(self.nTriplets)
+        # Formatting
+        ax.set_xticks(self.dateTicks)
+        ax.set_xticklabels([])
+        ax.set_ylabel(title)
 
-        # Prep image by masking background and determining percentiles
-        if self.verbose == True: print('Plotting cumulative misclosure')
-        self.cumMiscFig=plt.figure(); self.cumMiscAx=self.cumMiscFig.add_subplot(111)
-        self.cumMisclosure=self.maskBackground(self.cumMisclosure)
-        self.cumMiscStats=self.imgMinMax(self.cumMisclosure,[inps.pctMinClip,inps.pctMaxClip])
+    # Plot misclosure
+    def plotCumMisclosure(self,pctmin=1,pctmax=99,plotTimeIntervals=False):
+        '''
+            Map-view plot of cumulative misclosure.
+        '''
+        if self.verbose == True: print('Begin misclosure analysis')
 
-        # Plot cumulative misclosure
-        cax=self.miscMapPlot(self.cumMiscFig,self.cumMiscAx,self.cumMisclosure,title=self.cumMiscTitle,
-            cmap='plasma',minVal=self.cumMiscStats['min'],maxVal=self.cumMiscStats['max'])
-        cbar=self.cumMiscFig.colorbar(cax,orientation='horizontal')
-        cbar.set_label('radians')
+        # Parameters
+        self.plotTimeIntervals = plotTimeIntervals
 
+        # Set up interactive plots
+        self.mscFig = plt.figure()
+        self.mscAx = self.mscFig.add_subplot(111)
 
-        ## Plot cumulative absolute misclosure
-        self.cumAbsMiscTitle='Cumulative misclosure ({} triplets)'.format(self.nTriplets)
+        self.absMscFig = plt.figure()
+        self.absMscAx = self.absMscFig.add_subplot(111)
 
-        # Prep image by masking background and determining percentiles
-        if self.verbose == True: print('Plotting cumulative absolute misclosure')
-        self.cumAbsMiscFig=plt.figure(); self.cumAbsMiscAx=self.cumAbsMiscFig.add_subplot(111)
-        self.cumAbsMisclosure=self.maskBackground(self.cumAbsMisclosure)
-        self.cumAbsMiscStats=self.imgMinMax(self.cumAbsMisclosure,[0,inps.pctMaxClip])
+        # Auto-detect background and clip values
+        self.cumMscBackground = self.__backgroundDetect__(self.cumMisclosure)
+        self.cumMsc = np.ma.array(self.cumMisclosure,
+            mask=(self.cumMisclosure==self.cumMscBackground))
+        self.cumMscClips = self.__imgClipValues__(self.cumMsc,percentiles=[pctmin,pctmax])
 
-        # Plot cumulative absolute misclosure
-        cax=self.miscMapPlot(self.cumAbsMiscFig,self.cumAbsMiscAx,self.cumAbsMisclosure,title=self.cumAbsMiscTitle,
-            cmap='plasma',minVal=self.cumAbsMiscStats['min'],maxVal=self.cumAbsMiscStats['max'])
-        cbar=self.cumAbsMiscFig.colorbar(cax,orientation='horizontal')
-        cbar.set_label('radians')
+        self.cumAbsMscBackground = self.__backgroundDetect__(self.cumAbsMisclosure)
+        self.cumAbsMsc = np.ma.array(self.cumAbsMisclosure,
+            mask=(self.cumAbsMisclosure==self.cumAbsMscBackground))
+        self.cumAbsMscClips = self.__imgClipValues__(self.cumAbsMsc,percentiles=[pctmin,pctmax])
 
+        # Plot maps
+        cax = self.__plotCumMisclosure__()
+        cbar = self.mscFig.colorbar(cax, orientation='vertical')
+        cbar.set_label('cum. misclosure (radians)')
 
-        ## Plot timeseries points
-        self.miscSeriesFig=plt.figure('Misclosure',figsize=(8,8))
-        self.miscSeriesAx=self.miscSeriesFig.add_subplot(411)
-        self.cumMiscSeriesAx=self.miscSeriesFig.add_subplot(412)
-        self.absMiscSeriesAx=self.miscSeriesFig.add_subplot(413)
-        self.cumAbsMiscSeriesAx=self.miscSeriesFig.add_subplot(414)
+        cax = self.__plotCumAbsMisclosure__()
+        cbar = self.absMscFig.colorbar(cax,orientation='vertical')
+        cbar.set_label('cum. abs. misclosure (radians)')
 
+        # Plot timeseries points
+        self.mscSeriesFig = plt.figure('Misclosure',figsize=(8,8))
+        self.mscSeriesAx = self.mscSeriesFig.add_subplot(411)
+        self.cumMscSeriesAx = self.mscSeriesFig.add_subplot(412)
+        self.absMscSeriesAx = self.mscSeriesFig.add_subplot(413)
+        self.cumAbsMscSeriesAx = self.mscSeriesFig.add_subplot(414)
 
         # Link canvas to plots for interaction
-        self.cumMiscFig.canvas.mpl_connect('button_press_event', self.misclosureAnalysis)
-        self.cumAbsMiscFig.canvas.mpl_connect('button_press_event', self.misclosureAnalysis)
-
+        self.mscFig.canvas.mpl_connect('button_press_event', self.__misclosureAnalysis__)
+        self.absMscFig.canvas.mpl_connect('button_press_event', self.__misclosureAnalysis__)
 
 
     ## Misclosure analysis
-    def misclosureAnalysis(self,event):
+    def __misclosureAnalysis__(self,event):
+        '''
+            Show the time history of each pixel.
+        '''
         px=event.xdata; py=event.ydata
         px=int(round(px)); py=int(round(py))
 
@@ -524,72 +730,132 @@ class dataSet:
         print('Abs cumulative misclosure: {}'.format(self.cumAbsMisclosure[py,px]))
 
         # Plot query points on maps
-        self.cumMiscAx.cla()
-        self.miscMapPlot(self.cumMiscFig,self.cumMiscAx,self.cumMisclosure,title=self.cumMiscTitle,
-            cmap='plasma',minVal=self.cumMiscStats['min'],maxVal=self.cumMiscStats['max'])
-        self.cumMiscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+        self.mscAx.cla()
+        self.__plotCumMisclosure__()
+        self.mscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
-        self.cumAbsMiscAx.cla()
-        self.miscMapPlot(self.cumAbsMiscFig,self.cumAbsMiscAx,self.cumAbsMisclosure,title=self.cumAbsMiscTitle,
-            cmap='plasma',minVal=self.cumAbsMiscStats['min'],maxVal=self.cumAbsMiscStats['max'])
-        self.cumAbsMiscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+        self.absMscAx.cla()
+        self.__plotCumAbsMisclosure__()
+        self.absMscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
         # Plot misclosure over time
-        print('Misclosure: {}'.format(self.miscStack[:,py,px]))
-        self.miscSeriesAx.cla() # misclosure
-        self.plotSeries(self.miscSeriesFig,self.miscSeriesAx,self.miscStack[:,py,px],'misclosure')
-        self.cumMiscSeriesAx.cla() # cumulative misclosure
-        self.plotSeries(self.miscSeriesFig,self.cumMiscSeriesAx,np.cumsum(self.miscStack[:,py,px]),'cum. miscl.')
-        self.absMiscSeriesAx.cla() # absolute misclosure
-        self.plotSeries(self.miscSeriesFig,self.absMiscSeriesAx,self.absMiscStack[:,py,px],'abs. miscl')
-        self.cumAbsMiscSeriesAx.cla() # cumulative absolute misclosure
-        self.plotSeries(self.miscSeriesFig,self.cumAbsMiscSeriesAx,np.cumsum(self.absMiscStack[:,py,px]),'cum. abs. miscl.',timeAxis=True)
+        print('Misclosure: {}'.format(self.mscStack[:,py,px]))
+        self.mscSeriesAx.cla() # misclosure
+        self.__plotSeries__(self.mscSeriesAx, self.mscStack[:,py,px], 'misclosure')
+
+        self.cumMscSeriesAx.cla() # cumulative misclosure
+        self.__plotSeries__(self.cumMscSeriesAx, np.cumsum(self.mscStack[:,py,px]), 'cum. miscl.')
+
+        self.absMscSeriesAx.cla() # absolute misclosure
+        self.__plotSeries__(self.absMscSeriesAx, self.absMscStack[:,py,px], 'abs. miscl')
+
+        self.cumAbsMscSeriesAx.cla() # cumulative absolute misclosure
+        self.__plotSeries__(self.cumAbsMscSeriesAx, np.cumsum(self.absMscStack[:,py,px]),
+            'cum. abs. miscl.')
+
+        # Format x-axis
+        dates = pd.date_range(self.startDate-timedelta(days=30),
+            self.endDate+timedelta(days=30),freq='MS')
+        dateLabels = [date.strftime('%Y-%m') for date in dates]
+        self.cumAbsMscSeriesAx.set_xticklabels(self.dateTickLabels, rotation=90)
 
         # Draw outcomes
-        self.cumMiscFig.canvas.draw()
-        self.cumAbsMiscFig.canvas.draw()
-        self.miscSeriesFig.canvas.draw()
+        self.mscFig.canvas.draw()
+        self.absMscFig.canvas.draw()
+        self.mscSeriesFig.canvas.draw()
 
 
+    ## Plot incremental misclosure maps
+    def plotIncrements(self,pctmin=1,pctmax=99):
+        '''
+            Plot the incremental misclosure measurements.
+        '''
+        if self.verbose == True: print('Saving incremental misclosure maps to image files')
 
-### ANCILLARY FUNCTIONS ---
-## Imagette plotting
-def plotImagettes(imgs,mRows,nCols,cmap='viridis',downsampleFactor=0,
-    pctmin=0,pctmax=100,
-    titleList=None,supTitle=None):
+        # Parameters
+        subplotDims = (2, 2)
+        maxSubplots = subplotDims[0]*subplotDims[1]
 
-    # Number of imagettes
-    nImgs=imgs.shape[0]
+        # Output directory/subdirectory
+        self.figdir = os.path.join(self.workdir,'MisclosureFigs')
+        try:
+            os.mkdir(self.figdir)
+        except:
+            pass
 
-    # Number of imagettes per figure
-    nbImagettes=mRows*nCols
+        figNb = 0 # start figure counter
+        plotNb = 1 # start subplot counter
+        for i in range(self.nTriplets):
+            # Plot number and subplot position
+            if plotNb % maxSubplots == 1:
+                # Spawn new figure
+                figNb += 1 # update figure counter
+                plotNb = 1 # reset subplot counter
+                Fig = plt.figure(figsize=(8,6))
+            ax = Fig.add_subplot(subplotDims[0],subplotDims[1],plotNb)
 
-    # Loop through image list
-    x=1 # position variable
-    for i in range(nImgs):
-        # Generate new figure if needed
-        if x%nbImagettes==1:
-            Fig=plt.figure() # new figure
-            x=1 # reset counter
+            # Format misclosure map
+            mscMapBackground = self.__backgroundDetect__(self.mscStack[i,:,:])
+            mscMap = np.ma.array(self.mscStack[i,:,:],mask=(self.mscStack[i,:,:]==mscMapBackground))
+            mscMapClips = self.__imgClipValues__(mscMap,[pctmin,pctmax])
 
-        # Format image
-        img=imgs[i,:,:] # current image from list
-        ds=int(2**downsampleFactor) # downsample factor
-        img=img[::ds,::ds] # downsample image
-        img=np.ma.array(img,mask=(img==0)) # mask background
+            # Plot misclosure
+            cax = ax.imshow(mscMap,cmap='plasma',vmin=mscMapClips['min'],vmax=mscMapClips['max'])
 
-        imgMin,imgMax=np.percentile(img.compressed(),(pctmin,pctmax))
+            # Format axis
+            ax.set_xticks([]); ax.set_yticks([])
+            Fig.colorbar(cax, orientation='horizontal')
+            dates = [date.strftime('%Y%m%d') for date in self.tripletDates[i]]
+            ax.set_title('_'.join(dates))
 
-        # Plot image as subplot
-        ax=Fig.add_subplot(mRows,nCols,x)
-        ax.imshow(img,cmap=cmap,vmin=imgMin,vmax=imgMax)
+            if plotNb == maxSubplots:
+                # Save old figure
+                Fig.suptitle('Phase misclosure (radians)')
+                figname = 'MisclosureValues_fig{}.png'.format(figNb)
+                figpath = os.path.join(self.figdir,figname)
+                Fig.savefig(figpath,dpi=300)
 
-        # Plot formatting
-        ax.set_title(titleList[i])
-        ax.set_xticks([]); ax.set_yticks([])
-        Fig.suptitle(supTitle)
+            plotNb += 1
 
-        x+=1 # update counter
+            # Save final figure
+            Fig.suptitle('Phase misclosure (radians)')
+            figname = 'MisclosureValues_fig{}.png'.format(figNb)
+            figpath = os.path.join(self.figdir,figname)
+            Fig.savefig(figpath,dpi=300)
+
+
+    ## Save cumulative misclosure plots to geotiffs
+    def saveCumMisclosure(self):
+        '''
+            Save cumulative (/absolute) misclosure plots to georeferenced tiff files. Use metadata
+            from unwrapStack.vrt file.
+        '''
+        if self.verbose == True: print('Saving misclosure maps to geotiffs')
+
+        # Fix background values
+        self.cumMisclosure[self.cumMisclosure==self.cumMscBackground] = 0
+        self.cumAbsMisclosure[self.cumAbsMisclosure==self.cumAbsMscBackground] = 0
+
+        # Save cumulative misclosure
+        cumMscSavename = os.path.join(self.figdir,'CumulativeMisclosure.tif')
+        self.__saveGeoTiff__(cumMscSavename,self.cumMisclosure)
+
+        # Save cumulative absolute misclosure
+        cumAbsMscSavename = os.path.join(self.figdir,'CumulativeAbsoluteMisclosure.tif')
+        self.__saveGeoTiff__(cumAbsMscSavename,self.cumAbsMisclosure)
+
+    def __saveGeoTiff__(self,savename,img):
+        '''
+            Template for saving geotiffs.
+        '''
+        driver=gdal.GetDriverByName('GTiff')
+        DSout=driver.Create(savename,self.IFGs.RasterXSize,self.IFGs.RasterYSize,1,
+            gdal.GDT_Float32)
+        DSout.GetRasterBand(1).WriteArray(img)
+        DSout.GetRasterBand(1).SetNoDataValue(0)
+        DSout.SetProjection(self.IFGs.GetProjection())
+        DSout.SetGeoTransform(self.IFGs.GetGeoTransform())
+        DSout.FlushCache()
 
 
 
@@ -598,37 +864,39 @@ def main(inps=None):
     ## Gather arguments
     inps=cmdLineParse()
 
+
     ## Load data based on data type
-    data=loadData(inps)
+    dataStack=stack(imgfile=inps.imgfile,
+        workdir=inps.workdir,
+        startDate=inps.startDate, endDate=inps.endDate,
+        excludePairs=inps.excludePairs,
+        verbose=inps.verbose)
 
-    # Plot data if requested
-    if inps.plotInputs == True:
-        plotImagettes(data.ifgs,4,5,cmap='jet',downsampleFactor=3,
-            pctmin=1,pctmax=99,
-            titleList=data.pairLabels,supTitle='Input data')
-
-
-    ## Reference point
-    if inps.refY == 'auto':
-        data.refY=np.random.randint(0,data.M,1)
-    else:
-        data.refY=int(inps.refY)
-    if inps.refX == 'auto':
-        data.refX=np.random.randint(0,data.N,1)
-    else:
-        data.refX=int(inps.refX)
+    # Plot pairs if requested
+    if inps.plotPairs == True:
+        dataStack.plotPairs()
 
 
-    ## Formulate valid triplets
-    data.createTriplets(minTime=inps.minTime,maxTime=inps.maxTime,printTriplets=inps.printTriplets)
+    ## Create list of triplets
+    dataStack.createTriplets(minTime=inps.minTime,maxTime=inps.maxTime,
+        printTriplets=inps.printTriplets)
+
+    # Plot triplets if requested
+    if inps.plotTriplets == True:
+        dataStack.plotTriplets()
 
 
-    ## Calculate misclosure
-    data.computeMisclosure()
+    ## Compute misclosure
+    dataStack.computeMisclosure(refXY=[inps.refX, inps.refY],
+        refLoLa=[inps.refLon, inps.refLat])
 
+    # Plot and analyze data
+    dataStack.plotCumMisclosure(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip,
+        plotTimeIntervals=inps.plotTimeIntervals)
+    # plt.show()
 
-    ## Plot misclosure
-    data.plotMisclosure(inps)
+    # Save incremental misclosure plots to figure
+    dataStack.plotIncrements(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip)
 
-
-    plt.show()
+    # Save misclosure maps to geotiffs
+    dataStack.saveCumMisclosure()
