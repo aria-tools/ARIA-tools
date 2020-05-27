@@ -403,6 +403,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
+                #create directory for quality control plots
+                if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots',key)):
+                    os.makedirs(os.path.join(outDir,'metadatalyr_plots',key))
+
                 gdal.BuildVRT(outname +'.vrt', [i[1]][0])
 
                 if dem is None:
@@ -486,6 +490,50 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     arrshape=gdal.Open(dem.GetDescription()).ReadAsArray().shape
     # load layered metadata array
     data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=dem_bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+
+    #quality control (bug-fix varies based off of layer of interest).
+    prod_key=os.path.basename(os.path.dirname(outname))
+    if prod_key=='bPerpendicular':
+        data_array_band=data_array.GetRasterBand(1).ReadAsArray()
+        #cycle between mid-range and mid-azimuth profiles
+        prof_direc='range'
+        polycovarr=[]
+        for i in enumerate([data_array_band[int(data_array_band.shape[0]/2),:],data_array_band[:,int(data_array_band.shape[1]/2)]]):
+            if i[0]==1:
+                prof_direc='azimuth'
+            #set up array
+            mid_line=i[1]
+            xarr=range(len(mid_line))
+            #fit line and get covariance
+            polyvar, polycov = np.polyfit(xarr,mid_line,1,cov=True)
+            polycovarr.append(abs(polycov[0,1]))
+            if verbose:
+                import matplotlib.pyplot as plt
+                ax0=plt.figure().add_subplot(111)
+                ax0.scatter(xarr, mid_line, c='k', s=7)
+                refline = np.linspace(min(ax0.get_xlim()[0],ax0.get_ylim()[0]),max(ax0.get_xlim()[1],ax0.get_ylim()[1]),100)
+                ax0.plot(refline, (refline*polyvar[0])+polyvar[1], linestyle='solid', color='red', linewidth=1.5)
+                ax0.set_ylabel('%s array'%(prod_key))
+                ax0.set_xlabel('distance')
+                ax0.set_title('Profile along mid-%s'%(prof_direc))
+                ax0.annotate('Cor = %f'%(abs(polycov[0,1])), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
+                    textcoords='offset points', fontweight='bold', ha='left', va='top')
+                plt.margins(0)
+                plt.tight_layout()
+                plt.savefig(os.path.join(os.path.dirname(os.path.dirname(outname)),'metadatalyr_plots',prod_key, \
+                    os.path.basename(outname)+'_mid%s.eps'%(prof_direc)))
+                plt.close()
+        #if covariance too large, fix array
+        if max(polycovarr) > 0.001:
+            print("WARNING: %s layer for IFG %s has covariance of %f, automated correction applied" \
+                %(prod_key,os.path.basename(outname),max(polycovarr)))
+            #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
+            negs_percent=((data_array_band < 0).sum()/data_array_band.size)*100
+            for i in range(1,5):
+                data_array_band=abs(data_array.GetRasterBand(i).ReadAsArray())
+                if negs_percent>50:
+                    data_array_band*=-1
+                data_array.GetRasterBand(i).WriteArray(data_array_band)
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
