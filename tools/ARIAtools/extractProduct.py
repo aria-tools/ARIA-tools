@@ -17,6 +17,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
 def createParser():
@@ -157,110 +158,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
         raise Exception('Failed to open user DEM')
 
     return demfilename, demfile, Latitude, Longitude
-
-def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
-    '''
-        Function to load and export mask file.
-        If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
-    '''
-
-    # Import functions
-    from ARIAtools.vrtmanager import renderOGRVRT
-
-    _world_watermask = [' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L1.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L2.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L3.shp', ' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L4.shp',' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp']
-
-    # If specified DEM subdirectory exists, delete contents
-    workdir=os.path.join(workdir,'mask')
-    if os.path.exists(workdir) and os.path.abspath(maskfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')) and os.path.abspath(maskfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')) or maskfilename.lower()=='download':
-        for i in glob.glob(os.path.join(workdir,'*.*')): os.remove(i)
-    if not os.path.exists(workdir):
-        os.mkdir(workdir)
-
-
-    # Get bounds of user bbox_file
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
-
-    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT':
-        outputFormat='ENVI'
-
-    # Download mask
-    if maskfilename.lower()=='download':
-        maskfilename=os.path.join(workdir,'watermask'+'.msk')
-        os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
-        ###Make coastlines/islands union VRT
-        renderOGRVRT(os.path.join(workdir,'watermsk_shorelines.vrt'), _world_watermask[::2])
-
-        ###Make lakes/ponds union VRT
-        renderOGRVRT(os.path.join(workdir,'watermsk_lakes.vrt'), _world_watermask[1::2])
-
-        ###Initiate water-mask with coastlines/islands union VRT
-        # save uncropped mask
-        gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'), os.path.join(workdir,'watermsk_shorelines.vrt'), options=gdal.RasterizeOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], burnValues=[1], layers='merged'))
-        gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'), os.path.join(workdir,'watermask_uncropped.msk'), options=gdal.TranslateOptions(format="VRT"))
-        # save cropped mask
-        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        update_file=gdal.Open(maskfilename,gdal.GA_Update)
-        update_file.SetProjection(proj)
-        update_file.GetRasterBand(1).SetNoDataValue(0.) ; del update_file
-        gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
-
-        ###Must take inverse of lakes/ponds union because of opposite designation (1 for water, 0 for land) as desired (0 for water, 1 for land)
-        lake_masks=gdal.Rasterize('', os.path.join(workdir,'watermsk_lakes.vrt'), options=gdal.RasterizeOptions(format='MEM', outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], burnValues=[1], layers='merged', inverse=True))
-        lake_masks.SetProjection(proj)
-        lake_masks=lake_masks.ReadAsArray()
-
-        if amp_thresh:
-            ###Make average amplitude mask
-            # Delete existing average amplitude file
-            for i in glob.glob(os.path.join(workdir,'avgamplitude*')): os.remove(i)
-
-            # building the VRT
-            gdal.BuildVRT(os.path.join(workdir,'avgamplitude') +'.vrt', product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
-            # taking average of all scenes and generating raster
-            gdal.Warp(os.path.join(workdir,'avgamplitude'), os.path.join(workdir,'avgamplitude')+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, resampleAlg='average', width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-            # Update VRT
-            gdal.Translate(os.path.join(workdir,'avgamplitude')+'.vrt', os.path.join(workdir,'avgamplitude'), options=gdal.TranslateOptions(format="VRT"))
-            print('Saved average amplitude here: '+ os.path.join(workdir,'avgamplitude'))
-
-            # Using specified amplitude threshold, pass amplitude mask
-            amp_file=gdal.Open(os.path.join(workdir,'avgamplitude')).ReadAsArray()
-            amp_file = np.where(amp_file < float(amp_thresh), 0, 1)
-        else:
-            amp_file=np.ones((lake_masks.shape[0],lake_masks.shape[1]))
-
-        ###Update water-mask with lakes/ponds union and average amplitude
-        mask_file = gdal.Open(maskfilename,gdal.GA_Update)
-        mask_file.GetRasterBand(1).WriteArray(lake_masks*gdal.Open(maskfilename).ReadAsArray()*amp_file)
-        #Delete temp files
-        del lake_masks, amp_file, mask_file
-        os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
-
-    if os.path.basename(maskfilename).lower().startswith('nlcd') and maskfilename.lower().endswith('img'):
-        from ariaNLCDmask import NLCDMasker
-        maskfilename = NLCDMasker(os.path.dirname(workdir))(maskfilename) ## write mask to disk
-
-    # Load mask
-    try:
-        # Check if uncropped/cropped maskfiles exist in 'mask' subdirectory
-        if not os.path.exists(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')):
-            # save uncropped masfile
-            gdal.BuildVRT(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), maskfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update maskfilename
-            maskfilename=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')
-            # save cropped maskfile
-            gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-            mask_file = gdal.Open(maskfilename,gdal.GA_Update)
-            mask_file.SetProjection(proj) ; del mask_file
-            gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
-        #pass cropped DEM
-        mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        mask.SetProjection(proj)
-        mask.SetDescription(maskfilename)
-    except:
-        raise Exception('Failed to open user mask')
-
-    return mask
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     '''

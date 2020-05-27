@@ -17,7 +17,8 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.ARIAProduct import ARIA_standardproduct
-from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_mask, export_products, tropo_correction
+from ARIAtools.mask_util import prep_mask
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, export_products, tropo_correction
 
 
 def createParser():
