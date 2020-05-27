@@ -176,6 +176,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
     if not os.path.exists(workdir):
         os.mkdir(workdir)
 
+
     # Get bounds of user bbox_file
     bounds=open_shapefile(bbox_file, 0, 0).bounds
 
@@ -234,6 +235,10 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         #Delete temp files
         del lake_masks, amp_file, mask_file
         os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
+
+    if os.path.basename(maskfilename).lower().startswith('nlcd') and maskfilename.lower().endswith('img'):
+        from ariaNLCDmask import NLCDMasker
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(maskfilename) ## write mask to disk
 
     # Load mask
     try:
@@ -360,7 +365,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     del ds
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
-
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """
@@ -731,7 +735,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
 
         else:
             print("WARNING: Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s"%(product_dict[2][i][0],tropo_products))
-
 
 def main(inps=None):
     '''
