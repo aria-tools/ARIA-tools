@@ -361,7 +361,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
 
-
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """
         Export layer and 2D meta-data layers (at the product resolution).
@@ -407,6 +406,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                 if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots',key)):
                     os.makedirs(os.path.join(outDir,'metadatalyr_plots',key))
 
+                #make VRT pointing to metadata layers in standard product
                 gdal.BuildVRT(outname +'.vrt', [i[1]][0])
 
                 if dem is None:
@@ -471,6 +471,130 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
         prog_bar.close()
     return
 
+class metadata_qualitycheck:
+    '''
+        Metadata quality control function. Artifacts recognized based off of covariance of cross-profiles.
+        Bug-fix varies based off of layer of interest.
+        Verbose mode generates a series of quality control plots with these profiles.
+    '''
+
+    def __init__(self, data_array, prod_key, outname, verbose=None):
+        # Pass inputs
+        self.data_array = data_array
+        self.prod_key = prod_key
+        self.outname = outname
+        self.verbose = verbose
+        self.data_array_band=data_array.GetRasterBand(1).ReadAsArray()
+        #mask by nodata value
+        self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
+        # Run class
+        self.__run__()
+
+    def __getCovar__(self, prof_direc, profprefix=''):
+        from scipy.stats import linregress
+
+        #append prefix for plot names
+        prof_direc=profprefix+prof_direc
+        #iterate through transpose of matrix if looking in azimuth
+        arrT=''
+        if 'azimuth' in prof_direc:
+            arrT='.T'
+        # Cycle between range and azimuth profiles
+        rsquaredarr=[]
+        std_errarr=[]
+        for i in enumerate(eval('self.data_array_band%s'%(arrT))):
+            mid_line=i[1]
+            xarr=range(len(mid_line))
+            #linear regression and get covariance
+            slope, bias, rsquared, p_value, std_err = linregress(xarr,mid_line.tolist())
+            rsquaredarr.append(abs(rsquared)**2)
+            std_errarr.append(std_err)
+            #exit loop/make plots in verbose mode if R^2 and standard error anomalous, or if on last iteration
+            if (rsquaredarr[i[0]] < 0.9 and std_errarr[i[0]] > 0.01) or (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
+                if self.verbose:
+                    #Make quality-control plots
+                    import matplotlib.pyplot as plt
+                    ax0=plt.figure().add_subplot(111)
+                    ax0.scatter(xarr, mid_line, c='k', s=7)
+                    refline = np.linspace(min(xarr),max(xarr),100)
+                    ax0.plot(refline, (refline*slope)+bias, linestyle='solid', color='red')
+                    ax0.set_ylabel('%s array'%(self.prod_key))
+                    ax0.set_xlabel('distance')
+                    ax0.set_title('Profile along %s'%(prof_direc))
+                    ax0.annotate('R\u00b2 = %f\nStd error= %f'%(rsquaredarr[i[0]],std_err), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
+                        textcoords='offset points', fontweight='bold', ha='left', va='top')
+                    if rsquaredarr[i[0]] < 0.9 and std_errarr[i[0]] > 0.01:
+                        ax0.annotate('WARNING\nR\u00b2 and standard error values suggest artifact exists', (1, 0), xytext=(4, -4), \
+                            xycoords='axes fraction', textcoords='offset points', fontweight='bold', ha='left', va='top')
+                    plt.margins(0)
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(os.path.dirname(os.path.dirname(self.outname)),'metadatalyr_plots',self.prod_key, \
+                        os.path.basename(self.outname)+'_%s.eps'%(prof_direc)))
+                    plt.close()
+                break
+
+        return rsquaredarr, std_errarr
+
+    def __run__(self):
+        from scipy.linalg import lstsq
+
+        # Get R^2/standard error across range
+        rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range')
+        # Get R^2/standard error across azimuth
+        rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth')
+        #Combine arrays
+        rsquaredarr = rsquaredarr_rng + rsquaredarr_az
+        std_errarr = std_errarr_rng + std_errarr_az
+        #if R^2 and standard error anomalous, fix array
+        if min(rsquaredarr) < 0.998 and max(std_errarr) > 0.0001:
+            #Cycle through each band
+            for i in range(1,5):
+                self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
+                #mask by nodata value
+                self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
+                np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
+                #Unique bug-fix for bPerp layers with sign-flips
+                if self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01:
+                    #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
+                    negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
+                    self.data_array_band=abs(self.data_array_band)
+                    if negs_percent>50:
+                        self.data_array_band*=-1
+                else:
+                    # regular grid covering the domain of the data
+                    X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+                    XX = X.flatten()
+                    YY = Y.flatten()
+                    # best-fit linear plane
+                    #for very large artifacts, must mask array for outliers to get best fit
+                    if min(rsquaredarr) < 0.8 and max(std_errarr) > 0.001:
+                        maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
+                        #mask all values above mean
+                        if maj_percent>50:
+                            self.data_array_band = np.ma.masked_where(self.data_array_band > self.data_array_band.mean(), self.data_array_band)
+                        #mask all values below mean
+                        else:
+                            self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
+                    A = np.c_[XX, YY, np.ones(len(XX))]
+                    C,_,_,_ = lstsq(A, self.data_array_band.data.flatten())
+                    # evaluate it on grid
+                    self.data_array_band = C[0]*X + C[1]*Y + C[2]
+                    #mask by nodata value
+                    self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), \
+                        self.data_array_band)
+                    np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
+                #update band
+                self.data_array.GetRasterBand(i).WriteArray(self.data_array_band.filled())
+                # Pass warning and get R^2/standard error across range/azimuth (only do for first band)
+                if i==1:
+                    print("WARNING: %s layer for IFG %s has R\u00b2 of %f and standard error of %s, automated correction applied" \
+                        %(self.prod_key,os.path.basename(self.outname),min(rsquaredarr), max(std_errarr)))
+                    rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range', profprefix='corrected')
+                    rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth', profprefix='corrected')
+        del self.data_array_band
+
+        return self.data_array
+
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
     '''
         2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
@@ -491,49 +615,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     # load layered metadata array
     data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", outputBounds=dem_bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
-    #quality control (bug-fix varies based off of layer of interest).
-    prod_key=os.path.basename(os.path.dirname(outname))
-    if prod_key=='bPerpendicular':
-        data_array_band=data_array.GetRasterBand(1).ReadAsArray()
-        #cycle between mid-range and mid-azimuth profiles
-        prof_direc='range'
-        polycovarr=[]
-        for i in enumerate([data_array_band[int(data_array_band.shape[0]/2),:],data_array_band[:,int(data_array_band.shape[1]/2)]]):
-            if i[0]==1:
-                prof_direc='azimuth'
-            #set up array
-            mid_line=i[1]
-            xarr=range(len(mid_line))
-            #fit line and get covariance
-            polyvar, polycov = np.polyfit(xarr,mid_line,1,cov=True)
-            polycovarr.append(abs(polycov[0,1]))
-            if verbose:
-                import matplotlib.pyplot as plt
-                ax0=plt.figure().add_subplot(111)
-                ax0.scatter(xarr, mid_line, c='k', s=7)
-                refline = np.linspace(min(ax0.get_xlim()[0],ax0.get_ylim()[0]),max(ax0.get_xlim()[1],ax0.get_ylim()[1]),100)
-                ax0.plot(refline, (refline*polyvar[0])+polyvar[1], linestyle='solid', color='red', linewidth=1.5)
-                ax0.set_ylabel('%s array'%(prod_key))
-                ax0.set_xlabel('distance')
-                ax0.set_title('Profile along mid-%s'%(prof_direc))
-                ax0.annotate('Cor = %f'%(abs(polycov[0,1])), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
-                    textcoords='offset points', fontweight='bold', ha='left', va='top')
-                plt.margins(0)
-                plt.tight_layout()
-                plt.savefig(os.path.join(os.path.dirname(os.path.dirname(outname)),'metadatalyr_plots',prod_key, \
-                    os.path.basename(outname)+'_mid%s.eps'%(prof_direc)))
-                plt.close()
-        #if covariance too large, fix array
-        if max(polycovarr) > 0.001:
-            print("WARNING: %s layer for IFG %s has covariance of %f, automated correction applied" \
-                %(prod_key,os.path.basename(outname),max(polycovarr)))
-            #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
-            negs_percent=((data_array_band < 0).sum()/data_array_band.size)*100
-            for i in range(1,5):
-                data_array_band=abs(data_array.GetRasterBand(i).ReadAsArray())
-                if negs_percent>50:
-                    data_array_band*=-1
-                data_array.GetRasterBand(i).WriteArray(data_array_band)
+    #metadata layer quality check, correction applied if necessary
+    data_array = metadata_qualitycheck(data_array, os.path.basename(os.path.dirname(outname)), outname, verbose).data_array
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
