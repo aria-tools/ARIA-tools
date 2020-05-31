@@ -504,7 +504,12 @@ class metadata_qualitycheck:
         std_errarr=[]
         for i in enumerate(eval('self.data_array_band%s'%(arrT))):
             mid_line=i[1]
-            xarr=range(len(mid_line))
+            xarr=np.array(range(len(mid_line)))
+            #truncate columns of 0s
+            if mid_line.mask.size!=1:
+                if True in mid_line.mask:
+                    xarr=xarr[~mid_line.mask]
+                    mid_line=mid_line[~mid_line.mask]
             #linear regression and get covariance
             slope, bias, rsquared, p_value, std_err = linregress(xarr,mid_line.tolist())
             rsquaredarr.append(abs(rsquared)**2)
@@ -524,8 +529,8 @@ class metadata_qualitycheck:
                     ax0.annotate('R\u00b2 = %f\nStd error= %f'%(rsquaredarr[i[0]],std_err), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
                         textcoords='offset points', fontweight='bold', ha='left', va='top')
                     if rsquaredarr[i[0]] < 0.9 and std_errarr[i[0]] > 0.01:
-                        ax0.annotate('WARNING\nR\u00b2 and standard error values suggest artifact exists', (1, 0), xytext=(4, -4), \
-                            xycoords='axes fraction', textcoords='offset points', fontweight='bold', ha='left', va='top')
+                        ax0.annotate('WARNING: R\u00b2 and standard error\nsuggest artifact exists', (1, 1), xytext=(4, -4), \
+                            xycoords='axes fraction', textcoords='offset points', fontweight='bold', ha='right', va='top')
                     plt.margins(0)
                     plt.tight_layout()
                     plt.savefig(os.path.join(os.path.dirname(os.path.dirname(self.outname)),'metadatalyr_plots',self.prod_key, \
@@ -563,10 +568,13 @@ class metadata_qualitycheck:
                 else:
                     # regular grid covering the domain of the data
                     X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-                    XX = X.flatten()
-                    YY = Y.flatten()
-                    # best-fit linear plane
-                    #for very large artifacts, must mask array for outliers to get best fit
+                    Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+                    #truncate columns of 0s
+                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+                        Xmask=Xmask.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
+                        Ymask=Ymask.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
+                        self.data_array_band=self.data_array_band.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
+                    # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
                     if min(rsquaredarr) < 0.8 and max(std_errarr) > 0.001:
                         maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
                         #mask all values above mean
@@ -575,6 +583,20 @@ class metadata_qualitycheck:
                         #mask all values below mean
                         else:
                             self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
+                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+                        #truncate columns of 0s
+                        if self.data_array_band[np.all(self.data_array_band.mask == False, axis=1)].mask.all()==True:
+                            Xmask=Xmask.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
+                            Ymask=Ymask.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
+                            self.data_array_band=self.data_array_band.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
+                        #truncate rows of 0s
+                        else:
+                            Xmask=Xmask[np.all(self.data_array_band.mask == False, axis=1)]
+                            Ymask=Ymask[np.all(self.data_array_band.mask == False, axis=1)]
+                            self.data_array_band=self.data_array_band[np.all(self.data_array_band.mask == False, axis=1)]
+                    # truncated grid covering the domain of the data
+                    XX = Xmask.flatten()
+                    YY = Ymask.flatten()
                     A = np.c_[XX, YY, np.ones(len(XX))]
                     C,_,_,_ = lstsq(A, self.data_array_band.data.flatten())
                     # evaluate it on grid
