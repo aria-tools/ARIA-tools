@@ -893,7 +893,7 @@ def main(inps=None):
     # Plot and analyze data
     dataStack.plotCumMisclosure(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip,
         plotTimeIntervals=inps.plotTimeIntervals)
-    # plt.show()
+    plt.show()
 
     # Save incremental misclosure plots to figure
     dataStack.plotIncrements(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip)
