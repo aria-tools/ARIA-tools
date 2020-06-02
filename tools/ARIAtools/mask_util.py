@@ -94,9 +94,9 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         del lake_masks, amp_file, mask_file
         os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
 
-    if os.path.basename(maskfilename).lower().startswith('nlcd') and maskfilename.lower().endswith('img'):
-        print("***Cropping NLCD mask... ***")
-        maskfilename = NLCDMasker(os.path.dirname(workdir))(maskfilename, proj, bounds, arrshape) ## write mask to disk
+    if os.path.basename(maskfilename).lower().startswith('nlcd'):
+        print("***Downloading and cropping the NLCD mask...***")
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape) ## write mask to disk
 
     # Load mask
     try:
@@ -128,10 +128,14 @@ class NLCDMasker(object):
         self.lc        = lc # landcover classes to mask
         gdal.PushErrorHandler('CPLQuietErrorHandler')
 
-    def __call__(self, path_nlcd, proj, bounds, arrshape, view=False, test=False):
+    def __call__(self, proj, bounds, arrshape, test=False):
         """ view=True to plot the mask; test=True to apply mask to dummy data """
+        import matplotlib.pyplot as plt
         ## crop the raw nlcd in memory
-        ds_crop = crop_ds(path_nlcd, self.path_bbox)
+        path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
+                    '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
+
+        ds_crop   = crop_ds(path_nlcd, self.path_bbox)
 
         ## mask the landcover classes in lc
         ds_mask = make_mask(ds_crop, self.lc)
@@ -146,12 +150,11 @@ class NLCDMasker(object):
         ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16, noData=0)
         gdal.BuildVRT(dst + '.vrt' ,ds)
 
-        ## optionally view the mask
-        if view:
-            import matplotlib.pyplot as plt
-            arr = ds.ReadAsArray()
-            plt.imshow(arr, cmap=plt.cm.Greys_r, interpolation='nearest'); plt.colorbar()
-            plt.title('Resampled mask\nDims: {}'.format(arr.shape)); plt.show()
+        ## save a view of the mask
+        arr = ds.ReadAsArray()
+        plt.imshow(arr, cmap=plt.cm.Greys_r, interpolation='nearest')
+        plt.colorbar(); plt.title('Resampled mask\nDims: {}'.format(arr.shape))
+        plt.savefig(op.join(path_mask, 'NLCD_crop.msk.png'))
 
         if test: self.__test__(ds_maskre)
 
@@ -191,7 +194,7 @@ class NLCDMasker(object):
 
 def crop_ds(path_raster, path_poly, path_write=''):
     """ Crop to a raster (or path to one) using a polygon stored on disk """
-    if isinstance(path_raster, str) and op.exists(path_raster):
+    if isinstance(path_raster, str) and (op.exists(path_raster) or path_raster.startswith('/vsi')):
         ds  = gdal.Open(path_raster)
     else:
         raise FileNotFoundError(path_raster)
