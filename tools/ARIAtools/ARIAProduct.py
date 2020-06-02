@@ -322,7 +322,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 num_dups.append(i[0])
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
-        if num_dups!=0:
+        if len(num_dups) > 0:
             print("%d out of %d products rejected since they are duplicates"%(len(num_dups),num_prods))
 
         # If only one pair in list, add it to list.
