@@ -235,6 +235,8 @@ class NLCDMasker(object):
                     '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
 
         ds_crop   = crop_ds(path_nlcd, self.path_bbox)
+        print ('Cropping worked?')
+        quit()
 
         ## mask the landcover classes in lc
         ds_mask  = make_mask(ds_crop, self.lc)
