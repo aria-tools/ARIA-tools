@@ -59,8 +59,14 @@ jobs:
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
             mkdir test
             cd test
-            ariaDownload.py --ifg 20190325_20190301 --bbox "36.5 38 -76.5 -75" -w ./products_004 
-            ariaExtract.py -f "products_004/*.nc" -m 'NLCD'
+            #NLCD mask -- only valid over CONUS
+            # #ariaDownload.py --ifg 20190325_20190301 --bbox "36.5 38 -76.5 -75" -w ./products
+            mkdir products
+            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-A-R-004-tops-20190325_20190301-230653-39145N_37270N-PP-a57b-v2_0_2/S1-GUNW-A-R-004-tops-20190325_20190301-230653-39145N_37270N-PP-a57b-v2_0_2.nc
+            wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
+            cd ../
+            ariaExtract.py -f "products/*.nc" -m 'NLCD'
+            rm -rf products
 
             #product count
             # ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v -o count
