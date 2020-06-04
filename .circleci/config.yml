@@ -62,6 +62,7 @@ jobs:
             #NLCD mask -- only valid over CONUS
             # #ariaDownload.py --ifg 20190325_20190301 --bbox "36.5 38 -76.5 -75" -w ./products
             mkdir products
+            cd products
             wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-A-R-004-tops-20190325_20190301-230653-39145N_37270N-PP-a57b-v2_0_2/S1-GUNW-A-R-004-tops-20190325_20190301-230653-39145N_37270N-PP-a57b-v2_0_2.nc
             wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             cd ../
