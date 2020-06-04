@@ -234,28 +234,29 @@ class NLCDMasker(object):
         path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
                     '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
 
-        ds_crop   = crop_ds(path_nlcd, self.path_bbox)
-        print ('Cropping worked?')
-        quit()
+        ds_crop   = crop_ds(path_nlcd, self.path_bbox); print ('Cropped NLCD')
 
         ## mask the landcover classes in lc
-        ds_mask  = make_mask(ds_crop, self.lc)
+        ds_mask  = make_mask(ds_crop, self.lc); print ('Made Mask')
 
         ## resample the mask to the size of the products (mimic ariaExtract)
-        ds_maskre = resamp(ds_mask, proj, bounds, arrshape)
+        ds_maskre = resamp(ds_mask, proj, bounds, arrshape); print ('Resampled')
 
         ## write mask to disk
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
         dst = op.join(path_mask, 'NLCD_crop.msk')
         ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16, noData=0)
+        print ('Translated to ENVI')
         gdal.BuildVRT(dst + '.vrt' ,ds)
 
         ## save a view of the mask
         arr = ds.ReadAsArray()
         plt.imshow(arr, cmap=plt.cm.Greys_r, interpolation='nearest')
+        print ('Plotted')
         plt.colorbar(); plt.title('Resampled mask\nDims: {}'.format(arr.shape))
         plt.savefig(op.join(path_mask, 'NLCD_crop.msk.png'))
+        print ('Saved fig')
 
         if test: self.__test__(ds_maskre)
 
