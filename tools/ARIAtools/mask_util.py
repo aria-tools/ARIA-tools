@@ -120,82 +120,9 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     return mask
 
-class NLCDMasker(object):
-    def __init__(self, path_aria, lc=[11, 12, 90, 95]):
-        self.path_aria = path_aria
-        self.path_bbox = op.join(self.path_aria, 'productBoundingBox', 'productBoundingBox.shp')
-        self.path_dem  = op.join(self.path_aria, 'DEM', 'SRTM_3arcsec.dem')
-        self.lc        = lc # landcover classes to mask
-        gdal.PushErrorHandler('CPLQuietErrorHandler')
-
-    def __call__(self, path_nlcd, proj, bounds, arrshape, view=False, test=False):
-        """ view=True to plot the mask; test=True to apply mask to dummy data """
-        ## crop the raw nlcd in memory
-        ds_crop = crop_ds(path_nlcd, self.path_bbox)
-
-        ## mask the landcover classes in lc
-        ds_mask = make_mask(ds_crop, self.lc)
-
-        ## resample the mask to the size of the products (mimic ariaExtract)
-        ds_maskre = resamp(ds_mask, proj, bounds, arrshape)
-
-        ## write mask to disk
-        path_mask = op.join(self.path_aria, 'mask')
-        os.mkdirs(path_mask) if not op.exists(path_mask) else ''
-        dst = op.join(path_mask, 'NLCD_crop.msk')
-        ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16, noData=0)
-        gdal.BuildVRT(dst + '.vrt' ,ds)
-
-        ## optionally view the mask
-        if view:
-            import matplotlib.pyplot as plt
-            arr = ds.ReadAsArray()
-            plt.imshow(arr, cmap=plt.cm.Greys_r, interpolation='nearest'); plt.colorbar()
-            plt.title('Resampled mask\nDims: {}'.format(arr.shape)); plt.show()
-
-        if test: self.__test__(ds_maskre)
-
-        return dst
-
-    def __test__(self, ds_maskre):
-        ## apply mask to dummy data FOR TESTING
-        import matplotlib.pyplot as plt
-        ds_dummy  = self._dummy_data(self.path_dem)
-        ds_masked = self._apply_mask(ds_maskre, ds_dummy)
-
-        arr = ds_masked.ReadAsArray()
-        arr = np.where(arr>9990, np.nan, arr)
-        plt.imshow(arr, cmap='jet_r', interpolation='nearest'); plt.colorbar()
-        plt.title('Mask applied to dummy data'); plt.show()
-
-    def _dummy_data(self, ds2match):
-        """ Create raster of dummy data using the dem (for sizing); For test """
-        if isinstance(ds2match, str) and op.exists(ds2match):
-            arr = gdal.Open(ds2match, gdal.GA_ReadOnly).ReadAsArray()
-        else:
-            arr = ds2match.ReadAsArray()
-
-        # arr = np.random.rand(*arr.shape)
-        arr = np.ones(arr.shape) * 10
-        ds  = arr2ds(ds2match, arr)
-        arr1 = ds.ReadAsArray()
-        return ds
-
-    def _apply_mask(self, ds_mask, ds_2mask):
-        """ Apply mask to test viewing """
-        arr = ds_mask.ReadAsArray()
-        arr = np.where(arr == 0, np.nan, 1)
-        masked = ds_2mask.ReadAsArray() * arr
-        ds_masked = arr2ds(ds_mask, masked)
-        return ds_masked
-
 def crop_ds(path_raster, path_poly, path_write=''):
     """ Crop to a raster (or path to one) using a polygon stored on disk """
-    if isinstance(path_raster, str) and op.exists(path_raster):
-        ds  = gdal.Open(path_raster)
-    else:
-        raise FileNotFoundError(path_raster)
-    ds  = gdal.Warp(path_write, ds, format='VRT', cutlineDSName=path_poly,
+    ds  = gdal.Warp(path_write, path_raster, format='VRT', cutlineDSName=path_poly,
                                              cropToCutline=True, dstNodata=9999)
     if path_write: ds_vrt = gdal.BuildVRT('{}.vrt'.format(path_write), ds)
     return ds
@@ -288,3 +215,75 @@ def resamp_DEP(src, match, view=False):
     gdal.ReprojectImage(src, dst, src_proj, match_proj, gdalconst.GRA_NearestNeighbour)
     del src, match
     return dst
+
+class NLCDMasker(object):
+    def __init__(self, path_aria, lc=[11, 12, 90, 95]):
+        self.path_aria = path_aria
+        self.path_bbox = op.join(self.path_aria, 'productBoundingBox', 'productBoundingBox.shp')
+        self.path_dem  = op.join(self.path_aria, 'DEM', 'SRTM_3arcsec.dem')
+        self.lc        = lc # landcover classes to mask
+        gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+    def __call__(self, proj, bounds, arrshape, test=False):
+        """ view=True to plot the mask; test=True to apply mask to dummy data """
+        import matplotlib.pyplot as plt
+        ## crop the raw nlcd in memory
+        path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
+                    '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
+
+        ds_crop   = crop_ds(path_nlcd, self.path_bbox)
+
+        ## mask the landcover classes in lc
+        ds_mask = make_mask(ds_crop, self.lc)
+
+        ## resample the mask to the size of the products (mimic ariaExtract)
+        ds_maskre = resamp(ds_mask, proj, bounds, arrshape)
+
+        ## write mask to disk
+        path_mask = op.join(self.path_aria, 'mask')
+        os.mkdirs(path_mask) if not op.exists(path_mask) else ''
+        dst = op.join(path_mask, 'NLCD_crop.msk')
+        ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16, noData=0)
+        gdal.BuildVRT(dst + '.vrt' ,ds)
+
+        ## save a view of the mask
+        arr = ds.ReadAsArray()
+        plt.imshow(arr, cmap=plt.cm.Greys_r, interpolation='nearest')
+        plt.colorbar(); plt.title('Resampled mask\nDims: {}'.format(arr.shape))
+        plt.savefig(op.join(path_mask, 'NLCD_crop.msk.png'))
+
+        if test: self.__test__(ds_maskre)
+
+        return dst
+
+    def __test__(self, ds_maskre):
+        ## apply mask to dummy data FOR TESTING
+        import matplotlib.pyplot as plt
+        ds_dummy  = self._dummy_data(self.path_dem)
+        ds_masked = self._apply_mask(ds_maskre, ds_dummy)
+
+        arr = ds_masked.ReadAsArray()
+        arr = np.where(arr>9990, np.nan, arr)
+        plt.imshow(arr, cmap='jet_r', interpolation='nearest'); plt.colorbar()
+        plt.title('Mask applied to dummy data'); plt.show()
+
+    def _dummy_data(self, ds2match):
+        """ Create raster of dummy data using the dem (for sizing); For test """
+        if isinstance(ds2match, str) and op.exists(ds2match):
+            arr = gdal.Open(ds2match, gdal.GA_ReadOnly).ReadAsArray()
+        else:
+            arr = ds2match.ReadAsArray()
+
+        # arr = np.random.rand(*arr.shape)
+        arr = np.ones(arr.shape) * 10
+        ds  = arr2ds(ds2match, arr)
+        arr1 = ds.ReadAsArray()
+        return ds
+
+    def _apply_mask(self, ds_mask, ds_2mask):
+        """ Apply mask to test viewing """
+        arr = ds_mask.ReadAsArray()
+        arr = np.where(arr == 0, np.nan, 1)
+        masked = ds_2mask.ReadAsArray() * arr
+        ds_masked = arr2ds(ds_mask, masked)
+        return ds_masked
