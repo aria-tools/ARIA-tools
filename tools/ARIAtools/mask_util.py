@@ -121,9 +121,12 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
     return mask
 
 def crop_ds(path_raster, path_poly, path_write=''):
-    """ Crop to a raster (or path to one) using a polygon stored on disk """
-    ds  = gdal.Warp(path_write, path_raster, format='VRT', cutlineDSName=path_poly,
+    """ Crop path_raster (or dataset opened with gdal) to a polygon on disk """
+    assert op.exists(path_raster) or path_raster.startswith('/vsi'), 'Invalid path to NLCD mask'
+    path_raster = gdal.BuildVRT('', path_raster)
+    ds          = gdal.Warp(path_write, path_raster, format='VRT', cutlineDSName=path_poly,
                                              cropToCutline=True, dstNodata=9999)
+
     if path_write: ds_vrt = gdal.BuildVRT('{}.vrt'.format(path_write), ds)
     return ds
 
@@ -234,7 +237,7 @@ class NLCDMasker(object):
         ds_crop   = crop_ds(path_nlcd, self.path_bbox)
 
         ## mask the landcover classes in lc
-        ds_mask = make_mask(ds_crop, self.lc)
+        ds_mask  = make_mask(ds_crop, self.lc)
 
         ## resample the mask to the size of the products (mimic ariaExtract)
         ds_maskre = resamp(ds_mask, proj, bounds, arrshape)
