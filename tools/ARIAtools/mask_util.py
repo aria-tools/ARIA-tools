@@ -157,12 +157,15 @@ def resamp(src, proj, bounds, arrshape, view=False):
 
     if path:
         dst = gdal.GetDriverByName('ENVI').Create(path, width, height, 1, gdalconst.GDT_Float32)
+    print ('ok')
     # else:
     #     dst = gdal.GetDriverByName('MEM').Create('', width, height, 1, gdalconst.GDT_Float32)
 
     dst.SetGeoTransform(gt)
     dst.SetProjection(proj)
+    print ('closer')
     gdal.ReprojectImage(src, dst, src.GetProjection(), proj, gdalconst.GRA_NearestNeighbour)
+    print ('Reprojected')
     del src
     return dst
 
