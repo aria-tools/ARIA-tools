@@ -80,5 +80,6 @@ jobs:
             #run loading of aria products in mintpy
             prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180502_20180408.vrt -a azimuthAngle/20180502_20180408.vrt
 
-            #NLCD mask
-            ariaExtract.py -f "products/*.nc" -m 'NLCD'
+            #NLCD mask -- only valid over CONUS
+            ariaDownload.py -ifg 20190325_20190301 --bbox "36.5 38 -76.5 -75" -w ./products_004 
+            ariaExtract.py -f "products_004/*.nc" -m 'NLCD'
