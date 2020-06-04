@@ -97,6 +97,12 @@ def createParser():
     parser.add_argument('-refLat', dest='refLat', type=float, default=None,
         help='Reference latitude')
 
+    # Query point
+    parser.add_argument('--queryX', dest='queryX', type=int, default=None, help='Query point X pixel')
+    parser.add_argument('--queryY', dest='queryY', type=int, default=None, help='Query point Y pixel')
+    parser.add_argument('--queryLon', dest='queryLon', type=float, default=None, help='Query point longitude')
+    parser.add_argument('--queryLat', dest='queryLat', type=float, default=None, help='Query point latitude')
+
     # Vocalization
     parser.add_argument('-v','--verbose', dest='verbose', action='store_true', help='Verbose mode')
 
@@ -139,6 +145,10 @@ class stack:
         self.imgdir = os.path.dirname(self.imgfile)
         self.workdir = os.path.abspath(workdir)
 
+        # Check if output directory exists
+        if not os.path.exists(self.workdir):
+            os.mkdir(self.workdir)
+
         # Dates and pairs
         self.startDate = datetime.strptime(startDate,'%Y%m%d')
         if not endDate:
@@ -162,12 +172,19 @@ class stack:
 
 
     # Load data from unwrapStack.vrt
-    def __loadStackData__(self,):
+    def __loadStackData__(self):
         '''
             Load data from unwrapStack.vrt file.
         '''
         # Open dataset
         self.IFGs = gdal.Open(self.imgfile,gdal.GA_ReadOnly)
+
+        # Format extent
+        N = self.IFGs.RasterXSize; M = self.IFGs.RasterYSize
+        tnsf = self.IFGs.GetGeoTransform()
+        left = tnsf[0]; xstep = tnsf[1]; right = left+N*xstep
+        top = tnsf[3]; ystep = tnsf[5]; bottom = top+M*ystep
+        self.extent = (left, right, bottom, top)
 
         # Report if requested
         if self.verbose == True: print('{} bands detected'.format(self.IFGs.RasterCount))
@@ -535,6 +552,7 @@ class stack:
             # Reselect reference points
             self.refX = np.random.randint(cohDS.RasterXSize)
             self.refY = np.random.randint(cohDS.RasterYSize)
+            n += 1 # update counter
 
             # Break loop after 10000 iterations
             if n == 10000:
@@ -558,7 +576,7 @@ class stack:
         self.__referencePoint__(refXY,refLoLa)
 
         # Misclosure placeholders
-        self.mscStack = []
+        self.netMscStack = []
         self.absMscStack = []
 
         # Compute phase triplets
@@ -586,19 +604,19 @@ class stack:
             KI -= KI[self.refY,self.refX]
 
             # Compute (abs)misclosure
-            misclosure = JI+KJ-KI
-            absMisclosure = np.abs(misclosure)
+            netMisclosure = JI+KJ-KI
+            absMisclosure = np.abs(netMisclosure)
 
             # Append to stack
-            self.mscStack.append(misclosure)
+            self.netMscStack.append(netMisclosure)
             self.absMscStack.append(absMisclosure)
 
         # Convert lists to 3D arrays
-        self.mscStack = np.array(self.mscStack)
+        self.netMscStack = np.array(self.netMscStack)
         self.absMscStack = np.array(self.absMscStack)
 
         # Cumulative misclosure
-        self.cumMisclosure = np.sum(self.mscStack,axis=0)
+        self.cumNetMisclosure = np.sum(self.netMscStack,axis=0)
         self.cumAbsMisclosure = np.sum(self.absMscStack,axis=0)
 
 
@@ -625,15 +643,15 @@ class stack:
 
         return clipValues
 
-    def __plotCumMisclosure__(self):
+    def __plotCumNetMisclosure__(self):
         '''
             Plot cumulative misclosure.
         '''
-        cax = self.mscAx.imshow(self.cumMsc,cmap='plasma',
-            vmin=self.cumMscClips['min'],vmax=self.cumMscClips['max'],zorder=1)
-        self.mscAx.plot(self.refX,self.refY,'ks',zorder=2)
-        self.mscAx.set_xticks([]); self.mscAx.set_yticks([])
-        self.mscAx.set_title('Cumulative misclosure')
+        cax = self.netMscAx.imshow(self.cumNetMsc,cmap='plasma',
+            vmin=self.cumNetMscClips['min'],vmax=self.cumNetMscClips['max'],zorder=1)
+        self.netMscAx.plot(self.refX,self.refY,'ks',zorder=2)
+        self.netMscAx.set_xticks([]); self.netMscAx.set_yticks([])
+        self.netMscAx.set_title('Cumulative misclosure')
 
         return cax
 
@@ -668,7 +686,7 @@ class stack:
         ax.set_ylabel(title)
 
     # Plot misclosure
-    def plotCumMisclosure(self,pctmin=1,pctmax=99,plotTimeIntervals=False):
+    def plotCumMisclosure(self,queryXY=None,queryLoLa=None,pctmin=1,pctmax=99,plotTimeIntervals=False):
         '''
             Map-view plot of cumulative misclosure.
         '''
@@ -678,17 +696,17 @@ class stack:
         self.plotTimeIntervals = plotTimeIntervals
 
         # Set up interactive plots
-        self.mscFig = plt.figure()
-        self.mscAx = self.mscFig.add_subplot(111)
+        self.netMscFig = plt.figure()
+        self.netMscAx = self.netMscFig.add_subplot(111)
 
         self.absMscFig = plt.figure()
         self.absMscAx = self.absMscFig.add_subplot(111)
 
         # Auto-detect background and clip values
-        self.cumMscBackground = self.__backgroundDetect__(self.cumMisclosure)
-        self.cumMsc = np.ma.array(self.cumMisclosure,
-            mask=(self.cumMisclosure==self.cumMscBackground))
-        self.cumMscClips = self.__imgClipValues__(self.cumMsc,percentiles=[pctmin,pctmax])
+        self.cumNetMscBackground = self.__backgroundDetect__(self.cumNetMisclosure)
+        self.cumNetMsc = np.ma.array(self.cumNetMisclosure,
+            mask=(self.cumNetMisclosure==self.cumNetMscBackground))
+        self.cumNetMscClips = self.__imgClipValues__(self.cumNetMsc,percentiles=[pctmin,pctmax])
 
         self.cumAbsMscBackground = self.__backgroundDetect__(self.cumAbsMisclosure)
         self.cumAbsMsc = np.ma.array(self.cumAbsMisclosure,
@@ -696,8 +714,8 @@ class stack:
         self.cumAbsMscClips = self.__imgClipValues__(self.cumAbsMsc,percentiles=[pctmin,pctmax])
 
         # Plot maps
-        cax = self.__plotCumMisclosure__()
-        cbar = self.mscFig.colorbar(cax, orientation='vertical')
+        cax = self.__plotCumNetMisclosure__()
+        cbar = self.netMscFig.colorbar(cax, orientation='vertical')
         cbar.set_label('cum. misclosure (radians)')
 
         cax = self.__plotCumAbsMisclosure__()
@@ -706,45 +724,48 @@ class stack:
 
         # Plot timeseries points
         self.mscSeriesFig = plt.figure('Misclosure',figsize=(8,8))
-        self.mscSeriesAx = self.mscSeriesFig.add_subplot(411)
-        self.cumMscSeriesAx = self.mscSeriesFig.add_subplot(412)
+        self.netMscSeriesAx = self.mscSeriesFig.add_subplot(411)
+        self.cumNetMscSeriesAx = self.mscSeriesFig.add_subplot(412)
         self.absMscSeriesAx = self.mscSeriesFig.add_subplot(413)
         self.cumAbsMscSeriesAx = self.mscSeriesFig.add_subplot(414)
 
+        # Pre-specified query points
+        self.__misclosureQuery__(queryXY,queryLoLa)
+
         # Link canvas to plots for interaction
-        self.mscFig.canvas.mpl_connect('button_press_event', self.__misclosureAnalysis__)
+        self.netMscFig.canvas.mpl_connect('button_press_event', self.__misclosureAnalysis__)
         self.absMscFig.canvas.mpl_connect('button_press_event', self.__misclosureAnalysis__)
 
 
     ## Misclosure analysis
     def __misclosureAnalysis__(self,event):
         '''
-            Show the time history of each pixel.
+            Show the time history of each pixel based on interactive map.
         '''
         px=event.xdata; py=event.ydata
         px=int(round(px)); py=int(round(py))
 
         # Report position and cumulative values
         print('px {} py {}'.format(px,py)) # report position
-        print('Cumulative misclosure: {}'.format(self.cumMisclosure[py,px]))
+        print('Cumulative misclosure: {}'.format(self.cumNetMisclosure[py,px]))
         print('Abs cumulative misclosure: {}'.format(self.cumAbsMisclosure[py,px]))
 
         # Plot query points on maps
-        self.mscAx.cla()
-        self.__plotCumMisclosure__()
-        self.mscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
+        self.netMscAx.cla()
+        self.__plotCumNetMisclosure__()
+        self.netMscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
         self.absMscAx.cla()
         self.__plotCumAbsMisclosure__()
         self.absMscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
         # Plot misclosure over time
-        print('Misclosure: {}'.format(self.mscStack[:,py,px]))
-        self.mscSeriesAx.cla() # misclosure
-        self.__plotSeries__(self.mscSeriesAx, self.mscStack[:,py,px], 'misclosure')
+        print('Misclosure: {}'.format(self.netMscStack[:,py,px]))
+        self.netMscSeriesAx.cla() # misclosure
+        self.__plotSeries__(self.netMscSeriesAx, self.netMscStack[:,py,px], 'misclosure')
 
-        self.cumMscSeriesAx.cla() # cumulative misclosure
-        self.__plotSeries__(self.cumMscSeriesAx, np.cumsum(self.mscStack[:,py,px]), 'cum. miscl.')
+        self.cumNetMscSeriesAx.cla() # cumulative misclosure
+        self.__plotSeries__(self.cumNetMscSeriesAx, np.cumsum(self.netMscStack[:,py,px]), 'cum. miscl.')
 
         self.absMscSeriesAx.cla() # absolute misclosure
         self.__plotSeries__(self.absMscSeriesAx, self.absMscStack[:,py,px], 'abs. miscl')
@@ -760,15 +781,56 @@ class stack:
         self.cumAbsMscSeriesAx.set_xticklabels(self.dateTickLabels, rotation=90)
 
         # Draw outcomes
-        self.mscFig.canvas.draw()
+        self.netMscFig.canvas.draw()
         self.absMscFig.canvas.draw()
         self.mscSeriesFig.canvas.draw()
 
 
-    ## Plot incremental misclosure maps
-    def plotIncrements(self,pctmin=1,pctmax=99):
+    ## Misclosure query
+    def __misclosureQuery__(self,queryXY=None,queryLoLa=None):
         '''
-            Plot the incremental misclosure measurements.
+            Show the time history of each pixel based on pre-specified selection.
+        '''
+        if self.verbose == True: print('Pre-specified query point...')
+
+        # Convert bewteen lon/lat and image coordinates
+        if queryLoLa.count(None) == 0:
+            # Determine the XY coordinates from the given lon/lat
+            qLon,qLat = queryLoLa
+            qx,qy = self.LoLa2XY(queryLoLa[0],queryLoLa[1])
+            qx = int(qx); qy = int(qy) # convert to integer values
+
+        elif queryXY.count(None) == 0:
+            # Use the provided XY coordinates
+            qx,qy = queryXY
+            qLon,qLat = self.XY2LoLa(queryXY[0],queryXY[1])
+
+        if self.verbose == True:
+            print('Query point: X {} / Y {}; Lon {:.4f} / Lat {:.4f}'. \
+                format(qx,qy,qLon,qLat))
+
+        # Plot query points on map
+        self.netMscAx.plot(qx,qy,color='k',marker='o',markerfacecolor='w',zorder=3)
+        self.absMscAx.plot(qx,qy,color='k',marker='o',markerfacecolor='w',zorder=3)
+
+        # Plot misclosure over time
+        self.__plotSeries__(self.netMscSeriesAx, self.netMscStack[:,qy,qx], 'misclosure')
+        self.__plotSeries__(self.cumNetMscSeriesAx, np.cumsum(self.netMscStack[:,qy,qx]), 'cum. miscl.')
+        self.__plotSeries__(self.absMscSeriesAx, self.absMscStack[:,qy,qx], 'abs. miscl')
+        self.__plotSeries__(self.cumAbsMscSeriesAx, np.cumsum(self.absMscStack[:,qy,qx]),
+            'cum. abs. miscl.')
+
+        # Format x-axis
+        dates = pd.date_range(self.startDate-timedelta(days=30),
+            self.endDate+timedelta(days=30),freq='MS')
+        dateLabels = [date.strftime('%Y-%m') for date in dates]
+        self.cumAbsMscSeriesAx.set_xticklabels(self.dateTickLabels, rotation=90)
+
+
+    ## Plot triplet misclosure maps
+    def plotTripletMaps(self,pctmin=1,pctmax=99):
+        '''
+            Plot the misclosure measurements for each triplet to figures.
         '''
         if self.verbose == True: print('Saving incremental misclosure maps to image files')
 
@@ -795,8 +857,8 @@ class stack:
             ax = Fig.add_subplot(subplotDims[0],subplotDims[1],plotNb)
 
             # Format misclosure map
-            mscMapBackground = self.__backgroundDetect__(self.mscStack[i,:,:])
-            mscMap = np.ma.array(self.mscStack[i,:,:],mask=(self.mscStack[i,:,:]==mscMapBackground))
+            mscMapBackground = self.__backgroundDetect__(self.netMscStack[i,:,:])
+            mscMap = np.ma.array(self.netMscStack[i,:,:],mask=(self.netMscStack[i,:,:]==mscMapBackground))
             mscMapClips = self.__imgClipValues__(mscMap,[pctmin,pctmax])
 
             # Plot misclosure
@@ -833,12 +895,12 @@ class stack:
         if self.verbose == True: print('Saving misclosure maps to geotiffs')
 
         # Fix background values
-        self.cumMisclosure[self.cumMisclosure==self.cumMscBackground] = 0
+        self.cumNetMisclosure[self.cumNetMisclosure==self.cumNetMscBackground] = 0
         self.cumAbsMisclosure[self.cumAbsMisclosure==self.cumAbsMscBackground] = 0
 
         # Save cumulative misclosure
-        cumMscSavename = os.path.join(self.figdir,'CumulativeMisclosure.tif')
-        self.__saveGeoTiff__(cumMscSavename,self.cumMisclosure)
+        cumNetMscSavename = os.path.join(self.figdir,'CumulativeMisclosure.tif')
+        self.__saveGeoTiff__(cumNetMscSavename,self.cumNetMisclosure)
 
         # Save cumulative absolute misclosure
         cumAbsMscSavename = os.path.join(self.figdir,'CumulativeAbsoluteMisclosure.tif')
@@ -891,12 +953,14 @@ def main(inps=None):
         refLoLa=[inps.refLon, inps.refLat])
 
     # Plot and analyze data
-    dataStack.plotCumMisclosure(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip,
+    dataStack.plotCumMisclosure(queryXY=[inps.queryX,inps.queryY],
+        queryLoLa=[inps.queryLon,inps.queryLat],
+        pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip,
         plotTimeIntervals=inps.plotTimeIntervals)
     plt.show()
 
-    # Save incremental misclosure plots to figure
-    dataStack.plotIncrements(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip)
+    # Save misclosure map for each triplet to figures
+    dataStack.plotTripletMaps(pctmin=inps.pctMinClip,pctmax=inps.pctMaxClip)
 
     # Save misclosure maps to geotiffs
     dataStack.saveCumMisclosure()
