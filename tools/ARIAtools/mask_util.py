@@ -134,7 +134,9 @@ def make_mask(ds_crop, lc):
     # values outside crop; 0 is really just extra check
     lc.extend([0,255])
 
+    print ('in made mask')
     arr = ds_crop.ReadAsArray()
+    print ('read as array')
     for lclass in lc:
         arr = np.where(arr == lclass, np.nan, arr)
 
@@ -145,9 +147,10 @@ def make_mask(ds_crop, lc):
 def resamp(src, proj, bounds, arrshape, view=False):
     """ Resample a dataset from src dimensions using outputs from merged_productbbox """
     path = src.GetDescription()
-    path = path if op.exists(path) else op.join(os.getcwd(), 'temp')
+    path = path if op.exists(path) else '' # op.join(os.getcwd(), 'temp')
     if isinstance(src, str) and op.exists(src):
-        src = gdal.Open(src, gdal.GA_ReadOnly)
+        pass
+        # src = gdal.Open(src, gdal.GA_ReadOnly)
 
     ## compute geotranform
     height, width = arrshape
@@ -157,9 +160,8 @@ def resamp(src, proj, bounds, arrshape, view=False):
 
     if path:
         dst = gdal.GetDriverByName('ENVI').Create(path, width, height, 1, gdalconst.GDT_Float32)
-    print ('ok')
-    # else:
-    #     dst = gdal.GetDriverByName('MEM').Create('', width, height, 1, gdalconst.GDT_Float32)
+    else:
+        dst = gdal.GetDriverByName('MEM').Create('', width, height, 1, gdalconst.GDT_Int16)
 
     dst.SetGeoTransform(gt)
     dst.SetProjection(proj)
