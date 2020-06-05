@@ -189,9 +189,12 @@ def arr2ds(ds_orig, arr, noData=9999):
         # ds_out = gdal.GetDriverByName('MEM').Create('', ds_orig.RasterXSize,
         #             ds_orig.RasterYSize, 1, gdal.GDT_Float32)
         dst = os.path.join(os.getcwd(), 'tmp')
+        print ('here')
         ds_out = gdal.GetDriverByName('ENVI').Create(dst, ds_orig.RasterXSize,
                     ds_orig.RasterYSize, 1, gdal.GDT_Float32)
+        print ('created dataset')
         ds_out.GetRasterBand(1).WriteArray(arr)
+        print ('wrote array')
         ds_out.GetRasterBand(1).SetNoDataValue(noData)
 
     print ('made envi1')
