@@ -132,6 +132,7 @@ def crop_ds(path_raster, path_poly, path_write=''):
 
 def make_mask(ds_crop, lc):
     # values outside crop; 0 is really just extra check
+    print ('in fn')
     lc.extend([0,255])
 
     print ('in made mask')
@@ -139,9 +140,12 @@ def make_mask(ds_crop, lc):
     print ('read as array')
     for lclass in lc:
         arr = np.where(arr == lclass, np.nan, arr)
+    print ('where good')
 
     arr = np.where(np.isnan(arr), np.nan, 1)
+    print ('hwere good 2')
     ds  = arr2ds(ds_crop, arr)
+    print ('arr 2 ds good')
     return ds
 
 def resamp(src, proj, bounds, arrshape, view=False):
@@ -241,6 +245,7 @@ class NLCDMasker(object):
                     '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
 
         ds_crop   = crop_ds(path_nlcd, self.path_bbox); print ('Cropped NLCD')
+        print ('trying to make mask')
 
         ## mask the landcover classes in lc
         ds_mask  = make_mask(ds_crop, self.lc); print ('Made Mask')
