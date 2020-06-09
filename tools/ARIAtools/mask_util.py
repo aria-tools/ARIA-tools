@@ -94,9 +94,9 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         del lake_masks, amp_file, mask_file
         os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
 
-    if os.path.basename(maskfilename).lower().startswith('nlcd') and maskfilename.lower().endswith('img'):
-        print("***Cropping NLCD mask... ***")
-        maskfilename = NLCDMasker(os.path.dirname(workdir))(maskfilename, proj, bounds, arrshape) ## write mask to disk
+    if os.path.basename(maskfilename).lower().startswith('nlcd'):
+        print("***Accessing and cropping the NLCD mask...***")
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape)
 
     # Load mask
     try:
