@@ -125,7 +125,7 @@ def crop_ds(path_raster, path_poly, path_write=''):
     assert op.exists(path_raster) or path_raster.startswith('/vsi'), 'Invalid path to NLCD mask'
     path_raster = gdal.BuildVRT('', path_raster)
     ds          = gdal.Warp(path_write, path_raster, format='VRT', cutlineDSName=path_poly,
-                                             cropToCutline=True, dstNodata=9999)
+                                             cropToCutline=True, dstNodata=0)
 
     if path_write: ds_vrt = gdal.BuildVRT('{}.vrt'.format(path_write), ds)
     return ds
@@ -144,10 +144,9 @@ def make_mask(ds_crop, lc):
 
 def resamp(src, proj, bounds, arrshape, view=False):
     """ Resample a dataset from src dimensions using outputs from merged_productbbox """
-    path = src.GetDescription()
-    path = path if op.exists(path) else '' # op.join(os.getcwd(), 'temp')
     if isinstance(src, str) and op.exists(src):
         src = gdal.Open(src, gdal.GA_ReadOnly)
+    path = path if op.exists(src.GetDescription()) else ''
 
     ## compute geotranform
     height, width = arrshape
@@ -158,25 +157,21 @@ def resamp(src, proj, bounds, arrshape, view=False):
     if path:
         dst = gdal.GetDriverByName('ENVI').Create(path, width, height, 1, gdalconst.GDT_Float32)
     else:
-        dst = gdal.GetDriverByName('MEM').Create('', width, height, 1, gdalconst.GDT_Int16)
+        dst = gdal.GetDriverByName('MEM').Create(path, width, height, 1, gdalconst.GDT_Int16)
 
-    print ('Created new')
     dst.SetGeoTransform(gt)
     dst.SetProjection(proj)
     gdal.ReprojectImage(src, dst, src.GetProjection(), proj, gdalconst.GRA_NearestNeighbour)
-    print ('Reprojected')
     del src
     return dst
 
-def arr2ds(ds_orig, arr, noData=9999):
+def arr2ds(ds_orig, arr, noData=0):
     """
     Create a new dataset identical to ds_orig except with values of 'arr'
     Performed in memory
     """
     ds_orig = gdal.Open(ds_orig, gdal.GA_ReadOnly) if isinstance(ds_orig, str) else ds_orig
     arr     = np.where(np.isnan(arr), noData, arr)
-    print ('in arr2ds')
-
 
     if arr.ndim == 3:
         ds_out = gdal.GetDriverByName('MEM').Create('', ds_orig.RasterXSize,
@@ -186,18 +181,10 @@ def arr2ds(ds_orig, arr, noData=9999):
             ds_out.GetRasterBand(i+1).WriteArray(arr[i, :, :])
             ds_out.GetRasterBand(i+1).SetNoDataValue(noData)
     else:
-        # ds_out = gdal.GetDriverByName('MEM').Create('', ds_orig.RasterXSize,
-        #             ds_orig.RasterYSize, 1, gdal.GDT_Float32)
-        dst = os.path.join(os.getcwd(), 'tmp')
-        print ('here')
-        ds_out = gdal.GetDriverByName('ENVI').Create(dst, ds_orig.RasterXSize,
+        ds_out = gdal.GetDriverByName('MEM').Create('', ds_orig.RasterXSize,
                     ds_orig.RasterYSize, 1, gdal.GDT_Float32)
-        print ('created dataset')
         ds_out.GetRasterBand(1).WriteArray(arr)
-        print ('wrote array')
         ds_out.GetRasterBand(1).SetNoDataValue(noData)
-
-    print ('made envi1')
 
     ds_out.SetGeoTransform(ds_orig.GetGeoTransform())
     ds_out.SetProjection(ds_orig.GetProjection())
@@ -248,19 +235,20 @@ class NLCDMasker(object):
         path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
                     '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
 
-        ds_crop   = crop_ds(path_nlcd, self.path_bbox); print ('Cropped NLCD')
-
-        ## mask the landcover classes in lc
-        ds_mask  = make_mask(ds_crop, self.lc); print ('Made Mask')
+        ds_crop   = crop_ds(path_nlcd, self.path_bbox)
 
         ## resample the mask to the size of the products (mimic ariaExtract)
-        ds_maskre = resamp(ds_mask, proj, bounds, arrshape); print ('Resampled')
+        ds_resamp = resamp(ds_crop, proj, bounds, arrshape)
+
+        ## mask the landcover classes in lc
+        ds_mask   = make_mask(ds_resamp, self.lc)
+
 
         ## write mask to disk
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
         dst = op.join(path_mask, 'NLCD_crop.msk')
-        ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16, noData=0)
+        ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16)
         gdal.BuildVRT(dst + '.vrt' ,ds)
 
         ## save a view of the mask
@@ -269,7 +257,7 @@ class NLCDMasker(object):
         plt.colorbar(); plt.title('Resampled mask\nDims: {}'.format(arr.shape))
         plt.savefig(op.join(path_mask, 'NLCD_crop.msk.png'))
 
-        if test: self.__test__(ds_maskre)
+        if test: self.__test__(ds_mask)
 
         return dst
 
