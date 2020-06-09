@@ -248,7 +248,7 @@ class NLCDMasker(object):
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
         dst = op.join(path_mask, 'NLCD_crop.msk')
-        ds  = gdal.Translate(dst, ds_maskre, format='ENVI', outputType=gdal.GDT_UInt16)
+        ds  = gdal.Translate(dst, ds_mask, format='ENVI', outputType=gdal.GDT_UInt16)
         gdal.BuildVRT(dst + '.vrt' ,ds)
 
         ## save a view of the mask
