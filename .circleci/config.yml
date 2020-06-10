@@ -86,6 +86,3 @@ jobs:
             wget https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             cd ../
             ariaExtract.py -f "products/*004-*.nc" -m 'NLCD'
-            cd mask
-            ls 
-            du -hs *
