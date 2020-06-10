@@ -265,7 +265,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 rdrmetadata_dict['slantRangeEnd']=956307.125
                 #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
                 rdrmetadata_dict['sceneLength']=27
-                self.sceneLength=27
             elif basename.split('-')[0]=='ALOS2':
                 rdrmetadata_dict['missionID']='ALOS-2'
                 rdrmetadata_dict['productType']='UNW GEO IFG'
@@ -276,7 +275,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 rdrmetadata_dict['slantRangeEnd']=913840.2
                 #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
                 rdrmetadata_dict['sceneLength']=52
-                self.sceneLength=52
             else:
                 raise Exception('Sensor %s for file %s not supported.'%(basename.split('-')[0],fname))
 
@@ -357,10 +355,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         for i in enumerate(self.products[:-1]):
             # Get this reference product's times
             scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S.%f")
-            scene_end=scene_start+timedelta(seconds=self.sceneLength)
+            scene_end=scene_start+timedelta(seconds=i[1][0]['sceneLength'])
             master=datetime.strptime(i[1][0]['pair_name'][9:], "%Y%m%d")
             new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S.%f")
-            new_scene_end=new_scene_start+timedelta(seconds=self.sceneLength)
+            new_scene_end=new_scene_start+timedelta(seconds=i[1][0]['sceneLength'])
             slave=datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:], "%Y%m%d")
 
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
@@ -437,6 +435,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Sort by pair and start time.
         self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
         self.products=list(self.products)
+
+        # Exit if products from different sensors were mixed
+        if not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products) and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products):
+            raise Exception('Specified input contains standard products from different sensors, please proceed with homogeneous products.')
 
         # Check if any pairs meet criteria
         if self.products==[]:
