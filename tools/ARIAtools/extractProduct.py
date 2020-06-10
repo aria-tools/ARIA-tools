@@ -284,7 +284,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
         # Create union of productBoundingBox layers
         for frame in scene["productBoundingBox"]:
-            print('frame', frame)
             prods_bbox=open_shapefile(frame, 'productBoundingBox', 1)
             if os.path.exists(outname):
                 union_bbox=open_shapefile(outname, 0, 0)
