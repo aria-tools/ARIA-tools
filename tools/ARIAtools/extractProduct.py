@@ -524,9 +524,6 @@ class metadata_qualitycheck:
                 slope, bias, rsquared, p_value, std_err = linregress(xarr_chunk,chunk)
                 rsquaredarr.append(abs(rsquared)**2)
                 std_errarr.append(std_err)
-                #!#slope_n, bias_n, rsquared_n, p_value_n, std_err_n = linregress(mid_line.tolist(),(xarr*slope)+bias)
-                #!#rsquaredarr.append(min(abs(rsquared), abs(rsquared_n))**2)
-                #!#std_errarr.append(min(abs(std_err), abs(std_err_n)))
                 #terminate early if last iteration would have small chunk size
                 if len(chunk)>chunk_size:
                     break
@@ -602,7 +599,6 @@ class metadata_qualitycheck:
                     # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
                     if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.001:
                         maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
-                        print("maj_percent",maj_percent)
                         #mask all values above mean
                         if maj_percent>50:
                             self.data_array_band = np.ma.masked_where(self.data_array_band > self.data_array_band.mean(), self.data_array_band)
