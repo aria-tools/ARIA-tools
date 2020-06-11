@@ -510,12 +510,29 @@ class metadata_qualitycheck:
                 if True in mid_line.mask:
                     xarr=xarr[~mid_line.mask]
                     mid_line=mid_line[~mid_line.mask]
-            #linear regression and get covariance
-            slope, bias, rsquared, p_value, std_err = linregress(xarr,mid_line.tolist())
-            rsquaredarr.append(abs(rsquared)**2)
-            std_errarr.append(std_err)
+
+            #chunk array to better isolate artifacts
+            chunk_size= 4
+            for j in range(0, len(mid_line.tolist()), chunk_size):
+                chunk = mid_line.tolist()[j:j+chunk_size]
+                xarr_chunk = xarr[j:j+chunk_size]
+                # make sure each iteration contains at least minimum number of elements
+                if j==range(0, len(mid_line.tolist()), chunk_size)[-2] and len(mid_line.tolist()) % chunk_size != 0:
+                    chunk = mid_line.tolist()[j:]
+                    xarr_chunk = xarr[j:]
+                #linear regression and get covariance
+                slope, bias, rsquared, p_value, std_err = linregress(xarr_chunk,chunk)
+                rsquaredarr.append(abs(rsquared)**2)
+                std_errarr.append(std_err)
+                #!#slope_n, bias_n, rsquared_n, p_value_n, std_err_n = linregress(mid_line.tolist(),(xarr*slope)+bias)
+                #!#rsquaredarr.append(min(abs(rsquared), abs(rsquared_n))**2)
+                #!#std_errarr.append(min(abs(std_err), abs(std_err_n)))
+                #terminate early if last iteration would have small chunk size
+                if len(chunk)>chunk_size:
+                    break
+
             #exit loop/make plots in verbose mode if R^2 and standard error anomalous, or if on last iteration
-            if (rsquaredarr[i[0]] < 0.9 and std_errarr[i[0]] > 0.01) or (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
+            if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
                 if self.verbose:
                     #Make quality-control plots
                     import matplotlib.pyplot as plt
@@ -526,9 +543,9 @@ class metadata_qualitycheck:
                     ax0.set_ylabel('%s array'%(self.prod_key))
                     ax0.set_xlabel('distance')
                     ax0.set_title('Profile along %s'%(prof_direc))
-                    ax0.annotate('R\u00b2 = %f\nStd error= %f'%(rsquaredarr[i[0]],std_err), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
+                    ax0.annotate('R\u00b2 = %f\nStd error= %f'%(min(rsquaredarr),max(std_errarr)), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
                         textcoords='offset points', fontweight='bold', ha='left', va='top')
-                    if rsquaredarr[i[0]] < 0.9 and std_errarr[i[0]] > 0.01:
+                    if min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01:
                         ax0.annotate('WARNING: R\u00b2 and standard error\nsuggest artifact exists', (1, 1), xytext=(4, -4), \
                             xycoords='axes fraction', textcoords='offset points', fontweight='bold', ha='right', va='top')
                     plt.margins(0)
@@ -547,21 +564,29 @@ class metadata_qualitycheck:
         rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range')
         # Get R^2/standard error across azimuth
         rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth')
-        #Combine arrays
-        rsquaredarr = rsquaredarr_rng + rsquaredarr_az
-        std_errarr = std_errarr_rng + std_errarr_az
+
+        #filter out normal values from arrays
+        rsquaredarr = [0.97] ; std_errarr=[0.001]
+        if min(rsquaredarr_rng) < 0.97 and max(std_errarr_rng) > 0.001:
+            rsquaredarr.append(min(rsquaredarr_rng))
+            std_errarr.append(max(std_errarr_rng))
+        if min(rsquaredarr_az) < 0.97 and max(std_errarr_az) > 0.001:
+            rsquaredarr.append(min(rsquaredarr_az))
+            std_errarr.append(max(std_errarr_az))
+
         #if R^2 and standard error anomalous, fix array
-        if min(rsquaredarr) < 0.998 and max(std_errarr) > 0.0001:
+        if min(rsquaredarr) < 0.97 and max(std_errarr) > 0.001:
             #Cycle through each band
             for i in range(1,5):
                 self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
                 #mask by nodata value
                 self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
                 np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
+                negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
                 #Unique bug-fix for bPerp layers with sign-flips
-                if self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01:
+                if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) \
+                    and (negs_percent != 100 or negs_percent != 0):
                     #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
-                    negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
                     self.data_array_band=abs(self.data_array_band)
                     if negs_percent>50:
                         self.data_array_band*=-1
@@ -575,8 +600,9 @@ class metadata_qualitycheck:
                         Ymask=Ymask.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
                         self.data_array_band=self.data_array_band.T[np.all(self.data_array_band.T.mask == False, axis=1)].T
                     # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
-                    if min(rsquaredarr) < 0.8 and max(std_errarr) > 0.001:
+                    if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.001:
                         maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
+                        print("maj_percent",maj_percent)
                         #mask all values above mean
                         if maj_percent>50:
                             self.data_array_band = np.ma.masked_where(self.data_array_band > self.data_array_band.mean(), self.data_array_band)
