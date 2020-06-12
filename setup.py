@@ -39,4 +39,3 @@ else:
            packages=['ARIAtools'],
            package_dir={'ARIAtools': 'tools/ARIAtools'},
            scripts=['tools/bin/ariaPlot.py','tools/bin/ariaDownload.py','tools/bin/ariaExtract.py','tools/bin/ariaTSsetup.py','tools/bin/ariaAOIassist.py','tools/bin/ariaMisclosure.py'])
-
