@@ -96,7 +96,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     if os.path.basename(maskfilename).lower().startswith('nlcd'):
         print("***Accessing and cropping the NLCD mask...***")
-        maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape)
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape, outputFormat)
 
     # Load mask
     try:
@@ -228,9 +228,14 @@ class NLCDMasker(object):
         self.lc        = lc # landcover classes to mask
         gdal.PushErrorHandler('CPLQuietErrorHandler')
 
-    def __call__(self, proj, bounds, arrshape, test=False):
+    def __call__(self, proj, bounds, arrshape, outputFormat='ENVI', test=False):
         """ view=True to plot the mask; test=True to apply mask to dummy data """
         import matplotlib.pyplot as plt
+
+        # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+        if outputFormat=='VRT':
+            outputFormat='ENVI'
+
         ## crop the raw nlcd in memory
         path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
                     '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
@@ -243,12 +248,11 @@ class NLCDMasker(object):
         ## mask the landcover classes in lc
         ds_mask   = make_mask(ds_resamp, self.lc)
 
-
         ## write mask to disk
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
         dst = op.join(path_mask, 'NLCD_crop.msk')
-        ds  = gdal.Translate(dst, ds_mask, format='ENVI', outputType=gdal.GDT_UInt16)
+        ds  = gdal.Translate(dst, ds_mask, options=gdal.TranslateOptions(format=outputFormat, outputType=gdal.GDT_Byte))
         gdal.BuildVRT(dst + '.vrt' ,ds)
 
         ## save a view of the mask
