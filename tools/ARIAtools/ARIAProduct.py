@@ -136,8 +136,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # Open standard product bbox
         if self.bbox is not None:
-            file_bbox = open_shapefile(fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
-            # file_bbox = open_shapefile(fname, 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            file_bbox = open_shapefile(fname + '":'+sdskeys[0], 'productBoundingBox', 1)
             # Only generate dictionaries if there is spatial overlap with user bbox
             if file_bbox.intersects(self.bbox):
                 product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys, version)]
