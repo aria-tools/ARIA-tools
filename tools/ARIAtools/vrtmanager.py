@@ -191,3 +191,55 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
         gdal.BuildVRT(fname+'.vrt', fname, options=gdal.BuildVRTOptions(options=['-overwrite']))
 
     return
+
+
+###Average rasters
+def rasterAverage(outname, product_dict, bounds, prods_TOTbbox, outputFormat='ENVI', thresh=None):
+    '''
+        Generate average of rasters.
+        Currently implemented for:
+        1. amplitude under 'mask_util.py'
+        2. coherence under 'plot_avgcoherence' function of productPlot
+    '''
+
+    # Import functions
+    from ARIAtools.vrtmanager import renderVRT
+    import glob
+    import numpy as np
+    import os
+
+    ###Make average raster
+    # Delete existing average raster file
+    for i in glob.glob(outname+'*'): os.remove(i)
+
+    # Iterate through all layers
+    for i in enumerate(product_dict):
+        arr_file = gdal.Warp('', i[1], options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+        arr_file_arr = np.ma.masked_where(arr_file.ReadAsArray() == arr_file.GetRasterBand(1).GetNoDataValue(), arr_file.ReadAsArray())
+        ### Iteratively update average raster file
+        if os.path.exists(outname):
+            arr_file = gdal.Open(outname,gdal.GA_Update)
+            arr_file = arr_file.GetRasterBand(1).WriteArray(arr_file_arr+arr_file.ReadAsArray())
+        else:
+            # If looping through first raster file, nothing to sum so just save to file
+            renderVRT(outname, arr_file_arr, geotrans=arr_file.GetGeoTransform(), drivername=outputFormat, \
+               gdal_fmt=arr_file_arr.dtype.name, proj=arr_file.GetProjection(), \
+               nodata=arr_file.GetRasterBand(1).GetNoDataValue())
+        arr_file = arr_file_arr = None
+
+    # Take average of raster sum
+    arr_file = gdal.Open(outname,gdal.GA_Update)
+    arr_mean = arr_file.ReadAsArray()/len(product_dict)
+
+    # Mask using specified raster threshold
+    if thresh:
+        arr_mean = np.where(arr_mean < float(thresh), 0, 1)
+
+    # Save updated array to file
+    arr_file = arr_file.GetRasterBand(1).WriteArray(arr_mean)
+    arr_file = None ; arr_mean = None
+
+    # Load raster to pass
+    arr_file = gdal.Open(outname).ReadAsArray()
+
+    return arr_file
