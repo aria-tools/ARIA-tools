@@ -13,6 +13,7 @@ import glob
 import numpy as np
 from osgeo import gdal, ogr, gdalconst
 from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.vrtmanager import rasterAverage
 
 def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
     '''
@@ -48,7 +49,6 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
         ###Make coastlines/islands union VRT
         renderOGRVRT(os.path.join(workdir,'watermsk_shorelines.vrt'), _world_watermask[::2])
-
         ###Make lakes/ponds union VRT
         renderOGRVRT(os.path.join(workdir,'watermsk_lakes.vrt'), _world_watermask[1::2])
 
@@ -68,35 +68,30 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
-        if amp_thresh:
-            ###Make average amplitude mask
-            # Delete existing average amplitude file
-            for i in glob.glob(os.path.join(workdir,'avgamplitude*')): os.remove(i)
-
-            # building the VRT
-            gdal.BuildVRT(os.path.join(workdir,'avgamplitude') +'.vrt', product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
-            # taking average of all scenes and generating raster
-            gdal.Warp(os.path.join(workdir,'avgamplitude'), os.path.join(workdir,'avgamplitude')+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, resampleAlg='average', width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-            # Update VRT
-            gdal.Translate(os.path.join(workdir,'avgamplitude')+'.vrt', os.path.join(workdir,'avgamplitude'), options=gdal.TranslateOptions(format="VRT"))
-            print('Saved average amplitude here: '+ os.path.join(workdir,'avgamplitude'))
-
-            # Using specified amplitude threshold, pass amplitude mask
-            amp_file=gdal.Open(os.path.join(workdir,'avgamplitude')).ReadAsArray()
-            amp_file = np.where(amp_file < float(amp_thresh), 0, 1)
-        else:
-            amp_file=np.ones((lake_masks.shape[0],lake_masks.shape[1]))
-
         ###Update water-mask with lakes/ponds union and average amplitude
         mask_file = gdal.Open(maskfilename,gdal.GA_Update)
-        mask_file.GetRasterBand(1).WriteArray(lake_masks*gdal.Open(maskfilename).ReadAsArray()*amp_file)
+        mask_file.GetRasterBand(1).WriteArray(lake_masks*gdal.Open(maskfilename).ReadAsArray())
         #Delete temp files
-        del lake_masks, amp_file, mask_file
-        os.remove(os.path.join(workdir,'watermsk_shorelines.vrt')); os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
+        del lake_masks, mask_file
 
     if os.path.basename(maskfilename).lower().startswith('nlcd'):
         print("***Accessing and cropping the NLCD mask...***")
         maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape, outputFormat)
+
+    # Make sure to apply amplitude mask to downloaded products
+    if os.path.exists(os.path.join(workdir,'watermsk_shorelines.vrt')) or os.path.basename(maskfilename)=='NLCD_crop.msk':
+        ###Make average amplitude mask
+        if amp_thresh:
+            amp_file = rasterAverage(os.path.join(workdir,'avgamplitude'), product_dict[0], bounds, prods_TOTbbox, outputFormat=outputFormat, thresh=amp_thresh)
+            ###Update mask with average amplitude
+            mask_file = gdal.Open(maskfilename,gdal.GA_Update)
+            mask_file.GetRasterBand(1).WriteArray(gdal.Open(maskfilename).ReadAsArray()*amp_file)
+            #Delete temp files
+            del mask_file, amp_file
+        if os.path.exists(os.path.join(workdir,'watermsk_shorelines.vrt')):
+            os.remove(os.path.join(workdir,'watermsk_shorelines.vrt'))
+        if os.path.exists(os.path.join(workdir,'watermsk_lakes.vrt')):
+            os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
 
     # Load mask
     try:
@@ -111,6 +106,15 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
             mask_file = gdal.Open(maskfilename,gdal.GA_Update)
             mask_file.SetProjection(proj) ; del mask_file
             gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
+            ###Make average amplitude mask
+            if amp_thresh:
+                amp_file = rasterAverage(os.path.join(workdir,'avgamplitude'), product_dict[0], bounds, prods_TOTbbox, outputFormat=outputFormat, thresh=amp_thresh)
+                ###Update mask with average amplitude
+                mask_file = gdal.Open(maskfilename,gdal.GA_Update)
+                mask_file.GetRasterBand(1).WriteArray(gdal.Open(maskfilename).ReadAsArray()*amp_file)
+                #Delete temp files
+                del mask_file, amp_file
+
         #pass cropped DEM
         mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         mask.SetProjection(proj)

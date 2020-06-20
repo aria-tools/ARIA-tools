@@ -372,19 +372,19 @@ class plot_class:
         '''
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
 
-        # building the VRT
-        gdal.BuildVRT(outname +'.vrt', self.product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
-        # taking average of all scenes and generating raster
-        gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
-        # Update VRT
-        gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
+        # Import functions
+        from ARIAtools.vrtmanager import rasterAverage
+
+        ###Make average coherence raster
+        coh_file = rasterAverage(outname, self.product_dict[0], self.bbox_file, self.prods_TOTbbox, outputFormat=self.outputFormat)
 
         # Apply mask (if specified).
         if self.mask is not None:
             update_file=gdal.Open(outname,gdal.GA_Update)
-            update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(outname+'.vrt').ReadAsArray())
+            update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*coh_file)
             del update_file
 
+        del coh_file
         ds = gdal.Open(outname+'.vrt', gdal.GA_ReadOnly)
         ## for making ~water pixels white
         arr = np.where(ds.ReadAsArray() < 0.01, np.nan, ds.ReadAsArray())
@@ -592,7 +592,7 @@ def main(inps=None):
     # Generate average land coherence raster
     if inps.makeavgoh:
         print("- Generate 2D raster of average coherence.")
-        make_plot=plot_class([[item for sublist in [list(set(d['coherence'])) for d in standardproduct_info.products[1] if 'coherence' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         make_plot.plot_avgcoherence()
 
 

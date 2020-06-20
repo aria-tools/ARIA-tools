@@ -283,7 +283,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle',
             '/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle']
             if version.lower()=='1c':
-                sdskeys.append('/science/grids/corrections/derived/ionosphere')
+                sdskeys.append('/science/grids/corrections/derived/ionosphere/ionosphere')
 
         return rdrmetadata_dict, sdskeys
 
@@ -395,7 +395,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products)+len(track_rejected_pairs)))
+            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len([item[0] for item in sorted_products])))
             if self.verbose:
                 # Provide report of which files were kept vs. which were not.
                 print("Specifically, the following interferograms were rejected:")
