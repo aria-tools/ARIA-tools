@@ -71,8 +71,8 @@ class SentinelMetadata:
         flag_partial_coverage=False,remove_incomplete_dates=False):
         # Record parameters
         self.track=track
-        self.minLat=-60
-        self.maxLat=60
+        self.minLat=-75
+        self.maxLat=75
         self.workdir=workdir
         self.excludeDates=excludeDates
         self.plotRaw=plotRaw
