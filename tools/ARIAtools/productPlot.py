@@ -19,7 +19,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Import functions
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.extractProduct import prep_mask
+from ARIAtools.mask_util import prep_mask
 
 def createParser():
     '''
@@ -32,7 +32,7 @@ def createParser():
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: https://www.mrlc.gov/national-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover-database-nlcd-2016")
     parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='ENVI', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated with ENVI format.')
@@ -372,19 +372,19 @@ class plot_class:
         '''
         outname=os.path.join(self.workdir,'avgcoherence{}'.format(self.mask_ext))
 
-        # building the VRT
-        gdal.BuildVRT(outname +'.vrt', self.product_dict[0], options=gdal.BuildVRTOptions(resolution='highest', resampleAlg='average'))
-        # taking average of all scenes and generating raster
-        gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.prods_TOTbbox, outputBounds=self.bbox_file, resampleAlg='average', multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)]))
-        # Update VRT
-        gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
+        # Import functions
+        from ARIAtools.vrtmanager import rasterAverage
+
+        ###Make average coherence raster
+        coh_file = rasterAverage(outname, self.product_dict[0], self.bbox_file, self.prods_TOTbbox, outputFormat=self.outputFormat)
 
         # Apply mask (if specified).
         if self.mask is not None:
             update_file=gdal.Open(outname,gdal.GA_Update)
-            update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(outname+'.vrt').ReadAsArray())
+            update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*coh_file)
             del update_file
 
+        del coh_file
         ds = gdal.Open(outname+'.vrt', gdal.GA_ReadOnly)
         ## for making ~water pixels white
         arr = np.where(ds.ReadAsArray() < 0.01, np.nan, ds.ReadAsArray())
@@ -566,8 +566,7 @@ def main(inps=None):
 
         # Load or download mask (if specified).
         if inps.mask is not None:
-            inps.mask = prep_mask([[j['amplitude'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]],inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
-
+            inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Make spatial extent plot
     if inps.plottracks:
@@ -593,7 +592,7 @@ def main(inps=None):
     # Generate average land coherence raster
     if inps.makeavgoh:
         print("- Generate 2D raster of average coherence.")
-        make_plot=plot_class([[item for sublist in [list(set(d['coherence'])) for d in standardproduct_info.products[1] if 'coherence' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         make_plot.plot_avgcoherence()
 
 
