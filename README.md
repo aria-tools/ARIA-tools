@@ -19,7 +19,6 @@ Actual time-series processing is not supported in ARIA-tools. However, outputs a
 THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
 
 ## Contents
-
 1.  [Software Dependencies](#software-dependencies)
 2.  [Installation](#installation)
 -   [Conda](#conda)
@@ -141,7 +140,6 @@ Time-series set-up with spatial-temporal contiguous unwrapped interferograms and
 
 ------
 ## Documentation
-
 See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs) for all documentation and Jupyter Notebook Tutorials.
 
 ------

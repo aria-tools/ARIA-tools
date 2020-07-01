@@ -182,7 +182,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     for scene in product_dict:
         # Get pair name, expected in dictionary
         pair_name=scene["pair_name"][0]
-        outname=os.path.join(workdir, pair_name+'.shp')
+        outname=os.path.join(workdir, pair_name+'.json')
 
         # Create union of productBoundingBox layers
         for frame in scene["productBoundingBox"]:
@@ -193,9 +193,9 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
         scene["productBoundingBox"]=[outname]
 
-    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.shp')
+    prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.json')
     # Need to track bounds of max extent to avoid metadata interpolation issues
-    prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.shp')
+    prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
     save_shapefile(prods_TOTbbox_metadatalyr, open_shapefile(product_dict[sceneareas.index(max(sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     # Initiate intersection file with bbox, if bbox specified
@@ -393,12 +393,12 @@ class metadata_qualitycheck:
         self.__run__()
 
     def __truncateArray__(self, data_array_band, Xmask, Ymask, direction='col'):
-        #truncate columns of nodata
+        #crop out columns with any masked values
         if direction=='col':
             Xmask=Xmask.T[np.all(data_array_band.T.mask == False, axis=1)].T
             Ymask=Ymask.T[np.all(data_array_band.T.mask == False, axis=1)].T
             data_array_band=data_array_band.T[np.all(data_array_band.T.mask == False, axis=1)].T
-        #truncate rows of nodata
+        #crop out rows with any masked values
         if direction=='row':
             Xmask=Xmask[np.all(data_array_band.mask == False, axis=1)]
             Ymask=Ymask[np.all(data_array_band.mask == False, axis=1)]
@@ -529,6 +529,16 @@ class metadata_qualitycheck:
                         else:
                             self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
                     if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+                        #first must crop all columns with no valid values
+                        nancols=np.all(self.data_array_band.mask == True, axis=0)
+                        self.data_array_band=self.data_array_band[:,~nancols]
+                        Xmask=Xmask[:,~nancols]
+                        Ymask=Ymask[:,~nancols]
+                        #first must crop all rows with no valid values
+                        nanrows=np.all(self.data_array_band.mask == True, axis=1)
+                        self.data_array_band=self.data_array_band[~nanrows]
+                        Xmask=Xmask[~nanrows]
+                        Ymask=Ymask[~nanrows]
                         #truncate columns of nodata
                         if self.data_array_band[np.all(self.data_array_band.mask == False, axis=1)].mask.all()==True:
                             self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
@@ -550,8 +560,12 @@ class metadata_qualitycheck:
                 self.data_array.GetRasterBand(i).WriteArray(self.data_array_band.filled())
                 # Pass warning and get R^2/standard error across range/azimuth (only do for first band)
                 if i==1:
-                    print("WARNING: %s layer for IFG %s has R\u00b2 of %f and standard error of %s, automated correction applied" \
-                        %(self.prod_key,os.path.basename(self.outname),min(rsquaredarr), max(std_errarr)))
+                    # make sure appropriate unit is passed to print statement
+                    lyrunit = "\N{DEGREE SIGN}"
+                    if self.prod_key=='bPerpendicular' or self.prod_key=='bParallel':
+                        lyrunit = 'm'
+                    print("WARNING: %s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied" \
+                        %(self.prod_key,os.path.basename(self.outname),min(rsquaredarr), max(std_errarr), lyrunit))
                     rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range', profprefix='corrected')
                     rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth', profprefix='corrected')
         del self.data_array_band
@@ -757,8 +771,8 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         bbox=[geotrans[3]+(gdal.Open(i).ReadAsArray().shape[0]*geotrans[-1]),geotrans[3],geotrans[0],geotrans[0]+(gdal.Open(i).ReadAsArray().shape[1]*geotrans[1])]
         bbox=Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]]))))
-        save_shapefile(i+'.shp', bbox, 'GeoJSON')
-        per_overlap=((user_bbox.intersection(open_shapefile(i+'.shp', 0, 0)).area)/(user_bbox.area))*100
+        save_shapefile(i+'.json', bbox, 'GeoJSON')
+        per_overlap=((user_bbox.intersection(open_shapefile(i+'.json', 0, 0)).area)/(user_bbox.area))*100
         if per_overlap!=100. and per_overlap!=0.:
             print("WARNING: Common track extent only has %d%% overlap with tropospheric product %s"%(per_overlap, i)+'\n')
         if per_overlap==0.:
