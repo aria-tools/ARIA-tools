@@ -32,8 +32,8 @@ def createParser():
             help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-t', '--tracks', dest='tracks', type=str, default='all',
             help='Include only specified track number in results. Can be multiple, separated by spaces. Default : All')
-    parser.add_argument('-l', '--lat_bounds', dest='latBounds', type=str, default='-60 60',
-            help='Specify a search for only frames that fall within these lat bounds.')
+    parser.add_argument('-l', '--lat_bounds', dest='latBounds', type=str, default='-75 75',
+            help='Specify a search for only frames that fall within these lat bounds. Default : -75 75')
     parser.add_argument('-s', '--start_date', dest='startDate', type=str, default=None,
             help='Start date. Default : None')
     parser.add_argument('-e', '--end_date', dest='endDate', type=str, default=None,
@@ -71,8 +71,8 @@ class SentinelMetadata:
         flag_partial_coverage=False,remove_incomplete_dates=False):
         # Record parameters
         self.track=track
-        self.minLat=-60
-        self.maxLat=60
+        self.minLat=-75
+        self.maxLat=75
         self.workdir=workdir
         self.excludeDates=excludeDates
         self.plotRaw=plotRaw
