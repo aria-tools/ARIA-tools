@@ -66,8 +66,8 @@ jobs:
             #product download
             #ariaDownload.py -t 124 -w products --ifg 20180408_20180502 -v
             cd products
-            wget -c --http-user=$URSname –-http-password='$URSkey' "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1.nc
-            wget -c --http-user=$URSname –-http-password='$URSkey' "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1.nc
+            wget -c --http-user=$URSname –-http-password=$URSkey "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1.nc
+            wget -c --http-user=$URSname –-http-password=$URSkey "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1.nc
             cd ../
             #extraction of 3D metadata layer
             ariaExtract.py -f "products/*.nc" -l azimuthAngle -d download
@@ -82,7 +82,7 @@ jobs:
 
             #download and test NLCD mask
             cd products
-            wget -c --http-user=$URSname –-http-password='$URSkey' "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
-            wget -c --http-user=$URSname –-http-password='$URSkey' "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
+            wget -c --http-user=$URSname –-http-password=$URSkey "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
+            wget -c --http-user=$URSname –-http-password=$URSkey "https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             cd ../
             ariaExtract.py -f "products/*004-*.nc" -m 'NLCD'
