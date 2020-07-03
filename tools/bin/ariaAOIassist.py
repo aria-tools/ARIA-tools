@@ -32,8 +32,8 @@ def createParser():
             help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-t', '--tracks', dest='tracks', type=str, default='all',
             help='Include only specified track number in results. Can be multiple, separated by spaces. Default : All')
-    parser.add_argument('-l', '--lat_bounds', dest='latBounds', type=str, default='-75 75',
-            help='Specify a search for only frames that fall within these lat bounds. Default : -75 75')
+    parser.add_argument('-l', '--lat_bounds', dest='latBounds', type=str, default=None,
+            help='Specify a search for only frames that fall within these lat bounds. Default : None')
     parser.add_argument('-s', '--start_date', dest='startDate', type=str, default=None,
             help='Start date. Default : None')
     parser.add_argument('-e', '--end_date', dest='endDate', type=str, default=None,
@@ -66,18 +66,15 @@ class SentinelMetadata:
         be added for further sorting. Filtering is done in-place using the dataframe. Additional
         parameters and flags are added without removing metadata entries.
     '''
-    # Load data from csv and pre-format
-    def __init__(self,imgfile,track,workdir='./',excludeDates=None,plotRaw=False,
-        flag_partial_coverage=False,remove_incomplete_dates=False):
+    ## Load data from csv and pre-format
+    def __init__(self,imgfile,track,workdir='./',excludeDates=None):
         # Record parameters
         self.track=track
-        self.minLat=-75
-        self.maxLat=75
-        self.workdir=workdir
+        self.workdir=os.path.abspath(workdir)
         self.excludeDates=excludeDates
-        self.plotRaw=plotRaw
-        self.flagPartialCoverage=flag_partial_coverage
-        self.removeIncomplete=remove_incomplete_dates
+
+        # Defaults
+        self.removeIncompleteDates=False
 
         # Open ASF Vertex csv file and read meta data as Pandas dataframe
         csvfile_name=os.path.abspath(imgfile)
@@ -95,8 +92,11 @@ class SentinelMetadata:
         self.__filterByBeamMode__()
         self.__filterByProcessingLevel__()
 
+        # Determine lat bounds based on existing data
+        self.__determineLatBounds__()
 
-    # Formatting
+
+    ## Pre-formatting
     def __assignFrameID__(self):
         '''
             Develop a unique "frame identification code" comprising orbit+path+frame
@@ -160,8 +160,16 @@ class SentinelMetadata:
         else:
             self.excludeDates=[]
 
+    def __determineLatBounds__(self):
+        '''
+            Automatically determine the latitude bounds baesd on the existing data set.
+        '''
+        # Determine min/max of data set
+        self.minLat=self.metadata['Center Lat'].min()
+        self.maxLat=self.metadata['Center Lat'].max()
 
-    # Filtering
+
+    ## Filter on initialization
     def __filterByTrack__(self):
         '''
             Remove tracks not specified by user. Modify self.tracks parameter to include only those
@@ -182,7 +190,6 @@ class SentinelMetadata:
         '''
         dropIndicesIW=self.metadata[self.metadata['Beam Mode']!='IW'].index
         self.metadata.drop(dropIndicesIW,inplace=True)
-
 
     def __filterByProcessingLevel__(self):
         '''
@@ -207,6 +214,8 @@ class SentinelMetadata:
                 if np.min(ID_differences)<4: dropIndicesRAW.append(frameNdx)
         self.metadata.drop(dropIndicesRAW,inplace=True)
 
+
+    ## Additional filtering
     def filterByDate(self,startDate=None,endDate=None):
         '''
             Clip the data set based on start and end dates if provided. Provide dates in format
@@ -247,38 +256,22 @@ class SentinelMetadata:
         self.metadata.drop(dropIndicesLats,inplace=True)
 
 
-    # Spatial checks
-    def __addLatExtremes__(self):
-        '''
-            Add one column each for the minimum and maximum latitude extents. This is designed to ease
-            continuity checks.
-        '''
-        minLats=[]
-        maxLats=[]
-        for frameNdx,frame in self.metadata.iterrows():
-            lats=frame[['Near Start Lat','Far Start Lat','Near End Lat','Far End Lat']].to_numpy()
-            minLats.append(lats.min())
-            maxLats.append(lats.max())
-        self.metadata['minLat']=minLats
-        self.metadata['maxLat']=maxLats
-
-    def checkContinuity(self):
+    ## Spatial checks
+    def checkContinuity(self,removeIncompleteDates=False):
         '''
             Check whether an SLC is missing in the track for any given date. Specifically, we want to
             see whether the spacing between frames exceeds a threshold (e.g., one and a half frames).
             If that is the case, we want to assign different colors to the different subsets of frames.
             This information will be carried through the metadata as new columns: "nGaps" (i.e., the
             number of gaps with frames missing), and "subGroup".
-
             This function also checks whether the frames cover the full latitude extent provided.
             Dates with incomplete coverage will not be automatically excluded, they will simply
             be flagged.
-
-            If the --remove_incomplete_dates option is selected, update the self.excludeDates
+            If the --removeIncompleteDates option is selected, update the self.excludeDates
             property with the incomplete dates.
         '''
         # Add columns for min/max Lat extremes to each frame
-        self.__addLatExtremes__()
+        self.__addPassLats__()
 
         # Add empty columns for gaps, subgroups, extents covered
         self.metadata['gaps']=np.zeros((self.metadata.shape[0],1))
@@ -316,25 +309,27 @@ class SentinelMetadata:
                     # Update subgroup
                     self.metadata.loc[satPass.index[i+1],'subgroup']=currentSubgroup+1
 
-            # Check that max/min latitude extents are covered if lat bounds are
-            # user-specified
-            if (self.maxLat<60) and (self.minLat>-60):
-                latExtremesMet=False
-                latMax=satPass['maxLat'].to_numpy().max() # max of all frames at this date
-                latMin=satPass['minLat'].to_numpy().min() # min of all frames at this date
+            # Check that max/min latitude extents are covered
+            latExtremesMet=False
+            latMax=satPass['maxLat'].to_numpy().max() # max of all frames at this date
+            latMin=satPass['minLat'].to_numpy().min() # min of all frames at this date
 
-                if (latMax>self.maxLat) and (latMin<self.minLat):
-                    latExtremesMet=True
-            else:
-                # Ignore lat criteria if bounds are left at default +- 60 degrees
+            # Compare min/max values of pass to allowable min/max latitudes
+            if (latMax>=(self.maxLat)) and (latMin<=(self.minLat)):
                 latExtremesMet=True
 
             # If there are no gaps and latitude extremes are covered, consider coverage complete
             if (sum(self.metadata.loc[passIndices,'gaps'])==0) and (latExtremesMet==True):
                 self.metadata.loc[passIndices,'Extent Covered']=True
 
-        # If remove_incomplete_dates is specified, update self.excludeDates
-        if self.removeIncomplete == True:
+        # If removeIncompleteDates is specified, update self.excludeDates
+        self.partialDatesRemoved=False
+
+        if removeIncompleteDates==True:
+            # Update parameter
+            self.partialDatesRemoved=True
+
+            # Check extent covered
             for frameNdx,frame in self.metadata.iterrows():
                 if frame['Extent Covered']==False:
                     self.excludeDates.append(frame['Common Date'])
@@ -349,9 +344,34 @@ class SentinelMetadata:
                     exclDatesFile.write(date+'\n')
                 exclDatesFile.close()
 
+        # Warn user if no dates remain which satisfy all spatial and temporal criteria
+        remainingDates=[date for date in self.metadata['Common Date'] if date not in
+            self.excludeDates]
+        self.nRemainingDates=len(remainingDates)
+        if self.nRemainingDates==0:
+            excludeDates_warning='''
+                WARNING: No dates meet all spatial and temporal criteria.
+Try modifying the --lat_bounds parameter to be more conservative. Current lat bounds: {:.2f} {:.2f}
+'''.format(self.minLat,self.maxLat)
+            print(excludeDates_warning)
 
-    # Plotting
-    def plotFrameCenters(self):
+    def __addPassLats__(self):
+        '''
+            Add one column each for the minimum and maximum latitude extents. This is designed to ease
+            continuity checks.
+        '''
+        minLats=[]
+        maxLats=[]
+        for frameNdx,frame in self.metadata.iterrows():
+            lats=frame[['Near Start Lat','Far Start Lat','Near End Lat','Far End Lat']].to_numpy()
+            minLats.append(lats.min())
+            maxLats.append(lats.max())
+        self.metadata['minLat']=minLats
+        self.metadata['maxLat']=maxLats
+
+
+    ## Plotting
+    def plotFrameCenters(self,flagPartialCoverage=False,plotRaw=False):
         '''
             Plot the center of each frame with attributes.
         '''
@@ -365,18 +385,18 @@ class SentinelMetadata:
         # Loop through each SLC acqusition
         labels=[]
         for frameNdx,frame in self.metadata.loc[SLCindices,:].iterrows():
-            # Color based on gaps
-            if (self.flagPartialCoverage==True) and (frame['gaps']>0):
+            # Color based on spatial extent, if extent is not automatic
+            if (flagPartialCoverage==True) and (frame['Extent Covered']==False):
                 color='r'
-                label='Incomplete track'
+                label='Incomplete for lat.s {:.1f}-{:.1f}'.format(self.minLat,self.maxLat)
             else:
                 color='k'
                 label='Complete track'
 
-            # Color based on spatial extent, if extent is not automatic
-            if (self.flagPartialCoverage==True) and (frame['Extent Covered']==False):
-                color='r'
-                label='Incomplete track'
+            # Color based on gaps
+            if (flagPartialCoverage==True) and (frame['gaps']>0):
+                color=(0.6,0,0) # dark red
+                label='Incomplete due to gaps'
 
             # Gray if excluded
             if frame['Common Date'] in self.excludeDates:
@@ -388,7 +408,7 @@ class SentinelMetadata:
                 label=label)
 
         # Plot RAW frames if specified
-        if self.plotRaw==True:
+        if plotRaw==True:
             RAWindices=self.metadata[self.metadata['Processing Level']=='RAW'].index
 
             # Loop through each RAW acquisition
@@ -405,7 +425,7 @@ class SentinelMetadata:
         self.ax.set_xlabel('Date')
 
         # Highlight dates with only partial coverage
-        if self.flagPartialCoverage==True:
+        if flagPartialCoverage==True:
             slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
             partialIndices=self.metadata[self.metadata['Extent Covered']==False].index
             partialIndices=set(slcIndices).intersection(partialIndices)
@@ -433,7 +453,7 @@ class SentinelMetadata:
         self.Fig.savefig(os.path.join(self.workdir,figname))
 
 
-    # Save spatial extents
+    ## Save spatial extents
     def save2kml(self):
         '''
             Save frame boundaries to kml file - use only SLC frames and non-exluded dates.
@@ -463,10 +483,7 @@ class SentinelMetadata:
             for frameNdx,frame in self.metadata.loc[dateIndices,:].iterrows():
                 feat=ogr.Feature(layer.GetLayerDefn())
                 feat.SetField('id',frameNdx)
-                bbox=Polygon([(float(frame['Near Start Lon']),float(frame['Near Start Lat'])),
-                    (float(frame['Far Start Lon']),float(frame['Far Start Lat'])),
-                    (float(frame['Far End Lon']),float(frame['Far End Lat'])),
-                    (float(frame['Near End Lon']),float(frame['Near End Lat']))])
+                bbox=self.__polygonFromFrame__(frame)
                 geom=ogr.CreateGeometryFromWkb(bbox.wkb)
                 feat.SetGeometry(geom)
                 feat.SetStyleString("PEN(c:#000000)")
@@ -476,8 +493,6 @@ class SentinelMetadata:
         # Close KML
         DS=layer=feat=geom=None
 
-
-    # Suggested AOI based on intersection of all polygons
     def __polygonFromFrame__(self,frame):
         '''
             Create a Shapely polygon from the coordinates of a frame.
@@ -487,6 +502,67 @@ class SentinelMetadata:
                     (float(frame['Far End Lon']),float(frame['Far End Lat'])),
                     (float(frame['Near End Lon']),float(frame['Near End Lat']))])
         return P
+
+
+    ## Suggested AOI based on intersection of all polygons
+    def intersectionAOI(self):
+        '''
+            Create a "suggested" AOI based on the intersection of all frame polygons.
+            This function does not guarantee a result.
+        '''
+        # Exclude dates based on spatial criteria if not already done
+        if self.partialDatesRemoved==False:
+            self.checkContinuity(removeIncompleteDates=True)
+
+        # Check that some valid dates remain
+        errMessage='''
+No valid dates were found to meet all spatial and temporal criteria.
+Suggest to narrow the latitude bounds using the --lat_bounds \'min max\' option, or
+exclude dates using the --exclude_dates option.
+Check the {}_lat_extents.eps file for a visual aid using the --flag_partial_coverage option.
+        '''.format(self.trackCode)
+        assert self.nRemainingDates>0, errMessage
+
+        # Use only SLCs
+        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+
+        # Unique dates
+        dates=list(set(self.metadata.loc[slcIndices,'Common Date']))
+        dates=[date for date in dates if date not in self.excludeDates]
+
+        # Use first date as initial polygon
+        dateUnion=self.__mergeFramesbyDate__(dates[0])
+        sceneIntersection=dateUnion
+
+        validOverlap=True # assume all frames overlap until detected otherwise
+        for date in dates[1:]:
+            # Take union of frames in date
+            dateUnion=self.__mergeFramesbyDate__(date)
+
+            # Take intersection of dates
+            sceneIntersection=sceneIntersection.intersection(dateUnion)
+
+            # Check whether area of intersection remains a single polygon, or if it is broken into
+            # multiple pieces
+            if isinstance(sceneIntersection,MultiPolygon):
+                print('COULD NOT AUTOMATICALLY DETERMINE AOI DUE TO GAPS.')
+                print('Area of frame overlap not continuous, beginning on {}'.format(date))
+                validOverlap=False
+                break
+
+        # Remove ~20km from either end and save suggested AOI
+        if validOverlap==True:
+            # Simply polygon by removing points within several hundred meters of each other
+            sceneIntersection=self.__simplifyAOI__(sceneIntersection)
+
+            # Remove 20 km from edges
+            sceneIntersection=self.__trimAOIedges__(sceneIntersection)
+
+            # Save AOI to KML
+            self.__saveAOI__(sceneIntersection)
+
+        # Update latitude extents plot
+        self.plotFrameCenters(flagPartialCoverage=True)
 
     def __mergeFramesbyDate__(self,date):
         '''
@@ -514,7 +590,7 @@ class SentinelMetadata:
 
     def __simplifyAOI__(self,AOI):
         '''
-            Simplify AOI polygon by removing points within several hundred meters of each other.
+            Simplify AOI polygon by removing points within several kilometers of each other.
         '''
         # Assign search distance
         d=0.05 # 0.01 degrees ~ 1 km
@@ -618,48 +694,6 @@ class SentinelMetadata:
         # Close KML
         DS=layer=feat=geom=None
 
-    def intersectionAOI(self):
-        '''
-            Create a "suggested" AOI based on the intersection of all frame polygons.
-            This function does not guarantee a result.
-        '''
-        # Use only SLCs
-        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
-
-        # Unique dates
-        dates=list(set(self.metadata.loc[slcIndices,'Common Date']))
-        dates=[date for date in dates if date not in self.excludeDates]
-
-        # Use first date as initial polygon
-        dateUnion=self.__mergeFramesbyDate__(dates[0])
-        sceneIntersection=dateUnion
-
-        validOverlap=True # assume all frames overlap until detected otherwise
-        for date in dates[1:]:
-            # Take union of frames in date
-            dateUnion=self.__mergeFramesbyDate__(date)
-
-            # Take intersection of dates
-            sceneIntersection=sceneIntersection.intersection(dateUnion)
-
-            # Check whether area of intersection remains a single polygon, or if it is broken into
-            # multiple pieces
-            if isinstance(sceneIntersection,MultiPolygon):
-                print('COULD NOT AUTOMATICALLY DETERMINE AOI DUE TO GAPS.')
-                print('Area of frame overlap not continuous, beginning on {}'.format(date))
-                validOverlap=False
-                break
-
-        # Remove ~20km from either end and save suggested AOI
-        if validOverlap==True:
-            # Simply polygon by removing points within several hundred meters of each other
-            sceneIntersection=self.__simplifyAOI__(sceneIntersection)
-
-            # Remove 20 km from edges
-            sceneIntersection=self.__trimAOIedges__(sceneIntersection)
-
-            # Save AOI to KML
-            self.__saveAOI__(sceneIntersection)
 
 
 # Main
@@ -671,9 +705,6 @@ if __name__ == "__main__":
     # Inputs
     # Gather inputs from command line
     inps = cmdLineParse(iargs=None)
-
-    # Split latitude values and convert to type float
-    inps.latBounds=[float(val) for val in inps.latBounds.split()]
 
 
     # Setup
@@ -698,26 +729,29 @@ if __name__ == "__main__":
 
         # Instantiate metadata object and load metadata from csv
         track_metadata=SentinelMetadata(imgfile=inps.imgfile,track=track,workdir=inps.workdir,
-            excludeDates=inps.excludeDates,
-            plotRaw=inps.plotRaw,
-            flag_partial_coverage=inps.flagPartialCoverage,
-            remove_incomplete_dates=inps.removeIncomplete)
+            excludeDates=inps.excludeDates)
 
         # Filtering -- remove frames from metadata
         # Clip based on start and end date
         track_metadata.filterByDate(startDate=inps.startDate,endDate=inps.endDate)
 
-        # Filter by latitude bounds
-        track_metadata.filterByLatitude(minLat=inps.latBounds[0],maxLat=inps.latBounds[1])
+        # Filter by latitude bounds if specified
+        if inps.latBounds is not None:
+            # Split latitude values and convert to type float
+            inps.latBounds=[float(val) for val in inps.latBounds.split()]
+
+            # Filter
+            track_metadata.filterByLatitude(minLat=inps.latBounds[0],maxLat=inps.latBounds[1])
 
         # Check spatial criteria -- does not remove scenes, only highlights potentially problematic
         # ones
         # Check for gaps
-        track_metadata.checkContinuity()
+        track_metadata.checkContinuity(removeIncompleteDates=inps.removeIncomplete)
 
         # Outputs
         # Plot frame centers
-        track_metadata.plotFrameCenters()
+        track_metadata.plotFrameCenters(flagPartialCoverage=inps.flagPartialCoverage,
+            plotRaw=inps.plotRaw)
 
         # Save to Google Earth KML
         track_metadata.save2kml()
