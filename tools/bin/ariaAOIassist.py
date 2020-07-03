@@ -514,15 +514,6 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
         if self.partialDatesRemoved==False:
             self.checkContinuity(removeIncompleteDates=True)
 
-        # Check that some valid dates remain
-        errMessage='''
-No valid dates were found to meet all spatial and temporal criteria.
-Suggest to narrow the latitude bounds using the --lat_bounds \'min max\' option, or
-exclude dates using the --exclude_dates option.
-Check the {}_lat_extents.eps file for a visual aid using the --flag_partial_coverage option.
-        '''.format(self.trackCode)
-        assert self.nRemainingDates>0, errMessage
-
         # Use only SLCs
         slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
 
