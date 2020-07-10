@@ -57,7 +57,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'), os.path.join(workdir,'watermsk_shorelines.vrt'), options=gdal.RasterizeOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], burnValues=[1], layers='merged'))
         gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'), os.path.join(workdir,'watermask_uncropped.msk'), options=gdal.TranslateOptions(format="VRT"))
         # save cropped mask
-        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, dstNodata=0, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
         update_file.SetProjection(proj)
         update_file.GetRasterBand(1).SetNoDataValue(0.) ; del update_file
@@ -102,7 +102,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
             # update maskfilename
             maskfilename=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')
             # save cropped maskfile
-            gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+            gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
             mask_file = gdal.Open(maskfilename,gdal.GA_Update)
             mask_file.SetProjection(proj) ; del mask_file
             gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
@@ -116,7 +116,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
                 del mask_file, amp_file
 
         #pass cropped DEM
-        mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, dstNodata=0, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         mask.SetProjection(proj)
         mask.SetDescription(maskfilename)
     except:
