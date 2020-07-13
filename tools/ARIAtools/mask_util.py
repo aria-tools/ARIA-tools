@@ -12,6 +12,7 @@ import os.path as op
 import glob
 import numpy as np
 from osgeo import gdal, ogr, gdalconst
+gdal.UseExceptions()
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import rasterAverage
 
