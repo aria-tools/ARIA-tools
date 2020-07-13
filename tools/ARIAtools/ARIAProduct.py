@@ -101,9 +101,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.bbox = Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]])))) #Pass lons/lats to create polygon
                 # Save polygon in shapefile
-                save_shapefile(os.path.join(workdir,'user_bbox.shp'), self.bbox, 'GeoJSON')
-                self.bbox_file=os.path.join(workdir,'user_bbox.shp')
-                print("Shapefile %s created for input user bounds."%os.path.join(workdir,'user_bbox.shp'))
+                save_shapefile(os.path.join(workdir,'user_bbox.json'), self.bbox, 'GeoJSON')
+                self.bbox_file=os.path.join(workdir,'user_bbox.json')
+                print("Shapefile %s created for input user bounds."%os.path.join(workdir,'user_bbox.json'))
             # If shapefile
             elif os.path.isfile(bbox):
                 self.bbox = open_shapefile(bbox, 0, 0)                       ##SS => We should track the projection of the shapefile. i.e. if user provides this in e.g. UTM etc.

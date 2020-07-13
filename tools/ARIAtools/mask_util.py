@@ -227,7 +227,7 @@ def resamp_DEP(src, match, view=False):
 class NLCDMasker(object):
     def __init__(self, path_aria, lc=[11, 12, 90, 95]):
         self.path_aria = path_aria
-        self.path_bbox = op.join(self.path_aria, 'productBoundingBox', 'productBoundingBox.shp')
+        self.path_bbox = op.join(self.path_aria, 'productBoundingBox', 'productBoundingBox.json')
         self.path_dem  = op.join(self.path_aria, 'DEM', 'SRTM_3arcsec.dem')
         self.lc        = lc # landcover classes to mask
         gdal.PushErrorHandler('CPLQuietErrorHandler')
