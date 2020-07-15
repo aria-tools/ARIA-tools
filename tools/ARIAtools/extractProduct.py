@@ -166,6 +166,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
     # Import functions
     from ARIAtools.shapefile_util import save_shapefile, shapefile_area
+    from shapely.geometry import Polygon
 
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
@@ -254,9 +255,27 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
         bbox_file=prods_TOTbbox
 
     # Warp the first scene with the output-bounds defined above
-    ds=gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", outputBounds=open_shapefile(bbox_file, 0, 0).bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    # ensure output-bounds are an integer multiple of interferometric grid and adjust if necessary
+    OG_bounds = list(open_shapefile(bbox_file, 0, 0).bounds)
+    arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
+    arrres = [abs(arrres.GetGeoTransform()[1]), abs(arrres.GetGeoTransform()[-1])]
+    ds = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", \
+        outputBounds = OG_bounds, xRes = arrres[0], yRes = arrres[1], targetAlignedPixels = True, multithread = True, \
+        options = ['NUM_THREADS = %s'%(num_threads)]))
     # Get shape of full res layers
     arrshape=[ds.RasterYSize, ds.RasterXSize]
+    new_bounds = [ds.GetGeoTransform()[0], ds.GetGeoTransform()[3] + (ds.GetGeoTransform()[-1] * arrshape[0]), \
+        ds.GetGeoTransform()[0] + (ds.GetGeoTransform()[1] * arrshape[1]), ds.GetGeoTransform()[3]]
+    if OG_bounds != new_bounds:
+        # Use shapely to make list
+        user_bbox = Polygon(np.column_stack((np.array([new_bounds[0],new_bounds[2],new_bounds[2],new_bounds[0],new_bounds[0]]),
+                    np.array([new_bounds[1],new_bounds[1],new_bounds[3],new_bounds[3],new_bounds[1]])))) #Pass lons/lats to create polygon
+        # Save polygon in shapefile
+        bbox_file = os.path.join(os.path.dirname(workdir), 'user_bbox.json')
+        save_shapefile(bbox_file, user_bbox, 'GeoJSON')
+        total_bbox = open_shapefile(prods_TOTbbox, 0, 0)
+        user_bbox = user_bbox.intersection(total_bbox)
+        save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
     # Get projection of full res layers
     proj=ds.GetProjection()
     del ds
