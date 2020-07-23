@@ -73,14 +73,19 @@ def shapefile_area(file_bbox):
     from pyproj import Proj
     from shapely.geometry import shape
 
-    #get coords
-    lon, lat=file_bbox.exterior.coords.xy
+    # loop through polygons
+    shape_area = 0
+    # pass single polygon as list
+    if file_bbox.type == 'Polygon': file_bbox = [file_bbox]
+    for polyobj in file_bbox:
+        # get coords
+        lon, lat=polyobj.exterior.coords.xy
 
-    #use equal area projection centered on/bracketing AOI
-    pa = Proj("+proj=aea +lat_1=%f +lat_2=%f +lat_0=%f +lon_0=%f"%(min(lat),max(lat), (max(lat)+min(lat))/2, (max(lon)+min(lon))/2))
-    x, y = pa(lon, lat)
-    cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-    shape_area=shape(cop).area/1e6  # area in km^2
+        # use equal area projection centered on/bracketing AOI
+        pa = Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(min(lat), max(lat), (max(lat)+min(lat))/2, (max(lon)+min(lon))/2))
+        x, y = pa(lon, lat)
+        cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+        shape_area+=shape(cop).area/1e6  # area in km^2
 
     return shape_area
 

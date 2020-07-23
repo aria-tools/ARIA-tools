@@ -101,9 +101,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.bbox = Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
                             np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]])))) #Pass lons/lats to create polygon
                 # Save polygon in shapefile
-                save_shapefile(os.path.join(workdir,'user_bbox.shp'), self.bbox, 'GeoJSON')
-                self.bbox_file=os.path.join(workdir,'user_bbox.shp')
-                print("Shapefile %s created for input user bounds."%os.path.join(workdir,'user_bbox.shp'))
+                save_shapefile(os.path.join(workdir,'user_bbox.json'), self.bbox, 'GeoJSON')
+                self.bbox_file=os.path.join(workdir,'user_bbox.json')
+                print("Shapefile %s created for input user bounds."%os.path.join(workdir,'user_bbox.json'))
             # If shapefile
             elif os.path.isfile(bbox):
                 self.bbox = open_shapefile(bbox, 0, 0)                       ##SS => We should track the projection of the shapefile. i.e. if user provides this in e.g. UTM etc.
@@ -136,16 +136,15 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # Open standard product bbox
         if self.bbox is not None:
-            file_bbox = open_shapefile(fname + '":'+sdskeys[0], 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
-            # file_bbox = open_shapefile(fname, 'productBoundingBox', 1)                    ##SS => We should track the projection of the shapefile. i.e. in case this changes in the product
+            file_bbox = open_shapefile(fname + '":'+sdskeys[0], 'productBoundingBox', 1)
             # Only generate dictionaries if there is spatial overlap with user bbox
             if file_bbox.intersects(self.bbox):
-                product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys)]
+                product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys, version)]
             else:
                 product_dicts = []
         # If no bbox specified, just pass dictionaries
         else:
-            product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys)]
+            product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys, version)]
 
         return product_dicts
 
@@ -239,36 +238,57 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         '''
 
         # ARIA standard product version 1a and 1b have same mapping
+        # ARIA standard product version 1c differs with inclusion of ionosphere layer
         rdrmetadata_dict={}
-        if version.lower() in ['1a', '1b']:
+        if version.lower() in ['1a', '1b', '1c']:
             #Pass pair name
             basename     = os.path.basename(fname)
-            self.pairname=basename[21:29] +'_'+ basename[30:38]
+            self.pairname=basename.split('-')[6]
 
             # Radarmetadata names for these versions
             rdrmetadata_dict['pair_name']=self.pairname
             rdrmetadata_dict['azimuthZeroDopplerMidTime']=basename[21:25]+'-'+basename[25:27]+'-' \
                 +basename[27:29]+'T'+basename[39:41]+':'+basename[41:43]+':'+basename[43:45] + '.0'
 
-            #hardcoded keys
-            rdrmetadata_dict['missionID']='Sentinel-1'
-            rdrmetadata_dict['productType']='UNW GEO IFG'
-            rdrmetadata_dict['wavelength']=0.05546576
-            rdrmetadata_dict['slantRangeSpacing']=2.329562187194824
-            rdrmetadata_dict['slantRangeStart']=798980.125
-            rdrmetadata_dict['slantRangeEnd']=956307.125
-            #hardcoded key meant to gauge temporal connectivity of scenes
-            rdrmetadata_dict['sceneLength']=27
+            rdrmetadata_dict['azimuthZeroDopplerMidTime']=self.pairname[:4]+'-'+self.pairname[4:6]+'-'+self.pairname[6:8]+'T' \
+                +basename.split('-')[7][:2]+':'+basename.split('-')[7][2:4]+':'+basename.split('-')[7][4:]+'.0'
+
+            #hardcoded keys for a given sensor
+            if basename.split('-')[0]=='S1':
+                rdrmetadata_dict['missionID']='Sentinel-1'
+                rdrmetadata_dict['productType']='UNW GEO IFG'
+                rdrmetadata_dict['wavelength']=0.05546576
+                rdrmetadata_dict['centerFrequency']=5.4050007e+09
+                rdrmetadata_dict['slantRangeSpacing']=2.329562187194824
+                rdrmetadata_dict['slantRangeStart']=798980.125
+                rdrmetadata_dict['slantRangeEnd']=956307.125
+                #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
+                rdrmetadata_dict['sceneLength']=27
+            elif basename.split('-')[0]=='ALOS2':
+                rdrmetadata_dict['missionID']='ALOS-2'
+                rdrmetadata_dict['productType']='UNW GEO IFG'
+                rdrmetadata_dict['wavelength']=0.229
+                rdrmetadata_dict['centerFrequency']=1.2364997e+09
+                rdrmetadata_dict['slantRangeSpacing']=8.582534
+                rdrmetadata_dict['slantRangeStart']=695397.
+                rdrmetadata_dict['slantRangeEnd']=913840.2
+                #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
+                rdrmetadata_dict['sceneLength']=52
+            else:
+                raise Exception('Sensor %s for file %s not supported.'%(basename.split('-')[0],fname))
 
             # Layer names for these versions
             sdskeys=['productBoundingBox','/science/grids/data/unwrappedPhase','/science/grids/data/coherence',
             '/science/grids/data/connectedComponents','/science/grids/data/amplitude','/science/grids/imagingGeometry/perpendicularBaseline',
-            '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle','/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle']
+            '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle',
+            '/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle']
+            if version.lower()=='1c':
+                sdskeys.append('/science/grids/corrections/derived/ionosphere/ionosphere')
 
         return rdrmetadata_dict, sdskeys
 
 
-    def __mappingData__(self, fname, rdrmetadata_dict, sdskeys):
+    def __mappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
         '''
             Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
             The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
@@ -277,8 +297,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Expected layers
         layerkeys=['productBoundingBox','unwrappedPhase',
         'coherence','connectedComponents','amplitude','bPerpendicular',
-        'bParallel','incidenceAngle','lookAngle',
-        'azimuthAngle']
+        'bParallel','incidenceAngle','lookAngle','azimuthAngle']
+        if version.lower()=='1c':
+            layerkeys.append('ionosphere')
 
         # Setup datalyr_dict
         datalyr_dict={}
@@ -310,14 +331,20 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         track_rejected_pairs=[]
 
         # Check for (and remove) duplicate products
+        num_prods=len(self.products)
+        num_dups=[]
         for i in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
             if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
-                print("WARNING: Duplicate product captured. Rejecting scene %s"%(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
+                if self.verbose:
+                    print("WARNING: Duplicate product captured. Rejecting scene %s"%(os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1])))
                 # Overwrite latter scene with former
                 self.products[i[0]+1]=i[1]
+                num_dups.append(i[0])
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
+        if num_dups:
+            print("%d out of %d products rejected since they are duplicates"%(len(num_dups),num_prods))
 
         # If only one pair in list, add it to list.
         if len(self.products)==1:
@@ -327,10 +354,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         for i in enumerate(self.products[:-1]):
             # Get this reference product's times
             scene_start=datetime.strptime(i[1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S.%f")
-            scene_end=scene_start+timedelta(seconds=27)
+            scene_end=scene_start+timedelta(seconds=i[1][0]['sceneLength'])
             master=datetime.strptime(i[1][0]['pair_name'][9:], "%Y%m%d")
             new_scene_start=datetime.strptime(self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'], "%Y-%m-%dT%H:%M:%S.%f")
-            new_scene_end=new_scene_start+timedelta(seconds=27)
+            new_scene_end=new_scene_start+timedelta(seconds=i[1][0]['sceneLength'])
             slave=datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:], "%Y%m%d")
 
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
@@ -352,8 +379,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
-                    print("Warning! Gap for interferogram %s"%(i[1][0]['pair_name']))
                     track_rejected_pairs.extend((i[1][0]['pair_name'], self.products[i[0]+1][0]['pair_name']))
+                    if self.verbose:
+                        print("WARNING: Gap for interferogram %s"%(i[1][0]['pair_name']))
 
             # Products correspond to different dates, so pass both as separate IFGs.
             else:
@@ -367,9 +395,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len(sorted_products[1])+len(track_rejected_pairs)))
-            # Provide report of which files were kept vs. which were not.
+            print("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len([item[0] for item in sorted_products])))
             if self.verbose:
+                # Provide report of which files were kept vs. which were not.
                 print("Specifically, the following interferograms were rejected:")
                 for item in sorted_products:
                     if item[1]['pair_name'][0] in track_rejected_pairs:
@@ -406,6 +434,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Sort by pair and start time.
         self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
         self.products=list(self.products)
+
+        # Exit if products from different sensors were mixed
+        if not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products) and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products):
+            raise Exception('Specified input contains standard products from different sensors, please proceed with homogeneous products.')
 
         # Check if any pairs meet criteria
         if self.products==[]:
