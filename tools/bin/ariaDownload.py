@@ -85,29 +85,32 @@ class Downloader(object):
             if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
             os.chdir(self.inps.wd)
             os.sys.argv = []
-            fileName = os.path.abspath(os.path.join(self.inps.wd,'ASFDataDload.py'))
+            fileName = os.path.abspath(op.join(self.inps.wd,'ASFDataDload.py'))
             with open(fileName, 'w') as f:
                 f.write(script)
 
             os.sys.path.append(os.path.abspath(self.inps.wd))
+            ## make a cookie from a .netrc that ASFDataDload will pick up
+            self.make_nc_cookie()
             import ASFDataDload as AD
             downloader = AD.bulk_downloader()
             downloader.download_files()
             downloader.print_summary()
+
             # Delete temporary files
-            shutil.rmtree(os.path.abspath(os.path.join(self.inps.wd,'__pycache__')))
+            shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
             os.remove(fileName)
 
         return urls
 
     def form_url(self):
-        url = '{}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'.format(self.url_base)
+        url = f'{self.url_base}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'
         if self.inps.track:
-            url += '&relativeOrbit={}'.format(self.inps.track)
+            url += f'&relativeOrbit={self.inps.track}'
         if self.inps.bbox:
             url += '&bbox=' + self._get_bbox()
         if self.inps.flightdir:
-            url += '&flightDirection={}'.format(self.inps.flightdir.upper())
+            url += '&flightDirection={self.inps.flightdir.upper()}'
 
         url = url.replace(' ', '+')
         print (url)
@@ -187,6 +190,66 @@ class Downloader(object):
             dst    = op.join(op.dirname(dst), basen)
             count += 1
         return dst
+
+    def make_nc_cookie(self):
+       import netrc, base64
+       from urllib.request import build_opener, Request
+       from urllib.request import HTTPHandler, HTTPSHandler, HTTPCookieProcessor
+       from urllib.error import HTTPError, URLError
+       from http.cookiejar import MozillaCookieJar
+
+       cookie_jar_path = op.join(op.expanduser('~'), '.bulk_download_cookiejar.txt')
+       asf_urs4        = {'url': 'https://urs.earthdata.nasa.gov/oauth/authorize',
+                         'client': 'BO_n7nTIlMljdvU6kRRB3g',
+                         'redir': 'https://auth.asf.alaska.edu/login'}
+       user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
+
+       # Build URS4 Cookie request
+       auth_cookie_url = f"{asf_urs4['url']}?client_id={asf_urs4['client']}&redirect_uri={asf_urs4['redir']}&response_type=code&state="
+       user_pass = base64.b64encode(bytes(f'{user}:{passw}', 'utf-8')).decode('utf-8')
+
+       # Authenticate against URS, grab all the cookies
+       cookie_jar = MozillaCookieJar()
+       opener     = build_opener(HTTPCookieProcessor(cookie_jar), HTTPHandler(), HTTPSHandler(**{}))
+       request    = Request(auth_cookie_url, headers={'Authorization': f'Basic {user_pass}'})
+
+       # Watch out cookie rejection!
+       try:
+          response = opener.open(request)
+       except HTTPError as e:
+          if "WWW-Authenticate" in e.headers and "Please enter your Earthdata Login credentials" in e.headers["WWW-Authenticate"]:
+             print (" > Username and Password combo was not successful. Please try again.")
+             return False
+          else:
+             # If an error happens here, the user most likely has not confirmed EULA.
+             print ("\nIMPORTANT: There was an error obtaining a download cookie from the .netrc!")
+             print ("Most likely you lack permission to download data from the ASF Datapool.")
+             print ("\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov")
+             exit(-1)
+
+       except URLError as e:
+          print ("\nIMPORTANT: There was a problem communicating with URS, unable to obtain cookie. ")
+          print ("Try cookie generation later.")
+          exit(-1)
+
+       # Did we get a cookie?
+       if check_cookie_is_logged_in(cookie_jar):
+          #COOKIE SUCCESS!
+          cookie_jar.save(cookie_jar_path)
+          return True
+
+       # if we aren't successful generating the cookie, nothing will work. Stop here!
+       print ("WARNING: Could not generate new cookie! Cannot proceed. Please try Username and Password again.")
+       print ("Response was {0}.".format(response.getcode()))
+       print ("\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov")
+       exit(-1)
+
+def check_cookie_is_logged_in(cj):
+    """ Make sure successfully logged into URS; get cookie if so"""
+    for cookie in cj:
+        if cookie.name == 'urs_user_already_logged':
+            return True
+    return False
 
 if __name__ == '__main__':
     inps = cmdLineParse()
