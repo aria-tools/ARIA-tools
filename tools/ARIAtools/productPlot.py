@@ -249,8 +249,11 @@ class plot_class:
             Make plot of track extents vs bounding bbox/common track extent.
         '''
 
-        ax=self.plt.figure().add_subplot(111)
-        #Iterate through all IFGs
+        # Figure size based on number of products
+        fig_xsize=0.17*len(self.product_dict[0])+4.8
+        ax=self.plt.figure(figsize=(fig_xsize,3.4)).add_subplot(111)
+
+        # Iterate through all IFGs
         S_extent=[]
         N_extent=[]
         for i in enumerate(self.product_dict[0]):
