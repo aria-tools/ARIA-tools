@@ -70,6 +70,10 @@ class SentinelMetadata:
     '''
     ## Load data from csv and pre-format
     def __init__(self,imgfile,track,workdir='./',excludeDates=None,verbose=False):
+        '''
+            Initialize class for parsing Sentinel-1 metadata downloaded from the ASF archive.
+            See help(SentinelMetadata) for further description.
+        '''
         # Record parameters
         self.track=track
         self.workdir=os.path.abspath(workdir)
