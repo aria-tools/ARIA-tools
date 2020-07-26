@@ -46,6 +46,7 @@ def createParser():
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, \
         help="Minimum km\u00b2 area of overlap of scenes wrt specified bounding box."+ \
         "Default 0.0081 = 0.0081km\u00b2=area of single pixel at standard 90m resolution")
+    parser.add_argument('--figwidth', dest='figwidth', type=str, default='standard', help='Width of lat extents figure in inches. Default is \"standard\", i.e., the 6.4-inch-wide standard figure size. Optionally, theuser may define the width manually, e.g,. 8 [inches] or set the parameter to \"wide\" format, i.e., the width of the figure automatically scales with the number of interferograms. Other options include')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
     return parser
 
@@ -244,14 +245,23 @@ class plot_class:
 
         return
 
-    def plot_extents(self):
+    def plot_extents(self,figwidth=6.4):
         '''
             Make plot of track extents vs bounding bbox/common track extent.
         '''
 
         # Figure size based on number of products
-        fig_xsize=0.17*len(self.product_dict[0])+4.8
-        ax=self.plt.figure(figsize=(fig_xsize,3.4)).add_subplot(111)
+        if figwidth in ['standard','narrow']:
+            # Use standard figure width
+            figwidth=6.4
+        elif figwidth in ['wide', 'auto']:
+            # Automatically adjust figure width
+            figwidth=0.17*len(self.product_dict[0])+6.4
+        else:
+            # Else, use user-specified width of figure
+            figwidth=float(figwidth)
+
+        ax=self.plt.figure(figsize=(figwidth,4.8)).add_subplot(111)
 
         # Iterate through all IFGs
         S_extent=[]
@@ -575,7 +585,7 @@ def main(inps=None):
     if inps.plottracks:
         print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
         make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
-        make_plot.plot_extents()
+        make_plot.plot_extents(figwidth=inps.figwidth)
 
 
     # Make pbaseline plot
