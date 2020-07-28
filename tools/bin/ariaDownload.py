@@ -21,7 +21,7 @@ from datetime import datetime
 
 def createParser():
     """ Download a bulk download script and execute it """
-    parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add "ARIA Product Search" to their URS approved applications.',
+    parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.',
                                      epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", "Url" and "Kmz" are currently supported. Use "Url" for ingestion to aria*.py')
@@ -30,8 +30,8 @@ def createParser():
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
     parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2014).')
     parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
-    parser.add_argument('-u', '--user', dest='user', default=None, type=str, help='NASA Earthdata URS user login. "ARIA Product Search" must be a URS approved application.')
-    parser.add_argument('-p', '--pass', dest='passw', default=None, type=str, help='NASA Earthdata URS user password. "ARIA Product Search" must be a URS approved application.')
+    parser.add_argument('-u', '--user', dest='user', default=None, type=str, help='NASA Earthdata URS user login. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
+    parser.add_argument('-p', '--pass', dest='passw', default=None, type=str, help='NASA Earthdata URS user password. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
     parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
     parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: ariaDownload.py -t 004 --daysmore 364.')
     parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
