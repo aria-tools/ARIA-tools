@@ -48,6 +48,8 @@ def createParser():
             help='Automatically detect and remove dates that do not entirely fill the given latitude bounds. Note that if lat bounds are left as default, only dates with gaps will be automatically excluded.')
     parser.add_argument('--approximate_AOI', dest='approxAOI', action='store_true',
             help='Create KML of approximate AOI. NOTE: ~20 km or 1 burst must be removed from either end of the AOI--this must be confirmed by the user.')
+    parser.add_argument('-v','--verbose', dest='verbose', action='store_true',
+            help='Verbose mode')
 
     return parser
 
@@ -67,11 +69,17 @@ class SentinelMetadata:
         parameters and flags are added without removing metadata entries.
     '''
     ## Load data from csv and pre-format
-    def __init__(self,imgfile,track,workdir='./',excludeDates=None):
+    def __init__(self,imgfile,track,workdir='./',excludeDates=None,verbose=False):
+        '''
+            Initialize class for parsing Sentinel-1 metadata downloaded from the ASF archive.
+            See help(SentinelMetadata) for further description.
+        '''
         # Record parameters
         self.track=track
         self.workdir=os.path.abspath(workdir)
         self.excludeDates=excludeDates
+
+        self.verbose=verbose
 
         # Defaults
         self.removeIncompleteDates=False
@@ -453,6 +461,30 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
         self.Fig.savefig(os.path.join(self.workdir,figname))
 
 
+    ## Save epochs to list
+    def saveEpochs(self):
+        '''
+            Save a list of unique epochs and report if requested.
+        '''
+        # Detect number of epochs
+        epochs=self.metadata['Common Date'].to_list()
+        epochs=list(set(epochs)) # unique dates
+        epochs.sort() # sorted
+        Nepochs=len(epochs)
+
+        # Report if requested
+        if self.verbose == True:
+            print('{} unique epochs'.format(Nepochs))
+
+        # Save to list
+        outname='{}_epochs.txt'.format(self.trackCode)
+        outpath=os.path.join(self.workdir,outname)
+        with open(outpath,'w') as outfile:
+            for epoch in epochs:
+                outfile.write('{}\n'.format(epoch))
+            outfile.close()
+
+
     ## Save spatial extents
     def save2kml(self):
         '''
@@ -720,7 +752,8 @@ if __name__ == "__main__":
 
         # Instantiate metadata object and load metadata from csv
         track_metadata=SentinelMetadata(imgfile=inps.imgfile,track=track,workdir=inps.workdir,
-            excludeDates=inps.excludeDates)
+            excludeDates=inps.excludeDates,
+            verbose=inps.verbose)
 
         # Filtering -- remove frames from metadata
         # Clip based on start and end date
@@ -743,6 +776,9 @@ if __name__ == "__main__":
         # Plot frame centers
         track_metadata.plotFrameCenters(flagPartialCoverage=inps.flagPartialCoverage,
             plotRaw=inps.plotRaw)
+
+        # Save epochs to list
+        track_metadata.saveEpochs()
 
         # Save to Google Earth KML
         track_metadata.save2kml()
