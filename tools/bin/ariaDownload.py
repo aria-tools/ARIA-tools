@@ -30,6 +30,8 @@ def createParser():
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
     parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2014).')
     parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
+    parser.add_argument('-u', '--user', dest='user', default=None, type=str, help='NASA Earthdata URS user login. "ARIA Product Search" must be a URS approved application.')
+    parser.add_argument('-p', '--pass', dest='passw', default=None, type=str, help='NASA Earthdata URS user password. "ARIA Product Search" must be a URS approved application.')
     parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
     parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: ariaDownload.py -t 004 --daysmore 364.')
     parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
@@ -64,25 +66,27 @@ class Downloader(object):
     def __call__(self):
         url              = self.form_url()
         dict_prod, urls  = self.parse_json(url)
-        script           = requests.post('{}&output={}'.format(self.url_base,
-                                        self.inps.output), data=dict_prod).text
+        script           = requests.post(f'{self.url_base}&output={self.inps.output}', data=dict_prod).text
+
+
         if self.inps.output == 'Count':
-            print ('\nFound -- {} -- products'.format(len(urls)))
+            print (f'\nFound -- {len(urls)} -- products')
+
 
         elif self.inps.output == 'Kml':
-            if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
+            os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
             print (script, file=open(dst, 'w'))
-            print ('Wrote .KMZ to:\n\t {}'.format(dst))
+            print (f'Wrote .KMZ to:\n\t {dst}')
 
         elif self.inps.output == 'Url':
-            if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
+            os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
             with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) for url in urls]
-            print ('Wrote -- {} -- product urls to: {}'.format(len(urls), dst))
+            print (f'Wrote -- {len_urls} -- product urls to: {dst}')
 
         elif self.inps.output == 'Download':
-            if not op.exists(self.inps.wd): os.mkdir(self.inps.wd)
+            os.makedirs(self.inps.wd, exist_ok=True)
             os.chdir(self.inps.wd)
             os.sys.argv = []
             fileName = os.path.abspath(op.join(self.inps.wd,'ASFDataDload.py'))
@@ -92,6 +96,7 @@ class Downloader(object):
             os.sys.path.append(os.path.abspath(self.inps.wd))
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
+
             import ASFDataDload as AD
             downloader = AD.bulk_downloader()
             downloader.download_files()
@@ -110,7 +115,7 @@ class Downloader(object):
         if self.inps.bbox:
             url += '&bbox=' + self._get_bbox()
         if self.inps.flightdir:
-            url += '&flightDirection={self.inps.flightdir.upper()}'
+            url += f'&flightDirection={self.inps.flightdir.upper()}'
 
         url = url.replace(' ', '+')
         print (url)
@@ -202,7 +207,15 @@ class Downloader(object):
        asf_urs4        = {'url': 'https://urs.earthdata.nasa.gov/oauth/authorize',
                          'client': 'BO_n7nTIlMljdvU6kRRB3g',
                          'redir': 'https://auth.asf.alaska.edu/login'}
-       user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
+       if self.inps.user is not None and self.inps.passw is not None:
+           user  = self.inps.user
+           passw = self.inps.passw
+       elif op.exists(op.join(op.expanduser('~'), '.netrc')):
+           # log.info('Obtaining user/pass from .netrc')
+           user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
+       else:
+           # resort to ASF credential checks (will prompt for input if can't find the cookiejar)
+           return None
 
        # Build URS4 Cookie request
        auth_cookie_url = f"{asf_urs4['url']}?client_id={asf_urs4['client']}&redirect_uri={asf_urs4['redir']}&response_type=code&state="
@@ -222,15 +235,15 @@ class Downloader(object):
              return False
           else:
              # If an error happens here, the user most likely has not confirmed EULA.
-             print ("\nIMPORTANT: There was an error obtaining a download cookie from the .netrc!")
-             print ("Most likely you lack permission to download data from the ASF Datapool.")
-             print ("\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov")
-             exit(-1)
+             print ('\nThere was an error obtaining a download cookie')
+             print ('Most likely you lack permission to download data from the ASF Datapool.')
+             print ('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
+             os.sys.exit(-1)
 
        except URLError as e:
-          print ("\nIMPORTANT: There was a problem communicating with URS, unable to obtain cookie. ")
-          print ("Try cookie generation later.")
-          exit(-1)
+          print ('\nThere was a problem communicating with URS, unable to obtain cookie')
+          print ('Try cookie generation later.')
+          os.sys.exit(-1)
 
        # Did we get a cookie?
        if check_cookie_is_logged_in(cookie_jar):
@@ -239,10 +252,10 @@ class Downloader(object):
           return True
 
        # if we aren't successful generating the cookie, nothing will work. Stop here!
-       print ("WARNING: Could not generate new cookie! Cannot proceed. Please try Username and Password again.")
-       print ("Response was {0}.".format(response.getcode()))
-       print ("\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov")
-       exit(-1)
+       print ('WARNING: Could not generate new cookie! Cannot proceed. Please check credentials and/or .netrc.')
+       print (f'Response was {response.getcode()}')
+       print ('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
+       os.sys.exit(-1)
 
 def check_cookie_is_logged_in(cj):
     """ Make sure successfully logged into URS; get cookie if so"""
