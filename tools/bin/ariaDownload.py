@@ -83,7 +83,7 @@ class Downloader(object):
             os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
             with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) for url in urls]
-            print (f'Wrote -- {len_urls} -- product urls to: {dst}')
+            print (f'Wrote -- {len(urls)} -- product urls to: {dst}')
 
         elif self.inps.output == 'Download':
             os.makedirs(self.inps.wd, exist_ok=True)
@@ -240,7 +240,7 @@ class Downloader(object):
              print ('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
              os.sys.exit(-1)
 
-       except URLError as e:
+       except URLError:
           print ('\nThere was a problem communicating with URS, unable to obtain cookie')
           print ('Try cookie generation later.')
           os.sys.exit(-1)
