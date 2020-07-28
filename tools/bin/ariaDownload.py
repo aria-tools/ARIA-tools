@@ -258,7 +258,7 @@ class Downloader(object):
        os.sys.exit(-1)
 
 def check_cookie_is_logged_in(cj):
-    """ Make sure successfully logged into URS; get cookie if so"""
+    """Make sure successfully logged into URS; get cookie if so"""
     for cookie in cj:
         if cookie.name == 'urs_user_already_logged':
             return True
