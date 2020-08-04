@@ -142,7 +142,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
             update_file=gdal.Open(demfilename,gdal.GA_Update)
             update_file.SetProjection(proj) ; del update_file
             gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT"))
-            log.info('Saved DEM cropped to interferometric grid here: '+ demfilename)
+            log.info('Saved DEM cropped to interferometric grid here: %s', demfilename)
 
         #pass expanded DEM for metadata field interpolation
         bounds=list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
