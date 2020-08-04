@@ -74,7 +74,7 @@ class Downloader(object):
         script           = requests.post(f'{self.url_base}&output={self.inps.output}', data=dict_prod).text
 
         if self.inps.output == 'Count':
-            log.info (f'\nFound -- {len(urls)} -- products')
+            log.info('\nFound -- %d -- products', len(urls))
 
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
