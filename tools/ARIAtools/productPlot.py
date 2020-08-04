@@ -231,6 +231,7 @@ class plot_class:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
         self.plt.savefig(os.path.join(self.workdir,'bperp_plot{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_plot{}.png'.format(self.mask_ext)))
         self.plt.close()
 
         # Make Baseline histogram
@@ -241,6 +242,7 @@ class plot_class:
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'bperp_histogram{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_histogram{}.png'.format(self.mask_ext)))
         self.plt.close()
 
         return
@@ -305,6 +307,7 @@ class plot_class:
 
         # saving the figure
         self.plt.savefig(os.path.join(self.workdir,'lat_extents.eps'))
+        self.plt.savefig(os.path.join(self.workdir,'lat_extents.png'))
         self.plt.close()
 
         return
@@ -366,6 +369,7 @@ class plot_class:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot{}.png'.format(self.mask_ext)))
         self.plt.close()
 
         ### Make average coherence histogram
@@ -376,6 +380,7 @@ class plot_class:
         ax1.yaxis.set_major_locator(self.MaxNLocator(integer=True)) #Force y-axis to only use ints
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_histogram{}.png'.format(self.mask_ext)))
         self.plt.close()
         return
 
@@ -413,6 +418,7 @@ class plot_class:
         cbar_ax.set_ylabel('Average Coherence', rotation=-90, labelpad=17)
         self.plt.tight_layout()
         self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'avgcoherence_plot{}.png'.format(self.mask_ext)))
         self.plt.close()
         return
 
@@ -487,6 +493,7 @@ class plot_class:
             # X-axis widened by 1 inch.
             self.plt.gcf().set_size_inches([self.plt.gcf().get_size_inches()[0]+5,self.plt.gcf().get_size_inches()[1]+1])
         self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot{}.eps'.format(self.mask_ext)))
+        self.plt.savefig(os.path.join(self.workdir,'bperp_coh_plot{}.png'.format(self.mask_ext)))
         self.plt.close()
         return
 
