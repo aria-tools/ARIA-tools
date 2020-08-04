@@ -587,7 +587,7 @@ class metadata_qualitycheck:
                     lyrunit = "\N{DEGREE SIGN}"
                     if self.prod_key=='bPerpendicular' or self.prod_key=='bParallel':
                         lyrunit = 'm'
-                    log.info("WARNING: %s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied" \
+                    log.warning("%s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied" \
                         %(self.prod_key,os.path.basename(self.outname),min(rsquaredarr), max(std_errarr), lyrunit))
                     rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range', profprefix='corrected')
                     rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth', profprefix='corrected')
