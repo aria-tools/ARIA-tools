@@ -127,7 +127,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             #version accessed differently between URL vs downloaded product
             version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
         except:
-            log.warning ('%s is not a supported file type... skipping', fname)
+            log.warning('%s is not a supported file type... skipping', fname)
             return []
 
         ### Get lists of radarmetadata/layer keys for this file version
