@@ -6,7 +6,9 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-""" Global logging configuration """
+"""
+   Global logging configuration
+"""
 
 import logging
 import os
@@ -29,7 +31,9 @@ class UnixColorFormatter(Formatter):
     }
 
     def __init__(self, fmt=None, datefmt=None, style="%", use_color=True):
-        """ Init Formatting """
+        """
+           Init Formatting
+        """
         super().__init__(fmt, datefmt, style)
         # Save the old function so we can call it later
         self.__formatMessage = self.formatMessage
@@ -45,7 +49,9 @@ class UnixColorFormatter(Formatter):
 
 
 class CustomFormatter(UnixColorFormatter):
-    """Adds levelname prefixes to the message on warning or above."""
+    """
+       Adds levelname prefixes to the message on warning or above.
+    """
     def formatMessage(self, record):
         message = super().formatMessage(record)
         if record.levelno >= logging.WARNING:
