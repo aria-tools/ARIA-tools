@@ -103,7 +103,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 # Save polygon in shapefile
                 save_shapefile(os.path.join(workdir,'user_bbox.json'), self.bbox, 'GeoJSON')
                 self.bbox_file=os.path.join(workdir,'user_bbox.json')
-                log.info ("Shapefile %s created for input user bounds.", os.path.join(workdir,'user_bbox.json'))
+                log.info("Shapefile %s created for input user bounds.", os.path.join(workdir,'user_bbox.json'))
             # If shapefile
             elif os.path.isfile(bbox):
                 self.bbox = open_shapefile(bbox, 0, 0)                       ##SS => We should track the projection of the shapefile. i.e. if user provides this in e.g. UTM etc.
@@ -209,7 +209,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             try: #If layer expected
                 rdrmetadata_dict[radarkeys[rmdkeys.index(i)]]=rdrmetadata[i][0]
             except: #If new, unaccounted layer not expected in rdrmetakeys
-                log.warning("Radarmetadata key %s not expected in rmdkeys"%(i))
+                log.warning("Radarmetadata key %s not expected in rmdkeys", i)
         rdrmetadata_dict['pair_name']=self.pairname
 
         # Setup datalyr_dict
@@ -219,7 +219,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 datalyr_dict[layerkeys[sdskeys.index(i[1].split(':')[-1].split('/')[-1])]]=i[1]
             #If new, unaccounted layer not expected in layerkeys
             except:
-                log.warning("Data layer key %s not expected in sdskeys"%(i[1]))
+                log.warning("Data layer key %s not expected in sdskeys", i[1])
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
         datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
@@ -309,7 +309,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
             #If new, unaccounted layer not expected in layerkeys
             except:
-                log.warning("Data layer key %s not expected in sdskeys"%(i[1]))
+                log.warning("Data layer key %s not expected in sdskeys", i[1])
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
         datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
@@ -337,14 +337,14 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
             if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
                 if self.verbose:
-                    log.warning("Duplicate product captured. Rejecting scene %s"%(os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1])))
+                    log.warning("Duplicate product captured. Rejecting scene %s", os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
                 # Overwrite latter scene with former
                 self.products[i[0]+1]=i[1]
                 num_dups.append(i[0])
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in itertools.groupby(self.products))
         if num_dups:
-            log.warning("%d products rejected since they are duplicates"%(len(num_dups),num_prods))
+            log.warning("%d products rejected since they are duplicates", len(num_dups))
 
         # If only one pair in list, add it to list.
         if len(self.products)==1:
@@ -381,7 +381,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 else:
                     track_rejected_pairs.extend((i[1][0]['pair_name'], self.products[i[0]+1][0]['pair_name']))
                     if self.verbose:
-                        log.warning("Gap for interferogram %s"%(i[1][0]['pair_name']))
+                        log.warning("Gap for interferogram %s", i[1][0]['pair_name'])
 
             # Products correspond to different dates, so pass both as separate IFGs.
             else:
@@ -395,14 +395,14 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            log.warning("%d out of %d interferograms rejected since stitched interferogram would have gaps"%(len(track_rejected_pairs),len([item[0] for item in sorted_products])))
+            log.warning("%d out of %d interferograms rejected since stitched interferogram would have gaps", len(track_rejected_pairs), len([item[0] for item in sorted_products]))
             # Provide report of which files were kept vs. which were not.
             log.debug("Specifically, the following interferograms were rejected:")
             for item in sorted_products:
                 if item[1]['pair_name'][0] in track_rejected_pairs:
                     log.debug(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
         else:
-            log.info("All (%d) interferograms are spatially continuous."%(len(sorted_products)))
+            log.info("All (%d) interferograms are spatially continuous.", len(sorted_products))
 
         sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], \
             [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
@@ -442,12 +442,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         if self.products==[]:
             raise Exception('No valid pairs meet spatial criteria, nothing to export.')
         if len(self.products)!=len(self.files):
-            log.warning("%d out of %d GUNW products rejected for not meeting user's bbox spatial criteria"%(len(self.files)-len(self.products),len(self.files)))
+            log.warning("%d out of %d GUNW products rejected for not meeting user's bbox spatial criteria", len(self.files)-len(self.products), len(self.files))
             # Provide report of which files were kept vs. which weren't
             log.debug("Specifically, the following GUNW products were rejected:")
             log.debug([i for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]])
         else:
-            log.info("All (%d) GUNW products meet spatial bbox criteria."%(len(self.files)))
+            log.info("All (%d) GUNW products meet spatial bbox criteria.", len(self.files))
 
         ### Split products in spatiotemporally continuous groups
         log.info("Group GUNW products into spatiotemporally continuous interferograms.")

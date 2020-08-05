@@ -24,10 +24,7 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 def createParser():
-    '''
-        Extract specified product layers. The default is to export all layers.
-    '''
-
+    ''' Extract specified product layers. The default will export all layers. '''
     import argparse
     parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stitching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
@@ -127,7 +124,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
         update_file=gdal.Open(demfilename,gdal.GA_Update)
         update_file.SetProjection(proj) ; del update_file
         gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
-        log.info('Downloaded 3 arc-sec SRTM DEM here: '+ demfilename)
+        log.info('Downloaded 3 arc-sec SRTM DEM here: %s', demfilename)
 
     # Load DEM and setup lat and lon arrays
     try:
@@ -240,7 +237,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes!=[]:
-        log.info("%d out of %d interferograms rejected for not meeting specified spatial thresholds"%(len(rejected_scenes),len(product_dict)))
+        log.info("%d out of %d interferograms rejected for not meeting specified spatial thresholds", len(rejected_scenes), len(product_dict))
     metadata_dict = [i for j, i in enumerate(metadata_dict) if j not in rejected_scenes]
     product_dict = [i for j, i in enumerate(product_dict) if j not in rejected_scenes]
     if product_dict==[]:
@@ -409,7 +406,7 @@ class metadata_qualitycheck:
         self.data_array_band=data_array.GetRasterBand(1).ReadAsArray()
         #mask by nodata value
         self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
-        
+
         if self.verbose: log.setLevel('DEBUG')
 
         # Run class
@@ -587,8 +584,8 @@ class metadata_qualitycheck:
                     lyrunit = "\N{DEGREE SIGN}"
                     if self.prod_key=='bPerpendicular' or self.prod_key=='bParallel':
                         lyrunit = 'm'
-                    log.warning("%s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied" \
-                        %(self.prod_key,os.path.basename(self.outname),min(rsquaredarr), max(std_errarr), lyrunit))
+                    log.warning("%s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied",
+                                self.prod_key, os.path.basename(self.outname), min(rsquaredarr), max(std_errarr), lyrunit)
                     rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range', profprefix='corrected')
                     rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth', profprefix='corrected')
         del self.data_array_band
@@ -702,7 +699,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     # If specified workdir doesn't exist, create it
     if not os.path.exists(workdir):
         os.mkdir(workdir)
-        log.info('Created directory: {}'.format(workdir))
+        log.info('Created directory: %s', workdir)
 
     # Get list of all dates for which standard products exist
     date_list=[]
@@ -738,7 +735,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             untar_dir=os.path.join(os.path.abspath(os.path.join(i[1], os.pardir)),os.path.basename(i[1]).split('.')[0]+'_extracted')
             if not tarfile.is_tarfile(i[1]):
                 raise Exception('Cannot extract %s because it is not a valid tarfile. Resolve this and relaunch'%(i[1]))
-            log.info('Extracting GACOS tarfile %s to %s.'%(os.path.basename(i[1]),untar_dir))
+            log.info('Extracting GACOS tarfile %s to %s.', os.path.basename(i[1]), untar_dir)
             tarfile.open(i[1]).extractall(path=untar_dir)
             tropo_products[i[0]]=untar_dir
         # Loop through each GACOS product file
@@ -755,12 +752,12 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                     # Save as GDAL file, using proj from first unwrappedPhase file
                     renderVRT(k, gacos_prod, geotrans=(float(tropo_rsc_dict['X_FIRST']), float(tropo_rsc_dict['X_STEP']), 0.0, float(tropo_rsc_dict['Y_FIRST']), 0.0, float(tropo_rsc_dict['Y_STEP'])), drivername=outputFormat, gdal_fmt='float32', proj=gdal.Open(os.path.join(outDir,'unwrappedPhase',product_dict[2][0][0])).GetProjection(), nodata=0.)
                     gacos_prod = None
-                    log.debug("GACOS product %s successfully converted to GDAL-readable raster"%(k))
+                    log.debug("GACOS product %s successfully converted to GDAL-readable raster", k)
 
     # If multiple GACOS directories, merge products.
     if len(tropo_products)>1:
         tropo_products=os.path.join(outDir,'merged_GACOS')
-        log.info('Stitching/storing GACOS products in %s.'%(tropo_products))
+        log.info('Stitching/storing GACOS products in %s.', tropo_products)
         # If specified merged directory doesn't exist, create it
         if not os.path.exists(os.path.join(outDir,'merged_GACOS')):
             os.mkdir(os.path.join(outDir,'merged_GACOS'))
@@ -796,9 +793,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         save_shapefile(i+'.json', bbox, 'GeoJSON')
         per_overlap=((user_bbox.intersection(open_shapefile(i+'.json', 0, 0)).area)/(user_bbox.area))*100
         if per_overlap!=100. and per_overlap!=0.:
-            log.info("WARNING: Common track extent only has %d%% overlap with tropospheric product %s"%(per_overlap, i)+'\n')
+            log.warning("Common track extent only has %d overlap with tropospheric product %d\n", per_overlap, i)
         if per_overlap==0.:
-            raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch'%(i))
+            raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch', i)
 
     # Iterate through all IFGs and apply corrections
     for i in range(len(product_dict[0])):
@@ -826,7 +823,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                 earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
                 delta = (earliest_end - latest_start).total_seconds() + 1
                 if delta<0:
-                    log.warning("tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s"%(abs(delta), os.path.basename(j)[:8], product_dict[2][i][0]))
+                    log.warning("tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s", abs(delta), os.path.basename(j)[:8], product_dict[2][i][0])
 
             # Open unwrappedPhase and mask nodata
             unwphase=gdal.Open(unwname)
@@ -862,13 +859,10 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             del unwphase, tropo_product, tropo_reference, tropo_secondary, lookfile
 
         else:
-            log.warning("Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s"%(product_dict[2][i][0],tropo_products))
+            log.warning("Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s", product_dict[2][i][0], tropo_products)
 
 def main(inps=None):
-    '''
-        Main workflow for extracting layers from ARIA products
-    '''
-
+    ''' Main workflow for extracting layers from ARIA products '''
     from ARIAtools.ARIAProduct import ARIA_standardproduct
 
     log.info("***Extract Product Function:***")
@@ -903,9 +897,9 @@ def main(inps=None):
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower()=='all':
         import multiprocessing
-        log.info('User specified use of all %s threads for gdal multiprocessing'%(str(multiprocessing.cpu_count())))
+        log.info('User specified use of all %s threads for gdal multiprocessing', str(multiprocessing.cpu_count()))
         inps.num_threads='ALL_CPUS'
-    log.info('Thread count specified for gdal multiprocessing = %s'%(inps.num_threads))
+    log.info('Thread count specified for gdal multiprocessing = %s', inps.num_threads)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
