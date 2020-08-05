@@ -17,7 +17,10 @@ import json
 import requests
 import argparse
 from datetime import datetime
+import logging
+from ARIAtools.logger import logger
 
+log = logging.getLogger('ARIAtools')
 
 def createParser():
     """ Download a bulk download script and execute it """
@@ -43,7 +46,7 @@ def cmdLineParse(iargs=None):
     parser = createParser()
     if len(os.sys.argv) < 2:
         parser.print_help()
-        os.sys.exit(1)
+        os.sys.exit(2)
 
     inps = parser.parse_args(args=iargs)
 
@@ -62,28 +65,28 @@ class Downloader(object):
         self.inps.output = self.inps.output.title()
         self.inps.wd     = op.abspath(self.inps.wd)
         self.url_base    = 'https://api.daac.asf.alaska.edu/services/search/param?'
+        if self.inps.v: log.setLevel('DEBUG')
+        return
 
     def __call__(self):
         url              = self.form_url()
         dict_prod, urls  = self.parse_json(url)
         script           = requests.post(f'{self.url_base}&output={self.inps.output}', data=dict_prod).text
 
-
         if self.inps.output == 'Count':
-            print (f'\nFound -- {len(urls)} -- products')
-
+            log.info('\nFound -- %d -- products', len(urls))
 
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
-            print (script, file=open(dst, 'w'))
-            print (f'Wrote .KMZ to:\n\t {dst}')
+            log.info(script, file=open(dst, 'w'))
+            log.info(f'Wrote .KMZ to:\n\t %s', dst)
 
         elif self.inps.output == 'Url':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
             with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) for url in urls]
-            print (f'Wrote -- {len(urls)} -- product urls to: {dst}')
+            log.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
 
         elif self.inps.output == 'Download':
             os.makedirs(self.inps.wd, exist_ok=True)
@@ -118,7 +121,7 @@ class Downloader(object):
             url += f'&flightDirection={self.inps.flightdir.upper()}'
 
         url = url.replace(' ', '+')
-        print (url)
+        log.info(url)
         return url
 
     def parse_json(self, url):
@@ -152,7 +155,7 @@ class Downloader(object):
 
             prod_ids.append(FileId); dl_urls.append(prod['downloadUrl'])
 
-            if self.inps.v: print ('Found: {}'.format(FileId))
+            log.debug('Found: %s', FileId)
 
         if len(prod_ids) == 0:
             raise Exception('No products found that satisfy requested conditions.')
@@ -211,8 +214,11 @@ class Downloader(object):
            user  = self.inps.user
            passw = self.inps.passw
        elif op.exists(op.join(op.expanduser('~'), '.netrc')):
-           # log.info('Obtaining user/pass from .netrc')
-           user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
+           log.info('Attempting to obtaining user/pass from .netrc')
+           try:
+               user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
+           except:
+               log.warning('Could not obtain credentials from existing .netrc')
        else:
            # resort to ASF credential checks (will prompt for input if can't find the cookiejar)
            return None
@@ -231,19 +237,19 @@ class Downloader(object):
           response = opener.open(request)
        except HTTPError as e:
           if "WWW-Authenticate" in e.headers and "Please enter your Earthdata Login credentials" in e.headers["WWW-Authenticate"]:
-             print (" > Username and Password combo was not successful. Please try again.")
+             log.info(' > Username and Password combo was not successful. Please try again.')
              return False
           else:
              # If an error happens here, the user most likely has not confirmed EULA.
-             print ('\nThere was an error obtaining a download cookie')
-             print ('Most likely you lack permission to download data from the ASF Datapool.')
-             print ('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
-             os.sys.exit(-1)
+             log.info('\nThere was an error obtaining a download cookie')
+             log.info('Most likely you lack permission to download data from the ASF Datapool.')
+             log.info('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
+             os.sys.exit(1)
 
        except URLError:
-          print ('\nThere was a problem communicating with URS, unable to obtain cookie')
-          print ('Try cookie generation later.')
-          os.sys.exit(-1)
+          log.info('\nThere was a problem communicating with URS, unable to obtain cookie')
+          log.info('Try cookie generation later.')
+          os.sys.exit(1)
 
        # Did we get a cookie?
        if check_cookie_is_logged_in(cookie_jar):
@@ -252,10 +258,10 @@ class Downloader(object):
           return True
 
        # if we aren't successful generating the cookie, nothing will work. Stop here!
-       print ('WARNING: Could not generate new cookie! Cannot proceed. Please check credentials and/or .netrc.')
-       print (f'Response was {response.getcode()}')
-       print ('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
-       os.sys.exit(-1)
+       log.warning('Could not generate new cookie! Cannot proceed. Please check credentials and/or .netrc.')
+       log.info(f'Response was {response.getcode()}')
+       log.info('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
+       os.sys.exit(1)
 
 def check_cookie_is_logged_in(cj):
     """Make sure successfully logged into URS; try to get cookie"""
