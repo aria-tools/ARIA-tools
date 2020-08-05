@@ -862,7 +862,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             log.warning("Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s", product_dict[2][i][0], tropo_products)
 
 def main(inps=None):
-    ''' Main workflow for extracting layers from ARIA products '''
+    '''Main workflow for extracting layers from ARIA products'''
     from ARIAtools.ARIAProduct import ARIA_standardproduct
 
     log.info("***Extract Product Function:***")
