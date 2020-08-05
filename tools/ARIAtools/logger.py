@@ -45,7 +45,7 @@ class UnixColorFormatter(Formatter):
 
 
 class CustomFormatter(UnixColorFormatter):
-    """ Adds levelname prefixes to the message on warning or above. """
+    """Adds levelname prefixes to the message on warning or above."""
     def formatMessage(self, record):
         message = super().formatMessage(record)
         if record.levelno >= logging.WARNING:
