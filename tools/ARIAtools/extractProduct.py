@@ -17,11 +17,11 @@ from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
-log = logging.getLogger(__name__)
-
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+log = logging.getLogger(__name__)
 
 def createParser():
     '''
