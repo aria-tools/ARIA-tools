@@ -16,9 +16,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas.plotting import register_matplotlib_converters
-register_matplotlib_converters()
 from osgeo import gdal
 from scipy.stats import mode
+
+import logging
+from ARIAtools.logger import logger
+
+register_matplotlib_converters()
+log = logging.getLogger(__name__)
 
 
 ### PARSER ---
@@ -159,7 +164,7 @@ class stack:
         self.excludePairs = excludePairs
 
         # Other
-        self.verbose = verbose
+        log.setLevel('DEBUG') if self.verbose else ''
 
         # Read stack data and retrieve list of dates
         self.__loadStackData__()
@@ -187,7 +192,7 @@ class stack:
         self.extent = (left, right, bottom, top)
 
         # Report if requested
-        if self.verbose == True: print('{} bands detected'.format(self.IFGs.RasterCount))
+        log.debug('%s bands detected', self.IFGs.RasterCount)
 
     # Convert date pair to string
     def __datePair2strPair__(self,datePair):
@@ -244,8 +249,7 @@ class stack:
         self.epochs.sort() # sort oldest-youngest
 
         self.nEpochs = len(self.epochs)
-        if self.verbose == True:
-            print('{} unique dates detected'.format(self.nEpochs))
+        log.debug('%s unique dates detected', self.nEpochs)
 
         # Limit dates available for triplet formulation by start and end date
         self.tripletEpochs = [epoch for epoch in self.epochs if epoch >= self.startDate]
@@ -338,7 +342,7 @@ class stack:
             The stack object retains an ordered list of dates in both YYYYMMDD format and datetime
             format, and pairList, based on the __format_dates__ function.
         '''
-        if self.verbose == True: print('Creating list of all possible triplets')
+        log.debug('Creating list of all possible triplets')
 
         # Loop through dates to create all possible triplet combinations
         self.triplets = []
@@ -375,11 +379,11 @@ class stack:
         # Report if requested
         if printTriplets == True:
             # Print to screen
-            print('Existing triplets:')
+           log.info('Existing triplets:')
             for triplet in self.triplets:
-                print([self.__datePair2strPair__(pair) for pair in triplet])
+                log.info([self.__datePair2strPair__(pair) for pair in triplet])
         if self.verbose == True:
-            print('{} existing triplets found based on search criteria'.format(self.nTriplets))
+            log.info('%s existing triplets found based on search criteria', self.nTriplets)
 
         # Reference dates
         self.tripletDates = [[triplet[0][1],triplet[1][1],triplet[2][0]] for triplet in self.triplets]
@@ -501,7 +505,7 @@ class stack:
             The point can be given in pixels or lon/lat coordinates. If given in Lat/Lon, determine
             the location in XY.
         '''
-        if self.verbose == True: print('Determining reference point...')
+        log.debug('Determining reference point...')
 
         if refLoLa.count(None) == 0:
             # Determine the XY coordinates from the given lon/lat
@@ -510,18 +514,16 @@ class stack:
             x,y = self.LoLa2XY(refLoLa[0],refLoLa[1])
             self.refX = int(x)
             self.refY = int(y)
-            if self.verbose == True:
-                print('Reference point given as: X {} / Y {}; Lon {} / Lat {}'. \
-                    format(self.refX,self.refY,self.refLon,self.refLat))
+            log.debug('Reference point given as: X %s / Y %s; Lon %s / Lat %s',
+                                 self.refX, self.refY, self.refLon, self.refLat)
 
         elif refXY.count(None) == 0:
             # Use the provided XY coordinates
             self.refX = refXY[0]
             self.refY = refXY[1]
             self.refLon,self.refLat = self.XY2LoLa(refXY[0],refXY[1])
-            if self.verbose == True:
-                print('Reference point given as: X {} / Y {}; Lon {:.4f} / Lat {:.4f}'. \
-                    format(self.refX,self.refY,self.refLon,self.refLat))
+            log.debug('Reference point given as: X %s / Y %s; Lon %.4f / Lat %.4f',
+                                 self.refX, self.refY, self.refLon, self.refLat)
 
         else:
             # Use a random reference point
@@ -534,13 +536,14 @@ class stack:
         '''
         # Load coherence data from cohStack.vrt
         cohfile = os.path.join(self.imgdir,'cohStack.vrt')
-        cohDS = gdal.Open(cohfile, gdal.GA_ReadOnly)
-        cohMap = np.zeros((cohDS.RasterYSize,cohDS.RasterXSize))
+        cohDS   = gdal.Open(cohfile, gdal.GA_ReadOnly)
+        cohMap  = np.zeros((cohDS.RasterYSize,cohDS.RasterXSize))
+        coh_min = 0.7
 
         for n in range(1,cohDS.RasterCount+1):
             cohMap += cohDS.GetRasterBand(n).ReadAsArray()
         aveCoherence = cohMap/cohDS.RasterCount
-        cohMask = (aveCoherence >= 0.7)
+        cohMask = (aveCoherence >= coh_min)
 
         # Start with initial guess for reference point
         self.refX = np.random.randint(cohDS.RasterXSize)
@@ -556,15 +559,15 @@ class stack:
 
             # Break loop after 10000 iterations
             if n == 10000:
-                print('WARNING: No reference point with coherence >= 0.7 found')
-                exit()
+                msg = f'No reference point with coherence >= {coh_min} found'
+                log.error(msg)
+                raise Exception(msg)
 
         # Convert to lon/lat
         self.refLon,self.refLat = self.XY2LoLa(self.refX,self.refY)
 
-        if self.verbose == True:
-            print('Reference point chosen randomly as: X {} / Y {}; Lon {:.4f} / Lat {:.4f}'.\
-                format(self.refX,self.refY,self.refLon,self.refLat))
+        log.debug('Reference point chosen randomly as: X %s / Y %s; Lon %.4f / Lat %.4f.',
+                                 self.refX, self.refY, self.refLon, self.refLat)
 
     # Compute misclosure
     def computeMisclosure(self,refXY=None,refLoLa=None):
@@ -580,7 +583,7 @@ class stack:
         self.absMscStack = []
 
         # Compute phase triplets
-        if self.verbose == True: print('Calculating misclosure')
+        log.debug('Calculating misclosure')
 
         for triplet in self.triplets:
             # Triplet date pairs
@@ -690,7 +693,7 @@ class stack:
         '''
             Map-view plot of cumulative misclosure.
         '''
-        if self.verbose == True: print('Begin misclosure analysis')
+        log.debug('Begin misclosure analysis')
 
         # Parameters
         self.plotTimeIntervals = plotTimeIntervals
@@ -746,9 +749,9 @@ class stack:
         px=int(round(px)); py=int(round(py))
 
         # Report position and cumulative values
-        print('px {} py {}'.format(px,py)) # report position
-        print('Cumulative misclosure: {}'.format(self.cumNetMisclosure[py,px]))
-        print('Abs cumulative misclosure: {}'.format(self.cumAbsMisclosure[py,px]))
+        log.info('px %s py %s', px, py) # report position
+        log.info('Cumulative misclosure: %s', self.cumNetMisclosure[py,px])
+        log.info('Abs cumulative misclosure: %s', self.cumAbsMisclosure[py,px])
 
         # Plot query points on maps
         self.netMscAx.cla()
@@ -760,7 +763,7 @@ class stack:
         self.absMscAx.plot(px,py,color='k',marker='o',markerfacecolor='w',zorder=3)
 
         # Plot misclosure over time
-        print('Misclosure: {}'.format(self.netMscStack[:,py,px]))
+        log.info('Misclosure: %s', self.netMscStack[:,py,px])
         self.netMscSeriesAx.cla() # misclosure
         self.__plotSeries__(self.netMscSeriesAx, self.netMscStack[:,py,px], 'misclosure')
 
@@ -791,7 +794,7 @@ class stack:
         '''
             Show the time history of each pixel based on pre-specified selection.
         '''
-        if self.verbose == True: print('Pre-specified query point...')
+        log.debug('Pre-specified query point...')
 
         # Convert bewteen lon/lat and image coordinates
         if queryLoLa.count(None) == 0:
@@ -805,9 +808,7 @@ class stack:
             qx,qy = queryXY
             qLon,qLat = self.XY2LoLa(queryXY[0],queryXY[1])
 
-        if self.verbose == True:
-            print('Query point: X {} / Y {}; Lon {:.4f} / Lat {:.4f}'. \
-                format(qx,qy,qLon,qLat))
+        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f' qx, qy, bqLon, qLat)
 
         # Plot query points on map
         self.netMscAx.plot(qx,qy,color='k',marker='o',markerfacecolor='w',zorder=3)
@@ -832,7 +833,7 @@ class stack:
         '''
             Plot the misclosure measurements for each triplet to figures.
         '''
-        if self.verbose == True: print('Saving incremental misclosure maps to image files')
+        log.debug('Saving incremental misclosure maps to image files')
 
         # Parameters
         subplotDims = (2, 2)
@@ -892,7 +893,7 @@ class stack:
             Save cumulative (/absolute) misclosure plots to georeferenced tiff files. Use metadata
             from unwrapStack.vrt file.
         '''
-        if self.verbose == True: print('Saving misclosure maps to geotiffs')
+        log.debug('Saving misclosure maps to geotiffs')
 
         # Fix background values
         self.cumNetMisclosure[self.cumNetMisclosure==self.cumNetMscBackground] = 0
