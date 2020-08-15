@@ -219,6 +219,7 @@ class Downloader(object):
                user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
            except:
                log.warning('Could not obtain credentials from existing .netrc')
+               return None
        else:
            # resort to ASF credential checks (will prompt for input if can't find the cookiejar)
            return None
