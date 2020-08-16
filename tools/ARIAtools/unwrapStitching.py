@@ -1428,7 +1428,7 @@ def gdalTest(file, verbose=False):
             log.debug("%s is GDAL compatible", file)
             return file
     except:
-            log.debug("%s is GDAL compatible", file)
+        log.debug("%s is GDAL compatible", file)
         return file
 
 
