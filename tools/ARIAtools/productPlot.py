@@ -568,7 +568,7 @@ def main(inps=None):
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower()=='all':
         import multiprocessing
-        log.info('User specified use of all %s threads for gdal multiprocessing %s', multiprocessing.cpu_count())
+        log.info('User specified use of all %s threads for gdal multiprocessing', multiprocessing.cpu_count())
         inps.num_threads='ALL_CPUS'
     log.info('Thread count specified for gdal multiprocessing = %s', inps.num_threads)
 
