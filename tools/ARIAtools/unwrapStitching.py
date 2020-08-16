@@ -12,6 +12,7 @@ import pdb
 import os
 import time
 import sys
+import logging
 
 import numpy as np
 from osgeo import gdal,ogr
@@ -27,29 +28,30 @@ import random
 import glob
 import collections
 
+from ARIAtools.logger import logger
+from ARIAtools.shapefile_util import open_shapefile, save_shapefile
+
+log = logging.getLogger(__name__)
+
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
 stitchMethodTypes = ['overlap','2stage']
 
-
-# Import functions
-from ARIAtools.shapefile_util import open_shapefile, save_shapefile
-
-
 class Stitching:
     '''
-        This is the parent class of all stiching codes.
-        It is whatever is shared between the different variants of stitching methods
-        e.g. - setting of the main input arguments,
-             - functions to verify GDAL compatibility,
-             - function to write new connected component of merged product based on a mapping table,
-             - fucntion to write unwrapped phase of merged product based on a mapping table
+    This is the parent class of all stiching codes.
+    It is whatever is shared between the different variants of stitching methods
+    e.g. - setting of the main input arguments,
+         - functions to verify GDAL compatibility,
+         - function to write new connected component of merged product based on a mapping table,
+         - fucntion to write unwrapped phase of merged product based on a mapping table
     '''
 
     def __init__(self):
         '''
-            Setting the default arguments needed by the class.
-            Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the child classes of the respective stitch method
+        Setting the default arguments needed by the class.
+        Parse the filenames and bbox as None as they need to be set by the user,
+        which will be caught when running the child classes of the respective stitch method
         '''
         self.inpFile = None
         self.ccFile = None
@@ -62,6 +64,7 @@ class Stitching:
         self.outFileConnComp = './connCompMerged'
         self.outputFormat='ENVI'
         self.verbose=False
+        log.setLevel('DEBUG') if self.verbose else ''
         # stitching methods, by default leverage product overlap method
         # other options would be to leverage connected component
         self.setStitchMethod("overlap")
@@ -180,13 +183,13 @@ class Stitching:
 
             # if one of the two files fails then do not try and merge them later on as GDAL is leveraged
             if inFile_temp is None or ccFile_temp is None:
-                print('Removing following pair combination (not GDAL compatible)')
-                print('UNW: ' + inFile)
-                print('CONN: ' + ccFile)
+                log.info('Removing following pair combination (not GDAL compatible)')
+                log.info('UNW: %s', inFile)
+                log.info('CONN: %s', ccFile)
             elif prodbboxFile_temp is None:
-                print('Removing following pair combination (malformed shapefile)')
-                print('UNW: ' + inFile)
-                print('CONN: ' + ccFile)
+                log.info('Removing following pair combination (malformed shapefile)')
+                log.info('UNW: %s', inFile)
+                log.info('CONN: %s', ccFile)
             else:
                 inpFile_keep.append(inFile_temp)
                 ccFile_keep.append(ccFile)
@@ -207,7 +210,7 @@ class Stitching:
         self.nfiles = np.shape(self.inpFile)[0]
 
         if self.nfiles==0:
-            print('No files left after GDAL compatibility check')
+            log.info('No files left after GDAL compatibility check')
             sys.exit(0)
     def __createImages__(self):
         '''
@@ -237,7 +240,7 @@ class Stitching:
             intermediateFiles = Parallel(n_jobs=-1,max_nbytes=1e6)(delayed(createConnComp_Int)(ii) for ii in all_inputs)
 
         except:
-            print('Multi-core version failed, will try single for loop')
+            log.info('Multi-core version failed, will try single for loop')
             intermediateFiles = []
             for counter in  range(len(self.fileMappingDict)):
                 fileMappingDict = self.fileMappingDict[counter]
@@ -321,13 +324,13 @@ class UnwrapOverlap(Stitching):
 
         ## check if required inputs are set
         if self.inpFile is None:
-            print("Error. Input unwrapped file(s) is (are) not set.")
+            log.error("Input unwrapped file(s) is (are) not set.")
             raise Exception
         if self.ccFile is None:
-            print("Error. Input Connected Components file(s) is (are) not set.")
+            log.error("Input Connected Components file(s) is (are) not set.")
             raise Exception
         if self.prodbboxFile is None:
-            print("Error. Input product Bounding box file(s) is (are) not set.")
+            log.error("Input product Bounding box file(s) is (are) not set.")
             raise Exception
 
         ## Verify if all the inputs are well-formed/GDAL compatible
@@ -363,7 +366,7 @@ class UnwrapOverlap(Stitching):
 
                 # determining the intersection between the two frames
                 if not bbox_frame1.intersects(bbox_frame2):
-                    print("Error, products do not overlap or were not provided in a contigious sorted list.")
+                    log.error("Products do not overlap or were not provided in a contigious sorted list.")
                     raise Exception
                 polyOverlap = bbox_frame1.intersection(bbox_frame2)
 
@@ -519,9 +522,6 @@ class UnwrapOverlap(Stitching):
         # pass the fileMapping back into self
         self.fileMappingDict = fileMappingDict
 
-        # print('MAPPING complete:')
-
-
 class UnwrapComponents(Stitching):
     '''
         Stiching/unwrapping using 2-Stage Phase Unwrapping
@@ -542,11 +542,11 @@ class UnwrapComponents(Stitching):
         self.region=5
 
         if self.inpFile is None:
-            print("Error. Input unwrapped file(s) is (are) not set.")
+            log.error("Input unwrapped file(s) is (are) not set.")
             raise Exception
 
         if self.ccFile is None:
-            print("Error. Input Connected Components file(s) is (are) not set.")
+            log.error("Input Connected Components file(s) is (are) not set.")
             raise Exception
 
         if self.solver not in solverTypes:
@@ -710,7 +710,7 @@ class UnwrapComponents(Stitching):
                 # finding the minMatch of closest points between two polygons lists
                 # will try multi-core version and default to for loop in case of failure
                 try:
-                    print('Multi-core')
+                    log.info('Multi-core')
                     start = time.time()
                     points = []
                     pointDistance = []
@@ -728,7 +728,7 @@ class UnwrapComponents(Stitching):
                         points.append(line[1])
                     stop = time.time()
                 except:
-                    print('For loop')
+                    log.info('For loop')
                     # for loop instead of multi-core
                     start = time.time()
                     points = []
@@ -741,7 +741,7 @@ class UnwrapComponents(Stitching):
                             points.append(points_temp)
                             pointDistance.append(pointDistance_temp)
                     stop = time.time()
-                print('DONE min distance points')
+                log.info('DONE min distance points')
                 # now find the point pair with the shortest distance and keep the correpsonding points
                 min_ix = np.where(pointDistance ==np.min(pointDistance))[0]
                 dist = pointDistance[min_ix[0]]
@@ -795,7 +795,7 @@ class UnwrapComponents(Stitching):
         self.tablePoints =tablePoints[unique_indices[:],:]
 
         # compute the phase values
-        print('Calculating the phase values for ' + str(self.tablePoints.shape[0]) + ' points')
+        log.info('Calculating the phase values for %s points', self.tablePoints.shape[0])
         # will try multi-core version and default to for loop in case of failure
         try:
             start = time.time()
@@ -816,7 +816,7 @@ class UnwrapComponents(Stitching):
             # end timer
             end = time.time()
         except:
-            print('Multi-core version failed, will try single for loop')
+            log.info('Multi-core version failed, will try single for loop')
             # will track processing time
             start = time.time()
             unwPhase_value = []
@@ -833,7 +833,7 @@ class UnwrapComponents(Stitching):
                 unwPhase_value.append(unwPhase_temp)
             # end timer
             end = time.time()
-        print("runtime phase value calculation: " + str(end - start) + " sec")
+        log.info("runtime phase value calculation: %s sec", end - start)
 
         # Appending the phase to the table stored in self with the points
         unwPhase_value = np.array(unwPhase_value)
@@ -870,15 +870,15 @@ class UnwrapComponents(Stitching):
 
             test = np.concatenate((X_coordinate, Y_coordinate), axis=1)
             test_unique, test_unique_indices = np.unique(test, axis=0,return_index=True)
-            print('Shifting coordinates by a pixel to make all points unique: iteration ' + str(while_count))
+            log.info('Shifting coordinates by a pixel to make all points unique: iteration %s', while_count)
             while_count = while_count+1
 
         if test_unique.shape!=test.shape:
-            print('Coordinates are not-unique, need to implement a while loop, run again for another random sample...')
+            log.error('Coordinates are not-unique, need to implement a while loop, run again for another random sample...')
             import pdb
             pdb.set_trace()
         else:
-            print('Coordinates are unique')
+            log.info('Coordinates are unique')
 
         # appending the X and Y-coordinates to the points table.
         self.tablePoints = np.concatenate((self.tablePoints, X_coordinate), axis=1)
@@ -938,7 +938,7 @@ class UnwrapComponents(Stitching):
                 else:
                     cycleMapping.append(0)
                     if connCompID_unique != 0 :
-                        print('Was not expecting this')
+                        log.error('Was not expecting this')
                         pdb.set_trace()
             cycleMapping = np.array(cycleMapping)
             cycleMapping = cycleMapping.reshape((cycleMapping.shape[0],1))
@@ -947,7 +947,7 @@ class UnwrapComponents(Stitching):
             # update the original dictionary and store it back in self
             fileMappingDict['connCompMapping'] = connCompMapping
             self.fileMappingDict[countFile]=fileMappingDict
-        print('MAPPING complete:')
+        log.info('MAPPING complete.')
 
 
 
@@ -997,11 +997,11 @@ def minDistancePoints(pairing):
         min_ix = np.where(dist_list ==np.min(dist_list))[0]
         dist = dist_list[min_ix[0]]
         points = tuple([point1_list[min_ix[0]], point2_list[min_ix[0]]])
-        print('intersect: min distance ' + str(dist) )
+        log.info('intersect: min distance %s', dist)
 
     else:
         if Poly1.intersection(Poly2).area > 0:
-            print("product overlap")
+            log.info("product overlap")
             pdb.set_trace()
 
         # leverage shapely distance function
@@ -1102,7 +1102,7 @@ def GDALread(filename,data_band=1,loadData=True):
     try:
         NoData = raster.GetNoDataValue()
     except:
-        print('Could not find a no-data value...')
+        log.warning('Could not find a no-data value...')
         NoData = None
 
     # getting the gdal transform and projection
@@ -1380,7 +1380,7 @@ def point2unwPhase(inputs):
         unwPhase = np.mean(unwData[connData==connCompID])
         np.where(connData==connCompID)
     except:
-        print("Looks like the region is not large enough, cannot find your connected component: " + str(connCompID))
+        log.error("Looks like the region is not large enough, cannot find your connected component: %s", connCompID)
         print(connData)
         pdb.set_trace()
 
@@ -1405,8 +1405,7 @@ def gdalTest(file, verbose=False):
         ds = gdal.Open(file, gdal.GA_ReadOnly)
         ds = None
     except:
-        if verbose:
-            print(file + " is Not GDAL compatible")
+        log.debug('%s is not GDAL compatible', file)
         return file_success
 
     # ideally use vrt file
@@ -1423,16 +1422,13 @@ def gdalTest(file, verbose=False):
         if os.path.isfile(filetest):
             ds = gdal.Open(filetest, gdal.GA_ReadOnly)
             ds = None
-            if verbose:
-                print(filetest + " is GDAL compatible")
+            log.debug("%s is GDAL compatible", filetest)
             return filetest
         else:
-            if verbose:
-                print(file + " is GDAL compatible")
+            log.debug("%s is GDAL compatible", file)
             return file
     except:
-        if verbose:
-            print(file + " is GDAL compatible")
+            log.debug("%s is GDAL compatible", file)
         return file
 
 
@@ -1478,9 +1474,9 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
         solver_2stage = 'pulp'
 
     # report method to user
-    print('STITCH Settings: Connected component approach')
-    print('Name: %s'%unwrapper_2stage_name)
-    print('Solver: %s'%solver_2stage)
+    log.info('STITCH Settings: Connected component approach')
+    log.info('Name: %s', unwrapper_2stage_name)
+    log.info('Solver: %s', solver_2stage)
 
     # Hand over to 2Stage unwrap
     unw = UnwrapComponents()

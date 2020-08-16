@@ -17,6 +17,10 @@ from scipy.spatial import Delaunay
 import pulp
 import timeit as T
 
+import logging
+from ARIAtools.logger import logger
+log = logging.getLogger(__name__)
+
 class Vertex(object):
     '''
     Defines vertex.
@@ -304,13 +308,13 @@ class Loop(object):
 
     def printEdges(self):
         for v in self.edges:
-          print(v)
+         log.info(v)
 
     def printFlow(self):
         flow = []
         for edge in self.edges:
           flow.append(edge.flow)
-        print(flow)
+        log.info(flow)
 
     def plot(self, ax):
         if self.residue != 0:
@@ -733,16 +737,16 @@ class PhaseUnwrap(object):
 
         # Solve the objective function
         if solver == 'glpk':
-          print('Using GLPK MIP solver')
+          log.info('Using GLPK MIP solver')
           MIPsolver = lambda: self.__prob__.solve(pulp.GLPK(msg=0))
         elif solver == 'pulp':
-          print('Using PuLP MIP solver')
+          log.info('Using PuLP MIP solver')
           MIPsolver = lambda: self.__prob__.solve()
         elif solver == 'gurobi':
-          print('Using Gurobi MIP solver')
+          log.info('Using Gurobi MIP solver')
           MIPsolver = lambda: self.__prob__.solve(pulp.GUROBI_CMD())
 
-        print('Time Taken (in sec) to solve: %f'%(T.timeit(MIPsolver, number=1)))
+        log.info('Time Taken (in sec) to solve: %f', T.timeit(MIPsolver, number=1))
 
         # Get solution
         for v, edge in self.__edges.items():
@@ -890,8 +894,8 @@ def main():
   compTest    = args.compTest
   mcf         = args.mcf
 
-  print("Input Type: %s"%(inputType))
-  print("Dimension: %d"%(dim))
+  log.info("Input Type: %s", inputType)
+  log.info("Dimension: %d", dim)
 
   # Random seeding to reapeat random numbers in case
   np.random.seed(100)
@@ -946,7 +950,7 @@ def main():
   if mcf is True:
     # We use redArcs to run Minimum Cost Flow
     redArcs = -1
-    print('Relax IV used as the solver for Minimum Cost Flow')
+    log.info('Relax IV used as the solver for Minimum Cost Flow')
     solver = None
   else:
     redArcs = args.redArcs
