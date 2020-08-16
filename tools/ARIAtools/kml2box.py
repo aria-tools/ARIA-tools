@@ -9,7 +9,12 @@
 
 import os
 from osgeo import gdal
+import logging
+from ARIAtools.logger import logger
+
 gdal.UseExceptions()
+
+log = logging.getLogger(__name__)
 
 def createParser():
     '''
@@ -33,10 +38,10 @@ def main(inps=None):
     inps = cmdLineParse()
 
     if not os.path.exists(inps.workdir):
-        print('Creating directory: {0}'.format(inps.workdir))
+        log.info('Creating directory: %s', inps.workdir)
         os.makedirs(inps.workdir)
     else:
-        print('Directory {0} already exists.'.format(inps.workdir))
+        log.info('Directory %s already exists.', inps.workdir)
 
     srcDS = gdal.OpenEx(inps.inFile)
     gdal.VectorTranslate(os.path.join(inps.workdir,inps.outFile), srcDS, format='GeoJSON', dim='XY')

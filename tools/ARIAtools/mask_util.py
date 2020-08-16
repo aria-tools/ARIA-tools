@@ -11,9 +11,14 @@ import os
 import os.path as op
 import glob
 import numpy as np
+import logging
 from osgeo import gdal, ogr, gdalconst
+
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import rasterAverage
+from ARIAtools.logger import logger
+
+log = logging.getLogger(__name__)
 
 def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
     '''
@@ -44,7 +49,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     # Download mask
     if maskfilename.lower()=='download':
-        print("***Downloading water mask... ***")
+        log.info("***Downloading water mask... ***")
         maskfilename=os.path.join(workdir,'watermask'+'.msk')
         os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
         ###Make coastlines/islands union VRT
@@ -75,7 +80,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
         del lake_masks, mask_file
 
     if os.path.basename(maskfilename).lower().startswith('nlcd'):
-        print("***Accessing and cropping the NLCD mask...***")
+        log.info("***Accessing and cropping the NLCD mask...***")
         maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape, outputFormat)
 
     # Make sure to apply amplitude mask to downloaded products
@@ -244,12 +249,15 @@ class NLCDMasker(object):
         path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
                     '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
 
+        log.info('Cropping raw NLCD...')
         ds_crop   = crop_ds(path_nlcd, self.path_bbox)
 
         ## resample the mask to the size of the products (mimic ariaExtract)
+        log.info('Resampling NLCD to selected bbox...')
         ds_resamp = resamp(ds_crop, proj, bounds, arrshape)
 
         ## mask the landcover classes in lc
+        log.info('Masking water and wetlands...')
         ds_mask   = make_mask(ds_resamp, self.lc)
 
         ## write mask to disk
