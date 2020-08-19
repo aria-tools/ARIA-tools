@@ -654,11 +654,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
         del dem_array
 
     # Save file
-    renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
+    renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
 
     # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
     # Crop to track extents
-    gdal.Warp(outname, outname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite'])).ReadAsArray()
+    gdal.Warp(outname, outname+'_temp', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+    #remove temp files
+    for i in glob.glob(outname+'_temp*'): os.remove(i)
 
     # Update VRT
     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
