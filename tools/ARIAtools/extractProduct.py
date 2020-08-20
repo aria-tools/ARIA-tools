@@ -409,7 +409,7 @@ class metadata_qualitycheck:
         #mask by nodata value
         self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
 
-        if self.verbose: log.setLevel('DEBUG')
+        if self.verbose: logger.setLevel(logging.DEBUG)
 
         # Run class
         self.__run__()

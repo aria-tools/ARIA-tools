@@ -35,8 +35,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     import glob
     def __init__(self, filearg, bbox=None, workdir='./', verbose=False):
         # If user wants verbose mode
-        self.verbose=verbose
         # Parse through file(s)/bbox input
+        if verbose: logger.setLevel(logging.DEBUG)
         self.files = []
         self.products = []
         # Track bbox file
@@ -336,8 +336,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         for i in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
             if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
-                if self.verbose:
-                    log.warning("Duplicate product captured. Rejecting scene %s", os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
+                log.debug("Duplicate product captured. Rejecting scene %s", os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
                 # Overwrite latter scene with former
                 self.products[i[0]+1]=i[1]
                 num_dups.append(i[0])
@@ -380,8 +379,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
                     track_rejected_pairs.extend((i[1][0]['pair_name'], self.products[i[0]+1][0]['pair_name']))
-                    if self.verbose:
-                        log.warning("Gap for interferogram %s", i[1][0]['pair_name'])
+                    log.debug("Gap for interferogram %s", i[1][0]['pair_name'])
 
             # Products correspond to different dates, so pass both as separate IFGs.
             else:

@@ -63,8 +63,7 @@ class Stitching:
         self.outFileUnw = './unwMerged'
         self.outFileConnComp = './connCompMerged'
         self.outputFormat='ENVI'
-        self.verbose=False
-        log.setLevel('DEBUG') if self.verbose else ''
+
         # stitching methods, by default leverage product overlap method
         # other options would be to leverage connected component
         self.setStitchMethod("overlap")
@@ -147,7 +146,7 @@ class Stitching:
 
     def setVerboseMode(self,verbose):
         """ Set verbose output mode"""
-        self.verbose = verbose
+        logger.setLevel(logging.DEBUG)
 
     def __verifyInputs__(self):
         '''

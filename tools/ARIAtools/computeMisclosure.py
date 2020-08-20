@@ -164,7 +164,8 @@ class stack:
         self.excludePairs = excludePairs
 
         # Other
-        log.setLevel('DEBUG') if self.verbose else ''
+        if self.verbose: logger.setLevel(logging.DEBUG)
+
 
         # Read stack data and retrieve list of dates
         self.__loadStackData__()

@@ -549,7 +549,7 @@ def get_extent(path_ds, shrink=None):
 
 def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-
+    logger.setLevel(logging.INFO)
     log.info("***Plotting Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product

@@ -19,6 +19,7 @@ from ARIAtools.vrtmanager import rasterAverage
 from ARIAtools.logger import logger
 
 log = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
     '''

@@ -20,6 +20,7 @@ import timeit as T
 import logging
 from ARIAtools.logger import logger
 log = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class Vertex(object):
     '''
