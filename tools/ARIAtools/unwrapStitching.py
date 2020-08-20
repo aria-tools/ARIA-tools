@@ -1380,7 +1380,7 @@ def point2unwPhase(inputs):
         unwPhase = np.mean(unwData[connData==connCompID])
         np.where(connData==connCompID)
     except:
-        log.error("Looks like the region is not large enough, cannot find your connected component: %s", connCompID)
+        log.error("Looks like the region is not large enough, cannot find your connected component: %s. Entering debug mode.", connCompID)
         print(connData)
         pdb.set_trace()
 
