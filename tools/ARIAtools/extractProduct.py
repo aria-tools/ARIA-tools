@@ -17,11 +17,11 @@ from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
-log = logging.getLogger(__name__)
-
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+log = logging.getLogger(__name__)
 
 def createParser():
     '''
@@ -409,7 +409,7 @@ class metadata_qualitycheck:
         #mask by nodata value
         self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
 
-        if self.verbose: log.setLevel('DEBUG')
+        if self.verbose: logger.setLevel(logging.DEBUG)
 
         # Run class
         self.__run__()

@@ -11,15 +11,18 @@ import os
 import numpy as np
 from osgeo import gdal
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import logging
+from ARIAtools.logger import logger
+
+from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.mask_util import prep_mask
 
 gdal.UseExceptions()
 
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
-# Import functions
-from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.mask_util import prep_mask
+log = logging.getLogger(__name__)
 
 def createParser():
     '''
@@ -53,8 +56,6 @@ def createParser():
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
-
-
 
 class plot_class:
     '''
@@ -197,9 +198,8 @@ class plot_class:
         # residual = L-np.dot(B,dS)
         # RMSE = np.sqrt(np.sum(residual**2)/len(residual))
         if np.linalg.matrix_rank(B1)!=len(list(dateDict.keys()))-1:
-            print('Baseline plot warning!')
-            print('Design matrix is rank deficient. Network is disconnected.')
-            print('Using a fully connected network is recommended.')
+            log.warning('Design matrix is rank deficient. Network is disconnected. '\
+                                'Using a fully connected network is recommended.')
 
         offset_dict={}
         # Plot dot for each date
@@ -440,9 +440,8 @@ class plot_class:
         zero = np.array([0.],np.float32)
         S = np.concatenate((zero,np.cumsum([dS*dtbase])))
         if np.linalg.matrix_rank(B1)!=len(list(dateDict.keys()))-1:
-            print('Baseline plot warning!')
-            print('Design matrix is rank deficient. Network is disconnected.')
-            print('Using a fully connected network is recommended.')
+            log.warning('Design matrix is rank deficient. Network is disconnected. '\
+                                'Using a fully connected network is recommended.')
 
         offset_dict={}
         # Plot dot for each date
@@ -550,8 +549,8 @@ def get_extent(path_ds, shrink=None):
 
 def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-
-    print("***Plotting Function:***")
+    logger.setLevel(logging.INFO)
+    log.info("***Plotting Function:***")
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
@@ -559,7 +558,7 @@ def main(inps=None):
 
     # If user requests to generate all plots.
     if inps.plotall:
-        print('"-plotall"==True. All plots will be made.')
+        log.info('"-plotall"==True. All plots will be made.')
         inps.plottracks=True
         inps.plotbperp=True
         inps.plotcoh=True
@@ -569,9 +568,9 @@ def main(inps=None):
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower()=='all':
         import multiprocessing
-        print('User specified use of all %s threads for gdal multiprocessing'%(str(multiprocessing.cpu_count())))
+        log.info('User specified use of all %s threads for gdal multiprocessing', multiprocessing.cpu_count())
         inps.num_threads='ALL_CPUS'
-    print('Thread count specified for gdal multiprocessing = %s'%(inps.num_threads))
+    log.info('Thread count specified for gdal multiprocessing = %s', inps.num_threads)
 
     if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
         # Import functions
@@ -590,34 +589,34 @@ def main(inps=None):
 
     # Make spatial extent plot
     if inps.plottracks:
-        print("- Make plot of track latitude extents vs bounding bbox/common track extent.")
+        log.info("- Make plot of track latitude extents vs bounding bbox/common track extent.")
         make_plot=plot_class([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
         make_plot.plot_extents(figwidth=inps.figwidth)
 
 
     # Make pbaseline plot
     if inps.plotbperp:
-        print("- Make baseline plot and histogram.")
+        log.info("- Make baseline plot and histogram.")
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir)
         make_plot.plot_pbaselines()
 
 
     # Make average land coherence plot
     if inps.plotcoh:
-        print("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
+        log.info("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, num_threads=inps.num_threads)
         make_plot.plot_coherence()
 
 
     # Generate average land coherence raster
     if inps.makeavgoh:
-        print("- Generate 2D raster of average coherence.")
+        log.info("- Generate 2D raster of average coherence.")
         make_plot=plot_class([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         make_plot.plot_avgcoherence()
 
 
     # Make pbaseline/coherence combo plot
     if inps.plotbperpcoh:
-        print("- Make baseline plot that is color-coded with respect to mean IFG coherence.")
+        log.info("- Make baseline plot that is color-coded with respect to mean IFG coherence.")
         make_plot=plot_class([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
         make_plot.plotbperpcoh()
