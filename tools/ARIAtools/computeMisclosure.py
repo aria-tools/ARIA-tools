@@ -374,13 +374,12 @@ class stack:
             for triplet in self.triplets:
                 strPair = [self.__datePair2strPair__(pair) for pair in triplet]
                 tripletFile.write('{}\n'.format(strPair))
-            tripletFile.close()
 
         # Report if requested
         if printTriplets == True:
             # Print to screen
            log.info('Existing triplets:')
-            for triplet in self.triplets:
+           for triplet in self.triplets:
                 log.info([self.__datePair2strPair__(pair) for pair in triplet])
         if self.verbose == True:
             log.info('%s existing triplets found based on search criteria', self.nTriplets)
@@ -527,7 +526,10 @@ class stack:
 
         else:
             # Use a random reference point
-            self.__autoReferencePoint__()
+            try:
+                self.__autoReferencePoint__()
+            except Exception:
+                log.exception('Coherence too low for reference point selection')
 
     # Random reference point
     def __autoReferencePoint__(self):
@@ -559,9 +561,7 @@ class stack:
 
             # Break loop after 10000 iterations
             if n == 10000:
-                msg = f'No reference point with coherence >= {coh_min} found'
-                log.error(msg)
-                raise Exception(msg)
+                raise Exception(f'No reference point with coherence >= {coh_min} found')
 
         # Convert to lon/lat
         self.refLon,self.refLat = self.XY2LoLa(self.refX,self.refY)
@@ -808,7 +808,7 @@ class stack:
             qx,qy = queryXY
             qLon,qLat = self.XY2LoLa(queryXY[0],queryXY[1])
 
-        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f' qx, qy, bqLon, qLat)
+        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f', qx, qy, bqLon, qLat)
 
         # Plot query points on map
         self.netMscAx.plot(qx,qy,color='k',marker='o',markerfacecolor='w',zorder=3)
