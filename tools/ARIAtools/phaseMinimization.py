@@ -865,6 +865,7 @@ def wrapValue(x):
 
 # Command Line argument parser
 def firstPassCommandLine():
+  import argparse
 
   # Creating the parser for the input arguments
   parser = argparse.ArgumentParser(description='Phase Unwrapping')

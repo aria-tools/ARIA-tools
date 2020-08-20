@@ -15,6 +15,7 @@ from ARIAtools.logger import logger
 gdal.UseExceptions()
 
 log = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def createParser():
     '''

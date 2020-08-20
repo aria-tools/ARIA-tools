@@ -808,7 +808,7 @@ class stack:
             qx,qy = queryXY
             qLon,qLat = self.XY2LoLa(queryXY[0],queryXY[1])
 
-        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f', qx, qy, bqLon, qLat)
+        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f', qx, qy, qLon, qLat)
 
         # Plot query points on map
         self.netMscAx.plot(qx,qy,color='k',marker='o',markerfacecolor='w',zorder=3)
