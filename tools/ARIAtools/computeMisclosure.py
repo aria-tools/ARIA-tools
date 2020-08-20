@@ -281,7 +281,6 @@ class stack:
                     excludePairs = exclFile.readlines()
                     excludePairs = [pair.strip('\n') for pair in excludePairs]
                     self.excludePairs = self.__pairList2dateList__(excludePairs)
-                    exclFile.close()
             else:
                 # Treat as list - split at spaces
                 excludePairs = self.excludePairs.split(' ')
@@ -380,7 +379,7 @@ class stack:
         if printTriplets == True:
             # Print to screen
            log.info('Existing triplets:')
-            for triplet in self.triplets:
+           for triplet in self.triplets:
                 log.info([self.__datePair2strPair__(pair) for pair in triplet])
         if self.verbose == True:
             log.info('%s existing triplets found based on search criteria', self.nTriplets)
@@ -808,7 +807,7 @@ class stack:
             qx,qy = queryXY
             qLon,qLat = self.XY2LoLa(queryXY[0],queryXY[1])
 
-        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f' qx, qy, bqLon, qLat)
+        log.debug('Query point: X %s / Y %s; Lon %.4f / Lat %.4f', qx, qy, bqLon, qLat)
 
         # Plot query points on map
         self.netMscAx.plot(qx,qy,color='k',marker='o',markerfacecolor='w',zorder=3)
