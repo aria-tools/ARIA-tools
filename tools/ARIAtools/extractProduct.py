@@ -414,33 +414,30 @@ class metadata_qualitycheck:
         # Run class
         self.__run__()
 
-    def __truncateArray__(self, data_array_band, Xmask, Ymask, direction='col'):
-        #crop out columns with any masked values
-        if direction=='col':
-            Xmask=Xmask.T[np.all(data_array_band.T.mask == False, axis=1)].T
-            Ymask=Ymask.T[np.all(data_array_band.T.mask == False, axis=1)].T
-            data_array_band=data_array_band.T[np.all(data_array_band.T.mask == False, axis=1)].T
-        #crop out rows with any masked values
-        if direction=='row':
-            Xmask=Xmask[np.all(data_array_band.mask == False, axis=1)]
-            Ymask=Ymask[np.all(data_array_band.mask == False, axis=1)]
-            data_array_band=data_array_band[np.all(data_array_band.mask == False, axis=1)]
+    def __truncateArray__(self, data_array_band, Xmask, Ymask):
+        # Mask columns/rows which are entirely made up of 0s
+        #first must crop all columns with no valid values
+        nancols=np.all(data_array_band.mask == True, axis=0)
+        data_array_band=data_array_band[:,~nancols]
+        Xmask=Xmask[:,~nancols]
+        Ymask=Ymask[:,~nancols]
+        #first must crop all rows with no valid values
+        nanrows=np.all(data_array_band.mask == True, axis=1)
+        data_array_band=data_array_band[~nanrows]
+        Xmask=Xmask[~nanrows]
+        Ymask=Ymask[~nanrows]
 
         return data_array_band, Xmask, Ymask
 
     def __getCovar__(self, prof_direc, profprefix=''):
         from scipy.stats import linregress
+        # Mask columns/rows which are entirely made up of 0s
+        if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
 
         #append prefix for plot names
         prof_direc=profprefix+prof_direc
-
-        #make sure no empty rows/columns are passed
-        if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-            #truncate columns of nodata
-            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
-            #truncate rows of nodata
-            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'row')
 
         #iterate through transpose of matrix if looking in azimuth
         arrT=''
@@ -452,7 +449,7 @@ class metadata_qualitycheck:
         for i in enumerate(eval('self.data_array_band%s'%(arrT))):
             mid_line=i[1]
             xarr=np.array(range(len(mid_line)))
-            #truncate columns of 0s
+            #remove masked values from slice
             if mid_line.mask.size!=1:
                 if True in mid_line.mask:
                     xarr=xarr[~mid_line.mask]
@@ -525,7 +522,6 @@ class metadata_qualitycheck:
                 self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
                 #mask by nodata value
                 self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
-                np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
                 negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
                 #Unique bug-fix for bPerp layers with sign-flips
                 if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) \
@@ -538,9 +534,6 @@ class metadata_qualitycheck:
                     # regular grid covering the domain of the data
                     X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
                     Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-                    #truncate columns of nodata
-                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
                     # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
                     if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.0015:
                         maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
@@ -550,24 +543,13 @@ class metadata_qualitycheck:
                         #mask all values below mean
                         else:
                             self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
+                    # Mask columns/rows which are entirely made up of 0s
                     if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-                        #first must crop all columns with no valid values
-                        nancols=np.all(self.data_array_band.mask == True, axis=0)
-                        self.data_array_band=self.data_array_band[:,~nancols]
-                        Xmask=Xmask[:,~nancols]
-                        Ymask=Ymask[:,~nancols]
-                        #first must crop all rows with no valid values
-                        nanrows=np.all(self.data_array_band.mask == True, axis=1)
-                        self.data_array_band=self.data_array_band[~nanrows]
-                        Xmask=Xmask[~nanrows]
-                        Ymask=Ymask[~nanrows]
-                        #truncate columns of nodata
-                        if self.data_array_band[np.all(self.data_array_band.mask == False, axis=1)].mask.all()==True:
-                            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
-                        #truncate rows of nodata
-                        else:
-                            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'row')
+                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
                     # truncated grid covering the domain of the data
+                    Xmask=Xmask[~self.data_array_band.mask]
+                    Ymask=Ymask[~self.data_array_band.mask]
+                    self.data_array_band = self.data_array_band[~self.data_array_band.mask]
                     XX = Xmask.flatten()
                     YY = Ymask.flatten()
                     A = np.c_[XX, YY, np.ones(len(XX))]
