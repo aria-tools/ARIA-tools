@@ -388,10 +388,10 @@ if __name__ == '__main__':
 
     # pre-staged files
     downloadDate = ['20141116_20141023']
-    downloadFiles = ['https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2.nc',
-             'https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2.nc',
-             'https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141210_20141023-030745-14420N_12396N-PP-ec61-v2_0_2/S1-GUNW-D-R-079-tops-20141210_20141023-030745-14420N_12396N-PP-ec61-v2_0_2.nc',
-             'https://aria-products.jpl.nasa.gov/search/dataset/grq_v2.0.2_s1-gunw-released/S1-GUNW-D-R-079-tops-20141210_20141023-030810-12923N_10895N-PP-477c-v2_0_2/S1-GUNW-D-R-079-tops-20141210_20141023-030810-12923N_10895N-PP-477c-v2_0_2.nc']
+    downloadFiles = ['https://grfn.asf.alaska.edu/door/download/S1-GUNW-D-R-079-tops-20141116_20141023-030926-08430N_06390N-PP-5c6d-v2_0_2.nc',
+             'https://grfn.asf.alaska.edu/door/download/S1-GUNW-D-R-079-tops-20141116_20141023-030901-09928N_07891N-PP-7d6c-v2_0_2.nc','https://grfn.asf.alaska.edu/door/download/S1-GUNW-D-R-079-tops-20141116_20141023-030836-11425N_09393N-PP-3df1-v2_0_2.nc',
+             'https://grfn.asf.alaska.edu/door/download/S1-GUNW-D-R-079-tops-20141116_20141023-030811-12922N_10895N-PP-a98f-v2_0_2.nc','https://grfn.asf.alaska.edu/door/download/S1-GUNW-D-R-079-tops-20141116_20141023-030746-14420N_12395N-PP-75c0-v2_0_2.nc',
+             'https://grfn.asf.alaska.edu/door/download/S1-GUNW-D-R-079-tops-20141116_20141023-030719-16084N_14064N-PP-3545-v2_0_2.nc']
 
 
     # download the data into a toplevel folder
