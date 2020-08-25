@@ -1912,3 +1912,44 @@ def product_stitch_2stage(unw_files, conn_files, prod_bbox_files, bbox_file, pro
     unw.setVerboseMode(verbose)
     unw.unwrapComponents()
 
+def product_stitch_Giangi(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+    '''
+        Stitching of products using the two-stage unwrapper approach
+        i.e. minimize the discontinuities between connected components
+    '''
+
+    import pdb
+    
+    # The solver used in minimizing the stiching of products
+    if unwrapper_2stage_name is None:
+        unwrapper_2stage_name = 'REDARC0'
+
+    if solver_2stage is None:
+        # If unwrapper_2state_name is MCF then solver is ignored
+        # and relaxIV MCF solver is used by default
+        solver_2stage = 'pulp'
+
+    # report method to user
+    print('STITCH Settings: Connected component approach')
+    print('Name: %s'%unwrapper_2stage_name)
+    print('Solver: %s'%solver_2stage)
+
+
+    # First, run the regular sticher, this will
+    # (1) correct for range offset
+    # (2) minimize the phase jump between adjacent product
+    unw = UnwrapOverlap()
+    unw.setInpFile(unw_files)
+    unw.setConnCompFile(conn_files)
+    unw.setOutFileConnComp(outFileConnComp + "_intermediate")
+    unw.setOutFileUnw(outFileUnw + "_intermediate")
+    unw.setProdBBoxFile(prod_bbox_files)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setVerboseMode(verbose)
+    unw.UnwrapOverlap()
+    
+    
+    # make some changes here 
