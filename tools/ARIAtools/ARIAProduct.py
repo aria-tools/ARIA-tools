@@ -263,7 +263,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 rdrmetadata_dict['slantRangeStart']=798980.125
                 rdrmetadata_dict['slantRangeEnd']=956307.125
                 #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
-                rdrmetadata_dict['sceneLength']=27
+                rdrmetadata_dict['sceneLength']=35
             elif basename.split('-')[0]=='ALOS2':
                 rdrmetadata_dict['missionID']='ALOS-2'
                 rdrmetadata_dict['productType']='UNW GEO IFG'
