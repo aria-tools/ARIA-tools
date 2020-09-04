@@ -74,6 +74,7 @@ class Downloader(object):
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
 
+
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
@@ -98,8 +99,7 @@ class Downloader(object):
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
 
-            # prod_dl(self.inps.num_threads)
-            prod_dl(10)
+            prod_dl(self.inps.num_threads)
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
@@ -280,7 +280,9 @@ def prod_dl(nt):
     chunk_check = []
     # sanity check
     for chunk in chunks: chunk_check.extend(chunk)
-    assert chunk_check == downloader.files, 'Chunking failed'
+    if not chunk_check == downloader.files:
+        log.error('Numpy incorrectly split product list; run serially')
+        raise RuntimeError
 
     # the ASF downloader obj must be called again in here otherwise multiprocessing fails
     with multiprocessing.Pool(nt) as pool:
