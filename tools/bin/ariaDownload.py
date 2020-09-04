@@ -8,14 +8,11 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-import os
-import os.path as op
-import shutil
-import math
-import re
-import json
-import requests
+import os, os.path as op
 import argparse
+import shutil, math
+import re, json, requests
+import numpy as np
 from datetime import datetime
 import logging
 from ARIAtools.logger import logger
@@ -37,6 +34,7 @@ def createParser():
     parser.add_argument('-p', '--pass', dest='passw', default=None, type=str, help='NASA Earthdata URS user password. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
     parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
     parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: ariaDownload.py -t 004 --daysmore 364.')
+    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='1', type=str, help='Specify number of threads for multiprocessing download. By default "1". Can also specify "All" to use all available threads.')
     parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('-v', '--verbose', dest='v', action='store_true', help='Print products to be downloaded to stdout')
@@ -100,16 +98,15 @@ class Downloader(object):
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
 
-            import ASFDataDload as AD
-            downloader = AD.bulk_downloader()
-            downloader.download_files()
-            downloader.print_summary()
+            # prod_dl(self.inps.num_threads)
+            prod_dl(10)
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
             os.remove(fileName)
 
         return urls
+
 
     def form_url(self):
         url = f'{self.url_base}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'
@@ -263,6 +260,40 @@ class Downloader(object):
        log.info(f'Response was {response.getcode()}')
        log.info('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
        os.sys.exit(1)
+
+def prod_dl(nt):
+    """ Perform downloading using ASF bulk dl; parallel processing supported """
+    import multiprocessing
+    import ASFDataDload as AD
+    downloader  = AD.bulk_downloader()
+    max_threads = multiprocessing.cpu_count()
+
+    if nt == 'all':
+        nt = max_threads
+    else:
+        nt = int(nt)
+
+    nt = nt if nt < max_threads else max_threads
+    log.info('Using  %s threads for parallel downloads', nt)
+    chunks = np.array_split(downloader.files, nt)
+    chunks = [chunk for chunk in chunks if chunk.size > 0]
+    chunk_check = []
+    # sanity check
+    for chunk in chunks: chunk_check.extend(chunk)
+    assert chunk_check == downloader.files, 'Chunking failed'
+
+    # the ASF downloader obj must be called again in here otherwise multiprocessing fails
+    with multiprocessing.Pool(nt) as pool:
+         pool.map(_dl_helper, chunks)
+
+def _dl_helper(files):
+    """ Helper function for parallel processing """
+    import ASFDataDload as AD
+    downloader = AD.bulk_downloader()
+    files = [files] if isinstance(files, str) else files
+    downloader.files = files
+    downloader.download_files()
+    downloader.print_summary()
 
 def check_cookie_is_logged_in(cj):
     """Make sure successfully logged into URS; try to get cookie"""
