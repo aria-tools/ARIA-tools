@@ -17,11 +17,11 @@ from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
-log = logging.getLogger(__name__)
-
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+log = logging.getLogger(__name__)
 
 def createParser():
     '''
@@ -409,38 +409,35 @@ class metadata_qualitycheck:
         #mask by nodata value
         self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
 
-        if self.verbose: log.setLevel('DEBUG')
+        if self.verbose: logger.setLevel(logging.DEBUG)
 
         # Run class
         self.__run__()
 
-    def __truncateArray__(self, data_array_band, Xmask, Ymask, direction='col'):
-        #crop out columns with any masked values
-        if direction=='col':
-            Xmask=Xmask.T[np.all(data_array_band.T.mask == False, axis=1)].T
-            Ymask=Ymask.T[np.all(data_array_band.T.mask == False, axis=1)].T
-            data_array_band=data_array_band.T[np.all(data_array_band.T.mask == False, axis=1)].T
-        #crop out rows with any masked values
-        if direction=='row':
-            Xmask=Xmask[np.all(data_array_band.mask == False, axis=1)]
-            Ymask=Ymask[np.all(data_array_band.mask == False, axis=1)]
-            data_array_band=data_array_band[np.all(data_array_band.mask == False, axis=1)]
+    def __truncateArray__(self, data_array_band, Xmask, Ymask):
+        # Mask columns/rows which are entirely made up of 0s
+        #first must crop all columns with no valid values
+        nancols=np.all(data_array_band.mask == True, axis=0)
+        data_array_band=data_array_band[:,~nancols]
+        Xmask=Xmask[:,~nancols]
+        Ymask=Ymask[:,~nancols]
+        #first must crop all rows with no valid values
+        nanrows=np.all(data_array_band.mask == True, axis=1)
+        data_array_band=data_array_band[~nanrows]
+        Xmask=Xmask[~nanrows]
+        Ymask=Ymask[~nanrows]
 
         return data_array_band, Xmask, Ymask
 
     def __getCovar__(self, prof_direc, profprefix=''):
         from scipy.stats import linregress
+        # Mask columns/rows which are entirely made up of 0s
+        if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
 
         #append prefix for plot names
         prof_direc=profprefix+prof_direc
-
-        #make sure no empty rows/columns are passed
-        if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-            #truncate columns of nodata
-            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
-            #truncate rows of nodata
-            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'row')
 
         #iterate through transpose of matrix if looking in azimuth
         arrT=''
@@ -452,7 +449,7 @@ class metadata_qualitycheck:
         for i in enumerate(eval('self.data_array_band%s'%(arrT))):
             mid_line=i[1]
             xarr=np.array(range(len(mid_line)))
-            #truncate columns of 0s
+            #remove masked values from slice
             if mid_line.mask.size!=1:
                 if True in mid_line.mask:
                     xarr=xarr[~mid_line.mask]
@@ -525,7 +522,6 @@ class metadata_qualitycheck:
                 self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
                 #mask by nodata value
                 self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
-                np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
                 negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
                 #Unique bug-fix for bPerp layers with sign-flips
                 if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) \
@@ -538,9 +534,6 @@ class metadata_qualitycheck:
                     # regular grid covering the domain of the data
                     X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
                     Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-                    #truncate columns of nodata
-                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
                     # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
                     if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.0015:
                         maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
@@ -550,24 +543,13 @@ class metadata_qualitycheck:
                         #mask all values below mean
                         else:
                             self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
+                    # Mask columns/rows which are entirely made up of 0s
                     if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-                        #first must crop all columns with no valid values
-                        nancols=np.all(self.data_array_band.mask == True, axis=0)
-                        self.data_array_band=self.data_array_band[:,~nancols]
-                        Xmask=Xmask[:,~nancols]
-                        Ymask=Ymask[:,~nancols]
-                        #first must crop all rows with no valid values
-                        nanrows=np.all(self.data_array_band.mask == True, axis=1)
-                        self.data_array_band=self.data_array_band[~nanrows]
-                        Xmask=Xmask[~nanrows]
-                        Ymask=Ymask[~nanrows]
-                        #truncate columns of nodata
-                        if self.data_array_band[np.all(self.data_array_band.mask == False, axis=1)].mask.all()==True:
-                            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'col')
-                        #truncate rows of nodata
-                        else:
-                            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask, 'row')
+                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
                     # truncated grid covering the domain of the data
+                    Xmask=Xmask[~self.data_array_band.mask]
+                    Ymask=Ymask[~self.data_array_band.mask]
+                    self.data_array_band = self.data_array_band[~self.data_array_band.mask]
                     XX = Xmask.flatten()
                     YY = Ymask.flatten()
                     A = np.c_[XX, YY, np.ones(len(XX))]
@@ -654,11 +636,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
         del dem_array
 
     # Save file
-    renderVRT(outname, out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
+    renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
 
     # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
     # Crop to track extents
-    gdal.Warp(outname, outname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite'])).ReadAsArray()
+    gdal.Warp(outname, outname+'_temp', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+    #remove temp files
+    for i in glob.glob(outname+'_temp*'): os.remove(i)
 
     # Update VRT
     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
