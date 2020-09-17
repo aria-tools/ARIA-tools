@@ -264,7 +264,7 @@ def prod_dl(nt):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
     import multiprocessing
     import ASFDataDload as AD
-    args        = os.sys.argv 
+    args = os.sys.argv 
     os.sys.argv = [] # gets around spurious messages
     downloader  = AD.bulk_downloader()
     max_threads = multiprocessing.cpu_count()
