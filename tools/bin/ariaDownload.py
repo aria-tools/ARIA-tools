@@ -78,7 +78,7 @@ class Downloader(object):
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
-            log.info(script, file=open(dst, 'w'))
+            print(script, file=open(dst, 'w'))
             log.info(f'Wrote .KMZ to:\n\t %s', dst)
 
         elif self.inps.output == 'Url':
