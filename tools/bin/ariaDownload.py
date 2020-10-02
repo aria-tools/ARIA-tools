@@ -282,8 +282,8 @@ def prod_dl(inps, dct_prod):
     for chunk in chunks1:
         chunks     = np.array_split(chunk, nt)
         lst_dcts   = [vars(inps)]*nt  # Namespace->dctionary, repeat it
-        for i in range(len(chunks)): # put split up files to the objects for threads
-            lst_dcts[i]['files'] = chunks[i]
+        for i, chunk1 in enumerate(chunks): # put split up files to the objects for threads
+            lst_dcts[i]['files'] = chunk1
 
         with multiprocessing.Pool(nt) as pool:
              pool.map(_dl_helper, lst_dcts)
@@ -298,7 +298,7 @@ def prod_dl(inps, dct_prod):
 def _dl_helper(inp_dct):
     """ Helper function for parallel processing """
     prod_dct = {'product_list': ','.join(inp_dct['files'])}
-    log.debug ('# of files: ', len(inp_dct['files']))
+    log.debug ('# of files: %d', len(inp_dct['files']))
     script   = requests.post(f'{inp_dct["url_base"]}&output=Download', data=prod_dct).text
     fileName = os.path.abspath(op.join(inp_dct['wd'],'ASFDataDload.py'))
     with open(fileName, 'w') as f: f.write(script)
