@@ -91,10 +91,6 @@ class Downloader(object):
         elif self.inps.output == 'Download':
             os.makedirs(self.inps.wd, exist_ok=True)
             os.chdir(self.inps.wd)
-            fileName = os.path.abspath(op.join(self.inps.wd,'ASFDataDloadTMP.py'))
-            with open(fileName, 'w') as f:
-                f.write(script)
-
             os.sys.path.append(os.path.abspath(self.inps.wd))
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
@@ -285,9 +281,10 @@ def prod_dl(inps, dct_prod):
     check   = []
     for chunk in chunks1:
         chunks     = np.array_split(chunk, nt)
-        inps.files = files
-        lst_dcts      = [vars(inps)]*nt  # Namespace->dctionary, repeat it
-        # the ASF downloader obj must be called again in here otherwise multiprocessing fails
+        lst_dcts   = [vars(inps)]*nt  # Namespace->dctionary, repeat it
+        for i in range(len(chunks)): # put split up files to the objects for threads
+            lst_dcts[i]['files'] = chunks[i]
+
         with multiprocessing.Pool(nt) as pool:
              pool.map(_dl_helper, lst_dcts)
 
@@ -301,6 +298,7 @@ def prod_dl(inps, dct_prod):
 def _dl_helper(inp_dct):
     """ Helper function for parallel processing """
     prod_dct = {'product_list': ','.join(inp_dct['files'])}
+    log.debug ('# of files: ', len(inp_dct['files']))
     script   = requests.post(f'{inp_dct["url_base"]}&output=Download', data=prod_dct).text
     fileName = os.path.abspath(op.join(inp_dct['wd'],'ASFDataDload.py'))
     with open(fileName, 'w') as f: f.write(script)
