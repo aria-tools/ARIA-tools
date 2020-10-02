@@ -68,16 +68,17 @@ class Downloader(object):
 
     def __call__(self):
         url              = self.form_url()
-        dict_prod, urls  = self.parse_json(url)
-        script           = requests.post(f'{self.url_base}&output={self.inps.output}', data=dict_prod).text
+        dct_prod, urls  = self.parse_json(url)
+        script = requests.post(f'{self.url_base}&output={self.inps.output}', data=dct_prod).text
+
 
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
 
-
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
-            dst = self._fmt_dst()
+            dst    = self._fmt_dst()
+            script = requests.post(f'{self.url_base}&output={self.inps.output}', data=dct_prod).text
             print(script, file=open(dst, 'w'))
             log.info(f'Wrote .KMZ to:\n\t %s', dst)
 
@@ -90,15 +91,15 @@ class Downloader(object):
         elif self.inps.output == 'Download':
             os.makedirs(self.inps.wd, exist_ok=True)
             os.chdir(self.inps.wd)
-            fileName = os.path.abspath(op.join(self.inps.wd,'ASFDataDload.py'))
+            fileName = os.path.abspath(op.join(self.inps.wd,'ASFDataDloadTMP.py'))
             with open(fileName, 'w') as f:
                 f.write(script)
 
             os.sys.path.append(os.path.abspath(self.inps.wd))
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
-
-            prod_dl(self.inps.num_threads)
+            inps.url_base = self.url_base
+            prod_dl(self.inps, dct_prod)
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
@@ -260,43 +261,53 @@ class Downloader(object):
        log.info('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
        os.sys.exit(1)
 
-def prod_dl(nt):
+def prod_dl(inps, dct_prod):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
     import multiprocessing
-    import ASFDataDload as AD
-    args = os.sys.argv
-    os.sys.argv = [] # gets around spurious messages
-    downloader  = AD.bulk_downloader()
-    max_threads = multiprocessing.cpu_count()
-    os.sys.argv = args # required for pool
+    # import ASFDataDload as AD
+    # args = os.sys.argv
+    # os.sys.argv = [] # gets around spurious messages
+    # downloader  = AD.bulk_downloader()
 
-    if nt == 'all':
+
+    max_threads = multiprocessing.cpu_count()
+    # os.sys.argv = args # required for pool
+
+    if inps.num_threads == 'all':
         nt = max_threads
     else:
-        nt = int(nt)
+        nt = int(inps.num_threads)
 
     nt = nt if nt < max_threads else max_threads
     log.info('Using  %s threads for parallel downloads', nt)
-    chunks = np.array_split(downloader.files, nt)
-    chunks = [chunk for chunk in chunks if chunk.size > 0]
-    chunk_check = []
-    # sanity check
-    for chunk in chunks: chunk_check.extend(chunk)
-    if not chunk_check == downloader.files:
-        log.error('Numpy incorrectly split product list; run serially')
-        raise RuntimeError
+    files   = dct_prod['product_list'].split(',')
+    chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
+    check   = []
+    for chunk in chunks1:
+        chunks     = np.array_split(chunk, nt)
+        inps.files = files
+        lst_dcts      = [vars(inps)]*nt  # Namespace->dctionary, repeat it
+        # the ASF downloader obj must be called again in here otherwise multiprocessing fails
+        with multiprocessing.Pool(nt) as pool:
+             pool.map(_dl_helper, lst_dcts)
 
-    # the ASF downloader obj must be called again in here otherwise multiprocessing fails
-    with multiprocessing.Pool(nt) as pool:
-         pool.map(_dl_helper, chunks)
+        check.extend(chunkc for chunkc in chunks)
 
-def _dl_helper(files):
+    for f in files:
+        if not f in check[0]:
+            log.critical('Downloader missed: %s, grab manually with date range', f)
+
+
+def _dl_helper(inp_dct):
     """ Helper function for parallel processing """
+    prod_dct = {'product_list': ','.join(inp_dct['files'])}
+    script   = requests.post(f'{inp_dct["url_base"]}&output=Download', data=prod_dct).text
+    fileName = os.path.abspath(op.join(inp_dct['wd'],'ASFDataDload.py'))
+    with open(fileName, 'w') as f: f.write(script)
     import ASFDataDload as AD
-    os.sys.argv = [] # gets around spurious messages
-    downloader = AD.bulk_downloader()
-    files = [files] if isinstance(files, str) else files
-    downloader.files = files
+    args, os.sys.argv = os.sys.argv, [] # gets around spurious messages
+    downloader  = AD.bulk_downloader()
+    os.sys.argv = args # required for pool
     downloader.download_files()
     downloader.print_summary()
 
