@@ -99,7 +99,7 @@ class Downloader(object):
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
-            os.remove(fileName)
+            os.remove(op.abspath(op.join(self.inps.wd, 'ASFDataDload.py')))
 
         return urls
 
