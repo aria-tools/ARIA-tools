@@ -78,7 +78,7 @@ class Downloader(object):
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst = self._fmt_dst()
-            log.info(script, file=open(dst, 'w'))
+            print(script, file=open(dst, 'w'))
             log.info(f'Wrote .KMZ to:\n\t %s', dst)
 
         elif self.inps.output == 'Url':
@@ -90,7 +90,6 @@ class Downloader(object):
         elif self.inps.output == 'Download':
             os.makedirs(self.inps.wd, exist_ok=True)
             os.chdir(self.inps.wd)
-            os.sys.argv = []
             fileName = os.path.abspath(op.join(self.inps.wd,'ASFDataDload.py'))
             with open(fileName, 'w') as f:
                 f.write(script)
@@ -265,8 +264,11 @@ def prod_dl(nt):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
     import multiprocessing
     import ASFDataDload as AD
+    args = os.sys.argv
+    os.sys.argv = [] # gets around spurious messages
     downloader  = AD.bulk_downloader()
     max_threads = multiprocessing.cpu_count()
+    os.sys.argv = args # required for pool
 
     if nt == 'all':
         nt = max_threads
@@ -291,6 +293,7 @@ def prod_dl(nt):
 def _dl_helper(files):
     """ Helper function for parallel processing """
     import ASFDataDload as AD
+    os.sys.argv = [] # gets around spurious messages
     downloader = AD.bulk_downloader()
     files = [files] if isinstance(files, str) else files
     downloader.files = files
