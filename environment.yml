@@ -10,7 +10,7 @@ channels:
 dependencies:
   - python>=3.6
   - cartopy
-  - gdal>=3.0
+  - gdal=3.0.4
   - hdf5
   - joblib
   - jupyterlab
