@@ -309,12 +309,6 @@ def _dl_helper(inp_dct):
     dler  = AD.bulk_downloader()
     dler.download_files()
 
-    ## write the summarys to temporary files to aggregate
-    # restore_point = os.sys.stdout
-    # os.sys.stdout = open(op.join(inp_dct['wd'], f'Summary_{inp_dct["ext"]}'), 'w')
-    # os.sys.stdout.close()
-    # os.sys.stdout = restore_point
-    # os.remove(fpath) # delete bulk downloader script
     return dler.success, dler.failed, dler.skipped, dler.total_time, dler.total_bytes
 
 def check_cookie_is_logged_in(cj):
@@ -323,41 +317,6 @@ def check_cookie_is_logged_in(cj):
         if cookie.name == 'urs_user_already_logged':
             return True
     return False
-
-# def rewrite_summary1(workdir):
-#     successes, failures, skips = [], [], []
-#     succ_idx, fail_idx, skip_idx, end_idx = None, None, None, None
-#     for f in os.listdir(workdir):
-#         if not f.startswith('Summary'): continue
-#         path      = os.path.join(workdir, f)
-#         with open(path, 'r') as fh:
-#             txt = fh.readlines()
-#         for i, line in enumerate(txt):
-#             if 'Successes' in line:
-#                 succ_idx = i+1
-#             if 'Failures' in line:
-#                 fail_idx = i+1
-#             if 'Skip' in line:
-#                 skip_idx = i
-#             if 'Average Rate' in line:
-#                 end_idx = i
-#         skip_idx = end_idx if skip_idx is None else skip_idx
-#         fail_idx = skip_idx if fail_idx is None else fail_idx
-#         succ_idx = 0 if succ_idx is None else succ_idx
-#
-#         successes.extend(txt[succ_idx:fail_idx])
-#         failures.extend(txt[fail_idx:skip_idx])
-#         skips.extend(txt[skip_idx:end_idx])
-#         # os.remove(f)
-#     success.insert(0, )
-#
-#     # print ('\n'.join(skips))
-#     # print ('\n'.join(successes))
-#     # print ('\n'.join(failures))
-#     if len(failures)>0:
-#         log.warning ('We recommend running the same ariaDownload command again to attempt to address failures')
-#     else:
-#         log.info ('All files have been downloaded successfully')
 
 def rewrite_summary(infos):
     succeed, failed, skipped, tot_time, tot_bytes = [], [], [], 0, 0
@@ -384,22 +343,6 @@ def rewrite_summary(infos):
         log.critical('We recommend rerunning the same ariaDownload command to address the %d failures', len(failed))
     else:
         log.info ('All files have been downloaded successfully')
-
-# def make_summary(dlObjj):
-#     print (" Successes: {0} files, {1} bytes ".format(len(dlObj.success), dlObj.total_bytes))
-#     dct = {}
-#     for success_file in dlObj.success:
-#        print ("           - {0}  {1:.2f}MB".format(success_file['file'],(success_file['size']/1024.0**2)))
-#     if len(self.failed) > 0:
-#        print ("  Failures: {0} files".format(len(dlObj.failed)))
-#        for failed_file in self.failed:
-#           print ("          - {0}".format(failed_file))
-#     if len(self.skipped) > 0:
-#        print ("  Skipped: {0} files".format(len(dlObj.skipped)))
-#        for skipped_file in self.skipped:
-#           print ("          - {0}".format(skipped_file))
-#     if len(self.success) > 0:
-#        print ("  Average Rate: {0:.2f}MB/sec".format( (dlObj.total_bytes/1024.0**2)/dlObj.total_time))
 
 if __name__ == '__main__':
     inps = cmdLineParse()
