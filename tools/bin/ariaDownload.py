@@ -99,7 +99,6 @@ class Downloader(object):
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
-            os.remove(op.abspath(op.join(self.inps.wd, 'ASFDataDload.py')))
 
         return urls
 
@@ -173,7 +172,7 @@ class Downloader(object):
         dst = op.join(self.inps.wd, 'download_products')
         ext      = '.kmz' if self.inps.output == 'Kml' else '.txt'
         if self.inps.track:
-            dst = '{}_{}track'.format(dst, self.inps.track).replace(',', '-')
+            dst = f'{dst}_{self.inps.track}track'.replace(',', '-')
 
         if self.inps.bbox:
             WSEN     = self._get_bbox().split(',')
@@ -183,11 +182,11 @@ class Downloader(object):
                     WSEN_fmt.append(math.floor(float(coord)))
                 else:
                     WSEN_fmt.append(math.ceil(float(coord)))
-            dst = '{}_{}W{}S{}E{}Nbbox'.format(dst, str(WSEN_fmt[0]), str(WSEN_fmt[1]), str(WSEN_fmt[2]), str(WSEN_fmt[3]))
-        dst  += '_0{}'.format(ext)
+            dst = f'{dst}_{WSEN_fmt[0]}W{WSEN_fmt[1]}S{WSEN_fmt[2]}E{WSEN_fmt[3]}Nbbox'
+        dst  += f'_0{ext}'
         count = 1 # don't overwrite if already exists
         while op.exists(dst):
-            basen  = '{}{}{}'.format(re.split(str(count-1)+ext, op.basename(dst))[0], count, ext)
+            basen  = f'{re.split(str(count-1)+ext, op.basename(dst))[0]}{count}{ext}'
             dst    = op.join(op.dirname(dst), basen)
             count += 1
         return dst
@@ -260,54 +259,63 @@ class Downloader(object):
 def prod_dl(inps, dct_prod):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
     import multiprocessing
-    # import ASFDataDload as AD
-    # args = os.sys.argv
-    # os.sys.argv = [] # gets around spurious messages
-    # downloader  = AD.bulk_downloader()
-
-
     max_threads = multiprocessing.cpu_count()
-    # os.sys.argv = args # required for pool
 
     if inps.num_threads == 'all':
         nt = max_threads
     else:
         nt = int(inps.num_threads)
-
-    nt = nt if nt < max_threads else max_threads
+    nt     = nt if nt < max_threads else max_threads
     log.info('Using  %s threads for parallel downloads', nt)
-    files   = dct_prod['product_list'].split(',')
-    chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
-    check   = []
+
+    files          = dct_prod['product_list'].split(',')
+    chunks1        = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
+    check          = []
     for chunk in chunks1:
         chunks     = np.array_split(chunk, nt)
-        lst_dcts   = [vars(inps)]*nt  # Namespace->dctionary, repeat it
-        for i, chunk1 in enumerate(chunks): # put split up files to the objects for threads
-            lst_dcts[i]['files'] = chunk1
+        lst_dcts   = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
+        for i, chunk1 in enumerate(chunks):
+            lst_dcts[i]['files'] = chunk1 # put split up files to the objects for threads
+            lst_dcts[i]['ext']   = i      # for unique bulk downloader file name
 
         with multiprocessing.Pool(nt) as pool:
-             pool.map(_dl_helper, lst_dcts)
+            try:
+                info = pool.map(_dl_helper, lst_dcts)
+            except Exception as E:
+                print ('ASF bulk downloader error:', E)
+                print ('Likely a bad handshake with the ASF DAAC. Try rerunning')
+                os.sys.exit(1)
 
-        check.extend(chunkc for chunkc in chunks)
+        check.extend(chunkc for chunkc in chunks) # in case products missed in split
 
+    rewrite_summary(info)
+
+    check = [item for sublist in check for item in sublist]
     for f in files:
-        if not f in check[0]:
-            log.critical('Downloader missed: %s, grab manually with date range', f)
-
+        if not f in check:
+            log.critical('File splitting missed: %s; subset your ARIA in command in time to try again', f)
 
 def _dl_helper(inp_dct):
     """ Helper function for parallel processing """
     prod_dct = {'product_list': ','.join(inp_dct['files'])}
     log.debug ('# of files: %d', len(inp_dct['files']))
     script   = requests.post(f'{inp_dct["url_base"]}&output=Download', data=prod_dct).text
-    fileName = os.path.abspath(op.join(inp_dct['wd'],'ASFDataDload.py'))
-    with open(fileName, 'w') as f: f.write(script)
-    import ASFDataDload as AD
+
+    fname    = f'ASFDataDload{inp_dct["ext"]}.py'
+    fpath    = os.path.abspath(os.path.join(inp_dct['wd'], fname))
+    with open(fpath, 'w') as f: f.write(script)
+    AD = __import__(os.path.splitext(fname)[0])
     args, os.sys.argv = os.sys.argv, [] # gets around spurious messages
-    downloader  = AD.bulk_downloader()
-    os.sys.argv = args # required for pool
-    downloader.download_files()
-    downloader.print_summary()
+    dler  = AD.bulk_downloader()
+    dler.download_files()
+
+    ## write the summarys to temporary files to aggregate
+    # restore_point = os.sys.stdout
+    # os.sys.stdout = open(op.join(inp_dct['wd'], f'Summary_{inp_dct["ext"]}'), 'w')
+    # os.sys.stdout.close()
+    # os.sys.stdout = restore_point
+    # os.remove(fpath) # delete bulk downloader script
+    return dler.success, dler.failed, dler.skipped, dler.total_time, dler.total_bytes
 
 def check_cookie_is_logged_in(cj):
     """Make sure successfully logged into URS; try to get cookie"""
@@ -315,6 +323,83 @@ def check_cookie_is_logged_in(cj):
         if cookie.name == 'urs_user_already_logged':
             return True
     return False
+
+# def rewrite_summary1(workdir):
+#     successes, failures, skips = [], [], []
+#     succ_idx, fail_idx, skip_idx, end_idx = None, None, None, None
+#     for f in os.listdir(workdir):
+#         if not f.startswith('Summary'): continue
+#         path      = os.path.join(workdir, f)
+#         with open(path, 'r') as fh:
+#             txt = fh.readlines()
+#         for i, line in enumerate(txt):
+#             if 'Successes' in line:
+#                 succ_idx = i+1
+#             if 'Failures' in line:
+#                 fail_idx = i+1
+#             if 'Skip' in line:
+#                 skip_idx = i
+#             if 'Average Rate' in line:
+#                 end_idx = i
+#         skip_idx = end_idx if skip_idx is None else skip_idx
+#         fail_idx = skip_idx if fail_idx is None else fail_idx
+#         succ_idx = 0 if succ_idx is None else succ_idx
+#
+#         successes.extend(txt[succ_idx:fail_idx])
+#         failures.extend(txt[fail_idx:skip_idx])
+#         skips.extend(txt[skip_idx:end_idx])
+#         # os.remove(f)
+#     success.insert(0, )
+#
+#     # print ('\n'.join(skips))
+#     # print ('\n'.join(successes))
+#     # print ('\n'.join(failures))
+#     if len(failures)>0:
+#         log.warning ('We recommend running the same ariaDownload command again to attempt to address failures')
+#     else:
+#         log.info ('All files have been downloaded successfully')
+
+def rewrite_summary(infos):
+    succeed, failed, skipped, tot_time, tot_bytes = [], [], [], 0, 0
+    for info in infos:
+        if info[0]: succeed.extend(info[0])
+        if info[1]: failed.extend(info[1])
+        if info[2]: skipped.extend(info[2])
+        tot_time += float(info[3])
+        tot_bytes += float(info[4])
+
+
+    log.info ('Successes: %d files, %s bytes', len(succeed), tot_bytes)
+    [print ('\n\t-', sf['file'], f'{sf["size"]/1024**2:.2f}') for sf in succeed]
+
+    if skipped: log.info('Skipped: %d files', len(skipped))
+    [print ('\n\t-', sf) for sf in skipped]
+
+    if failed: log.info('Failures: %d files', len(failed))
+    [print ('\n\t-', sf) for sf in failed]
+
+    if succeed: log.info('Average Rate: %.2f MB/sec', (tot_bytes/1024.0**2)/tot_time)
+
+    if failed:
+        log.critical('We recommend rerunning the same ariaDownload command to address the %d failures', len(failed))
+    else:
+        log.info ('All files have been downloaded successfully')
+
+# def make_summary(dlObjj):
+#     print (" Successes: {0} files, {1} bytes ".format(len(dlObj.success), dlObj.total_bytes))
+#     dct = {}
+#     for success_file in dlObj.success:
+#        print ("           - {0}  {1:.2f}MB".format(success_file['file'],(success_file['size']/1024.0**2)))
+#     if len(self.failed) > 0:
+#        print ("  Failures: {0} files".format(len(dlObj.failed)))
+#        for failed_file in self.failed:
+#           print ("          - {0}".format(failed_file))
+#     if len(self.skipped) > 0:
+#        print ("  Skipped: {0} files".format(len(dlObj.skipped)))
+#        for skipped_file in self.skipped:
+#           print ("          - {0}".format(skipped_file))
+#     if len(self.success) > 0:
+#        print ("  Average Rate: {0:.2f}MB/sec".format( (dlObj.total_bytes/1024.0**2)/dlObj.total_time))
 
 if __name__ == '__main__':
     inps = cmdLineParse()
