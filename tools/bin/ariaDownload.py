@@ -305,7 +305,7 @@ def _dl_helper(inp_dct):
     fpath    = os.path.abspath(os.path.join(inp_dct['wd'], fname))
     with open(fpath, 'w') as f: f.write(script)
     AD = __import__(os.path.splitext(fname)[0])
-    args, os.sys.argv = os.sys.argv, [] # gets around spurious messages
+    os.sys.argv = [] # gets around spurious messages
     dler  = AD.bulk_downloader()
     dler.download_files()
 
