@@ -329,13 +329,13 @@ def rewrite_summary(infos):
 
 
     log.info ('Successes: %d files, %s bytes', len(succeed), tot_bytes)
-    [print ('\n\t-', sf['file'], f'{sf["size"]/1024**2:.2f}') for sf in succeed]
+    _ = [print ('\n\t-', sf['file'], f'{sf["size"]/1024**2:.2f}') for sf in succeed]
 
     if skipped: log.info('Skipped: %d files', len(skipped))
-    [print ('\n\t-', sf) for sf in skipped]
+    _ = [print ('\n\t-', sf) for sf in skipped]
 
     if failed: log.info('Failures: %d files', len(failed))
-    [print ('\n\t-', sf) for sf in failed]
+    _ = [print ('\n\t-', sf) for sf in failed]
 
     if succeed: log.info('Average Rate: %.2f MB/sec', (tot_bytes/1024.0**2)/tot_time)
 
