@@ -343,6 +343,7 @@ def rewrite_summary(infos):
         log.critical('We recommend rerunning the same ariaDownload command to address the %d failures', len(failed))
     else:
         log.info ('All files have been downloaded successfully')
+    return
 
 if __name__ == '__main__':
     inps = cmdLineParse()
