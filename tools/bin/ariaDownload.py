@@ -10,14 +10,12 @@
 
 import os, os.path as op
 import argparse, time
-import shutil, math, io
+import shutil, math
 import re, json, requests
 import numpy as np
 from datetime import datetime
 import logging
-from contextlib import redirect_stdout
 from ARIAtools.logger import logger
-import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 mpl.use('agg')
