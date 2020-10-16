@@ -411,6 +411,7 @@ class MiniLog(object):
     def flush(self):
     """Needed for python 3 compatibility"""
     return
+    
 if __name__ == '__main__':
     inps = cmdLineParse()
     Downloader(inps)()
