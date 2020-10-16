@@ -361,10 +361,7 @@ def rewrite_summary(infos):
     return
 
 def status_plot(wd, rates=None, use_all=False):
-    """
-    Save a plot after each chunk on each core completes.
-    'Most recent' only includes the last ariaDownload run
-    """
+    """ Save plot after each chunk on each core; use_all shows all calls to script """
     if len(rates) == 1: # in case all successful (for testing)
         return
     with open(op.join(wd, 'avg_rates.csv'), 'a') as fh:
@@ -397,9 +394,10 @@ def status_plot(wd, rates=None, use_all=False):
     return
 
 class MiniLog(object):
+
     """ Helper to capture stdout for plotting """
-    # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
     def __init__(self):
+        # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
         self.terminal  = os.sys.stdout
         self.avg_rates = []
         return
@@ -411,8 +409,8 @@ class MiniLog(object):
         return
 
     def flush(self):
-        """ needed for python 3 compatibility """
-        return
+    """Needed for python 3 compatibility"""
+    return
 if __name__ == '__main__':
     inps = cmdLineParse()
     Downloader(inps)()
