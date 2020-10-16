@@ -9,13 +9,18 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os, os.path as op
-import argparse
-import shutil, math
+import argparse, time
+import shutil, math, io
 import re, json, requests
 import numpy as np
 from datetime import datetime
 import logging
+from contextlib import redirect_stdout
 from ARIAtools.logger import logger
+import pandas as pd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+mpl.use('agg')
 
 log = logging.getLogger('ARIAtools')
 
@@ -37,6 +42,7 @@ def createParser():
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='1', type=str, help='Specify number of threads for multiprocessing download. By default "1". Can also specify "All" to use all available threads.')
     parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
+    parser.add_argument('--use_all', dest='use_all', action='store_true', help='Consider all calls to ariaDownload when plotting DL speeds')
     parser.add_argument('-v', '--verbose', dest='v', action='store_true', help='Print products to be downloaded to stdout')
     return parser
 
@@ -75,6 +81,7 @@ class Downloader(object):
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
 
+
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst    = self._fmt_dst()
@@ -101,7 +108,6 @@ class Downloader(object):
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
 
         return urls
-
 
     def form_url(self):
         url = f'{self.url_base}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'
@@ -271,12 +277,14 @@ def prod_dl(inps, dct_prod):
     files          = dct_prod['product_list'].split(',')
     chunks1        = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
     check          = []
+    dl_id          = time.time()  # for tracking the download attempts
     for chunk in chunks1:
         chunks     = np.array_split(chunk, nt)
         lst_dcts   = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
         for i, chunk1 in enumerate(chunks):
             lst_dcts[i]['files'] = chunk1 # put split up files to the objects for threads
             lst_dcts[i]['ext']   = i      # for unique bulk downloader file name
+            lst_dcts[i]['id']    = dl_id
 
         with multiprocessing.Pool(nt) as pool:
             try:
@@ -294,6 +302,7 @@ def prod_dl(inps, dct_prod):
     for f in files:
         if not f in check:
             log.critical('File splitting missed: %s; subset your ARIA in command in time to try again', f)
+    return
 
 def _dl_helper(inp_dct):
     """ Helper function for parallel processing """
@@ -302,12 +311,20 @@ def _dl_helper(inp_dct):
     script   = requests.post(f'{inp_dct["url_base"]}&output=Download', data=prod_dct).text
 
     fname    = f'ASFDataDload{inp_dct["ext"]}.py'
-    fpath    = os.path.abspath(os.path.join(inp_dct['wd'], fname))
+    fpath    = os.path.join(inp_dct['wd'], fname)
     with open(fpath, 'w') as f: f.write(script)
     AD = __import__(os.path.splitext(fname)[0])
     os.sys.argv = [] # gets around spurious messages
+    ## capture stdout for plotting dl speed / time, also print to screen
+    mini   = MiniLog()
+    console, os.sys.stdout = os.sys.stdout, mini
     dler  = AD.bulk_downloader()
     dler.download_files()
+    os.sys.stdout = console
+
+    mini.avg_rates.insert(0, inp_dct['id'])
+
+    status_plot(os.path.join(inp_dct['wd']), mini.avg_rates, inp_dct['use_all'])
 
     return dler.success, dler.failed, dler.skipped, dler.total_time, dler.total_bytes
 
@@ -345,6 +362,59 @@ def rewrite_summary(infos):
         log.info ('All files have been downloaded successfully')
     return
 
+def status_plot(wd, rates=None, use_all=False):
+    """
+    Save a plot after each chunk on each core completes.
+    'Most recent' only includes the last ariaDownload run
+    """
+    if len(rates) == 1: # in case all successful (for testing)
+        return
+    with open(op.join(wd, 'avg_rates.csv'), 'a') as fh:
+        fh.write(','.join([str(avg_rate) for avg_rate in rates]) + '\n')
+
+    timestamps, rates = [], []
+    with open(op.join(wd, 'avg_rates.csv'), 'r') as fh:
+        for line in fh:
+            dat = line.strip().split(',')[1:]
+            timestamps.extend([line.split(',')[0]]*len(dat)) # repeat for later idx
+            rates.extend (dat)
+    timestamps = np.array([float(t) for t in timestamps])
+    rates      = np.array([float(rate) for rate in rates])
+    if not use_all:
+        rates = rates[timestamps==timestamps.max()]
+    x         = range(len(rates))
+    fig, axes = plt.subplots()
+    axes.scatter(x, rates, color='k')
+    if len(x) > 0:
+        coeffs    = np.polyfit(x, rates, 1)
+        trend     = np.polyval(coeffs, x)
+        axes.plot(x, trend, 'r--', label=f'$\Delta$ {coeffs[0]:.3f} MB/sec/prod')
+
+    axes.set_xlabel('ARIA Product Index')
+    axes.set_ylabel('MB/sec')
+    axes.set_title(f'Last Update: {str(datetime.now())}')
+    axes.legend();
+    kws = dict(dpi=150, bbox_inches='tight', pad_inches=0.025, transparent=False)
+    fig.savefig(op.join(wd, 'AvgDlSpeed'), **kws)
+    return
+
+class MiniLog(object):
+    """ Helper to capture stdout for plotting """
+    # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
+    def __init__(self):
+        self.terminal  = os.sys.stdout
+        self.avg_rates = []
+        return
+
+    def write(self, message):
+        self.terminal.write(message)
+        if 'Average Rate' in message:
+            self.avg_rates.append(float(message.strip().split()[-1].strip('MB/sec')))
+        return
+
+    def flush(self):
+        """ needed for python 3 compatibility """
+        return
 if __name__ == '__main__':
     inps = cmdLineParse()
     Downloader(inps)()
