@@ -361,7 +361,7 @@ def rewrite_summary(infos):
     return
 
 def status_plot(wd, rates=None, use_all=False):
-    """ Save plot after each chunk on each core; use_all shows all calls to script """
+    """Save plot after each chunk on each core; use_all shows all calls to script"""
     if len(rates) == 1: # in case all successful (for testing)
         return
     with open(op.join(wd, 'avg_rates.csv'), 'a') as fh:
@@ -380,23 +380,24 @@ def status_plot(wd, rates=None, use_all=False):
     x         = range(len(rates))
     fig, axes = plt.subplots()
     axes.scatter(x, rates, color='k')
-    if len(x) > 0:
+    try:
         coeffs    = np.polyfit(x, rates, 1)
         trend     = np.polyval(coeffs, x)
         axes.plot(x, trend, 'r--', label=f'$\Delta$ {coeffs[0]:.3f} MB/sec/prod')
+    except Exception as E: # polyfit may error if there are only one or two prods
+        pass
 
     axes.set_xlabel('ARIA Product Index')
     axes.set_ylabel('MB/sec')
     axes.set_title(f'Last Update: {str(datetime.now())}')
-    axes.legend();
+    axes.legend()
     kws = dict(dpi=150, bbox_inches='tight', pad_inches=0.025, transparent=False)
     fig.savefig(op.join(wd, 'AvgDlSpeed'), **kws)
     return
 
 class MiniLog(object):
-
-    """ Helper to capture stdout for plotting """
     def __init__(self):
+        """Helper to capture stdout for plotting"""
         # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
         self.terminal  = os.sys.stdout
         self.avg_rates = []
@@ -408,9 +409,9 @@ class MiniLog(object):
             self.avg_rates.append(float(message.strip().split()[-1].strip('MB/sec')))
         return
 
-    def flush(self):
-        """Needed for python 3 compatibility"""
-        return
+    # def flush(self):
+    #     """Needed for python 3 compatibility"""
+    #     return
 
 if __name__ == '__main__':
     inps = cmdLineParse()
