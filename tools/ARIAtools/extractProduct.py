@@ -11,6 +11,7 @@ import numpy as np
 import glob
 from osgeo import gdal
 import logging
+import requests
 from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile
@@ -22,6 +23,8 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
+
+_world_dem = "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
 
 def createParser():
     '''
@@ -98,15 +101,11 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
         Function to load and export DEM, lat, lon arrays.
         If "Download" flag is specified, DEM will be donwloaded on the fly.
     '''
-
-    _world_dem = '/vsicurl/https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1_Ellip/SRTM_GL1_Ellip_srtm.vrt'
-
     # If specified DEM subdirectory exists, delete contents
-    workdir=os.path.join(workdir,'DEM')
-    if os.path.exists(workdir) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')) or demfilename.lower()=='download':
-        for i in glob.glob(os.path.join(workdir,'*dem*')): os.remove(i)
-    if not os.path.exists(workdir):
-        os.mkdir(workdir)
+    workdir = os.path.join(workdir,'DEM')
+    os.makedirs(workdir, exist_ok=True)
+    # if os.path.exists(workdir) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')) or demfilename.lower()=='download':
+    #     for i in glob.glob(os.path.join(workdir,'*dem*')): os.remove(i)
 
     # Get bounds of user bbox_file
     bounds=open_shapefile(bbox_file, 0, 0).bounds
@@ -117,21 +116,26 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
 
     # Download DEM
     if demfilename.lower()=='download':
-        # update demfilename
-        demfilename=os.path.join(workdir,'SRTM_3arcsec.dem')
-        # save uncropped DEM
-        gdal.BuildVRT(os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), _world_dem, options=gdal.BuildVRTOptions(outputBounds=bounds))
-        # save cropped DEM
-        gdal.Warp(demfilename, os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        update_file=gdal.Open(demfilename,gdal.GA_Update)
-        update_file.SetProjection(proj) ; del update_file
-        gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
+        # dl uncropped dem
+        demfilename_uncrop = dl_dem(bounds, workdir)
+
+        # write cropped DEM
+        demfilename        = os.path.join(workdir,'SRTM_3arcsec.dem')
+        gdal.Warp(demfilename, demfilename_uncrop,format=outputFormat,
+                     cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                    outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0],
+                    multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+
+        update_file=gdal.Open(demfilename, gdal.GA_Update)
+        update_file.SetProjection(proj); del update_file
+        gdal.Translate(f'{demfilename}.vrt', demfilename, format='VRT')
         log.info('Downloaded 3 arc-sec SRTM DEM here: %s', demfilename)
 
-    # Load DEM and setup lat and lon arrays
+    ## for a user defined bbox
     try:
         # Check if uncropped/cropped DEMs exist in 'DEM' subdirectory
-        if not os.path.exists(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')):
+        path_dem = os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')
+        if not os.path.exists(some_path):
             # save uncropped DEM
             gdal.BuildVRT(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), demfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
             # update demfilename
@@ -142,22 +146,27 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
             update_file.SetProjection(proj) ; del update_file
             gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT"))
             log.info('Saved DEM cropped to interferometric grid here: %s', demfilename)
-
-        #pass expanded DEM for metadata field interpolation
-        bounds=list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
-        arr_res=[abs(gdal.Open(demfilename).GetGeoTransform()[1]), abs(gdal.Open(demfilename).GetGeoTransform()[-1])] # Get output res
-        demfile = gdal.Warp('', _world_dem, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, xRes=arr_res[0], yRes=arr_res[1], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        demfile.SetProjection(proj)
-        demfile.SetDescription(demfilename)
-
-        # Define lat/lon arrays for fullres layers
-        Latitude=np.linspace(demfile.GetGeoTransform()[3],demfile.GetGeoTransform()[3]+(demfile.GetGeoTransform()[5]*demfile.RasterYSize),demfile.RasterYSize)
-        Latitude=np.repeat(Latitude[:, np.newaxis], demfile.RasterXSize, axis=1)
-        Longitude=np.linspace(demfile.GetGeoTransform()[0],demfile.GetGeoTransform()[0]+(demfile.GetGeoTransform()[1]*demfile.RasterXSize),demfile.RasterXSize)
-        Longitude=np.repeat(Longitude[:, np.newaxis], demfile.RasterYSize, axis=1)
-        Longitude=Longitude.transpose()
     except:
-        raise Exception('Failed to open user DEM')
+        log.error('Failed to open user DEM')
+        os.sys.exit(0)
+
+    # Load DEM and setup lat and lon arrays
+    #pass expanded DEM for metadata field interpolation
+    bounds  = list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
+    arr_res = [abs(gdal.Open(demfilename).GetGeoTransform()[1]), abs(gdal.Open(demfilename).GetGeoTransform()[-1])] # Get output res
+    demfile = gdal.Warp('', demfilename_uncrop, format='MEM', outputBounds=bounds,
+                             xRes=arr_res[0], yRes=arr_res[1], multithread=True,
+                                     options=['NUM_THREADS=%s'%(num_threads)])
+    demfile.SetProjection(proj)
+    demfile.SetDescription(demfilename)
+
+    # Define lat/lon arrays for fullres layers
+    Latitude=np.linspace(demfile.GetGeoTransform()[3],demfile.GetGeoTransform()[3]+(demfile.GetGeoTransform()[5]*demfile.RasterYSize),demfile.RasterYSize)
+    Latitude=np.repeat(Latitude[:, np.newaxis], demfile.RasterXSize, axis=1)
+    Longitude=np.linspace(demfile.GetGeoTransform()[0],demfile.GetGeoTransform()[0]+(demfile.GetGeoTransform()[1]*demfile.RasterXSize),demfile.RasterXSize)
+    Longitude=np.repeat(Longitude[:, np.newaxis], demfile.RasterYSize, axis=1)
+    Longitude=Longitude.transpose()
+
 
     return demfilename, demfile, Latitude, Longitude
 
@@ -391,6 +400,13 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
 
         prog_bar.close()
     return
+
+def dl_dem(WESN, work_dir):
+    r   = requests.get(_world_dem.format(*WESN), allow_redirects=True)
+    dst = os.path.join(work_dir,'SRTM_3arcsec_uncropped.dem.vrt')
+    with open(dst, 'wb') as fh:
+        fh.write(r.content)
+    return dst
 
 class metadata_qualitycheck:
     '''
