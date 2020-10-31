@@ -818,13 +818,13 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             # Open corresponding tropo products and pass the difference
             tropo_product = gdal.Warp('', tropo_reference, format="MEM", cutlineDSName=prods_TOTbbox,
                           outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',
-                          dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+                          dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)]).ReadAsArray()
 
             tropo_product = np.ma.masked_where(tropo_product == 0., tropo_product)
             tropo_secondary = gdal.Warp('', tropo_secondary, format="MEM", cutlineDSName=prods_TOTbbox,
                                             outputBounds=bounds, width=arrshape[1], height=arrshape[0],
                                             resampleAlg='lanczos', dstNodata=0., multithread=True,
-                                            options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
+                                            options=['NUM_THREADS=%s'%(num_threads)]).ReadAsArray()
 
             tropo_secondary = np.ma.masked_where(tropo_secondary == 0., tropo_secondary)
             tropo_product   = np.subtract(tropo_secondary,tropo_product)
