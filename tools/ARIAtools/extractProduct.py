@@ -336,7 +336,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
     return aria_dem, ds_aria, Latitude, Longitude
 
 def dl_dem(path_dem, path_prod_union):
-    """Download the DEM over product bbox union"""
+    """Download the DEM over product bbox union."""
     WESN      = open_shapefile(path_prod_union, 0, 0).bounds
     root      = os.path.splitext(path_dem)[0]
     dst       = f'{root}_uncropped.tif'
