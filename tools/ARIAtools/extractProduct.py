@@ -286,63 +286,64 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
         If "Download" flag is specified, DEM will be donwloaded on the fly.
     '''
     # If specified DEM subdirectory exists, delete contents
-    workdir     = os.path.join(workdir,'DEM')
-    ARIAdem     = os.path.join(workdir, 'SRTM_3arcsec.dem')
+    workdir      = os.path.join(workdir,'DEM')
+    aria_dem     = os.path.join(workdir, 'SRTM_3arcsec.dem')
     os.makedirs(workdir, exist_ok=True)
 
-    # Get bounds of user bbox_file
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
+    bounds       = open_shapefile(bbox_file, 0, 0).bounds # bounds of user bbox
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     if demfilename.lower()=='download':
-        demfilename = dl_dem(ARIAdem, bounds)
+        demfilename = dl_dem(aria_dem, prods_TOTbbox_metadatalyr)
 
     else: # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
         assert os.path.exists(demfilename), f'Cannot open DEM at: {demfilename}'
-        ds   = gdal.Open(demfilename)
-        epsg = osr.SpatialReference(wkt=ds.GetProjection()).GetAttrValue('AUTHORITY',1)
+        ds_u = gdal.Open(demfilename)
+        epsg = osr.SpatialReference(wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY',1)
         assert epsg is not None, f'No projection information in DEM: {demfilename}'
+        del ds_u
 
     # write cropped DEM
-    gdal.Warp(ARIAdem, demfilename, format=outputFormat,
+    gdal.Warp(aria_dem, demfilename, format=outputFormat,
                 cutlineDSName=prods_TOTbbox, outputBounds=bounds,
                 outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0],
                 multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
 
-    update_file=gdal.Open(demfilename, gdal.GA_Update)
+    update_file = gdal.Open(aria_dem, gdal.GA_Update)
     update_file.SetProjection(proj); del update_file
-    gdal.Translate(f'{demfilename}.vrt', demfilename, format='VRT')
-    log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', ARIAdem)
+    ds_aria     = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
+    log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
 
     # Load DEM and setup lat and lon arrays
-    #pass expanded DEM for metadata field interpolation
+    # pass expanded DEM for metadata field interpolation
     bounds  = list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
-    arr_res = [abs(gdal.Open(demfilename).GetGeoTransform()[1]), abs(gdal.Open(demfilename).GetGeoTransform()[-1])] # Get output res
-    demfile = gdal.Warp('', ARIAdem, format='MEM', outputBounds=bounds,
-                             xRes=arr_res[0], yRes=arr_res[1], multithread=True,
+    gt      = ds_aria.GetGeoTransform()
+    ds_aria = gdal.Warp('', aria_dem, format='MEM', outputBounds=bounds,
+                             xRes=abs(gt[1]), yRes=abs(gt[-1]), multithread=True,
                                      options=['NUM_THREADS=%s'%(num_threads)])
-    demfile.SetProjection(proj)
-    demfile.SetDescription(ARIAdem)
+    ds_aria.SetProjection(proj); ds_aria.SetDescription(aria_dem)
 
     # Define lat/lon arrays for fullres layers
-    Latitude=np.linspace(demfile.GetGeoTransform()[3],demfile.GetGeoTransform()[3]+(demfile.GetGeoTransform()[5]*demfile.RasterYSize),demfile.RasterYSize)
-    Latitude=np.repeat(Latitude[:, np.newaxis], demfile.RasterXSize, axis=1)
-    Longitude=np.linspace(demfile.GetGeoTransform()[0],demfile.GetGeoTransform()[0]+(demfile.GetGeoTransform()[1]*demfile.RasterXSize),demfile.RasterXSize)
-    Longitude=np.repeat(Longitude[:, np.newaxis], demfile.RasterYSize, axis=1)
-    Longitude=Longitude.transpose()
+    gt, xs, ys  = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
+    Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*ys), ys)
+    Latitude    = np.repeat(Latitude[:, np.newaxis], xs, axis=1)
+    Longitude   = np.linspace(gt[0], gt[0]+(gt[1]*xs), xs)
+    Longitude   = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
 
+    return aria_dem, ds_aria, Latitude, Longitude
 
-    return ARIAdem, demfile, Latitude, Longitude
-
-def dl_dem(path_dem, WESN):
+def dl_dem(path_dem, path_prod_union):
+    """ dl DEM over product bbox union """
+    WESN      = open_shapefile(path_prod_union, 0, 0).bounds
     root, ext = os.path.splitext(path_dem)
-    dst       = f'{root}_uncropped{ext}'
-    r   = requests.get(_world_dem.format(*WESN), allow_redirects=True)
+    dst       = f'{root}_uncropped.tif'
+    r         = requests.get(_world_dem.format(*WESN), allow_redirects=True)
     with open(dst, 'wb') as fh:
         fh.write(r.content)
+    del r
     return dst
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
