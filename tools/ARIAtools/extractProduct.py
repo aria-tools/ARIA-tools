@@ -9,8 +9,9 @@
 import os
 import numpy as np
 import glob
-from osgeo import gdal
+from osgeo import gdal, osr
 import logging
+import requests
 from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile
@@ -22,6 +23,8 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
+
+_world_dem = "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
 
 def createParser():
     '''
@@ -93,73 +96,255 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
+class metadata_qualitycheck:
+    '''
+        Metadata quality control function. Artifacts recognized based off of covariance of cross-profiles.
+        Bug-fix varies based off of layer of interest.
+        Verbose mode generates a series of quality control plots with these profiles.
+    '''
+
+    def __init__(self, data_array, prod_key, outname, verbose=None):
+        # Pass inputs
+        self.data_array = data_array
+        self.prod_key = prod_key
+        self.outname = outname
+        self.verbose = verbose
+        self.data_array_band=data_array.GetRasterBand(1).ReadAsArray()
+        #mask by nodata value
+        self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
+
+        if self.verbose: logger.setLevel(logging.DEBUG)
+
+        # Run class
+        self.__run__()
+
+    def __truncateArray__(self, data_array_band, Xmask, Ymask):
+        # Mask columns/rows which are entirely made up of 0s
+        #first must crop all columns with no valid values
+        nancols=np.all(data_array_band.mask == True, axis=0)
+        data_array_band=data_array_band[:,~nancols]
+        Xmask=Xmask[:,~nancols]
+        Ymask=Ymask[:,~nancols]
+        #first must crop all rows with no valid values
+        nanrows=np.all(data_array_band.mask == True, axis=1)
+        data_array_band=data_array_band[~nanrows]
+        Xmask=Xmask[~nanrows]
+        Ymask=Ymask[~nanrows]
+
+        return data_array_band, Xmask, Ymask
+
+    def __getCovar__(self, prof_direc, profprefix=''):
+        from scipy.stats import linregress
+        # Mask columns/rows which are entirely made up of 0s
+        if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
+
+        #append prefix for plot names
+        prof_direc=profprefix+prof_direc
+
+        #iterate through transpose of matrix if looking in azimuth
+        arrT=''
+        if 'azimuth' in prof_direc:
+            arrT='.T'
+        # Cycle between range and azimuth profiles
+        rsquaredarr=[]
+        std_errarr=[]
+        for i in enumerate(eval('self.data_array_band%s'%(arrT))):
+            mid_line=i[1]
+            xarr=np.array(range(len(mid_line)))
+            #remove masked values from slice
+            if mid_line.mask.size!=1:
+                if True in mid_line.mask:
+                    xarr=xarr[~mid_line.mask]
+                    mid_line=mid_line[~mid_line.mask]
+
+            #chunk array to better isolate artifacts
+            chunk_size= 4
+            for j in range(0, len(mid_line.tolist()), chunk_size):
+                chunk = mid_line.tolist()[j:j+chunk_size]
+                xarr_chunk = xarr[j:j+chunk_size]
+                # make sure each iteration contains at least minimum number of elements
+                if j==range(0, len(mid_line.tolist()), chunk_size)[-2] and len(mid_line.tolist()) % chunk_size != 0:
+                    chunk = mid_line.tolist()[j:]
+                    xarr_chunk = xarr[j:]
+                #linear regression and get covariance
+                slope, bias, rsquared, p_value, std_err = linregress(xarr_chunk,chunk)
+                rsquaredarr.append(abs(rsquared)**2)
+                std_errarr.append(std_err)
+                #terminate early if last iteration would have small chunk size
+                if len(chunk)>chunk_size:
+                    break
+
+            #exit loop/make plots in verbose mode if R^2 and standard error anomalous, or if on last iteration
+            if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
+                if self.verbose:
+                    #Make quality-control plots
+                    import matplotlib.pyplot as plt
+                    ax0=plt.figure().add_subplot(111)
+                    ax0.scatter(xarr, mid_line, c='k', s=7)
+                    refline = np.linspace(min(xarr),max(xarr),100)
+                    ax0.plot(refline, (refline*slope)+bias, linestyle='solid', color='red')
+                    ax0.set_ylabel('%s array'%(self.prod_key))
+                    ax0.set_xlabel('distance')
+                    ax0.set_title('Profile along %s'%(prof_direc))
+                    ax0.annotate('R\u00b2 = %f\nStd error= %f'%(min(rsquaredarr),max(std_errarr)), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
+                        textcoords='offset points', fontweight='bold', ha='left', va='top')
+                    if min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01:
+                        ax0.annotate('WARNING: R\u00b2 and standard error\nsuggest artifact exists', (1, 1), xytext=(4, -4), \
+                            xycoords='axes fraction', textcoords='offset points', fontweight='bold', ha='right', va='top')
+                    plt.margins(0)
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(os.path.dirname(os.path.dirname(self.outname)),'metadatalyr_plots',self.prod_key, \
+                        os.path.basename(self.outname)+'_%s.eps'%(prof_direc)))
+                    plt.close()
+                break
+
+        return rsquaredarr, std_errarr
+
+    def __run__(self):
+        from scipy.linalg import lstsq
+
+        # Get R^2/standard error across range
+        rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range')
+        # Get R^2/standard error across azimuth
+        rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth')
+
+        #filter out normal values from arrays
+        rsquaredarr = [0.97] ; std_errarr=[0.0015]
+        if min(rsquaredarr_rng) < 0.97 and max(std_errarr_rng) > 0.0015:
+            rsquaredarr.append(min(rsquaredarr_rng))
+            std_errarr.append(max(std_errarr_rng))
+        if min(rsquaredarr_az) < 0.97 and max(std_errarr_az) > 0.0015:
+            rsquaredarr.append(min(rsquaredarr_az))
+            std_errarr.append(max(std_errarr_az))
+
+        #if R^2 and standard error anomalous, fix array
+        if min(rsquaredarr) < 0.97 and max(std_errarr) > 0.0015:
+            #Cycle through each band
+            for i in range(1,5):
+                self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
+                #mask by nodata value
+                self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
+                negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
+                #Unique bug-fix for bPerp layers with sign-flips
+                if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) \
+                    and (negs_percent != 100 or negs_percent != 0):
+                    #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
+                    self.data_array_band=abs(self.data_array_band)
+                    if negs_percent>50:
+                        self.data_array_band*=-1
+                else:
+                    # regular grid covering the domain of the data
+                    X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+                    Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+                    # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
+                    if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.0015:
+                        maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
+                        #mask all values above mean
+                        if maj_percent>50:
+                            self.data_array_band = np.ma.masked_where(self.data_array_band > self.data_array_band.mean(), self.data_array_band)
+                        #mask all values below mean
+                        else:
+                            self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
+                    # Mask columns/rows which are entirely made up of 0s
+                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
+                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
+                    # truncated grid covering the domain of the data
+                    Xmask=Xmask[~self.data_array_band.mask]
+                    Ymask=Ymask[~self.data_array_band.mask]
+                    self.data_array_band = self.data_array_band[~self.data_array_band.mask]
+                    XX = Xmask.flatten()
+                    YY = Ymask.flatten()
+                    A = np.c_[XX, YY, np.ones(len(XX))]
+                    C,_,_,_ = lstsq(A, self.data_array_band.data.flatten())
+                    # evaluate it on grid
+                    self.data_array_band = C[0]*X + C[1]*Y + C[2]
+                    #mask by nodata value
+                    self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), \
+                        self.data_array_band)
+                    np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
+                #update band
+                self.data_array.GetRasterBand(i).WriteArray(self.data_array_band.filled())
+                # Pass warning and get R^2/standard error across range/azimuth (only do for first band)
+                if i==1:
+                    # make sure appropriate unit is passed to print statement
+                    lyrunit = "\N{DEGREE SIGN}"
+                    if self.prod_key=='bPerpendicular' or self.prod_key=='bParallel':
+                        lyrunit = 'm'
+                    log.warning("%s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied",
+                                self.prod_key, os.path.basename(self.outname), min(rsquaredarr), max(std_errarr), lyrunit)
+                    rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range', profprefix='corrected')
+                    rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth', profprefix='corrected')
+        del self.data_array_band
+
+        return self.data_array
+
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
     '''
         Function to load and export DEM, lat, lon arrays.
         If "Download" flag is specified, DEM will be donwloaded on the fly.
     '''
-
-    _world_dem = '/vsicurl/https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1_Ellip/SRTM_GL1_Ellip_srtm.vrt'
-
     # If specified DEM subdirectory exists, delete contents
-    workdir=os.path.join(workdir,'DEM')
-    if os.path.exists(workdir) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')) and os.path.abspath(demfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')) or demfilename.lower()=='download':
-        for i in glob.glob(os.path.join(workdir,'*dem*')): os.remove(i)
-    if not os.path.exists(workdir):
-        os.mkdir(workdir)
+    workdir      = os.path.join(workdir,'DEM')
+    aria_dem     = os.path.join(workdir, 'SRTM_3arcsec.dem')
+    os.makedirs(workdir, exist_ok=True)
 
-    # Get bounds of user bbox_file
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
+    bounds       = open_shapefile(bbox_file, 0, 0).bounds # bounds of user bbox
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT':
-        outputFormat='ENVI'
+    outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
-    # Download DEM
     if demfilename.lower()=='download':
-        # update demfilename
-        demfilename=os.path.join(workdir,'SRTM_3arcsec.dem')
-        # save uncropped DEM
-        gdal.BuildVRT(os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), _world_dem, options=gdal.BuildVRTOptions(outputBounds=bounds))
-        # save cropped DEM
-        gdal.Warp(demfilename, os.path.join(workdir,'SRTM_3arcsec_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        update_file=gdal.Open(demfilename,gdal.GA_Update)
-        update_file.SetProjection(proj) ; del update_file
-        gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT")) #Make VRT
-        log.info('Downloaded 3 arc-sec SRTM DEM here: %s', demfilename)
+        demfilename = dl_dem(aria_dem, prods_TOTbbox_metadatalyr)
+
+    else: # checks for user specified DEM, ensure it's georeferenced
+        demfilename = os.path.abspath(demfilename)
+        assert os.path.exists(demfilename), f'Cannot open DEM at: {demfilename}'
+        ds_u = gdal.Open(demfilename)
+        epsg = osr.SpatialReference(wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY',1)
+        assert epsg is not None, f'No projection information in DEM: {demfilename}'
+        del ds_u
+
+    # write cropped DEM
+    gdal.Warp(aria_dem, demfilename, format=outputFormat,
+                cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0],
+                multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+
+    update_file = gdal.Open(aria_dem, gdal.GA_Update)
+    update_file.SetProjection(proj); del update_file
+    ds_aria     = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
+    log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
 
     # Load DEM and setup lat and lon arrays
-    try:
-        # Check if uncropped/cropped DEMs exist in 'DEM' subdirectory
-        if not os.path.exists(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'.dem')):
-            # save uncropped DEM
-            gdal.BuildVRT(os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), demfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update demfilename
-            demfilename=os.path.join(workdir,os.path.basename(demfilename).split('.')[0].split('uncropped')[0]+'.dem')
-            # save cropped DEM
-            gdal.Warp(demfilename, os.path.join(workdir,os.path.basename(demfilename).split('.')[0]+'_uncropped.dem.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-            update_file=gdal.Open(demfilename,gdal.GA_Update)
-            update_file.SetProjection(proj) ; del update_file
-            gdal.Translate(demfilename+'.vrt', demfilename, options=gdal.TranslateOptions(format="VRT"))
-            log.info('Saved DEM cropped to interferometric grid here: %s', demfilename)
+    # pass expanded DEM for metadata field interpolation
+    bounds  = list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
+    gt      = ds_aria.GetGeoTransform()
+    ds_aria = gdal.Warp('', aria_dem, format='MEM', outputBounds=bounds,
+                             xRes=abs(gt[1]), yRes=abs(gt[-1]), multithread=True,
+                                     options=['NUM_THREADS=%s'%(num_threads)])
+    ds_aria.SetProjection(proj); ds_aria.SetDescription(aria_dem)
 
-        #pass expanded DEM for metadata field interpolation
-        bounds=list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
-        arr_res=[abs(gdal.Open(demfilename).GetGeoTransform()[1]), abs(gdal.Open(demfilename).GetGeoTransform()[-1])] # Get output res
-        demfile = gdal.Warp('', _world_dem, options=gdal.WarpOptions(format="MEM", outputBounds=bounds, xRes=arr_res[0], yRes=arr_res[1], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        demfile.SetProjection(proj)
-        demfile.SetDescription(demfilename)
+    # Define lat/lon arrays for fullres layers
+    gt, xs, ys  = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
+    Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*ys), ys)
+    Latitude    = np.repeat(Latitude[:, np.newaxis], xs, axis=1)
+    Longitude   = np.linspace(gt[0], gt[0]+(gt[1]*xs), xs)
+    Longitude   = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
 
-        # Define lat/lon arrays for fullres layers
-        Latitude=np.linspace(demfile.GetGeoTransform()[3],demfile.GetGeoTransform()[3]+(demfile.GetGeoTransform()[5]*demfile.RasterYSize),demfile.RasterYSize)
-        Latitude=np.repeat(Latitude[:, np.newaxis], demfile.RasterXSize, axis=1)
-        Longitude=np.linspace(demfile.GetGeoTransform()[0],demfile.GetGeoTransform()[0]+(demfile.GetGeoTransform()[1]*demfile.RasterXSize),demfile.RasterXSize)
-        Longitude=np.repeat(Longitude[:, np.newaxis], demfile.RasterYSize, axis=1)
-        Longitude=Longitude.transpose()
-    except:
-        raise Exception('Failed to open user DEM')
+    return aria_dem, ds_aria, Latitude, Longitude
 
-    return demfilename, demfile, Latitude, Longitude
+def dl_dem(path_dem, path_prod_union):
+    """Download the DEM over product bbox union."""
+    WESN      = open_shapefile(path_prod_union, 0, 0).bounds
+    root      = os.path.splitext(path_dem)[0]
+    dst       = f'{root}_uncropped.tif'
+    r         = requests.get(_world_dem.format(*WESN), allow_redirects=True)
+    with open(dst, 'wb') as fh:
+        fh.write(r.content)
+    del r
+    return dst
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     '''
@@ -171,8 +356,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     from shapely.geometry import Polygon
 
     # If specified workdir doesn't exist, create it
-    if not os.path.exists(workdir):
-        os.mkdir(workdir)
+    os.makedirs(workdir, exist_ok=True)
 
     # If specified, check if user's bounding box meets minimum threshold area
     if bbox_file is not None:
@@ -392,190 +576,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
         prog_bar.close()
     return
 
-class metadata_qualitycheck:
-    '''
-        Metadata quality control function. Artifacts recognized based off of covariance of cross-profiles.
-        Bug-fix varies based off of layer of interest.
-        Verbose mode generates a series of quality control plots with these profiles.
-    '''
-
-    def __init__(self, data_array, prod_key, outname, verbose=None):
-        # Pass inputs
-        self.data_array = data_array
-        self.prod_key = prod_key
-        self.outname = outname
-        self.verbose = verbose
-        self.data_array_band=data_array.GetRasterBand(1).ReadAsArray()
-        #mask by nodata value
-        self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
-
-        if self.verbose: logger.setLevel(logging.DEBUG)
-
-        # Run class
-        self.__run__()
-
-    def __truncateArray__(self, data_array_band, Xmask, Ymask):
-        # Mask columns/rows which are entirely made up of 0s
-        #first must crop all columns with no valid values
-        nancols=np.all(data_array_band.mask == True, axis=0)
-        data_array_band=data_array_band[:,~nancols]
-        Xmask=Xmask[:,~nancols]
-        Ymask=Ymask[:,~nancols]
-        #first must crop all rows with no valid values
-        nanrows=np.all(data_array_band.mask == True, axis=1)
-        data_array_band=data_array_band[~nanrows]
-        Xmask=Xmask[~nanrows]
-        Ymask=Ymask[~nanrows]
-
-        return data_array_band, Xmask, Ymask
-
-    def __getCovar__(self, prof_direc, profprefix=''):
-        from scipy.stats import linregress
-        # Mask columns/rows which are entirely made up of 0s
-        if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
-
-        #append prefix for plot names
-        prof_direc=profprefix+prof_direc
-
-        #iterate through transpose of matrix if looking in azimuth
-        arrT=''
-        if 'azimuth' in prof_direc:
-            arrT='.T'
-        # Cycle between range and azimuth profiles
-        rsquaredarr=[]
-        std_errarr=[]
-        for i in enumerate(eval('self.data_array_band%s'%(arrT))):
-            mid_line=i[1]
-            xarr=np.array(range(len(mid_line)))
-            #remove masked values from slice
-            if mid_line.mask.size!=1:
-                if True in mid_line.mask:
-                    xarr=xarr[~mid_line.mask]
-                    mid_line=mid_line[~mid_line.mask]
-
-            #chunk array to better isolate artifacts
-            chunk_size= 4
-            for j in range(0, len(mid_line.tolist()), chunk_size):
-                chunk = mid_line.tolist()[j:j+chunk_size]
-                xarr_chunk = xarr[j:j+chunk_size]
-                # make sure each iteration contains at least minimum number of elements
-                if j==range(0, len(mid_line.tolist()), chunk_size)[-2] and len(mid_line.tolist()) % chunk_size != 0:
-                    chunk = mid_line.tolist()[j:]
-                    xarr_chunk = xarr[j:]
-                #linear regression and get covariance
-                slope, bias, rsquared, p_value, std_err = linregress(xarr_chunk,chunk)
-                rsquaredarr.append(abs(rsquared)**2)
-                std_errarr.append(std_err)
-                #terminate early if last iteration would have small chunk size
-                if len(chunk)>chunk_size:
-                    break
-
-            #exit loop/make plots in verbose mode if R^2 and standard error anomalous, or if on last iteration
-            if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
-                if self.verbose:
-                    #Make quality-control plots
-                    import matplotlib.pyplot as plt
-                    ax0=plt.figure().add_subplot(111)
-                    ax0.scatter(xarr, mid_line, c='k', s=7)
-                    refline = np.linspace(min(xarr),max(xarr),100)
-                    ax0.plot(refline, (refline*slope)+bias, linestyle='solid', color='red')
-                    ax0.set_ylabel('%s array'%(self.prod_key))
-                    ax0.set_xlabel('distance')
-                    ax0.set_title('Profile along %s'%(prof_direc))
-                    ax0.annotate('R\u00b2 = %f\nStd error= %f'%(min(rsquaredarr),max(std_errarr)), (0, 1), xytext=(4, -4), xycoords='axes fraction', \
-                        textcoords='offset points', fontweight='bold', ha='left', va='top')
-                    if min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01:
-                        ax0.annotate('WARNING: R\u00b2 and standard error\nsuggest artifact exists', (1, 1), xytext=(4, -4), \
-                            xycoords='axes fraction', textcoords='offset points', fontweight='bold', ha='right', va='top')
-                    plt.margins(0)
-                    plt.tight_layout()
-                    plt.savefig(os.path.join(os.path.dirname(os.path.dirname(self.outname)),'metadatalyr_plots',self.prod_key, \
-                        os.path.basename(self.outname)+'_%s.eps'%(prof_direc)))
-                    plt.close()
-                break
-
-        return rsquaredarr, std_errarr
-
-    def __run__(self):
-        from scipy.linalg import lstsq
-
-        # Get R^2/standard error across range
-        rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range')
-        # Get R^2/standard error across azimuth
-        rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth')
-
-        #filter out normal values from arrays
-        rsquaredarr = [0.97] ; std_errarr=[0.0015]
-        if min(rsquaredarr_rng) < 0.97 and max(std_errarr_rng) > 0.0015:
-            rsquaredarr.append(min(rsquaredarr_rng))
-            std_errarr.append(max(std_errarr_rng))
-        if min(rsquaredarr_az) < 0.97 and max(std_errarr_az) > 0.0015:
-            rsquaredarr.append(min(rsquaredarr_az))
-            std_errarr.append(max(std_errarr_az))
-
-        #if R^2 and standard error anomalous, fix array
-        if min(rsquaredarr) < 0.97 and max(std_errarr) > 0.0015:
-            #Cycle through each band
-            for i in range(1,5):
-                self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
-                #mask by nodata value
-                self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
-                negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
-                #Unique bug-fix for bPerp layers with sign-flips
-                if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) \
-                    and (negs_percent != 100 or negs_percent != 0):
-                    #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
-                    self.data_array_band=abs(self.data_array_band)
-                    if negs_percent>50:
-                        self.data_array_band*=-1
-                else:
-                    # regular grid covering the domain of the data
-                    X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-                    Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-                    # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
-                    if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.0015:
-                        maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
-                        #mask all values above mean
-                        if maj_percent>50:
-                            self.data_array_band = np.ma.masked_where(self.data_array_band > self.data_array_band.mean(), self.data_array_band)
-                        #mask all values below mean
-                        else:
-                            self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
-                    # Mask columns/rows which are entirely made up of 0s
-                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
-                    # truncated grid covering the domain of the data
-                    Xmask=Xmask[~self.data_array_band.mask]
-                    Ymask=Ymask[~self.data_array_band.mask]
-                    self.data_array_band = self.data_array_band[~self.data_array_band.mask]
-                    XX = Xmask.flatten()
-                    YY = Ymask.flatten()
-                    A = np.c_[XX, YY, np.ones(len(XX))]
-                    C,_,_,_ = lstsq(A, self.data_array_band.data.flatten())
-                    # evaluate it on grid
-                    self.data_array_band = C[0]*X + C[1]*Y + C[2]
-                    #mask by nodata value
-                    self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), \
-                        self.data_array_band)
-                    np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
-                #update band
-                self.data_array.GetRasterBand(i).WriteArray(self.data_array_band.filled())
-                # Pass warning and get R^2/standard error across range/azimuth (only do for first band)
-                if i==1:
-                    # make sure appropriate unit is passed to print statement
-                    lyrunit = "\N{DEGREE SIGN}"
-                    if self.prod_key=='bPerpendicular' or self.prod_key=='bParallel':
-                        lyrunit = 'm'
-                    log.warning("%s layer for IFG %s has R\u00b2 of %.4f and standard error of %.4f%s, automated correction applied",
-                                self.prod_key, os.path.basename(self.outname), min(rsquaredarr), max(std_errarr), lyrunit)
-                    rsquaredarr_rng, std_errarr_rng = self.__getCovar__('range', profprefix='corrected')
-                    rsquaredarr_az, std_errarr_az = self.__getCovar__('azimuth', profprefix='corrected')
-        del self.data_array_band
-
-        return self.data_array
-
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
     '''
         2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
@@ -672,20 +672,17 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
     from shapely.geometry import Polygon
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT':
-        outputFormat='ENVI'
+    outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
-    user_bbox=open_shapefile(bbox_file, 0, 0)
-    bounds=user_bbox.bounds
+    user_bbox    = open_shapefile(bbox_file, 0, 0)
+    bounds       = user_bbox.bounds
 
     product_dict=[[j['unwrappedPhase'] for j in full_product_dict[1]], [j['lookAngle'] for j in full_product_dict[1]], [j["pair_name"] for j in full_product_dict[1]]]
     metadata_dict=[[j['azimuthZeroDopplerMidTime'] for j in full_product_dict[0]], [j['wavelength'] for j in full_product_dict[0]]]
     workdir=os.path.join(outDir,'tropocorrected_products')
 
     # If specified workdir doesn't exist, create it
-    if not os.path.exists(workdir):
-        os.mkdir(workdir)
-        log.info('Created directory: %s', workdir)
+    os.makedirs(workdir, exist_ok=True)
 
     # Get list of all dates for which standard products exist
     date_list=[]
@@ -800,16 +797,17 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
                 tropo_rsc_dict['TIME_OF_DAY']=open(j[:-4]+'.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
                 # If stitched tropo product, must account for date change (if applicable)
                 if '-' in tropo_rsc_dict['TIME_OF_DAY'][0]:
-                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(m[:10]+'-'+m[11:].split('.')[0]+'-'+str(round(float('0.'+m[11:].split('.')[1])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
+                    tropo_rsc_dict['TIME_OF_DAY'] = [datetime.strptime(m[:10]+'-'+m[11:].split('.')[0]+'-'+str(round(float('0.'+m[11:].split('.')[1])*60)), "%Y-%m-%d-%H-%M") for m in tropo_rsc_dict['TIME_OF_DAY']]
                 else:
-                    tropo_rsc_dict['TIME_OF_DAY']=[datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[0]+'-'+str(round(float('0.'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[-1])*60)), "%Y-%m-%d-%H-%M")]
+                    tropo_rsc_dict['TIME_OF_DAY'] = [datetime.strptime(os.path.basename(j)[:4]+'-'+os.path.basename(j)[4:6]+'-'+os.path.basename(j)[6:8]+'-'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[0]+'-'+str(round(float('0.'+tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[-1])*60)), "%Y-%m-%d-%H-%M")]
 
                 # Check and report if tropospheric product falls outside of standard product range
                 latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime']+[min(tropo_rsc_dict['TIME_OF_DAY'])])
                 earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime']+[max(tropo_rsc_dict['TIME_OF_DAY'])])
                 delta = (earliest_end - latest_start).total_seconds() + 1
                 if delta<0:
-                    log.warning("tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s", abs(delta), os.path.basename(j)[:8], product_dict[2][i][0])
+                    log.warning("tropospheric product was generated %f secs outside of acquisition interval for scene %s in IFG %s",
+                                        abs(delta), os.path.basename(j)[:8], product_dict[2][i][0])
 
             # Open unwrappedPhase and mask nodata
             unwphase=gdal.Open(unwname)
@@ -819,11 +817,18 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
             unwphase=np.ma.masked_where(unwphase == unwnodata, unwphase)
 
             # Open corresponding tropo products and pass the difference
-            tropo_product=gdal.Warp('', tropo_reference, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
-            tropo_product=np.ma.masked_where(tropo_product == 0., tropo_product)
-            tropo_secondary=gdal.Warp('', tropo_secondary, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos', dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)])).ReadAsArray()
-            tropo_secondary=np.ma.masked_where(tropo_secondary == 0., tropo_secondary)
-            tropo_product=np.subtract(tropo_secondary,tropo_product)
+            tropo_product = gdal.Warp('', tropo_reference, format="MEM", cutlineDSName=prods_TOTbbox,
+                          outputBounds=bounds, width=arrshape[1], height=arrshape[0], resampleAlg='lanczos',
+                          dstNodata=0., multithread=True, options=['NUM_THREADS=%s'%(num_threads)]).ReadAsArray()
+
+            tropo_product = np.ma.masked_where(tropo_product == 0., tropo_product)
+            tropo_secondary = gdal.Warp('', tropo_secondary, format="MEM", cutlineDSName=prods_TOTbbox,
+                                            outputBounds=bounds, width=arrshape[1], height=arrshape[0],
+                                            resampleAlg='lanczos', dstNodata=0., multithread=True,
+                                            options=['NUM_THREADS=%s'%(num_threads)]).ReadAsArray()
+
+            tropo_secondary = np.ma.masked_where(tropo_secondary == 0., tropo_secondary)
+            tropo_product   = np.subtract(tropo_secondary,tropo_product)
 
             # Convert troposphere to rad
             tropo_product=np.divide(tropo_product,float(metadata_dict[1][i][0])/(4*np.pi))
@@ -894,17 +899,28 @@ def main(inps=None):
     standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
     # Load or download mask (if specified).
     if inps.mask is not None:
-        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist], [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]], inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude']))
+                        for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist],
+                        [item for sublist in [list(set(d['pair_name'])) for d in
+                        standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]],
+                        inps.mask, standardproduct_info.bbox_file, prods_TOTbbox, proj, amp_thresh=inps.amp_thresh, arrshape=arrshape,
+                        workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox, expected DEM shape, and output dir as input.
     if inps.demfile is not None:
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile, standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, proj, arrshape=arrshape, workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile,
+                    standardproduct_info.bbox_file, prods_TOTbbox,
+                    prods_TOTbbox_metadatalyr, proj, arrshape=arrshape,
+                    workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
     else:
-        demfile=None ; Latitude=None ; Longitude=None
+        demfile, Latitude, Longitude = None, None, None
 
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file,
+            prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude,
+            lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat,
+            stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
@@ -913,11 +929,15 @@ def main(inps=None):
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox,
+                        inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         # Resample DEM
         if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds, prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds,
+                            prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:
-        tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+        tropo_correction(standardproduct_info.products, inps.tropo_products,
+                         standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir,
+                         outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
