@@ -355,7 +355,6 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     bottomLeft = (min(WESN[1::2]), min(WESN[::2]))
     bottomRight = (min(WESN[1::2]), max(WESN[::2]))
     topLeft = (max(WESN[1::2]), min(WESN[::2]))
-    topRight = (max(WESN[1::2]), max(WESN[::2]))
     cols = np.linspace(bottomLeft[1], bottomRight[1], num=chunking_size)
     rows = [bottomLeft[0], topLeft[0]]
     # Download in chunks (if necessary)
