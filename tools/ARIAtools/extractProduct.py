@@ -375,7 +375,7 @@ def dl_dem(path_dem, path_prod_union, num_threads):
         dst       = f'{root}_uncropped.tif'
         gdal.Warp(dst, chunked_files, options=gdal.WarpOptions(multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
         # remove temp files
-        for i in glob.glob(f'{root}_*_uncropped.tif'): os.remove(i)    
+        for i in glob.glob(f'{root}_*_uncropped.tif'): os.remove(i)
     return dst
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
