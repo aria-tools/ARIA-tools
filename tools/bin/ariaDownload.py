@@ -318,12 +318,13 @@ def _dl_helper(inp_dct):
     ## capture stdout for plotting dl speed / time, also print to screen
     mini   = MiniLog(inp_dct['id'], time.time())
     console, os.sys.stdout = os.sys.stdout, mini
+    inp_dct['st'] = time.time()
     dler  = AD.bulk_downloader()
     dler.download_files()
     st    = time.time()
     os.sys.stdout = console
 
-    status_plot(inp_dct['wd'], mini.avg_rates, mini.elap, inp_dct['use_all'])
+    status_plot(inp_dct, mini.avg_rates, mini.elap)
 
     return dler.success, dler.failed, dler.skipped, dler.total_time, dler.total_bytes
 
@@ -361,16 +362,16 @@ def rewrite_summary(infos):
         log.info ('All files have been downloaded successfully')
     return
 
-def status_plot(wd, rates=None, elaps=None, use_all=False):
+def status_plot(inps, rates=None, elaps=None, use_all=False):
     """Save plot after each chunk on each core; use_all shows all calls to script"""
     if len(rates) <= 1: # in case all successful (for testing)
         return
-    with open(op.join(wd, 'avg_rates.csv'), 'a') as fh:
+    with open(op.join(inps['wd'], 'avg_rates.csv'), 'a') as fh:
         fh.write(','.join([str(avg_rate) for avg_rate in rates]) + '\n')
         fh.write(','.join([str(elap) for elap in elaps]) + '\n')
 
     timestamps, rates, elaps = [], [], []
-    with open(op.join(wd, 'avg_rates.csv'), 'r') as fh:
+    with open(op.join(inps['wd'], 'avg_rates.csv'), 'r') as fh:
         for line in fh:
             dat = line.strip().split(',')[1:]
             st  = line.split(',')[0]
@@ -384,7 +385,7 @@ def status_plot(wd, rates=None, elaps=None, use_all=False):
     rates      = np.array([float(rate) for rate in rates])
     elaps      = np.array([float(elap) for elap in elaps])
 
-    if not use_all:
+    if not inps['use_all']:
         rates = rates[timestamps==timestamps.max()]
         elaps = elaps[timestamps==timestamps.max()]
 
@@ -396,11 +397,11 @@ def status_plot(wd, rates=None, elaps=None, use_all=False):
     fig.suptitle(f'Last Update: {str(datetime.now())}')
 
     axes[1].scatter(elaps, rates, color='k', s=7)
-    axes[1].set_xlabel('Elapsed Time (per core; s)')
+    axes[1].set_xlabel('Time / prod (s)')
     # axes.axhline(np.mean(rates), color='k', linestyle='--', label=f'Overall Mean {np.mean(rates):.2f} MB/sec)')
 
     kws = dict(dpi=150, bbox_inches='tight', pad_inches=0.025, transparent=False)
-    fig.savefig(op.join(wd, 'AvgDlSpeed'), **kws)
+    fig.savefig(op.join(inps['wd'], 'AvgDlSpeed'), **kws)
     return
 
 class MiniLog(object):
