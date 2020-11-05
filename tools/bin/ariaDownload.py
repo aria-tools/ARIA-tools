@@ -321,7 +321,6 @@ def _dl_helper(inp_dct):
     inp_dct['st'] = time.time()
     dler  = AD.bulk_downloader()
     dler.download_files()
-    st    = time.time()
     os.sys.stdout = console
 
     status_plot(inp_dct, mini.avg_rates, mini.elap)
@@ -405,11 +404,11 @@ def status_plot(inps, rates=None, elaps=None, use_all=False):
     return
 
 class MiniLog(object):
-    def __init__(self, id, st):
+    def __init__(self, tid, st):
         """Helper to capture stdout for plotting"""
         # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
         self.terminal  = os.sys.stdout
-        self.avg_rates = [id]
+        self.avg_rates = [tid]
         self.elap      = [f'{st}elap']
         return
 
