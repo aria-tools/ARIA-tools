@@ -18,6 +18,7 @@ import logging
 from ARIAtools.logger import logger
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import multiprocessing
 mpl.use('agg')
 
 log = logging.getLogger('ARIAtools')
@@ -75,9 +76,9 @@ class Downloader(object):
         dct_prod, urls  = self.parse_json(url)
         script = requests.post(f'{self.url_base}&output={self.inps.output}', data=dct_prod).text
 
-
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
+
 
 
         elif self.inps.output == 'Kml':
@@ -121,7 +122,10 @@ class Downloader(object):
         return url
 
     def parse_json(self, url):
-        j        = json.loads(requests.get(url).text)[0]
+        response = requests.get(url)
+        if not response.ok:
+            raise Exception('Problem accessing ASF; should self resolve in a minute or two')
+        j        = json.loads(response.text)[0]
         if len(j) == 0:
             raise Exception('No products found with given url; check inputs for errors.')
 
@@ -262,7 +266,6 @@ class Downloader(object):
 
 def prod_dl(inps, dct_prod):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
-    import multiprocessing
     max_threads = multiprocessing.cpu_count()
 
     if inps.num_threads == 'all':
@@ -285,12 +288,12 @@ def prod_dl(inps, dct_prod):
             lst_dcts[i]['id']    = dl_id
 
         with multiprocessing.Pool(nt) as pool:
-            try:
-                info = pool.map(_dl_helper, lst_dcts)
-            except Exception as E:
-                print ('ASF bulk downloader error:', E)
-                print ('Likely a bad handshake with the ASF DAAC. Try rerunning')
-                os.sys.exit(1)
+            # try:
+            info = pool.map(_dl_helper, lst_dcts)
+            # except Exception as E:
+            #     print ('ASF bulk downloader error:', E)
+            #     print ('Likely a bad handshake with the ASF DAAC. Try rerunning')
+            #     os.sys.exit(1)
 
         check.extend(chunkc for chunkc in chunks) # in case products missed in split
 
@@ -304,6 +307,7 @@ def prod_dl(inps, dct_prod):
 
 def _dl_helper(inp_dct):
     """ Helper function for parallel processing """
+    # import threading
     prod_dct = {'product_list': ','.join(inp_dct['files'])}
     log.debug ('# of files: %d', len(inp_dct['files']))
     script   = requests.post(f'{inp_dct["url_base"]}&output=Download', data=prod_dct).text
@@ -314,15 +318,24 @@ def _dl_helper(inp_dct):
     AD = __import__(os.path.splitext(fname)[0])
     os.sys.argv = [] # gets around spurious messages
     ## capture stdout for plotting dl speed / time, also print to screen
-    mini   = MiniLog()
+    mini   = MiniLog(inp_dct['id'], time.time())
     console, os.sys.stdout = os.sys.stdout, mini
     dler  = AD.bulk_downloader()
     dler.download_files()
+    st    = time.time()
+    # t1    = multiprocessing.Process(target=dler.download_files)
+    # t1.start()
+    i     = 0
+    # while t1:
+    #     now = time.time()
+    #     # update every 5 minutes
+    #     if (now - st)/60 > (i * 5):
+    #         status_plot(inp_dct['wd'], mini.avg_rates, inp_dct['use_all'])
+    #         i+=1
+
     os.sys.stdout = console
 
-    mini.avg_rates.insert(0, inp_dct['id'])
-
-    status_plot(os.path.join(inp_dct['wd']), mini.avg_rates, inp_dct['use_all'])
+    status_plot(inp_dct['wd'], mini.avg_rates, mini.elap, inp_dct['use_all'])
 
     return dler.success, dler.failed, dler.skipped, dler.total_time, dler.total_bytes
 
@@ -360,53 +373,63 @@ def rewrite_summary(infos):
         log.info ('All files have been downloaded successfully')
     return
 
-def status_plot(wd, rates=None, use_all=False):
+def status_plot(wd, rates=None, elaps=None, use_all=False):
     """Save plot after each chunk on each core; use_all shows all calls to script"""
-    if len(rates) == 1: # in case all successful (for testing)
+    if len(rates) <= 1: # in case all successful (for testing)
         return
     with open(op.join(wd, 'avg_rates.csv'), 'a') as fh:
         fh.write(','.join([str(avg_rate) for avg_rate in rates]) + '\n')
+        fh.write(','.join([str(elap) for elap in elaps]) + '\n')
 
-    timestamps, rates = [], []
+    timestamps, rates, elaps = [], [], []
     with open(op.join(wd, 'avg_rates.csv'), 'r') as fh:
         for line in fh:
             dat = line.strip().split(',')[1:]
-            timestamps.extend([line.split(',')[0]]*len(dat)) # repeat for later idx
-            rates.extend (dat)
+            st  = line.split(',')[0]
+            if 'elap' in st:
+                elaps.extend(dat)
+            else:
+                rates.extend(dat)
+                timestamps.extend([st]*len(dat)) # repeat for later idx
+
     timestamps = np.array([float(t) for t in timestamps])
     rates      = np.array([float(rate) for rate in rates])
+    elaps      = np.array([float(elap) for elap in elaps])
+
     if not use_all:
         rates = rates[timestamps==timestamps.max()]
-    x         = range(len(rates))
-    fig, axes = plt.subplots()
-    axes.scatter(x, rates, color='k')
-    try:
-        coeffs    = np.polyfit(x, rates, 1)
-        trend     = np.polyval(coeffs, x)
-        axes.plot(x, trend, 'r--', label=f'$\Delta$ {coeffs[0]:.3f} MB/sec/prod')
-    except Exception as E: # polyfit may error if there are only one or two prods
-        pass
+        elaps = elaps[timestamps==timestamps.max()]
 
-    axes.set_xlabel('ARIA Product Index')
-    axes.set_ylabel('MB/sec')
-    axes.set_title(f'Last Update: {str(datetime.now())}')
-    axes.legend()
+    fig, axes = plt.subplots(ncols=2, sharey=True)
+
+    axes[0].scatter(range(len(rates)), rates, color='k', s=7)
+    axes[0].set_xlabel('ARIA Product Index')
+    axes[0].set_ylabel('MB/sec')
+    fig.suptitle(f'Last Update: {str(datetime.now())}')
+
+    axes[1].scatter(elaps, rates, color='k', s=7)
+    axes[1].set_xlabel('Elapsed Time (per core; s)')
+    # axes.axhline(np.mean(rates), color='k', linestyle='--', label=f'Overall Mean {np.mean(rates):.2f} MB/sec)')
+
     kws = dict(dpi=150, bbox_inches='tight', pad_inches=0.025, transparent=False)
     fig.savefig(op.join(wd, 'AvgDlSpeed'), **kws)
     return
 
 class MiniLog(object):
-    def __init__(self):
+    def __init__(self, id, st):
         """Helper to capture stdout for plotting"""
         # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
         self.terminal  = os.sys.stdout
-        self.avg_rates = []
+        self.avg_rates = [id]
+        self.elap      = [f'{st}elap']
         return
 
     def write(self, message):
         self.terminal.write(message)
         if 'Average Rate' in message:
-            self.avg_rates.append(float(message.strip().split()[-1].strip('MB/sec')))
+            msg = message.strip().split()
+            self.avg_rates.append(float(msg[-1].strip('MB/sec')))
+            self.elap.append(float(msg[3].strip('secs,')))
         return
 
     # def flush(self):
