@@ -79,8 +79,6 @@ class Downloader(object):
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
 
-
-
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst    = self._fmt_dst()
@@ -288,12 +286,12 @@ def prod_dl(inps, dct_prod):
             lst_dcts[i]['id']    = dl_id
 
         with multiprocessing.Pool(nt) as pool:
-            # try:
-            info = pool.map(_dl_helper, lst_dcts)
-            # except Exception as E:
-            #     print ('ASF bulk downloader error:', E)
-            #     print ('Likely a bad handshake with the ASF DAAC. Try rerunning')
-            #     os.sys.exit(1)
+            try:
+                info = pool.map(_dl_helper, lst_dcts)
+            except Exception as E:
+                print ('ASF bulk downloader error:', E)
+                print ('Likely a bad handshake with the ASF DAAC. Try rerunning')
+                os.sys.exit(1)
 
         check.extend(chunkc for chunkc in chunks) # in case products missed in split
 
@@ -323,16 +321,6 @@ def _dl_helper(inp_dct):
     dler  = AD.bulk_downloader()
     dler.download_files()
     st    = time.time()
-    # t1    = multiprocessing.Process(target=dler.download_files)
-    # t1.start()
-    i     = 0
-    # while t1:
-    #     now = time.time()
-    #     # update every 5 minutes
-    #     if (now - st)/60 > (i * 5):
-    #         status_plot(inp_dct['wd'], mini.avg_rates, inp_dct['use_all'])
-    #         i+=1
-
     os.sys.stdout = console
 
     status_plot(inp_dct['wd'], mini.avg_rates, mini.elap, inp_dct['use_all'])
@@ -431,10 +419,6 @@ class MiniLog(object):
             self.avg_rates.append(float(msg[-1].strip('MB/sec')))
             self.elap.append(float(msg[3].strip('secs,')))
         return
-
-    # def flush(self):
-    #     """Needed for python 3 compatibility"""
-    #     return
 
 if __name__ == '__main__':
     inps = cmdLineParse()
