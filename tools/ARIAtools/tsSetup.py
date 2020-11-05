@@ -89,7 +89,7 @@ def extractUTCtime(aria_prod):
         utcDict[pairName[0]] = utcTime.strftime("%H:%M:%S.%f")
     return utcDict
 
-def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
+def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=None):
 
     UTC_time = extractUTCtime(aria_prod)
     bPerp = extractMetaDict(aria_prod,'bPerpendicular')
@@ -114,27 +114,33 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         intList = glob.glob(os.path.join(workdir,'unwrappedPhase','[0-9]*[0-9].vrt'))
         dataType = "Float32"
         print('Number of unwrapped interferograms discovered: ', len(intList))
-        Dlist = intList
+        Dlist = sorted(intList)
     elif inputFiles in ['tropocorrected_products', 'tropocorrected', 'tropo']:
         domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
         dataType = "Float32"
         print('Number of tropocorrected unwrapped interferograms discovered: ', len(intList))
-        Dlist = intList
+        Dlist = sorted(intList)
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
         cohList = glob.glob(os.path.join(workdir,'coherence','[0-9]*[0-9].vrt'))
         dataType = "Float32"
         print('Number of coherence discovered: ', len(cohList))
-        Dlist = cohList
+        Dlist = sorted(cohList)
     elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
         domainName = 'connectedComponents'
         connCompList = glob.glob(os.path.join(workdir,'connectedComponents','[0-9]*[0-9].vrt'))
         dataType = "Int16"
         print('Number of connectedComponents discovered: ', len(connCompList))
-        Dlist = connCompList
+        Dlist = sorted(connCompList)
     else:
         print('Stacks can be created for unwrapped interferogram, coherence and connectedComponent VRT files')
+
+    # Confirm 1-to-1 match between UNW and other derived products
+    newDlist = [os.path.basename(i).split('.vrt')[0] for i in Dlist]
+    if refDlist and newDlist != refDlist:
+        raise Exception('Discrepancy between {} number of UNW products and {} number of {} products'.format(
+            len(refDlist), len(newDlist), domainName))
 
     for data in Dlist:
         width = None
@@ -232,6 +238,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         prog_bar.close()
         print(outputFileName, ': stack generated')
 
+    return newDlist
+
 
 def main(inps=None):
     inps = cmdLineParse()
@@ -312,9 +320,9 @@ def main(inps=None):
         tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
-    generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir)
+    refDlist = generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
+    refDlist = generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir, refDlist=refDlist)
     if inps.tropo_products:
-        generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir)
+        refDlist = generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
     else:
-        generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
+        refDlist = generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
