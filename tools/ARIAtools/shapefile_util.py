@@ -8,7 +8,6 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-import ogr
 import numpy as np
 
 from osgeo import gdal, ogr
