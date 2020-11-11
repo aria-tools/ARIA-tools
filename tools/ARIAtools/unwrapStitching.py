@@ -16,7 +16,7 @@ import logging
 
 import numpy as np
 from osgeo import gdal,ogr
-from gdalconst import *
+from osgeo.gdalconst import *
 import tempfile
 import shutil
 from shapely.geometry import Point,Polygon,shape, LinearRing
