@@ -30,16 +30,11 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
     # Import functions
     from ARIAtools.vrtmanager import renderOGRVRT
-
-    _world_watermask = [' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L1.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L2.shp',' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L3.shp', ' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L4.shp',' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp']
-
+    _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp' for i in range(1, 5)]
+    _world_watermask.append( ' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp')
     # If specified DEM subdirectory exists, delete contents
-    workdir=os.path.join(workdir,'mask')
-    if os.path.exists(workdir) and os.path.abspath(maskfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')) and os.path.abspath(maskfilename)!=os.path.abspath(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')) or maskfilename.lower()=='download':
-        for i in glob.glob(os.path.join(workdir,'*.*')): os.remove(i)
-    if not os.path.exists(workdir):
-        os.mkdir(workdir)
-
+    workdir = os.path.join(workdir,'mask')
+    os.makedirs(workdir, exist_ok=True)
 
     # Get bounds of user bbox_file
     bounds=open_shapefile(bbox_file, 0, 0).bounds
@@ -60,22 +55,29 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
 
         ###Initiate water-mask with coastlines/islands union VRT
         # save uncropped mask
-        gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'), os.path.join(workdir,'watermsk_shorelines.vrt'), options=gdal.RasterizeOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], burnValues=[1], layers='merged'))
-        gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'), os.path.join(workdir,'watermask_uncropped.msk'), options=gdal.TranslateOptions(format="VRT"))
+        gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'), os.path.join(workdir,'watermsk_shorelines.vrt'),
+                                    format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1],
+                                    height=arrshape[0], burnValues=[1], layers='merged')
+        gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'), os.path.join(workdir,'watermask_uncropped.msk'), format="VRT")
         # save cropped mask
-        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), format=outputFormat, outputBounds=bounds,
+                         outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
         update_file.SetProjection(proj)
         update_file.GetRasterBand(1).SetNoDataValue(0.) ; del update_file
         gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
 
         ###Must take inverse of lakes/ponds union because of opposite designation (1 for water, 0 for land) as desired (0 for water, 1 for land)
-        lake_masks=gdal.Rasterize('', os.path.join(workdir,'watermsk_lakes.vrt'), options=gdal.RasterizeOptions(format='MEM', outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], burnValues=[1], layers='merged', inverse=True))
+        lake_masks=gdal.Rasterize('', os.path.join(workdir,'watermsk_lakes.vrt'),
+                        format='MEM', outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1],
+                        height=arrshape[0], burnValues=[1], layers='merged', inverse=True)
+
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
         ###Update water-mask with lakes/ponds union and average amplitude
-        mask_file = gdal.Open(maskfilename,gdal.GA_Update)
+        mask_file = gdal.Open(maskfilename, gdal.GA_Update)
         mask_file.GetRasterBand(1).WriteArray(lake_masks*gdal.Open(maskfilename).ReadAsArray())
         #Delete temp files
         del lake_masks, mask_file

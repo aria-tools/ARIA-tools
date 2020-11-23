@@ -335,7 +335,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         num_dups=[]
         for i in enumerate(self.products[:-1]):
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
-            if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area)/(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
+            if (self.products[i[0]+1][0]['pair_name'][9:]==i[1][0]['pair_name'][9:]) and \
+                (self.products[i[0]+1][0]['pair_name'][:8]==i[1][0]['pair_name'][:8]) and \
+                (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection( \
+                open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area) \
+                /(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area)>0.9:
+                # If applicable, overwrite smaller scene with larger one
+                if (open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(
+                open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1)).area) \
+                /(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).area) \
+                >(open_shapefile(i[1][1]['productBoundingBox'], 'productBoundingBox', 1).intersection(
+                open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1)).area) \
+                /(open_shapefile(self.products[i[0]+1][1]['productBoundingBox'], 'productBoundingBox', 1).area):
+                    i=(i[0]-1,self.products[i[0]+1])
                 log.debug("Duplicate product captured. Rejecting scene %s", os.path.basename(self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
                 # Overwrite latter scene with former
                 self.products[i[0]+1]=i[1]
