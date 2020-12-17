@@ -125,7 +125,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=Non
         domainName = 'Coherence'
         cohList = glob.glob(os.path.join(workdir,'coherence','[0-9]*[0-9].vrt'))
         dataType = "Float32"
-        print('Number of coherence discovered: ', len(cohList))
+        print('Number of coherence files discovered: ', len(cohList))
         Dlist = sorted(cohList)
     elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
         domainName = 'connectedComponents'
@@ -133,6 +133,12 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=Non
         dataType = "Int16"
         print('Number of connectedComponents discovered: ', len(connCompList))
         Dlist = sorted(connCompList)
+    elif inputFiles in ['amplitude', 'Amplitude', 'amp']:
+        domainName = 'Amplitude'
+        ampList = glob.glob(os.path.join(workdir,'amplitude','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
+        print('Number of amplitude files discovered: ', len(ampList))
+        Dlist = sorted(ampList)
     else:
         print('Stacks can be created for unwrapped interferogram, coherence and connectedComponent VRT files')
 
@@ -301,6 +307,8 @@ def main(inps=None):
         if layers!=[]:
             print('\nExtracting optional, user-specified layers %s for each interferogram pair'%(layers))
             export_products(standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, layers, dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat, stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+    else:
+        inps.layers = []
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
@@ -326,3 +334,6 @@ def main(inps=None):
         refDlist = generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
     else:
         refDlist = generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
+    # If amplitude files extracted
+    if 'amplitude' in inps.layers:
+        refDlist = generateStack(standardproduct_info,'amplitude','ampStack',workdir=inps.workdir)
