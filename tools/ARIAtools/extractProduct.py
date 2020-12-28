@@ -16,7 +16,7 @@ from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.mask_util import prep_mask
-from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
+from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage, product_stitch_morph
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -45,7 +45,7 @@ def createParser():
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: https://www.mrlc.gov/national-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover-database-nlcd-2016")
     parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-#    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', where product overlap is minimized; '2stage', where minimization is first done on 'overlap' followed by connected components phase minimization between all connected componet (single point per component), or 'morph' where minization is first done on 'overlap' followed by a connected components growing approach though morphological operations. Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
     parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
@@ -594,9 +594,15 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                    elif stitchMethodType == 'morph':
+                        product_stitch_morph(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                    else:
+                        raise Exception('Not a valid stitch-method')
 
+
+                    
                     #If necessary, resample both unw/conn_comp files
                     if multilooking is not None:
                         resampleRaster(outFileConnComp, multilooking, bounds, prods_TOTbbox, rankedResampling, outputFormat=outputFormat, num_threads=num_threads)
@@ -891,6 +897,10 @@ def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
 
     log.info("***Extract Product Function:***")
+    
+    # check the stitch-method before doing work
+    if not(inps.stitchMethodType == 'overlap' or inps.stitchMethodType == '2stage' or inps.stitchMethodType == 'morph'):
+        raise Exception('Not a valid stitch-method')
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
@@ -952,7 +962,7 @@ def main(inps=None):
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file,
             prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude,
             lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat,
-            stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+            stitchMethodType=inps.stitchMethodType, verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:

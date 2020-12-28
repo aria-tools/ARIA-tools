@@ -27,6 +27,8 @@ from joblib import Parallel, delayed, dump, load
 import random
 import glob
 import collections
+from scipy.ndimage import binary_dilation,binary_erosion,generate_binary_structure
+
 
 from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
@@ -35,7 +37,7 @@ log = logging.getLogger(__name__)
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
-stitchMethodTypes = ['overlap','2stage']
+stitchMethodTypes = ['overlap','2stage','morph']
 
 class Stitching:
     '''
@@ -116,7 +118,9 @@ class Stitching:
             self.description="Two-stage corrected/stiched Unwrapped Phase"
         elif self.stitchMethodType=='overlap':
             self.description = "Overlap-based stiched Unwrapped Phase"
-
+        elif self.stitchMethodType=='morph':
+            self.description = "Morphology corrected/stiched Unwrapped Phase"
+                
     def setRedArcs(self, redArcs):
         """ Set the Redundant Arcs to use for LP unwrapping """
         self.redArcs = redArcs
@@ -521,6 +525,650 @@ class UnwrapOverlap(Stitching):
         # pass the fileMapping back into self
         self.fileMappingDict = fileMappingDict
 
+
+class UnwrapMorph(Stitching):
+    '''
+        Stiching/unwrapping using product overlap minimization
+    '''
+    
+    
+    def __init__(self):
+        '''
+            Inheret properties from the parent class
+            Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
+            '''
+        Stitching.__init__(self)
+    
+
+    
+    def UnwrapMorph(self):
+        
+        ## setting the method
+        self.setStitchMethod("morph")
+    
+        #processing parameters
+        self.proc_params = {'ni':8,
+                        'nb':10,
+                        'minsize':10,
+                        'debug':False,
+                        'max_guard':4}
+
+        ## Verify if all the inputs are well-formed/GDAL compatible
+        # Update files to be vrt if they exist and remove files which failed the gdal compatibility
+        self.__verifyInputs__()
+    
+        #import pdb
+        #pdb.set_trace()
+        
+        ## run Morphology minization between connected components
+        runw_ph,ncc = self.__fix_unwrap__()
+        #runw_ph,ncc = self.fix_unwrap(runw_ph,ncc,ni=ni,nb=nb,minsize=minsize,debug=debug,max_guard=max_guard)
+
+
+
+    def __fix_unwrap__(self):
+        ni = self.proc_params['ni']
+        nb = self.proc_params['nb']
+        minsize = self.proc_params['minsize']
+        debug = self.proc_params['debug']
+        max_guard = self.proc_params['max_guard']
+        
+
+        
+        # loading the data
+        connData,connNoData,connGeoTrans,connProj = GDALread(self.ccFile[0])
+        unwData,unwNoData,unwGeoTrans,unwProj = GDALread(self.inpFile[0])
+
+        ncc=connData
+        runw_ph=unwData
+        
+        max_cc    = np.ptp(ncc)
+        numcc = np.unique(ncc[ncc > 0]).size
+        guard = 0
+        while True:
+            cycles1,ord_overlaps1,nover1 = compute_cycles(runw_ph,ncc,nbest=nb,niter=ni,minsize=minsize,debug=debug)
+            runw_ph = add_cycles(runw_ph,ncc,cycles1,ord_overlaps1)
+            linked,singles = get_linked_cc(ord_overlaps1,max_cc)
+            ncc = adjust_cc(ncc,linked)
+            numcc_now = np.unique(ncc[ncc > 0]).size
+            #if only one good component left break
+            if numcc_now == 1:
+                break
+            #if no improvement break
+            elif numcc_now == numcc:
+                break
+            #safe guard just in case
+            elif guard == max_guard:
+                break
+            numcc = numcc_now
+            guard += 1
+        runw_ph = adjust_to_zero_cc(runw_ph,ncc,struc=None,niter=2,minsize=20)
+       
+        
+        write_ambiguity(ncc, self.outFileConnComp,connProj, connGeoTrans,noData=connNoData)
+        write_data(runw_ph, self.outFileUnw,unwProj, unwGeoTrans,noData=unwNoData)
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + self.outFileConnComp + " " + self.outFileConnComp + ".png"
+        os.system(cmd)
+        cmd = "gdal_translate -of png -scale -ot Byte -q " + self.outFileUnw + " " + self.outFileUnw + ".png"
+        os.system(cmd)
+        
+        return runw_ph,ncc
+
+    '''
+    def get_all_overlaps(cc,scc,nbest=3,struct=None,niter=2,minsize=20):
+        """
+            Given the array of ccomp sorted by size get all possible overlaps using the first "nbest"
+            inputs:
+            cc = ccomp file.
+            scc = array with all of sorted ccomp according to size.
+            nbests = use the first largest nbest cc in scc to get the overlap with others cc.
+            struct = morphological structure.
+            niter = number iterations of morphological operations.
+            minsize = minimum number of points in the overlaps. If less than minsize then no overlap.
+            outputs:
+            overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+            complete = bool True if all the cc have overlap
+            dones: the list of cc that have overlap
+        """
+        
+        #keep trak of the cc that have not been adjusted. initially are all except for -1 and 0
+        check_complete = np.unique(cc)
+        check_complete = np.setdiff1d(check_complete,np.array([-1,0]),True)
+        overlaps = {}
+        #get all the pairs that overlap
+        overlaps0,complete0,dones0 = get_overlaps(cc,scc[:nbest],overlaps,check_complete,struct,niter,minsize)
+        #get the new list of cc minus -1,0
+        check_complete = np.unique(cc)
+        check_complete = np.setdiff1d(check_complete,np.array([-1,0]),True)
+        #get the ones that still need to be done
+        not_dones = np.setdiff1d(check_complete,dones0)
+        #redo the overlap searching for the not_dones instead of nbest
+        overlaps,complete,dones = get_overlaps(cc,not_dones,overlaps,not_dones,struct,niter,minsize)
+        dones = np.unique(np.array(np.append(dones0,dones)))
+        #check if all have been fixed. sometime is not possible if there the cc is isolated
+        if len(dones) == len(check_complete):
+            complete = True
+        else:
+            complete = False
+        return overlaps,complete,dones
+
+    def order_overlaps(pairs):
+        """
+            Create an OrderedDict with key the cc and value a list of cc that have overlap with the key.
+            The order is based on the size of the values i.e. how many cc overlap with the key.
+            inputs:
+            pairs = list of cc pairs that overlap. The form is i_j where i,j are the cc.
+            output:
+            ddict = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        """
+        
+        ddict = collections.defaultdict(list)
+        for p in pairs:
+            keys = p.split('_')
+            ddict[int(keys[0])].append(int(keys[1]))
+        sizes = collections.defaultdict(int)
+        for k,v in ddict.items():
+            sizes[k] = len(v)
+        ssizes = collections.OrderedDict(sorted(sizes.items(),key = lambda t:t[1],reverse=True))
+        ddict = collections.OrderedDict([(k,ddict[k]) for k in ssizes.keys()])
+        return ddict
+
+    def get_resized_imgs(imgs,mask,buf=50):
+        """
+            Resize each image in images only where mask is non zero. Add a +- buf
+            inputs:
+            imgs = images to resize.
+            mask = the mask to find the extremes.
+            buf = add buf to the extremes.
+            outputs:
+            ret_imgs = the resized images
+            min_x = the minimun x location in the original image
+            min_y = the minimum y location in the original image
+        """
+        
+        #find the extremes where mask is to reduce the computation
+        locs = np.where(mask)
+        min_y = max(locs[0].min() - buf,0)
+        max_y = max(locs[0].max() + buf,mask.shape[0])
+        min_x = max(locs[1].min() - buf,0)
+        max_x = max(locs[1].max() + buf,mask.shape[1])
+        ret_imgs = []
+        for im in imgs:
+            ret_imgs.append(im[min_y:max_y,min_x:max_x])
+        return ret_imgs,min_x,min_y
+
+    def get_overlaps(cc,scc,overlaps,check_complete,struct=None,niter=2,minsize=20):
+        """
+            Given the array of ccomp sorted by size get all possible overlaps using the first "nbests"
+            inputs:
+            cc = ccomp file.
+            scc = array with subset of sorted ccomp according to size.
+            overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+            check_complete = list of the cc that have no overlap.
+            struct = morphological structure.
+            niter = number iterations of morphological operations.
+            minsize = minimum number of points in the overlaps
+            outputs:
+            overlaps = the updated input 'overlaps'.
+            complete = bool True if all the cc have overlap.
+            dones = the list of cc that have overlap.
+        """
+        
+        if struct is None:
+            struct = generate_binary_structure(2, 1)
+
+        dones = []
+        complete = False
+        for cc_now in scc:
+            mask = cc == cc_now
+            #resize cc and mask only around the extremes of mask
+            [ncc,mask],min_x,min_y = get_resized_imgs([cc,mask],mask,buf=50)
+            #get what's not cc_now
+            nmask = np.logical_not(mask)
+            #dilate mask
+            dmask = binary_dilation(mask,struct,niter)
+            #get intersection between dilate cc and not cc
+            inters = np.logical_and(dmask,nmask)
+            #select all the cc that are in the dilated part only
+            sel_now = np.unique(ncc[inters])
+            for i in sel_now:
+                if i == -1:
+                    continue
+                if i == 0:
+                    continue
+                okey = str(i) + '_' + str(cc_now)
+                #if already present skip
+                if okey in overlaps:
+                    continue
+                mask1 = ncc == i
+                [mask1,mmask,ddmask],min_xx,min_yy = get_resized_imgs([mask1,mask,dmask],mask1)
+                dmask1 = binary_dilation(mask1,struct,niter)
+                inters10 = np.logical_and(ddmask,mask1)
+                inters01 = np.logical_and(dmask1,mmask)
+                if np.count_nonzero(inters01) >= minsize and np.count_nonzero(inters10) >= minsize:
+                    #if enough points overlap that save the ovelapping points.
+                    #since we cropped the images need to put back the correct indices
+                    ninters01 = np.zeros_like(cc,np.bool)
+                    ninters01[min_y + min_yy:min_y + min_yy + inters01.shape[0],min_x + min_xx:min_x + min_xx + inters01.shape[1]] = inters01
+                    ninters10 = np.zeros_like(cc,np.bool)
+                    ninters10[min_y + min_yy:min_y + min_yy + inters10.shape[0],min_x + min_xx:min_x + min_xx + inters10.shape[1]] = inters10
+                    overlaps[str(cc_now) + '_' + str(i)] = [ninters01,ninters10]
+                    #mark the 2 cc as done
+                    dones.append(cc_now)
+                    dones.append(i)
+                    if len(check_complete) == len(np.intersect1d(check_complete,np.unique(np.array(dones)))):
+                        complete = True
+                if complete == True:
+                    break
+            if complete == True:
+                break
+        return overlaps,complete,np.unique(np.array(dones))
+
+    def get_overlaps_obs(cc,scc,overlaps,check_complete,struct=None,niter=2,minsize=20):
+        """
+            This method is deprecated (obsolete)
+            Given the array of ccomp sorted by size get all possible overlaps using the first "nbests"
+            inputs:
+            cc = ccomp file.
+            scc = array with subset of sorted ccomp according to size.
+            overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+            check_complete = list of the cc that have no overlap.
+            struct = morphological structure.
+            niter = number iterations of morphological operations.
+            minsize = minimum number of points in the overlaps
+            outputs:
+            overlaps = the updated input 'overlaps'.
+            complete = bool True if all the cc have overlap.
+            dones = the list of cc that have overlap.
+        """
+        
+        if struct is None:
+            struct = generate_binary_structure(2, 1)
+        
+        dones = []
+        complete = False
+        for cc_now in scc:
+            mask = cc == cc_now
+            nmask = np.logical_not(mask)
+            dmask = binary_dilation(mask,struct,niter)
+            inters = np.logical_and(dmask,nmask)
+            sel_now = np.unique(cc[inters])
+            for i in sel_now:
+                if i == -1:
+                    continue
+                if i == 0:
+                    continue
+                okey = str(i) + '_' + str(cc_now)
+                #if already present skip
+                if okey in overlaps:
+                    continue
+                mask1 = cc == i
+                dmask1 = binary_dilation(mask1,struct,niter)
+                inters10 = np.logical_and(dmask,mask1)
+                inters01 = np.logical_and(dmask1,mask)
+                if np.nonzero(inters01)[0].size >= minsize and np.nonzero(inters10)[0].size >= minsize:
+                    overlaps[str(cc_now) + '_' + str(i)] = [inters01,inters10]
+                    dones.append(cc_now)
+                    dones.append(i)
+                    if len(check_complete) == len(np.intersect1d(check_complete,np.unique(np.array(dones)))):
+                        complete = True
+                if complete == True:
+                    break
+            if complete == True:
+                break
+        return overlaps,complete,np.unique(np.array(dones))
+
+    def swap_single(ord_overlaps,overlaps):
+        """
+            Swap the key and value (when there is only one value) of the ordered overlaps when the key is not part
+            of any other pair of cc overlapping but the value is so that the pair is connected to others.
+            inputs:
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+            outputs:
+            nord_overlaps = updated ord_overlaps.
+            noverlaps = updates overlaps.
+        """
+        
+        #when one cc is inside the other the one inside has more overlap because of the dilation, but it's not
+        #connected to anything. So check if for single element values either the key or the value if part
+        #of some other cc set. If the value is and not the key then swap since most likely the key is inside the value.
+        #get_ipython().run_line_magic('debug', '')
+        n_ord_over = {}
+        nover = {}
+        to_delete = []
+        if len(ord_overlaps) > 1:
+            for k,v in ord_overlaps.items():
+                v = copy.deepcopy(v)
+                if len(v) == 1:
+                    for k1,v1 in ord_overlaps.items():
+                        if k1 == k:
+                            continue
+                        if v[0] in v1 and k not in v1:#the second check is to see if both v and k are in v1
+                            #if this is the case leave it alone otherwise remove it
+                            n_ord_over[v[0]] = [k]
+                            nover[str(v[0]) + '_' + str(k)] =  overlaps[str(k) + '_' + str(v[0])][::-1]#swap order
+                            to_delete.append(str(k) + '_' + str(v[0]))
+                        elif v[0] in v1 and k in v1:
+                            continue
+                        else:
+                            n_ord_over[k] = v
+                            nover[str(k) + '_' + str(v[0])] = overlaps[str(k) + '_' + str(v[0])]
+                else:
+                    n_ord_over[k] = v
+                    for vi in v:
+                        nover[str(k) + '_' + str(vi)] = overlaps[str(k) + '_' + str(vi)]
+            
+            #remove the one swapped
+            to_delete = np.unique(np.array(to_delete))
+            for k in to_delete:
+                if k in nover:
+                    del nover[k]
+                    k0 = int(k.split('_')[0])
+                    k1 = int(k.split('_')[1])
+                    n_ord_over[k0].remove(k1)
+                    if len(n_ord_over[k0]) == 0:
+                        n_ord_over.pop(k0, None)
+        else:#fringe case where there is only one left and the above logig doesn't work
+            n_ord_over = ord_overlaps
+            nover = overlaps
+
+        return collections.OrderedDict(sorted(n_ord_over.items(),key = lambda t:t[0])),nover
+
+    def remove_dups(ord_overlaps,nover):
+        """
+            Remove cc that are in multiple places. Keep the instance that has larger overlap.
+            inputs:
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            nover = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+            outputs:
+            nord_overlaps = updated ord_overlaps.
+            nover = updates nover.
+        """
+        
+        keys = list(ord_overlaps.keys())
+        for i in range(len(keys) - 1):
+            k = keys[i]
+            for j in range(i + 1,len(keys)):
+                k1 = keys[j]
+                common = np.intersect1d(ord_overlaps[k],ord_overlaps[k1])
+                for c in common:
+                    key = str(k) + '_' + str(c)
+                    key1 = str(k1) + '_' + str(c)
+                    if len(nover[key][0]) > len(nover[key1][0]):
+                        ord_overlaps[k1].remove(c)
+                        del nover[key1]
+                    else:
+                        ord_overlaps[k].remove(c)
+                        del nover[key]
+        keys = list(ord_overlaps.keys())
+        for k in keys:
+            v = ord_overlaps[k]
+            if len(v) == 0:
+                del ord_overlaps[k]
+        return ord_overlaps,nover
+
+    def reorder_overlaps(ord_overlaps):
+        """
+            Order the inputs so that when cycles are added to a cc no prior modified cc is affected.
+            inputs:
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            outputs:
+            nord_overlaps = the updated ord_overlaps.
+        """
+        
+        #make sure that the ovelarps are sorted so that when one is modified no other connected to it
+        #get modified later one. For instance 10:[11] and 13:[10,20]. In this order 11 is modified w.r.t. 10 but then
+        #10 is modified w.r.t 13 and 11 now is off
+        keys = list(ord_overlaps.keys())
+        ret = []
+        for i,k in enumerate(keys):
+            swapped = False
+            for k1 in keys[i+1:]:
+                if k in ord_overlaps[k1]:
+                    #NOTE:k cannot be present in any other list because we remove dups
+                    #     so it's safe to swap and break
+                    if k1 in ret:#already present from previous swap
+                        ret.append(k)
+                    else:
+                        ret.extend([k1,k])
+                    swapped = True
+                    break
+            if not swapped:#there was now connection with any other cc so just add
+                ret.append(k)
+        return collections.OrderedDict([(k,ord_overlaps[k]) for k in ret])
+
+    def get_cycles(unw_ph,ord_overlaps,nover):
+        """
+            Get the number of cycles that need to be added to a cc based on the difference of the phase in the
+            overlapping region. Only the values in the ord_overlap dict are updated while the key has 0 cycles (unless
+            a key is a value for another key in the dict)
+            inputs:
+            unw_ph: original unwrapped phase.
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            nover = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+            outputs:
+            cycles = dictionary with key a cc and value the number of cycles to be added.
+            stats = a dictionary with key the overlapping pair 'i_j' and value an array with the cycles,
+            stds of the phase in the two overlapping regions (normalized to 2pi), the number of elementes
+            in the overlapping regions.
+        """
+        
+        cycles = collections.defaultdict(int)
+        stats = collections.defaultdict(list)
+        first_time = True
+        for k,v in ord_overlaps.items():
+            if first_time:
+                cycles[k] = 0
+                first_time = False
+            for k1 in v:
+                key = str(k) + '_' + str(k1)
+                inters,inters1 = nover[key]
+                cyc = round((unw_ph[inters].mean() - unw_ph[inters1].mean())/(2*np.pi))
+                cycles[k1] =  cyc
+                stats[key] = [cyc,unw_ph[inters].std()/(2*np.pi),unw_ph[inters1].std()/(2*np.pi),
+                              np.count_nonzero(inters),np.count_nonzero(inters1)]
+        return cycles,stats
+
+    def alter_cycles(unw_ph,cc,selcc,ncyc):
+        """
+            Alterate the unwrapped phase by adding an interger times of 2pi to a given cc.
+            inputs:
+            unw_ph = original unwrapped phase.
+            cc = the connected component image.
+            selcc = array with the cc that need to be modified.
+            ncyc = array with the cycles to add to the cc in selcc.
+            outputs:
+            nunw_ph = the modified unwrapped phase.
+        """
+        
+        nunw_ph = unw_ph.copy()
+        for i,j in zip(selcc,ncyc):
+            seli = cc == i
+            nunw_ph[seli] += 2*np.pi*j
+        return nunw_ph
+
+    def get_images(dir_now,unw_file,cc_file):
+        """
+            Load the cc and unwrapped phase images into a numpy array.
+            inputs:
+            dir_now = directory containing the image files. Needs the xml metadata and the binary.
+            outputs:
+            cc: 2D int8 numpy array with the connected component image values.
+            unw_ph: 2D float32 numpy array with the unwrapped phase image values.
+        """
+       
+        data = gdal.Open(unw_file,gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        unw_ph = data_band.ReadAsArray()
+        data = None
+        # doing the connected component
+        data = gdal.Open(cc_file,gdal.GA_ReadOnly)
+        data_band = data.GetRasterBand(1)
+        cc = data_band.ReadAsArray()
+        data = None
+        img = None
+        return cc,unw_ph,img
+
+    def compute_cycles(unw_ph,cc,nbest=3,niter=2,minsize=20,debug=True):
+        """
+            Compute the cycles to be added to the unpwrapped phase.
+            inputs:
+            unw_ph = original unwrapped phase.
+            cc = the connected component image.
+            nbests = use the first largest nbest cc in scc to get the overlap with others cc.
+            niter = number iterations of morphological operations.
+            minsize = minimum number of points in the overlaps.
+            debug = bool if True prints intermediate steps results.
+            output:
+            cycles = dictionary with key a cc and value the number of cycles to be added.
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            nover = dictionary with key = i_j and values the two arrays which are the overlaps after
+            dilating one cc (i or j) and not the other (j or i).
+        """
+        
+        struct = generate_binary_structure(2, 1) # to identify neighbors
+        cc_sizes = []
+        
+        
+        # remove both the no-data and connected component 0 from the list under consideration
+        cc_left = np.setdiff1d(np.unique(cc),[-1,0],True)
+        for c in cc_left:
+            cc_sizes.append(np.count_nonzero(cc == c))
+        cc_sizes = np.array(cc_sizes,np.int32)
+        scc_sizes = cc_left[np.argsort(cc_sizes)[::-1]]
+
+        overlaps,complete,dones = get_all_overlaps(cc,scc_sizes,nbest=nbest,struct=struct,niter=niter,minsize=minsize)
+        #get_all_overlaps(cc,scc_sizes,2)
+        tord_overlaps = order_overlaps(overlaps.keys())
+        if debug:
+            print('order_overlaps',tord_overlaps)
+        ord_overlaps,nover = swap_single(tord_overlaps,overlaps)
+        if debug:
+            print('swap_single',ord_overlaps,'\n',nover.keys())
+        ord_overlaps,nover = remove_dups(ord_overlaps,nover)
+        if debug:
+            print('remove_dups',ord_overlaps,'\n',nover.keys())
+        ord_overlaps = reorder_overlaps(ord_overlaps)
+        if debug:
+            print('reorder_overlaps',ord_overlaps)
+        cycles,stats = get_cycles(unw_ph,ord_overlaps,nover)
+        return cycles,ord_overlaps,nover
+
+    def add_cycles(unw_ph,cc,cycles,ord_overlaps):
+        """
+            Add cycles to the unwrapped image to remove discontinuity.
+            inputs:
+            unw_ph = original unwrapped phase.
+            cc = the connected component image.
+            cycles = dictionary with key a cc and value the number of cycles to be added.
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            outputs:
+            nunw_ph = the fixed unwrapped phase.
+        """
+        
+        cp_cycles = copy.deepcopy(cycles)
+        keys = list(ord_overlaps.keys())
+        #go one key at the time except for the first since it's the zero shift
+        for i in range(1,len(keys)):
+            key = keys[i]
+            #go back to all the previous main cc and see if it belongs to one of the overlaps. if so need
+            #to adjust all the cycles for this cc
+            for j in range(i):
+                key1 = keys[j]
+                if key in ord_overlaps[key1]:#cc overlaps with previous one.
+                    for v in ord_overlaps[key]:
+                        #print(key1,key,cp_cycles[key],v,cp_cycles[v])
+                        cp_cycles[v] += cp_cycles[key]
+        to_change = []
+        max_cc    = np.ptp(cc)
+        for i in range(max_cc):
+            if i in cp_cycles:
+                to_change.append(cp_cycles[i])
+            else:
+                to_change.append(0)
+        to_change = np.array(to_change)
+        return unw_ph + 2*np.pi*to_change[cc]
+
+    def get_linked_cc(ord_overlaps,max_cc):
+        """
+            Find all the cc that linked to each other.
+            inputs:
+            ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+            max_cc = maximum number of connected components in the cc image.
+            outputs:
+            linked = list of all the cc linked to each other.
+        """
+        
+        linked = []
+        keys = list(ord_overlaps.keys())
+        done = []
+        for i,(k,v) in enumerate(ord_overlaps.items()):
+            #if k and it's v are already linked than skip them
+            if k in done:
+                continue
+            done.append(k)
+            link_now = [k] + v
+            #go through the remaining keys and if k1 was part of the value of another key
+            #it means that they are linked. ex. k,v = (1, [15, 16, 17, 18, 13, 19, 12]) and k1,v1 = (13, [10, 20])
+            #at the end they should all belong to the same cc.
+            for k1 in keys[i+1:]:
+                if k1 in link_now:
+                    link_now += ord_overlaps[k1]
+                    done.append(k1)
+            linked.append(link_now)
+        not_singles = np.array([i for j in linked for i in j])
+        singles = np.setdiff1d(np.arange(1,max_cc),not_singles)
+        singles.sort()
+        return linked,singles
+
+    def adjust_cc(cc,linked):
+        """
+            Adjust the connected component values of the linked cc.
+            inputs:
+            cc = the connected component image.
+            linked = list of all the cc linked to each other.
+            outputs:
+            ncc = adjusted connected component image.
+            """
+        ncc = cc.copy()
+        for l in linked:
+            n_value = l[0]
+            for l1 in l[1:]:
+                sel = ncc == l1
+                ncc[sel] = n_value
+        return ncc
+
+    def adjust_to_zero_cc(unw_ph,cc,struc=None,niter=2,minsize=20):
+        """
+            Adjust non zero cc to the zero one. Used to make the phase image look smooth.
+            inputs:
+            unw_ph = original unwrapped phase.
+            cc = the connected component image.
+            struct = morphological structure.
+            niter = number iterations of morphological operations.
+            minsize = minimum number of points in the overlaps.
+            outputs:
+            runw_ph = modified pahse image.
+        """
+        
+        check_complete = np.unique(cc)[1:]
+        overlaps = {}
+        overlaps,complete0,dones0 = get_overlaps(cc,[0],overlaps,check_complete,struct=struc,niter=niter,minsize=minsize)
+        ord_overlaps = {0:[int(i.split('_')[1]) for i in overlaps.keys()]}
+        cycles,stats = get_cycles(unw_ph,ord_overlaps,overlaps)
+        runw_ph = add_cycles(unw_ph,cc,cycles,ord_overlaps)
+        return runw_ph
+    '''
+
+
+
 class UnwrapComponents(Stitching):
     '''
         Stiching/unwrapping using 2-Stage Phase Unwrapping
@@ -534,7 +1182,7 @@ class UnwrapComponents(Stitching):
         Stitching.__init__(self)
 
 
-    def unwrapComponents(self):
+    def UnwrapComponents(self):
 
         ## setting the method
         self.setStitchMethod("2stage")
@@ -1213,6 +1861,37 @@ def write_ambiguity(data, outName,proj, geoTrans,noData=False):
     # close the file
     ds = None
 
+def write_data(data, outName,proj, geoTrans,noData=False):
+    '''
+        Write out an phase dataset in the Float32 data range of values
+    '''
+    
+    # GDAL precision support in envi
+    Float32 = gdal.GDT_Float32
+    
+    # check if the path to the file needs to be created
+    dirname = os.path.dirname(outName)
+    if not os.path.isdir(dirname):
+        os.makedirs(dirname)
+    
+    # Getting the GEOTIFF driver
+    driver = gdal.GetDriverByName('ENVI')
+    # leverage the compression option to ensure small file size
+    dst_options = ['COMPRESS=LZW']
+    # create the dataset
+    ds = driver.Create(outName , data.shape[1], data.shape[0], 1, Float32, dst_options)
+    # setting the proj and transformation
+    ds.SetGeoTransform(geoTrans)
+    ds.SetProjection(proj)
+    # populate the first band with data
+    bnd = ds.GetRasterBand(1)
+    bnd.WriteArray(data)
+    # setting the no-data value
+    if noData is not None:
+        bnd.SetNoDataValue(noData)
+    bnd.FlushCache()
+    # close the file
+    ds = None
 
 def build2PiScaleVRT(output,File,width=False,length=False):
     '''
@@ -1457,6 +2136,51 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
+def product_stitch_morph(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+    '''
+        Stitching of products using the two-stage unwrapper approach
+        i.e. minimize the discontinuities between connected components
+        '''
+    
+    import pdb
+    
+    # report method to user
+    print('STITCH Settings: Connected component approach')
+    print('Solver: MORPHOLOGY')
+
+    
+    # First, run the regular sticher, this will
+    # (1) correct for range offset
+    # (2) minimize the phase jump between adjacent product
+    unw = UnwrapOverlap()
+    unw.setInpFile(unw_files)
+    unw.setConnCompFile(conn_files)
+    unw.setOutFileConnComp(outFileConnComp + "_intermediate")
+    unw.setOutFileUnw(outFileUnw + "_intermediate")
+    unw.setProdBBoxFile(prod_bbox_files)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setVerboseMode(verbose)
+    unw.UnwrapOverlap()
+
+
+    # make some changes here
+    # Second, run the Morph unwrap to minimizes phase jumps across connected component boundaries
+    unw = UnwrapMorph()
+    unw.setInpFile(os.path.abspath(outFileUnw + "_intermediate"))
+    unw.setConnCompFile(os.path.abspath(outFileConnComp + "_intermediate"))
+    unw.setOutFileConnComp(outFileConnComp)
+    unw.setOutFileUnw(outFileUnw)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setVerboseMode(verbose)
+    unw.UnwrapMorph()
+
+
 def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
@@ -1466,31 +2190,599 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     # The solver used in minimizing the stiching of products
     if unwrapper_2stage_name is None:
         unwrapper_2stage_name = 'REDARC0'
-
+    
     if solver_2stage is None:
         # If unwrapper_2state_name is MCF then solver is ignored
         # and relaxIV MCF solver is used by default
         solver_2stage = 'pulp'
-
+    
     # report method to user
-    log.info('STITCH Settings: Connected component approach')
-    log.info('Name: %s', unwrapper_2stage_name)
-    log.info('Solver: %s', solver_2stage)
+    print('STITCH Settings: Connected component approach')
+    print('Name: %s'%unwrapper_2stage_name)
+    print('Solver: %s'%solver_2stage)
 
-    # Hand over to 2Stage unwrap
-    unw = UnwrapComponents()
-    unw._legacy_flag = True
+
+    # First, run the regular sticher, this will
+    # (1) correct for range offset
+    # (2) minimize the phase jump between adjacent product
+    unw = UnwrapOverlap()
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
+    unw.setOutFileConnComp(outFileConnComp + "_intermediate")
+    unw.setOutFileUnw(outFileUnw + "_intermediate")
+    unw.setProdBBoxFile(prod_bbox_files)
+    unw.setBBoxFile(bbox_file)
+    unw.setTotProdBBoxFile(prods_TOTbbox)
+    unw.setMask(mask)
+    unw.setOutputFormat(outputFormat)
+    unw.setVerboseMode(verbose)
+    unw.UnwrapOverlap()
+    
+    #pdb.set_trace()
+    # Second, run the 2stager to minimizes phase jumps across connected component boundaries
+    unw = UnwrapComponents()
+    unw.setInpFile(os.path.abspath(outFileUnw + "_intermediate"))
+    unw.setConnCompFile(os.path.abspath(outFileConnComp + "_intermediate"))
     unw.setOutFileConnComp(outFileConnComp)
     unw.setOutFileUnw(outFileUnw)
     unw.setSolver(solver_2stage)
     unw.setRedArcs(unwrapper_2stage_name)
     unw.setMask(mask)
     unw.setOutputFormat(outputFormat)
-    unw.setOutFileUnw(outFileUnw)
-    unw.setOutFileConnComp(outFileConnComp)
     unw.setBBoxFile(bbox_file)
     unw.setTotProdBBoxFile(prods_TOTbbox)
     unw.setVerboseMode(verbose)
-    unw.unwrapComponents()
+    unw.UnwrapComponents()
+
+
+def get_all_overlaps(cc,scc,nbest=3,struct=None,niter=2,minsize=20):
+    """
+        Given the array of ccomp sorted by size get all possible overlaps using the first "nbest"
+        inputs:
+        cc = ccomp file.
+        scc = array with all of sorted ccomp according to size.
+        nbests = use the first largest nbest cc in scc to get the overlap with others cc.
+        struct = morphological structure.
+        niter = number iterations of morphological operations.
+        minsize = minimum number of points in the overlaps. If less than minsize then no overlap.
+        outputs:
+        overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        complete = bool True if all the cc have overlap
+        dones: the list of cc that have overlap
+        """
+    
+    #keep trak of the cc that have not been adjusted. initially are all except for -1 and 0
+    check_complete = np.unique(cc)
+    check_complete = np.setdiff1d(check_complete,np.array([-1,0]),True)
+    overlaps = {}
+    #get all the pairs that overlap
+    overlaps0,complete0,dones0 = get_overlaps(cc,scc[:nbest],overlaps,check_complete,struct,niter,minsize)
+    #get the new list of cc minus -1,0
+    check_complete = np.unique(cc)
+    check_complete = np.setdiff1d(check_complete,np.array([-1,0]),True)
+    #get the ones that still need to be done
+    not_dones = np.setdiff1d(check_complete,dones0)
+    #redo the overlap searching for the not_dones instead of nbest
+    overlaps,complete,dones = get_overlaps(cc,not_dones,overlaps,not_dones,struct,niter,minsize)
+    dones = np.unique(np.array(np.append(dones0,dones)))
+    #check if all have been fixed. sometime is not possible if there the cc is isolated
+    if len(dones) == len(check_complete):
+        complete = True
+    else:
+        complete = False
+    return overlaps,complete,dones
+
+def order_overlaps(pairs):
+    """
+        Create an OrderedDict with key the cc and value a list of cc that have overlap with the key.
+        The order is based on the size of the values i.e. how many cc overlap with the key.
+        inputs:
+        pairs = list of cc pairs that overlap. The form is i_j where i,j are the cc.
+        output:
+        ddict = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        """
+    
+    ddict = collections.defaultdict(list)
+    for p in pairs:
+        keys = p.split('_')
+        ddict[int(keys[0])].append(int(keys[1]))
+    sizes = collections.defaultdict(int)
+    for k,v in ddict.items():
+        sizes[k] = len(v)
+    ssizes = collections.OrderedDict(sorted(sizes.items(),key = lambda t:t[1],reverse=True))
+    ddict = collections.OrderedDict([(k,ddict[k]) for k in ssizes.keys()])
+    return ddict
+
+def get_resized_imgs(imgs,mask,buf=50):
+    """
+        Resize each image in images only where mask is non zero. Add a +- buf
+        inputs:
+        imgs = images to resize.
+        mask = the mask to find the extremes.
+        buf = add buf to the extremes.
+        outputs:
+        ret_imgs = the resized images
+        min_x = the minimun x location in the original image
+        min_y = the minimum y location in the original image
+        """
+    
+    #find the extremes where mask is to reduce the computation
+    locs = np.where(mask)
+    min_y = max(locs[0].min() - buf,0)
+    max_y = max(locs[0].max() + buf,mask.shape[0])
+    min_x = max(locs[1].min() - buf,0)
+    max_x = max(locs[1].max() + buf,mask.shape[1])
+    ret_imgs = []
+    for im in imgs:
+        ret_imgs.append(im[min_y:max_y,min_x:max_x])
+    return ret_imgs,min_x,min_y
+
+def get_overlaps(cc,scc,overlaps,check_complete,struct=None,niter=2,minsize=20):
+    """
+        Given the array of ccomp sorted by size get all possible overlaps using the first "nbests"
+        inputs:
+        cc = ccomp file.
+        scc = array with subset of sorted ccomp according to size.
+        overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        check_complete = list of the cc that have no overlap.
+        struct = morphological structure.
+        niter = number iterations of morphological operations.
+        minsize = minimum number of points in the overlaps
+        outputs:
+        overlaps = the updated input 'overlaps'.
+        complete = bool True if all the cc have overlap.
+        dones = the list of cc that have overlap.
+        """
+    
+    if struct is None:
+        struct = generate_binary_structure(2, 1)
+    
+    dones = []
+    complete = False
+    for cc_now in scc:
+        mask = cc == cc_now
+        #resize cc and mask only around the extremes of mask
+        [ncc,mask],min_x,min_y = get_resized_imgs([cc,mask],mask,buf=50)
+        #get what's not cc_now
+        nmask = np.logical_not(mask)
+        #dilate mask
+        dmask = binary_dilation(mask,struct,niter)
+        #get intersection between dilate cc and not cc
+        inters = np.logical_and(dmask,nmask)
+        #select all the cc that are in the dilated part only
+        sel_now = np.unique(ncc[inters])
+        for i in sel_now:
+            if i == -1:
+                continue
+            if i == 0:
+                continue
+            okey = str(i) + '_' + str(cc_now)
+            #if already present skip
+            if okey in overlaps:
+                continue
+            mask1 = ncc == i
+            [mask1,mmask,ddmask],min_xx,min_yy = get_resized_imgs([mask1,mask,dmask],mask1)
+            dmask1 = binary_dilation(mask1,struct,niter)
+            inters10 = np.logical_and(ddmask,mask1)
+            inters01 = np.logical_and(dmask1,mmask)
+            if np.count_nonzero(inters01) >= minsize and np.count_nonzero(inters10) >= minsize:
+                #if enough points overlap that save the ovelapping points.
+                #since we cropped the images need to put back the correct indices
+                ninters01 = np.zeros_like(cc,np.bool)
+                ninters01[min_y + min_yy:min_y + min_yy + inters01.shape[0],min_x + min_xx:min_x + min_xx + inters01.shape[1]] = inters01
+                ninters10 = np.zeros_like(cc,np.bool)
+                ninters10[min_y + min_yy:min_y + min_yy + inters10.shape[0],min_x + min_xx:min_x + min_xx + inters10.shape[1]] = inters10
+                overlaps[str(cc_now) + '_' + str(i)] = [ninters01,ninters10]
+                #mark the 2 cc as done
+                dones.append(cc_now)
+                dones.append(i)
+                if len(check_complete) == len(np.intersect1d(check_complete,np.unique(np.array(dones)))):
+                    complete = True
+            if complete == True:
+                break
+        if complete == True:
+            break
+    return overlaps,complete,np.unique(np.array(dones))
+
+def get_overlaps_obs(cc,scc,overlaps,check_complete,struct=None,niter=2,minsize=20):
+    """
+        This method is deprecated (obsolete)
+        Given the array of ccomp sorted by size get all possible overlaps using the first "nbests"
+        inputs:
+        cc = ccomp file.
+        scc = array with subset of sorted ccomp according to size.
+        overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        check_complete = list of the cc that have no overlap.
+        struct = morphological structure.
+        niter = number iterations of morphological operations.
+        minsize = minimum number of points in the overlaps
+        outputs:
+        overlaps = the updated input 'overlaps'.
+        complete = bool True if all the cc have overlap.
+        dones = the list of cc that have overlap.
+        """
+    
+    if struct is None:
+        struct = generate_binary_structure(2, 1)
+    
+    dones = []
+    complete = False
+    for cc_now in scc:
+        mask = cc == cc_now
+        nmask = np.logical_not(mask)
+        dmask = binary_dilation(mask,struct,niter)
+        inters = np.logical_and(dmask,nmask)
+        sel_now = np.unique(cc[inters])
+        for i in sel_now:
+            if i == -1:
+                continue
+            if i == 0:
+                continue
+            okey = str(i) + '_' + str(cc_now)
+            #if already present skip
+            if okey in overlaps:
+                continue
+            mask1 = cc == i
+            dmask1 = binary_dilation(mask1,struct,niter)
+            inters10 = np.logical_and(dmask,mask1)
+            inters01 = np.logical_and(dmask1,mask)
+            if np.nonzero(inters01)[0].size >= minsize and np.nonzero(inters10)[0].size >= minsize:
+                overlaps[str(cc_now) + '_' + str(i)] = [inters01,inters10]
+                dones.append(cc_now)
+                dones.append(i)
+                if len(check_complete) == len(np.intersect1d(check_complete,np.unique(np.array(dones)))):
+                    complete = True
+            if complete == True:
+                break
+        if complete == True:
+            break
+    return overlaps,complete,np.unique(np.array(dones))
+
+def swap_single(ord_overlaps,overlaps):
+    """
+        Swap the key and value (when there is only one value) of the ordered overlaps when the key is not part
+        of any other pair of cc overlapping but the value is so that the pair is connected to others.
+        inputs:
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        overlaps = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        outputs:
+        nord_overlaps = updated ord_overlaps.
+        noverlaps = updates overlaps.
+        """
+    
+    #when one cc is inside the other the one inside has more overlap because of the dilation, but it's not
+    #connected to anything. So check if for single element values either the key or the value if part
+    #of some other cc set. If the value is and not the key then swap since most likely the key is inside the value.
+    #get_ipython().run_line_magic('debug', '')
+    n_ord_over = {}
+    nover = {}
+    to_delete = []
+    if len(ord_overlaps) > 1:
+        for k,v in ord_overlaps.items():
+            v = copy.deepcopy(v)
+            if len(v) == 1:
+                for k1,v1 in ord_overlaps.items():
+                    if k1 == k:
+                        continue
+                    if v[0] in v1 and k not in v1:#the second check is to see if both v and k are in v1
+                        #if this is the case leave it alone otherwise remove it
+                        n_ord_over[v[0]] = [k]
+                        nover[str(v[0]) + '_' + str(k)] =  overlaps[str(k) + '_' + str(v[0])][::-1]#swap order
+                        to_delete.append(str(k) + '_' + str(v[0]))
+                    elif v[0] in v1 and k in v1:
+                        continue
+                    else:
+                        n_ord_over[k] = v
+                        nover[str(k) + '_' + str(v[0])] = overlaps[str(k) + '_' + str(v[0])]
+            else:
+                n_ord_over[k] = v
+                for vi in v:
+                    nover[str(k) + '_' + str(vi)] = overlaps[str(k) + '_' + str(vi)]
+    
+        #remove the one swapped
+        to_delete = np.unique(np.array(to_delete))
+        for k in to_delete:
+            if k in nover:
+                del nover[k]
+                k0 = int(k.split('_')[0])
+                k1 = int(k.split('_')[1])
+                n_ord_over[k0].remove(k1)
+                if len(n_ord_over[k0]) == 0:
+                    n_ord_over.pop(k0, None)
+    else:#fringe case where there is only one left and the above logig doesn't work
+        n_ord_over = ord_overlaps
+        nover = overlaps
+    
+    return collections.OrderedDict(sorted(n_ord_over.items(),key = lambda t:t[0])),nover
+
+def remove_dups(ord_overlaps,nover):
+    """
+        Remove cc that are in multiple places. Keep the instance that has larger overlap.
+        inputs:
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        nover = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        outputs:
+        nord_overlaps = updated ord_overlaps.
+        nover = updates nover.
+        """
+    
+    keys = list(ord_overlaps.keys())
+    for i in range(len(keys) - 1):
+        k = keys[i]
+        for j in range(i + 1,len(keys)):
+            k1 = keys[j]
+            common = np.intersect1d(ord_overlaps[k],ord_overlaps[k1])
+            for c in common:
+                key = str(k) + '_' + str(c)
+                key1 = str(k1) + '_' + str(c)
+                if len(nover[key][0]) > len(nover[key1][0]):
+                    ord_overlaps[k1].remove(c)
+                    del nover[key1]
+                else:
+                    ord_overlaps[k].remove(c)
+                    del nover[key]
+    keys = list(ord_overlaps.keys())
+    for k in keys:
+        v = ord_overlaps[k]
+        if len(v) == 0:
+            del ord_overlaps[k]
+    return ord_overlaps,nover
+
+def reorder_overlaps(ord_overlaps):
+    """
+        Order the inputs so that when cycles are added to a cc no prior modified cc is affected.
+        inputs:
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        outputs:
+        nord_overlaps = the updated ord_overlaps.
+        """
+    
+    #make sure that the ovelarps are sorted so that when one is modified no other connected to it
+    #get modified later one. For instance 10:[11] and 13:[10,20]. In this order 11 is modified w.r.t. 10 but then
+    #10 is modified w.r.t 13 and 11 now is off
+    keys = list(ord_overlaps.keys())
+    ret = []
+    for i,k in enumerate(keys):
+        swapped = False
+        for k1 in keys[i+1:]:
+            if k in ord_overlaps[k1]:
+                #NOTE:k cannot be present in any other list because we remove dups
+                #     so it's safe to swap and break
+                if k1 in ret:#already present from previous swap
+                    ret.append(k)
+                else:
+                    ret.extend([k1,k])
+                swapped = True
+                break
+        if not swapped:#there was now connection with any other cc so just add
+            ret.append(k)
+    return collections.OrderedDict([(k,ord_overlaps[k]) for k in ret])
+
+def get_cycles(unw_ph,ord_overlaps,nover):
+    """
+        Get the number of cycles that need to be added to a cc based on the difference of the phase in the
+        overlapping region. Only the values in the ord_overlap dict are updated while the key has 0 cycles (unless
+        a key is a value for another key in the dict)
+        inputs:
+        unw_ph: original unwrapped phase.
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        nover = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        outputs:
+        cycles = dictionary with key a cc and value the number of cycles to be added.
+        stats = a dictionary with key the overlapping pair 'i_j' and value an array with the cycles,
+        stds of the phase in the two overlapping regions (normalized to 2pi), the number of elementes
+        in the overlapping regions.
+        """
+    
+    cycles = collections.defaultdict(int)
+    stats = collections.defaultdict(list)
+    first_time = True
+    for k,v in ord_overlaps.items():
+        if first_time:
+            cycles[k] = 0
+            first_time = False
+        for k1 in v:
+            key = str(k) + '_' + str(k1)
+            inters,inters1 = nover[key]
+            cyc = round((unw_ph[inters].mean() - unw_ph[inters1].mean())/(2*np.pi))
+            cycles[k1] =  cyc
+            stats[key] = [cyc,unw_ph[inters].std()/(2*np.pi),unw_ph[inters1].std()/(2*np.pi),
+                          np.count_nonzero(inters),np.count_nonzero(inters1)]
+    return cycles,stats
+
+def alter_cycles(unw_ph,cc,selcc,ncyc):
+    """
+        Alterate the unwrapped phase by adding an interger times of 2pi to a given cc.
+        inputs:
+        unw_ph = original unwrapped phase.
+        cc = the connected component image.
+        selcc = array with the cc that need to be modified.
+        ncyc = array with the cycles to add to the cc in selcc.
+        outputs:
+        nunw_ph = the modified unwrapped phase.
+        """
+    
+    nunw_ph = unw_ph.copy()
+    for i,j in zip(selcc,ncyc):
+        seli = cc == i
+        nunw_ph[seli] += 2*np.pi*j
+    return nunw_ph
+
+def get_images(dir_now,unw_file,cc_file):
+    """
+        Load the cc and unwrapped phase images into a numpy array.
+        inputs:
+        dir_now = directory containing the image files. Needs the xml metadata and the binary.
+        outputs:
+        cc: 2D int8 numpy array with the connected component image values.
+        unw_ph: 2D float32 numpy array with the unwrapped phase image values.
+        """
+    
+    data = gdal.Open(unw_file,gdal.GA_ReadOnly)
+    data_band = data.GetRasterBand(1)
+    unw_ph = data_band.ReadAsArray()
+    data = None
+    # doing the connected component
+    data = gdal.Open(cc_file,gdal.GA_ReadOnly)
+    data_band = data.GetRasterBand(1)
+    cc = data_band.ReadAsArray()
+    data = None
+    img = None
+    return cc,unw_ph,img
+
+def compute_cycles(unw_ph,cc,nbest=3,niter=2,minsize=20,debug=True):
+    """
+        Compute the cycles to be added to the unpwrapped phase.
+        inputs:
+        unw_ph = original unwrapped phase.
+        cc = the connected component image.
+        nbests = use the first largest nbest cc in scc to get the overlap with others cc.
+        niter = number iterations of morphological operations.
+        minsize = minimum number of points in the overlaps.
+        debug = bool if True prints intermediate steps results.
+        output:
+        cycles = dictionary with key a cc and value the number of cycles to be added.
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        nover = dictionary with key = i_j and values the two arrays which are the overlaps after
+        dilating one cc (i or j) and not the other (j or i).
+        """
+    
+    struct = generate_binary_structure(2, 1) # to identify neighbors
+    cc_sizes = []
+    
+    
+    # remove both the no-data and connected component 0 from the list under consideration
+    cc_left = np.setdiff1d(np.unique(cc),[-1,0],True)
+    for c in cc_left:
+        cc_sizes.append(np.count_nonzero(cc == c))
+    cc_sizes = np.array(cc_sizes,np.int32)
+    scc_sizes = cc_left[np.argsort(cc_sizes)[::-1]]
+
+    overlaps,complete,dones = get_all_overlaps(cc,scc_sizes,nbest=nbest,struct=struct,niter=niter,minsize=minsize)
+    #get_all_overlaps(cc,scc_sizes,2)
+    tord_overlaps = order_overlaps(overlaps.keys())
+    if debug:
+        print('order_overlaps',tord_overlaps)
+    ord_overlaps,nover = swap_single(tord_overlaps,overlaps)
+    if debug:
+        print('swap_single',ord_overlaps,'\n',nover.keys())
+    ord_overlaps,nover = remove_dups(ord_overlaps,nover)
+    if debug:
+        print('remove_dups',ord_overlaps,'\n',nover.keys())
+    ord_overlaps = reorder_overlaps(ord_overlaps)
+    if debug:
+        print('reorder_overlaps',ord_overlaps)
+    cycles,stats = get_cycles(unw_ph,ord_overlaps,nover)
+    return cycles,ord_overlaps,nover
+
+def add_cycles(unw_ph,cc,cycles,ord_overlaps):
+    """
+        Add cycles to the unwrapped image to remove discontinuity.
+        inputs:
+        unw_ph = original unwrapped phase.
+        cc = the connected component image.
+        cycles = dictionary with key a cc and value the number of cycles to be added.
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        outputs:
+        nunw_ph = the fixed unwrapped phase.
+        """
+    
+    cp_cycles = copy.deepcopy(cycles)
+    keys = list(ord_overlaps.keys())
+    #go one key at the time except for the first since it's the zero shift
+    for i in range(1,len(keys)):
+        key = keys[i]
+        #go back to all the previous main cc and see if it belongs to one of the overlaps. if so need
+        #to adjust all the cycles for this cc
+        for j in range(i):
+            key1 = keys[j]
+            if key in ord_overlaps[key1]:#cc overlaps with previous one.
+                for v in ord_overlaps[key]:
+                    #print(key1,key,cp_cycles[key],v,cp_cycles[v])
+                    cp_cycles[v] += cp_cycles[key]
+    to_change = []
+    max_cc    = np.ptp(cc)
+    for i in range(max_cc):
+        if i in cp_cycles:
+            to_change.append(cp_cycles[i])
+        else:
+            to_change.append(0)
+    to_change = np.array(to_change)
+    return unw_ph + 2*np.pi*to_change[cc]
+
+def get_linked_cc(ord_overlaps,max_cc):
+    """
+        Find all the cc that linked to each other.
+        inputs:
+        ord_overlaps = OrderedDict with key a cc and value an array of the cc overlapping with key.
+        max_cc = maximum number of connected components in the cc image.
+        outputs:
+        linked = list of all the cc linked to each other.
+        """
+    
+    linked = []
+    keys = list(ord_overlaps.keys())
+    done = []
+    for i,(k,v) in enumerate(ord_overlaps.items()):
+        #if k and it's v are already linked than skip them
+        if k in done:
+            continue
+        done.append(k)
+        link_now = [k] + v
+        #go through the remaining keys and if k1 was part of the value of another key
+        #it means that they are linked. ex. k,v = (1, [15, 16, 17, 18, 13, 19, 12]) and k1,v1 = (13, [10, 20])
+        #at the end they should all belong to the same cc.
+        for k1 in keys[i+1:]:
+            if k1 in link_now:
+                link_now += ord_overlaps[k1]
+                done.append(k1)
+        linked.append(link_now)
+    not_singles = np.array([i for j in linked for i in j])
+    singles = np.setdiff1d(np.arange(1,max_cc),not_singles)
+    singles.sort()
+    return linked,singles
+
+def adjust_cc(cc,linked):
+    """
+        Adjust the connected component values of the linked cc.
+        inputs:
+        cc = the connected component image.
+        linked = list of all the cc linked to each other.
+        outputs:
+        ncc = adjusted connected component image.
+        """
+    ncc = cc.copy()
+    for l in linked:
+        n_value = l[0]
+        for l1 in l[1:]:
+            sel = ncc == l1
+            ncc[sel] = n_value
+    return ncc
+
+def adjust_to_zero_cc(unw_ph,cc,struc=None,niter=2,minsize=20):
+    """
+        Adjust non zero cc to the zero one. Used to make the phase image look smooth.
+        inputs:
+        unw_ph = original unwrapped phase.
+        cc = the connected component image.
+        struct = morphological structure.
+        niter = number iterations of morphological operations.
+        minsize = minimum number of points in the overlaps.
+        outputs:
+        runw_ph = modified pahse image.
+        """
+    
+    check_complete = np.unique(cc)[1:]
+    overlaps = {}
+    overlaps,complete0,dones0 = get_overlaps(cc,[0],overlaps,check_complete,struct=struc,niter=niter,minsize=minsize)
+    ord_overlaps = {0:[int(i.split('_')[1]) for i in overlaps.keys()]}
+    cycles,stats = get_cycles(unw_ph,ord_overlaps,overlaps)
+    runw_ph = add_cycles(unw_ph,cc,cycles,ord_overlaps)
+    return runw_ph
+
