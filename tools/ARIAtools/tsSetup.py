@@ -115,7 +115,7 @@ def extractUTCtime(aria_prod):
         utcDict[pairName[0]] = utcTime
     return utcDict
 
-def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
+def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=None):
 
     UTC_time = extractUTCtime(aria_prod)
     bPerp = extractMetaDict(aria_prod,'bPerpendicular')
@@ -140,33 +140,45 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         intList = glob.glob(os.path.join(workdir,'unwrappedPhase','[0-9]*[0-9].vrt'))
         dataType = "Float32"
         print('Number of unwrapped interferograms discovered: ', len(intList))
-        Dlist = intList
+        Dlist = sorted(intList)
     elif inputFiles in ['tropocorrected_products', 'tropocorrected', 'tropo']:
         domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
         dataType = "Float32"
-        print('Number of tropo corrected unwrapped interferograms discovered: ', len(intList))
-        Dlist = intList
+        print('Number of tropocorrected unwrapped interferograms discovered: ', len(intList))
+        Dlist = sorted(intList)
     elif inputFiles in ['earthtidecorrected_products', 'earthtidecorrected', 'earthtide']:
         domainName = 'unwrappedPhase'
         intList = glob.glob(os.path.join(workdir,'earthtidecorrected_products','[0-9]*[0-9].vrt'))
         dataType = "Float32"
         print('Number of earth-tide corrected unwrapped interferograms discovered: ', len(intList))
-        Dlist = intList
+        Dlist = sorted(intList)
     elif inputFiles in ['coherence', 'Coherence', 'coh']:
         domainName = 'Coherence'
         cohList = glob.glob(os.path.join(workdir,'coherence','[0-9]*[0-9].vrt'))
         dataType = "Float32"
-        print('Number of coherence discovered: ', len(cohList))
-        Dlist = cohList
+        print('Number of coherence files discovered: ', len(cohList))
+        Dlist = sorted(cohList)
     elif inputFiles in ['connectedComponents','connectedComponent','connComp']:
         domainName = 'connectedComponents'
         connCompList = glob.glob(os.path.join(workdir,'connectedComponents','[0-9]*[0-9].vrt'))
         dataType = "Int16"
         print('Number of connectedComponents discovered: ', len(connCompList))
-        Dlist = connCompList
+        Dlist = sorted(connCompList)
+    elif inputFiles in ['amplitude', 'Amplitude', 'amp']:
+        domainName = 'Amplitude'
+        ampList = glob.glob(os.path.join(workdir,'amplitude','[0-9]*[0-9].vrt'))
+        dataType = "Float32"
+        print('Number of amplitude files discovered: ', len(ampList))
+        Dlist = sorted(ampList)
     else:
         print('Stacks can be created for unwrapped interferogram, coherence and connectedComponent VRT files')
+
+    # Confirm 1-to-1 match between UNW and other derived products
+    newDlist = [os.path.basename(i).split('.vrt')[0] for i in Dlist]
+    if refDlist and newDlist != refDlist:
+        raise Exception('Discrepancy between {} number of UNW products and {} number of {} products'.format(
+            len(refDlist), len(newDlist), domainName))
 
     for data in Dlist:
         width = None
@@ -192,7 +204,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
     rangeSpacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbitDirection = str.split(os.path.basename(aria_prod.files[0]),'-')[2]
 
-    with open( os.path.join(workdir,'stack', (outputFileName+'.vrt')), 'w') as fid:
+    stack_dir = os.path.join(workdir, 'stack')
+    with open( os.path.join(stack_dir, outputFileName+'.vrt'), 'w') as fid:
         fid.write( '''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
         <SRS>{proj}</SRS>
         <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n'''.format(
@@ -228,10 +241,10 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
                 print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
-            path = os.path.abspath(data[1])
+            path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
-            <SourceFilename>{path}</SourceFilename>
+            <SourceFilename relativeToVRT="1">{path}</SourceFilename>
             <SourceBand>1</SourceBand>
             <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{dataType}"/>
             <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
@@ -262,6 +275,8 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./'):
         fid.write('</VRTDataset>')
         prog_bar.close()
         print(outputFileName, ': stack generated')
+
+    return newDlist
 
 
 def main(inps=None):
@@ -371,6 +386,16 @@ def main(inps=None):
         ref_IFGdir='earthtidecorrected_products'
 
     # Generate Stack
-    generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
-    generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir)
-    generateStack(standardproduct_info,ref_IFGdir,'unwrapStack',workdir=inps.workdir)
+    refDlist = generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
+    refDlist = generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir, refDlist=refDlist)
+    # Make sure tropo corrections doesn't supercede solid_earth tide corrections 
+    # The latter are inclusive of tropo corrections
+    if inps.tropo_products and not inps.solid_tide:
+        refDlist = generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
+    elif inps.solid_tide:
+        refDlist = generateStack(standardproduct_info,'earthtidecorrected_products','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
+    else:
+        refDlist = generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
+    # If amplitude files extracted
+    if 'amplitude' in inps.layers:
+        refDlist = generateStack(standardproduct_info,'amplitude','ampStack',workdir=inps.workdir)
