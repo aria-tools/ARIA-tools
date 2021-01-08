@@ -10,7 +10,6 @@
 import os
 import numpy as np
 import logging
-from ARIAtools.logger import logger
 log = logging.getLogger(__name__)
 
 from osgeo import gdal, ogr

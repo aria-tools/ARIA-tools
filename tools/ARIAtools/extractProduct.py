@@ -358,7 +358,6 @@ def dl_dem(path_dem, path_prod_union, num_threads):
             dst = f'{root}_{i}_uncropped.tif'
             chunked_files.append(dst)
             WSEN = [cols[i], rows[i], cols[i+1], rows[i+1]]
-            poly = bbox2poly(SNWE=[rows[i], rows[i+1], cols[i], cols[i+1]])
             r    = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
             with open(dst, 'wb') as fh:
                 fh.write(r.content)
@@ -366,7 +365,7 @@ def dl_dem(path_dem, path_prod_union, num_threads):
         # Tile chunked products together after last iteration
         dst       = f'{root}_uncropped.tif'
         gdal.Warp(dst, chunked_files, multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
-        [os.remove(i) for i in glob.glob(f'{root}_*_uncropped.tif')] # remove tmp
+        # [os.remove(i) for i in glob.glob(f'{root}_*_uncropped.tif')] # remove tmp
 
     else:
         dst = f'{root}_uncropped.tif'
