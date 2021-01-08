@@ -9,6 +9,9 @@
 
 import os
 import numpy as np
+import logging
+from ARIAtools.logger import logger
+log = logging.getLogger(__name__)
 
 from osgeo import gdal, ogr
 gdal.UseExceptions()
@@ -87,6 +90,25 @@ def shapefile_area(file_bbox):
         shape_area+=shape(cop).area/1e6  # area in km^2
 
     return shape_area
+
+def chunk_area(WSEN):
+    """ Chunk an area ~evenly pieces < 450000 km required by the SRTM server """
+    from shapely.geometry import Polygon
+    max_area   = 400000 # need buffer for projections inconsistencies
+    W, S, E, N = WSEN
+    n    = 2 # start with a 2 x 2 chunk
+    area = max_area+1
+    while area > max_area:
+        cols = np.linspace(W, E, n+1)
+        rows = np.linspace(S, N, n+1)
+        Wi, Si, Ei, Ni = [cols[0], rows[0], cols[1], rows[1]]
+        poly = Polygon([(Wi,Ni), (Wi,Si), (Ei,Si), (Ei,Ni)])
+        area = shapefile_area(poly)
+        n+=1
+        if n>100:
+            log.error('There was a problem chunking the DEM; check input bounds')
+            os.sys.exit()
+    return rows, cols
 
 def plot_shapefile(fname):
     import matplotlib.path as mpath
