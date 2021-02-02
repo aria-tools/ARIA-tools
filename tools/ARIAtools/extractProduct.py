@@ -14,7 +14,7 @@ import logging
 import requests
 from ARIAtools.logger import logger
 
-from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
@@ -343,39 +343,38 @@ def dl_dem(path_dem, path_prod_union, num_threads):
 
     root      = os.path.splitext(path_dem)[0]
     prod_shapefile = open_shapefile(path_prod_union, 0, 0)
-    WESN      = prod_shapefile.bounds
-    chunking_size = 2
+    WSEN      = prod_shapefile.bounds
     # If area > 225000 km2, must split requests into chunks to successfully access data
-    if shapefile_area(prod_shapefile) > 225000:
+    chunk = False
+    if shapefile_area(prod_shapefile) > 450000:
+        chunk = True
         # Increase chunking size to discretize box into smaller grids
-        log.warning("User-defined bounds %dkm\u00b2 supersedes DEM maximum download area of 225000km\u00b2, must download in chunks", shapefile_area(prod_shapefile))
-        chunking_size = int(np.ceil(shapefile_area(prod_shapefile)/225000)) + 1
+        log.warning('User-defined bounds results in an area of %d km which exceeds the maximum download area of 450000; downloading in chunks', shapefile_area(prod_shapefile))
+        rows, cols = chunk_area(WSEN)
 
-    # Determine number of iterations to download DEM
-    bottomLeft = (min(WESN[1::2]), min(WESN[::2]))
-    bottomRight = (min(WESN[1::2]), max(WESN[::2]))
-    topLeft = (max(WESN[1::2]), min(WESN[::2]))
-    cols = np.linspace(bottomLeft[1], bottomRight[1], num=chunking_size)
-    rows = [bottomLeft[0], topLeft[0]]
-    # Download in chunks (if necessary)
-    chunked_files = []
-    for i in enumerate (cols[:-1]):
-        dst       = f'{root}_{i[0]}_uncropped.tif'
-        # Do not create temp file if chunking not necessary
-        if len(cols) == 2:
-            dst       = f'{root}_uncropped.tif'
-        chunked_files.append(dst)
-        WESN = [cols[i[0]], rows[0], cols[i[0]+1], rows[1]]
-        r         = requests.get(_world_dem.format(*WESN), allow_redirects=True)
+    if chunk: # Download in chunks (if necessary)
+        chunked_files, k = [], 0
+        for i in range(len(rows)-1):
+            for j in range(len(cols)-1):
+                dst = f'{root}_{k}_uncropped.tif'
+                chunked_files.append(dst)
+                WSEN = [cols[j], rows[i], cols[j+1], rows[i+1]]
+                r    = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
+                with open(dst, 'wb') as fh:
+                    fh.write(r.content)
+                k+=1
+
+        # Tile chunked products together after last iteration
+        dst       = f'{root}_uncropped.tif'
+        gdal.Warp(dst, chunked_files, multithread=True, options=[f'NUM_THREADS={num_threads}'])
+        [os.remove(i) for i in glob.glob(f'{root}_*_uncropped.tif')] # remove tmp
+
+    else:
+        dst = f'{root}_uncropped.tif'
+        r   = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
         with open(dst, 'wb') as fh:
             fh.write(r.content)
-        del r
-    # Tile chunked products together after last iteration (if necessary)
-    if len(cols) != 2:
-        dst       = f'{root}_uncropped.tif'
-        gdal.Warp(dst, chunked_files, options=gdal.WarpOptions(multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        # remove temp files
-        for i in glob.glob(f'{root}_*_uncropped.tif'): os.remove(i)
+    del r
     return dst
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
