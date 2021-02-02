@@ -353,19 +353,20 @@ def dl_dem(path_dem, path_prod_union, num_threads):
         rows, cols = chunk_area(WSEN)
 
     if chunk: # Download in chunks (if necessary)
-        chunked_files = []
-        for i in range(len(cols)-1):
-            dst = f'{root}_{i}_uncropped.tif'
-            chunked_files.append(dst)
-            WSEN = [cols[i], rows[i], cols[i+1], rows[i+1]]
-            poly = bbox2poly(SNWE=[rows[i], rows[i+1], cols[i], cols[i+1]])
-            r    = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
-            with open(dst, 'wb') as fh:
-                fh.write(r.content)
+        chunked_files, k = [], 0
+        for i in range(len(rows)-1):
+            for j in range(len(cols)-1):
+                dst = f'{root}_{k}_uncropped.tif'
+                chunked_files.append(dst)
+                WSEN = [cols[j], rows[i], cols[j+1], rows[i+1]]
+                r    = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
+                with open(dst, 'wb') as fh:
+                    fh.write(r.content)
+                k+=1
 
         # Tile chunked products together after last iteration
         dst       = f'{root}_uncropped.tif'
-        gdal.Warp(dst, chunked_files, multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+        gdal.Warp(dst, chunked_files, multithread=True, options=[f'NUM_THREADS={num_threads}'])
         [os.remove(i) for i in glob.glob(f'{root}_*_uncropped.tif')] # remove tmp
 
     else:
