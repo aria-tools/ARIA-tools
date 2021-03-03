@@ -150,7 +150,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=Non
         tropoDlist = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
         tropoDlist = sorted([os.path.basename(i).split('.vrt')[0] for i in tropoDlist])
         if os.path.exists(os.path.join(workdir,'tropocorrected_products')) and tropoDlist == refDlist:
-            log.warning("Discrepancy between 'tropocorrected_products' products ({} files) and {} products ({} files)," 
+            log.warning("Discrepancy between 'tropocorrected_products' products ({} files) and {} products ({} files),"
                         "rejecting scenes not common between both".format(len(refDlist), domainName, len(newDlist)))
         else:
             log.warning("Discrepancy between 'unwrappedPhase' products ({} files) and {} products ({} files),"
