@@ -11,6 +11,7 @@ dependencies:
   - python>=3.6
   - cartopy
   - gdal >=3.0,<=3.0.4
+  - tbb
   - hdf5
   - joblib
   - jupyterlab
