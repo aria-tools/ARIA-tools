@@ -10,6 +10,7 @@ import os
 import glob
 from datetime import datetime
 from osgeo import gdal
+import logging
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -20,6 +21,7 @@ from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, export_products, tropo_correction
 
+log = logging.getLogger(__name__)
 
 def createParser():
     '''
@@ -145,8 +147,18 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=Non
     # Confirm 1-to-1 match between UNW and other derived products
     newDlist = [os.path.basename(i).split('.vrt')[0] for i in Dlist]
     if refDlist and newDlist != refDlist:
-        raise Exception('Discrepancy between {} number of UNW products and {} number of {} products'.format(
-            len(refDlist), len(newDlist), domainName))
+        tropoDlist = glob.glob(os.path.join(workdir,'tropocorrected_products','[0-9]*[0-9].vrt'))
+        tropoDlist = sorted([os.path.basename(i).split('.vrt')[0] for i in tropoDlist])
+        if os.path.exists(os.path.join(workdir,'tropocorrected_products')) and tropoDlist == refDlist:
+            log.warning("Discrepancy between 'tropocorrected_products' products ({} files) and {} products ({} files),"
+                        "rejecting scenes not common between both".format(len(refDlist), domainName, len(newDlist)))
+        else:
+            log.warning("Discrepancy between 'unwrappedPhase' products ({} files) and {} products ({} files),"
+                        "rejecting scenes not common between both".format(len(refDlist), domainName, len(newDlist)))
+        # subset to match other datasets
+        subset_ind = [i[0] for i in enumerate(newDlist) if i[1] in refDlist]
+        newDlist = [newDlist[i] for i in subset_ind]
+        Dlist = [Dlist[i] for i in subset_ind]
 
     for data in Dlist:
         width = None
@@ -209,7 +221,7 @@ def generateStack(aria_prod,inputFiles,outputFileName,workdir='./', refDlist=Non
                 print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
-            path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
+            path = os.path.abspath(data[1])
             outstr = '''    <VRTRasterBand dataType="{dataType}" band="{index}">
         <SimpleSource>
             <SourceFilename relativeToVRT="1">{path}</SourceFilename>
@@ -328,12 +340,12 @@ def main(inps=None):
         tropo_correction(standardproduct_info.products, inps.tropo_products, standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir, outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    refDlist = generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir)
-    refDlist = generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir, refDlist=refDlist)
     if inps.tropo_products:
-        refDlist = generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
+        refDlist = generateStack(standardproduct_info,'tropocorrected_products','unwrapStack',workdir=inps.workdir)
     else:
-        refDlist = generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir, refDlist=refDlist)
+        refDlist = generateStack(standardproduct_info,'unwrappedPhase','unwrapStack',workdir=inps.workdir)
+    refDlist = generateStack(standardproduct_info,'coherence','cohStack',workdir=inps.workdir, refDlist=refDlist)
+    refDlist = generateStack(standardproduct_info,'connectedComponents','connCompStack',workdir=inps.workdir, refDlist=refDlist)
     # If amplitude files extracted
     if 'amplitude' in inps.layers:
-        refDlist = generateStack(standardproduct_info,'amplitude','ampStack',workdir=inps.workdir)
+        refDlist = generateStack(standardproduct_info,'amplitude','ampStack',workdir=inps.workdir, refDlist=refDlist)
