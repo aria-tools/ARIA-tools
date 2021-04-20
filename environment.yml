@@ -13,16 +13,17 @@ dependencies:
   - gdal >=3.0,<=3.0.4
   - hdf5
   - joblib
-  - jupyterlab
-  - jupyter_contrib_nbextensions
   - libgdal
   - matplotlib
   - netcdf4
   - pandas
   - pip
   - requests
-  - rise
   - shapely
   - scipy
   - pip:
     - h5py
+  #for ARIA-tools-docs
+  - jupyterlab
+  - jupyter_contrib_nbextensions
+  - rise
