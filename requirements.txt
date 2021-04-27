@@ -1,9 +1,6 @@
 python>=3.6
 netcdf4
 shapely
-jupyterlab
-jupyter_contrib_nbextensions
-rise
 joblib
 scipy
 matplotlib
