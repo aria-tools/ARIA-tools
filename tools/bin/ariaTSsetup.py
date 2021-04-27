@@ -1,8 +1,8 @@
 #! /usr/bin/env python3
 """ARIA-tool to run time series preparation.
-
 Copyright 2019, by the California Institute of Technology. ALL RIGHTS
 RESERVED. United States Government Sponsorship acknowledged.
+
 Author(s): Simran Sangha, David Bekaert, & Emre Havazli
 """
 # Import functions
