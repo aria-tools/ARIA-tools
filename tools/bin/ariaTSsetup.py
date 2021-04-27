@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 """
-Tool to run time series preparation.
+ARIA-tool to run time series preparation.
 
 Copyright 2019, by the California Institute of Technology. ALL RIGHTS
 RESERVED. United States Government Sponsorship acknowledged.
