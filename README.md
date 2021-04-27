@@ -21,14 +21,14 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 ## Contents
 1.  [Software Dependencies](#software-dependencies)
 2.  [Installation](#installation)
--   [Conda](#conda)
--   [Other installation options](#other-installation-options)
--   [ARIA-tools with support for S3 virtual data access](#aria-tools-with-support-for-s3-virtual-data-access)
+    -   [Conda](#conda)
+    -   [Other installation options](#other-installation-options)
+    -   [ARIA-tools with support for S3 virtual data access](#aria-tools-with-support-for-s3-virtual-data-access)
 3.  [Running ARIA-tools](#running-aria-tools)
--   [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
--   [Manipulating GUNW Products](#manipulating-gunw-products)
--   [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
--   [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
+    -   [Commandline download of GUNW Products](#commandline-download-of-gunw-products)
+    -   [Manipulating GUNW Products](#manipulating-gunw-products)
+    -   [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
+    -   [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
 4.  [Documentation](#documentation)
 5.  [Citation](#citation)
 6.  [Contributors and community contributions](#contributors)
@@ -72,12 +72,24 @@ Below we list the dependencies for ARIA-tools
 ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. Easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and use the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
 
 ### Conda
-Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below will clone the ARIA-tools package to your local directory, create a conda environment with the name 'ARIA-tools', install dependencies to this environment and activate it.
+Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below to download/clone the ARIA-tools package to your local directory:
 
 ```.tcsh
 git clone https://github.com/aria-tools/ARIA-tools.git
+```
+
+Run the commands below to install dependencies to a new conda environment `ARIA-tools` and activate it:
+
+```.tcsh
 conda env create -f ./ARIA-tools/environment.yml
 conda activate ARIA-tools
+```
+
+Or run the commands below to install dependencies to an existing conda environment (`base` by default):
+
+```.tcsh
+# add "jupyterlab jupyter_contrib_nbextensions rise" below to install the extra requirements for ARIA-tools-docs
+conda install -c conda-forge --yes --file ./ARIA-tools/requirements.txt
 ```
 
 We have included a setup.py script which allows for easy compilation and installation of third-party dependencies (c-code), as well as setting up the ARIA-tools package itself (python and command line tools).
@@ -94,8 +106,8 @@ set PATH $PATH:'/ARIAtoolsREPO/tools/bin'
 
 ### Other installation options
 The following pages might be of use to those trying to build third party packages from source.
--   [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/Linux_source_build.md)
--   [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOS_source_build.md)
+-   [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/LinuxSourceBuild.md)
+-   [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOSSourceBuild.md)
 
 
 ### ARIA-tools with support for S3 virtual data access
