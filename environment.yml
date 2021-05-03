@@ -24,5 +24,6 @@ dependencies:
   - rise
   - shapely
   - scipy
+  - pyproj
   - pip:
     - h5py
