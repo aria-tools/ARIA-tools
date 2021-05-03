@@ -53,7 +53,7 @@ jobs:
             python setup.py build
             python setup.py install
             ariaDownload.py -h
-            prep_aria.py -h
+            # prep_aria.py -h
       - run:
           name: Run unit tests
           command: |
@@ -82,7 +82,7 @@ jobs:
             #time-series prep
             ariaTSsetup.py -d download -m download -f "products/*.nc"
             #run loading of aria products in mintpy
-            prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180502_20180408.vrt -a azimuthAngle/20180502_20180408.vrt
+            # prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180502_20180408.vrt -a azimuthAngle/20180502_20180408.vrt
             #download and test NLCD mask
             cd products
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
