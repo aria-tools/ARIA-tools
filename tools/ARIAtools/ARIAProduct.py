@@ -12,9 +12,10 @@ import numpy as np
 from joblib import Parallel, delayed
 import logging
 from osgeo import gdal
+from subprocess import check_output
 
-from ARIAtools.shapefile_util import open_shapefile,save_shapefile
 from ARIAtools.logger import logger
+from ARIAtools.shapefile_util import open_shapefile,save_shapefile
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -427,7 +428,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     def __run__(self):
         # Only populate list of dictionaries if the file intersects with bbox
         # will try multi-core version (if multiple files are passed) and default to for loop in case of failure
-
         if len(self.files)>1:
             try:
                 log.info('Multi-core version')

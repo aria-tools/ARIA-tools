@@ -21,114 +21,161 @@ from ARIAtools.logger import logger
 log = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_thresh=None, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
-    '''
-        Function to load and export mask file.
-        If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
-        If the full resolution NLCD landcover data is given (NLCD...img) it will be cropped to match product
+def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
+                    amp_thresh=None, arrshape=None, workdir='./',
+                    outputFormat='ENVI', num_threads='2'):
+
+    '''Function to load and export mask file.
+    If "Download" flag is specified, GSHHS water mask will be donwloaded on the fly.
+    If the full resolution NLCD landcover data is given (NLCD...img) it will be cropped to match product
     '''
 
     # Import functions
     from ARIAtools.vrtmanager import renderOGRVRT
-    _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp' for i in range(1, 5)]
-    _world_watermask.append( ' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp')
+    _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu'\
+        f'/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp'\
+                                                     for i in range(1, 5)]
+    _world_watermask.append( ' /vsizip/vsicurl/https://osmdata.openstreetmap'\
+                            '.de/download/land-polygons-complete-4326.zip'\
+                            '/land-polygons-complete-4326/land_polygons.shp')
+
     # If specified DEM subdirectory exists, delete contents
     workdir = os.path.join(workdir,'mask')
     os.makedirs(workdir, exist_ok=True)
 
+    path_shorelines = os.path.join(workdir, 'watermsk_shorelines.vrt')
+    path_lakes      = os.path.join(workdir, 'watermsk_lakes.vrt')
+
     # Get bounds of user bbox_file
     bounds=open_shapefile(bbox_file, 0, 0).bounds
 
-    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT':
-        outputFormat='ENVI'
+    # File must be physically extracted. Defaulting to ENVI format.
+    outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     # Download mask
-    if maskfilename.lower()=='download':
+    if maskfilename.lower() == 'download':
         log.info("***Downloading water mask... ***")
-        maskfilename=os.path.join(workdir,'watermask'+'.msk')
         os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
-        ###Make coastlines/islands union VRT
-        renderOGRVRT(os.path.join(workdir,'watermsk_shorelines.vrt'), _world_watermask[::2])
-        ###Make lakes/ponds union VRT
-        renderOGRVRT(os.path.join(workdir,'watermsk_lakes.vrt'), _world_watermask[1::2])
+        maskfilename = os.path.join(workdir, 'watermask.msk')
 
-        ###Initiate water-mask with coastlines/islands union VRT
+        #  Make coastlines/islands union VRT
+        renderOGRVRT(path_shorelines, _world_watermask[::2])
+
+        #  Make lakes/ponds union VRT
+        renderOGRVRT(path_lakes, _world_watermask[1::2])
+
+        ##  Initiate water-mask with coastlines/islands union VRT
+        path_uncropped     = os.path.join(workdir, 'watermask_uncropped.msk')
+        path_uncropped_vrt = path_uncropped + '.vrt'
+        gdal.Rasterize(path_uncropped, path_shorelines,
+                       format=outputFormat, outputBounds=bounds,
+                       outputType=gdal.GDT_Byte, width=arrshape[1],
+                       height=arrshape[0], burnValues=[1], layers='merged')
+
         # save uncropped mask
-        gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'), os.path.join(workdir,'watermsk_shorelines.vrt'),
-                                    format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1],
-                                    height=arrshape[0], burnValues=[1], layers='merged')
-        gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'), os.path.join(workdir,'watermask_uncropped.msk'), format="VRT")
+        gdal.Translate(path_uncropped + '.vrt', path_uncropped, format='VRT')
+
         # save cropped mask
-        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), format=outputFormat, outputBounds=bounds,
-                         outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+        gdal.Warp(maskfilename, path_uncropped_vrt, format=outputFormat,
+                    outputBounds=bounds, outputType=gdal.GDT_Byte,
+                    width=arrshape[1], height=arrshape[0],
+                    multithread=True, options=[f'num_threads={num_threads}'])
 
-        update_file=gdal.Open(maskfilename,gdal.GA_Update)
+        update_file = gdal.Open(maskfilename, gdal.GA_Update)
         update_file.SetProjection(proj)
-        update_file.GetRasterBand(1).SetNoDataValue(0.) ; del update_file
-        gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
+        update_file.GetRasterBand(1).SetNoDataValue(0.); del update_file
+        gdal.Translate(maskfilename + '.vrt', maskfilename, format='VRT')
 
-        ###Must take inverse of lakes/ponds union because of opposite designation (1 for water, 0 for land) as desired (0 for water, 1 for land)
-        lake_masks=gdal.Rasterize('', os.path.join(workdir,'watermsk_lakes.vrt'),
-                        format='MEM', outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1],
-                        height=arrshape[0], burnValues=[1], layers='merged', inverse=True)
+        ## Take inverse of lakes/ponds union because of opposite designation
+         # (1 for water, 0 for land) as desired (0 for water, 1 for land)
+        lake_masks = gdal.Rasterize('', path_lakes, format='MEM',
+                        outputBounds=bounds, outputType=gdal.GDT_Byte,
+                        width=arrshape[1], height=arrshape[0], burnValues=[1],
+                        layers='merged', inverse=True)
 
         lake_masks.SetProjection(proj)
         lake_masks=lake_masks.ReadAsArray()
 
-        ###Update water-mask with lakes/ponds union and average amplitude
+        ## Update water-mask with lakes/ponds union and average amplitude
         mask_file = gdal.Open(maskfilename, gdal.GA_Update)
-        mask_file.GetRasterBand(1).WriteArray(lake_masks*gdal.Open(maskfilename).ReadAsArray())
-        #Delete temp files
+        mask_arr  = mask_file.ReadAsArray()
+        mask_file.GetRasterBand(1).WriteArray(lake_masks*mask_arr)
+        # Delete temp files and flush to disk
         del lake_masks, mask_file
 
+    ## Use NLCD Mask
     if os.path.basename(maskfilename).lower().startswith('nlcd'):
         log.info("***Accessing and cropping the NLCD mask...***")
-        maskfilename = NLCDMasker(os.path.dirname(workdir))(proj, bounds, arrshape, outputFormat)
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(
+                                        proj, bounds, arrshape, outputFormat)
 
     # Make sure to apply amplitude mask to downloaded products
-    if os.path.exists(os.path.join(workdir,'watermsk_shorelines.vrt')) or os.path.basename(maskfilename)=='NLCD_crop.msk':
-        ###Make average amplitude mask
+    if os.path.exists(os.path.join(workdir,'watermsk_shorelines.vrt')) or \
+                        os.path.basename(maskfilename)=='NLCD_crop.msk':
+        # Make average amplitude mask
         if amp_thresh:
-            amp_file = rasterAverage(os.path.join(workdir,'avgamplitude'), product_dict[0], bounds, prods_TOTbbox, outputFormat=outputFormat, thresh=amp_thresh)
-            ###Update mask with average amplitude
-            mask_file = gdal.Open(maskfilename,gdal.GA_Update)
-            mask_file.GetRasterBand(1).WriteArray(gdal.Open(maskfilename).ReadAsArray()*amp_file)
-            #Delete temp files
+            amp_file = rasterAverage(os.path.join(workdir, 'avgamplitude'),
+                            product_dict[0], bounds, prods_TOTbbox,
+                            outputFormat=outputFormat, thresh=amp_thresh)
+            # Update mask with average amplitude
+            mask_file = gdal.Open(maskfilename, gdal.GA_Update)
+            mask_arr  = mask_file.ReadAsArray()
+            mask_file.GetRasterBand(1).WriteArray(amp_file*mask_arr)
+
+            # Delete temp files / flush
             del mask_file, amp_file
-        if os.path.exists(os.path.join(workdir,'watermsk_shorelines.vrt')):
-            os.remove(os.path.join(workdir,'watermsk_shorelines.vrt'))
-        if os.path.exists(os.path.join(workdir,'watermsk_lakes.vrt')):
-            os.remove(os.path.join(workdir,'watermsk_lakes.vrt'))
+
+        ## remove extra files
+        os.remove(path_shorelines) if os.path.exists(path_shorelines) else ''
+        os.remove(path_lakes) if os.path.exists(path_lakes) else ''
 
     # Load mask
-    try:
-        # Check if uncropped/cropped maskfiles exist in 'mask' subdirectory
-        if not os.path.exists(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')):
-            # save uncropped masfile
-            gdal.BuildVRT(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), maskfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
-            # update maskfilename
-            maskfilename=os.path.join(workdir,os.path.basename(maskfilename).split('.')[0].split('uncropped')[0]+'.msk')
-            # save cropped maskfile
-            gdal.Warp(maskfilename, os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-            mask_file = gdal.Open(maskfilename,gdal.GA_Update)
-            mask_file.SetProjection(proj) ; del mask_file
-            gdal.Translate(maskfilename+'.vrt', maskfilename, options=gdal.TranslateOptions(format="VRT"))
-            ###Make average amplitude mask
-            if amp_thresh:
-                amp_file = rasterAverage(os.path.join(workdir,'avgamplitude'), product_dict[0], bounds, prods_TOTbbox, outputFormat=outputFormat, thresh=amp_thresh)
-                ###Update mask with average amplitude
-                mask_file = gdal.Open(maskfilename,gdal.GA_Update)
-                mask_file.GetRasterBand(1).WriteArray(gdal.Open(maskfilename).ReadAsArray()*amp_file)
-                #Delete temp files
-                del mask_file, amp_file
+    # try:
+    # Check if uncropped/cropped maskfiles exist in 'mask' subdirectory
+    root_mask = os.path.join(workdir, os.path.basename(
+                                                maskfilename).split('.')[0])
+    if not os.path.exists(root_mask + '.msk'):
+        # save uncropped maskfile
+        gdal.BuildVRT(root_mask + '_uncropped.msk.vrt', maskfilename,
+                                                        outputBounds=bounds)
+        # update maskfilename
+        maskfilename = root_mask.split('uncropped')[0] + '.msk'
 
-        #pass cropped DEM
-        mask=gdal.Warp('', maskfilename, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-        mask.SetProjection(proj)
-        mask.SetDescription(maskfilename)
-    except:
-        raise Exception('Failed to open user mask')
+        # save cropped maskfile
+        gdal.Warp(maskfilename, root_mask + '_uncropped.msk.vrt',
+                        format=outputFormat, cutlineDSName=prods_TOTbbox,
+                        outputBounds=bounds, width=arrshape[1],
+                        height=arrshape[0], multithread=True,
+                        options=[f'NUM_THREADS={num_threads}'])
+
+        mask_file = gdal.Open(maskfilename, gdal.GA_Update)
+        mask_file.SetProjection(proj); del mask_file
+        gdal.Translate(maskfilename + '.vrt', maskfilename, format='VRT')
+
+        ## Make average amplitude mask
+        if amp_thresh:
+            amp_file = rasterAverage(os.path.join(workdir, 'avgamplitude'),
+                            product_dict[0], bounds, prods_TOTbbox,
+                             outputFormat=outputFormat, thresh=amp_thresh)
+
+            # Update mask with average amplitude
+            mask_file = gdal.Open(maskfilename, gdal.GA_Update)
+            mask_arr  = mask_file.ReadAsArray()
+            mask_file.GetRasterBand(1).WriteArray(mask_Arr*amp_file)
+
+            # Delete temp files
+            del mask_file, amp_file
+
+    # crop mask to DEM size?
+    mask = gdal.Warp('', maskfilename, format='MEM',
+                    cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                    width=arrshape[1], height=arrshape[0], multithread=True,
+                    options=[f'NUM_THREADS={num_threads}'])
+
+    mask.SetProjection(proj)
+    mask.SetDescription(maskfilename)
+    # except:
+    #     raise Exception('Failed to open user mask')
 
     return mask
 
@@ -267,7 +314,7 @@ class NLCDMasker(object):
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
         dst = op.join(path_mask, 'NLCD_crop.msk')
-        ds  = gdal.Translate(dst, ds_mask, options=gdal.TranslateOptions(format=outputFormat, outputType=gdal.GDT_Byte))
+        ds  = gdal.Translate(dst, ds_mask, format=outputFormat, outputType=gdal.GDT_Byte)
         gdal.BuildVRT(dst + '.vrt' ,ds)
 
         ## save a view of the mask

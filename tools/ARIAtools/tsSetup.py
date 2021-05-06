@@ -18,7 +18,7 @@ from datetime import datetime
 from osgeo import gdal
 
 # Import functions
-from ARIAtools import progBar
+from ARIAtools import progBar, version
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
@@ -373,8 +373,10 @@ def generate_stack(aria_prod, input_files, output_file_name,
 def main(inps=None):
     """Run time series prepation."""
     inps = cmd_line_parse()
-
-    print("***Time-series Preparation Function:***")
+    print ('*****************************************************************')
+    print (version.release_description)
+    print ('*** Time-series Preparation Function ***')
+    print ('*****************************************************************')
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
