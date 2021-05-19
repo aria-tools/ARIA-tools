@@ -898,6 +898,12 @@ def main(inps=None):
     if not inps.layers and not inps.tropo_products:
         log.info('No layers specified; only creating bounding box shapes')
 
+    elif inps.layers.lower()=='all':
+        log.info('All layers are to be extracted, pass all keys.')
+        inps.layers=list(standardproduct_info.products[1][0].keys())
+        # Must remove productBoundingBoxes & pair-names because they are not raster layers
+        inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
+
     elif inps.tropo_products:
         log.info('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
         # If no input layers specified, initialize list
@@ -907,11 +913,6 @@ def main(inps=None):
         if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
         if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
 
-    elif inps.layers.lower()=='all':
-        log.info('All layers are to be extracted, pass all keys.')
-        inps.layers=list(standardproduct_info.products[1][0].keys())
-        # Must remove productBoundingBoxes & pair-names because they are not raster layers
-        inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
 
     else:
         inps.layers=list(inps.layers.split(','))
