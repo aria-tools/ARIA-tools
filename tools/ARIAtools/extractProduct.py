@@ -965,8 +965,8 @@ def main(inps=None):
                              num_threads=inps.num_threads,
                              minimumOverlap=inps.minimumOverlap,
                              verbose=inps.verbose)
-    standardproduct_info.products[0], standardproduct_info.products[1],
-    standardproduct_info.bbox_file, prods_TOTbbox,
+    standardproduct_info.products[0], standardproduct_info.products[1], \
+    standardproduct_info.bbox_file, prods_TOTbbox, \
     prods_TOTbbox_metadatalyr, arrshape, proj = res
 
     # Load or download mask (if specified).
