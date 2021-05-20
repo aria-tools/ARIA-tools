@@ -60,14 +60,10 @@ def cmdLineParse(iargs = None):
     return parser.parse_args(args=iargs)
 
 class InterpCube(object):
-    '''
-        Class to interpolate intersection of cube with DEM
-    '''
+    """ Class to interpolate intersection of cube with DEM """
 
     def __init__(self, inobj, hgtobj, latobj, lonobj):
-        '''
-            Init with h5py dataset.
-        '''
+        """ Init with h5py dataset. """
         self.data = inobj[:]
         self.hgts = hgtobj[:]
         self.offset = None
@@ -78,23 +74,20 @@ class InterpCube(object):
         self.createInterp()
 
     def createInterp(self):
-        '''
-            Create interpolators.
-        '''
+        """ Create interpolators. """
         from scipy.interpolate import RectBivariateSpline
         self.offset = np.mean(self.data)
         for i in range(len(self.hgts)):
             self.interp.append( RectBivariateSpline(self.latobj, self.lonobj, self.data[i]-self.offset))
 
     def __call__(self, line, pix, h):
-        '''
-            Interpolate at a single point.
-        '''
+        """ Interpolate at a single point. """
         from scipy.interpolate import interp1d
 
         vals  = np.array( [x(line,pix)[0,0] for x in self.interp])
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
+
 
 class metadata_qualitycheck:
     '''
@@ -280,10 +273,12 @@ class metadata_qualitycheck:
 
         return self.data_array
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
-    '''
-        Function to load and export DEM, lat, lon arrays.
-        If "Download" flag is specified, DEM will be donwloaded on the fly.
+
+def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
+                        proj, arrshape=None, workdir='./',
+                        outputFormat='ENVI', num_threads='2'):
+    '''Function to load and export DEM, lat, lon arrays.
+    If "Download" flag is specified, DEM will be donwloaded on the fly.
     '''
     # If specified DEM subdirectory exists, delete contents
     workdir      = os.path.join(workdir,'DEM')
@@ -335,8 +330,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, p
 
     return aria_dem, ds_aria, Latitude, Longitude
 
+
 def dl_dem(path_dem, path_prod_union, num_threads):
-    """Download the DEM over product bbox union."""
+    """ Download the DEM over product bbox union. """
 
     # Import functions
     from ARIAtools.shapefile_util import shapefile_area
@@ -346,19 +342,22 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     WSEN      = prod_shapefile.bounds
     # If area > 225000 km2, must split requests into chunks to successfully access data
     chunk = False
-    if shapefile_area(prod_shapefile) > 450000:
+    area  = shapefile_area(prod_shapefile)
+    if area > 80000:
         chunk = True
         # Increase chunking size to discretize box into smaller grids
-        log.warning('User-defined bounds results in an area of %d km which exceeds the maximum download area of 450000; downloading in chunks', shapefile_area(prod_shapefile))
+        log.warning(f'User-defined bounds results in an area of {area:.3f} km2,'\
+                    ' which exceeds the maximum download area of 80000;'
+                    ' downloading in chunks')
         rows, cols = chunk_area(WSEN)
 
     if chunk: # Download in chunks (if necessary)
         chunked_files = []
+        from shapely.geometry import Polygon
         for i in range(len(cols)-1):
             dst = f'{root}_{i}_uncropped.tif'
             chunked_files.append(dst)
             WSEN = [cols[i], rows[i], cols[i+1], rows[i+1]]
-            poly = bbox2poly(SNWE=[rows[i], rows[i+1], cols[i], cols[i+1]])
             r    = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
             with open(dst, 'wb') as fh:
                 fh.write(r.content)
@@ -376,10 +375,16 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     del r
     return dst
 
-def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
-    '''
-        Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), report common track union to accurately interpolate metadata fields, and expected shape for DEM.
-    '''
+
+def merged_productbbox(metadata_dict, product_dict, workdir='./',
+                       bbox_file=None, croptounion=False, num_threads='2',
+                       minimumOverlap=0.0081, verbose=None):
+    """ Extract/merge productBoundingBox layers for each pair and update dict
+
+    Report common track bbox (default is to take common intersection,
+    but user may specify union), report common track union to accurately
+    interpolate metadata fields, and expected shape for DEM.
+    """
 
     # Import functions
     from ARIAtools.shapefile_util import save_shapefile, shapefile_area
@@ -496,13 +501,20 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
-    """
-        Export layer and 2D meta-data layers (at the product resolution).
-        The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
-        The keys specify which layer to extract from the dictionary.
-        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
-        Optionally, a user may pass a mask-file.
+
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
+                    rankedResampling=False, dem=None, lat=None, lon=None,
+                    mask=None, outDir='./',outputFormat='VRT',
+                    stitchMethodType='overlap', verbose=None,
+                    num_threads='2', multilooking=None):
+    """ Export layer and 2D meta-data layers (at the product resolution).
+
+    The function finalize_metadata is called to derive the 2D metadata layer.
+    Dem/lat/lon arrays must be passed for this process.
+    The keys specify which layer to extract from the dictionary.
+    All products are cropped by the bounds from the input bbox_file,
+    and clipped to the track extent denoted by the input prods_TOTbbox.
+    Optionally, a user may pass a mask-file.
     """
 
     ##Import functions
@@ -606,10 +618,15 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
         prog_bar.close()
     return
 
-def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
-    '''
-        2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
-    '''
+
+def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
+                          lat, lon, mask=None, outputFormat='ENVI',
+                          verbose=None, num_threads='2'):
+    """ 2D metadata layer derivation by interpolation and intersection with DEM
+
+    Intersection done on 3D layers with a DEM.
+    Lat/lon arrays must also be passed for this process.
+    """
 
     # import dependencies
     import scipy
@@ -688,10 +705,15 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
 
     del out_interpolated, interpolator, interp_2d, data_array
 
-def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox, outDir='./',outputFormat='VRT', verbose=None, num_threads='2'):
-    """
-        Perform tropospheric corrections. Must provide valid path to GACOS products.
-        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+
+def tropo_correction(full_product_dict, tropo_products, bbox_file,
+                        prods_TOTbbox, outDir='./',outputFormat='VRT',
+                        verbose=None, num_threads='2'):
+    """ Perform tropospheric corrections.
+
+    Must provide valid path to GACOS products.
+    All products are cropped by the bounds from the input bbox_file, and
+    clipped to the track extent denoted by the input prods_TOTbbox.
     """
 
     # Import functions
@@ -882,6 +904,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         else:
             log.warning("Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s", product_dict[2][i][0], tropo_products)
 
+
 def main(inps=None):
     '''
        Main workflow for extracting layers from ARIA products
@@ -890,10 +913,10 @@ def main(inps=None):
 
     log.info("***Extract Product Function:***")
 
-    # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
-    # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
+    # if bbox, file(s) not meeting imposed spatial criteria are rejected.
+    # In addition, path to bbox file ['standardproduct_info.bbox_file']
+    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox,
+                                    workdir=inps.workdir, verbose=inps.verbose)
 
     if not inps.layers and not inps.tropo_products:
         log.info('No layers specified; only creating bounding box shapes')
@@ -902,32 +925,50 @@ def main(inps=None):
         log.info('All layers are to be extracted, pass all keys.')
         inps.layers=list(standardproduct_info.products[1][0].keys())
         # Must remove productBoundingBoxes & pair-names because they are not raster layers
-        inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
+        layers = ['productBoundingBox', 'productBoundingBoxFrames', 'pair_name']
+        inps.layers = [i for i in inps.layers if i not in layers]
 
     elif inps.tropo_products:
-        log.info('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
+        log.info('Tropospheric corrections will be applied, '\
+            'making sure at least unwrappedPhase and lookAngle are extracted.')
         # If no input layers specified, initialize list
         if not inps.layers: inps.layers=[]
         # If valid argument for input layers passed, parse to list
-        if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
-        if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
-        if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
+        if isinstance(inps.layers,str):
+            inps.layers = list(inps.layers.split(','))
+            inps.layers = [i.replace(' ','') for i in inps.layers]
 
+        if 'lookAngle' not in inps.layers:
+            inps.layers.append('lookAngle')
+        if 'unwrappedPhase' not in inps.layers:
+            inps.layers.append('unwrappedPhase')
 
     else:
-        inps.layers=list(inps.layers.split(','))
-        inps.layers=[i.replace(' ','') for i in inps.layers]
+        inps.layers = list(inps.layers.split(','))
+        inps.layers = [i.replace(' ','') for i in inps.layers]
 
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower()=='all':
         import multiprocessing
-        log.info('User specified use of all %s threads for gdal multiprocessing', str(multiprocessing.cpu_count()))
+        log.info('User specified use of all %s threads for gdal multiprocessing',
+                                        str(multiprocessing.cpu_count()))
         inps.num_threads='ALL_CPUS'
     log.info('Thread count specified for gdal multiprocessing = %s', inps.num_threads)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
+    res = merged_productbbox(standardproduct_info.products[0],
+                             standardproduct_info.products[1],
+                             os.path.join(inps.workdir,'productBoundingBox'),
+                             standardproduct_info.bbox_file,
+                             inps.croptounion,
+                             num_threads=inps.num_threads,
+                             minimumOverlap=inps.minimumOverlap,
+                             verbose=inps.verbose)
+    standardproduct_info.products[0], standardproduct_info.products[1],
+    standardproduct_info.bbox_file, prods_TOTbbox,
+    prods_TOTbbox_metadatalyr, arrshape, proj = res
+
     # Load or download mask (if specified).
     if inps.mask is not None:
         inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude']))
@@ -943,15 +984,18 @@ def main(inps=None):
         inps.demfile, demfile, Latitude, Longitude = prep_dem(inps.demfile,
                     standardproduct_info.bbox_file, prods_TOTbbox,
                     prods_TOTbbox_metadatalyr, proj, arrshape=arrshape,
-                    workdir=inps.workdir, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+                    workdir=inps.workdir, outputFormat=inps.outputFormat,
+                    num_threads=inps.num_threads)
     else:
         demfile, Latitude, Longitude = None, None, None
 
     # Extract user expected layers
     export_products(standardproduct_info.products[1], standardproduct_info.bbox_file,
-            prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude,
-            lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat,
-            stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+            prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile,
+            lat=Latitude, lon=Longitude, mask=inps.mask, outDir=inps.workdir,
+            outputFormat=inps.outputFormat, stitchMethodType='overlap',
+            verbose=inps.verbose, num_threads=inps.num_threads,
+            multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
@@ -960,15 +1004,20 @@ def main(inps=None):
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox,
-                        inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(inps.mask.GetDescription(), inps.multilooking,
+                        bounds, prods_TOTbbox, inps.rankedResampling,
+                        outputFormat=inps.outputFormat,
+                        num_threads=inps.num_threads)
         # Resample DEM
         if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds,
-                            prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+            resampleRaster(demfile.GetDescription(), inps.multilooking,
+                            bounds, prods_TOTbbox, inps.rankedResampling,
+                            outputFormat=inps.outputFormat,
+                            num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.tropo_products:
         tropo_correction(standardproduct_info.products, inps.tropo_products,
-                         standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir,
-                         outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+                         standardproduct_info.bbox_file, prods_TOTbbox,
+                         outDir=inps.workdir, outputFormat=inps.outputFormat,
+                         verbose=inps.verbose, num_threads=inps.num_threads)

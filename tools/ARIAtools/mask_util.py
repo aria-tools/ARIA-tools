@@ -104,6 +104,9 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj, amp_th
     # Load mask
     try:
         # Check if uncropped/cropped maskfiles exist in 'mask' subdirectory
+        # usr_mask = os.path.join(workdir, os.path.basename(maskfilename
+        #                                             ).splitext()[0] + '.msk')
+        # if not os.path.exists(usr_mask):
         if not os.path.exists(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'.msk')):
             # save uncropped masfile
             gdal.BuildVRT(os.path.join(workdir,os.path.basename(maskfilename).split('.')[0]+'_uncropped.msk.vrt'), maskfilename, options=gdal.BuildVRTOptions(outputBounds=bounds))
