@@ -365,7 +365,6 @@ def dl_dem(path_dem, path_prod_union, num_threads):
         # Tile chunked products together after last iteration
         dst       = f'{root}_uncropped.tif'
         gdal.Warp(dst, chunked_files, multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
-        [os.remove(i) for i in glob.glob(f'{root}_*_uncropped.tif')] # remove tmp
 
     else:
         dst = f'{root}_uncropped.tif'
@@ -433,7 +432,12 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
         total_bbox_metadatalyr=open_shapefile(prods_TOTbbox_metadatalyr, 0, 0)
         # Generate footprint for the union of all products
         if croptounion:
-            prods_bbox=prods_bbox.union(total_bbox)
+            # Get union
+            total_bbox=total_bbox.union(prods_bbox)
+            total_bbox_metadatalyr=total_bbox_metadatalyr.union(prods_bbox)
+            # Save to file
+            save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON')
+            save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
@@ -674,6 +678,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     except:
         #chunk data to conserve memory
         out_interpolated = []
+        # need to mask nodata
+        dem_array = dem.ReadAsArray()
+        dem_array = np.ma.masked_where(dem_array == dem.GetRasterBand(1).GetNoDataValue(), dem_array)
         dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
         lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
         lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
@@ -766,15 +773,21 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
     tropo_date_dict={}
     for i in date_list: tropo_date_dict[i]=[] ; tropo_date_dict[i+"_UTC"]=[]
     for i in enumerate(tropo_products):
-        if not os.path.isdir(i[1]):
+        if not os.path.isdir(i[1]) and not i[1].endswith('.ztd') and not i[1].endswith('.tif'):
             untar_dir=os.path.join(os.path.abspath(os.path.join(i[1], os.pardir)),os.path.basename(i[1]).split('.')[0]+'_extracted')
             if not tarfile.is_tarfile(i[1]):
                 raise Exception('Cannot extract %s because it is not a valid tarfile. Resolve this and relaunch'%(i[1]))
             log.info('Extracting GACOS tarfile %s to %s.', os.path.basename(i[1]), untar_dir)
             tarfile.open(i[1]).extractall(path=untar_dir)
             tropo_products[i[0]]=untar_dir
-        # Loop through each GACOS product file
-        for k in glob.glob(os.path.join(tropo_products[i[0]],'*.ztd')):
+        # Loop through each GACOS product file, differentiating between direct input list of GACOS products vs parent directory
+        if i[1].endswith('.ztd') or i[1].endswith('.tif'):
+            ztd_list = [i[1]]
+        else:
+            ztd_list = glob.glob(os.path.join(tropo_products[i[0]],'*.ztd')) + glob.glob(os.path.join(tropo_products[i[0]],'*.tif'))
+            # prioritize .ztd over .tif duplicates if the former exists
+            ztd_list = [i for i in ztd_list if not (i.endswith('.tif') and i.split('.tif')[0] in ztd_list)]
+        for k in ztd_list:
             # Only check files corresponding to standard product dates
             if os.path.basename(k)[:-4] in date_list:
                 tropo_date_dict[os.path.basename(k)[:-4]].append(k)
@@ -790,6 +803,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                     log.debug("GACOS product %s successfully converted to GDAL-readable raster", k)
 
     # If multiple GACOS directories, merge products.
+    tropo_products = list(set([os.path.dirname(i) if (i.endswith('.ztd') or i.endswith('.tif')) else i for i in tropo_products]))
     if len(tropo_products)>1:
         tropo_products=os.path.join(outDir,'merged_GACOS')
         log.info('Stitching/storing GACOS products in %s.', tropo_products)
@@ -819,7 +833,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
         tropo_products=tropo_products[0]
 
     # Estimate percentage of overlap with tropospheric product
-    for i in glob.glob(os.path.join(tropo_products,'*.ztd.vrt')):
+    for i in glob.glob(os.path.join(tropo_products,'*.vrt')):
         # create shapefile
         geotrans=gdal.Open(i).GetGeoTransform()
         bbox=[geotrans[3]+(gdal.Open(i).ReadAsArray().shape[0]*geotrans[-1]),geotrans[3],geotrans[0],geotrans[0]+(gdal.Open(i).ReadAsArray().shape[1]*geotrans[1])]
@@ -833,11 +847,29 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             raise Exception('No spatial overlap between tropospheric product %s and defined bounding box. Resolve conflict and relaunch', i)
 
     # Iterate through all IFGs and apply corrections
+    missing_products = []
     for i in range(len(product_dict[0])):
         outname=os.path.join(workdir,product_dict[2][i][0])
         unwname=os.path.join(outDir,'unwrappedPhase',product_dict[2][i][0])
         tropo_reference=os.path.join(tropo_products,product_dict[2][i][0][:8]+'.ztd.vrt')
         tropo_secondary=os.path.join(tropo_products,product_dict[2][i][0][9:]+'.ztd.vrt')
+        # if .ztd products don't exist, check if .tif exists
+        if not os.path.exists(tropo_reference):
+            tropo_reference=os.path.join(tropo_products,product_dict[2][i][0][:8]+'.ztd.tif.vrt')
+        if not os.path.exists(tropo_secondary):
+            tropo_secondary=os.path.join(tropo_products,product_dict[2][i][0][9:]+'.ztd.tif.vrt')
+        # skip if corrected already generated and does not need to be updated
+        if os.path.exists(outname):
+            # get unwrappedPhase geotrans and productbounding box
+            unw_prodcheck = gdal.Open(unwname)
+            unw_geotrans = unw_prodcheck.GetGeoTransform()
+            unw_prodcheck = np.isfinite(unw_prodcheck.ReadAsArray())
+            tropo_prodcheck = gdal.Open(outname)
+            output_geotrans = tropo_prodcheck.GetGeoTransform()
+            tropo_prodcheck = np.isfinite(tropo_prodcheck.ReadAsArray())
+            if unw_geotrans == output_geotrans and np.array_equal(unw_prodcheck, tropo_prodcheck):
+                continue
+            del unw_prodcheck, tropo_prodcheck
         if os.path.exists(tropo_reference) and os.path.exists(tropo_secondary):
             # Check if tropo products are temporally consistent with IFG
             for j in [tropo_reference, tropo_secondary]:
@@ -903,6 +935,14 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
 
         else:
             log.warning("Must skip IFG %s, because the tropospheric products corresponding to the reference and/or secondary products are not found in the specified folder %s", product_dict[2][i][0], tropo_products)
+            for j in [tropo_reference, tropo_secondary]:
+                if not os.path.exists(j) and j not in missing_products:
+                    missing_products.append(j)
+    # Print list of dates missing tropospheric corrections
+    if len(missing_products) > 0:
+        missing_products = [os.path.basename(i)[:8] for i in missing_products]
+        log.debug("Tropo products for the following dates are missing:")
+        log.debug(missing_products)
 
 
 def main(inps=None):
