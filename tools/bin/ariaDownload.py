@@ -358,16 +358,22 @@ class Downloader(object):
        asf_urs4        = {'url': 'https://urs.earthdata.nasa.gov/oauth/authorize',
                          'client': 'BO_n7nTIlMljdvU6kRRB3g',
                          'redir': 'https://auth.asf.alaska.edu/login'}
+       path_netrc      = op.join(op.expanduser('~'), '.netrc')
        if self.inps.user is not None and self.inps.passw is not None:
            user  = self.inps.user
            passw = self.inps.passw
-       elif op.exists(op.join(op.expanduser('~'), '.netrc')):
+       elif op.exists(path_netrc):
            log.info('Attempting to obtaining user/pass from .netrc')
            try:
                user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
-           except:
-               log.warning('Could not obtain credentials from existing .netrc')
-               return None
+           except Exception as E:
+               if 'permissive' in E:
+                   os.chmod(path_netrc, 600)
+               try:
+                   user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
+               except:
+                   log.warning('Could not obtain credentials from existing .netrc')
+                   return None
        else:
            # resort to ASF credential checks (will prompt for input if can't find the cookiejar)
            return None
