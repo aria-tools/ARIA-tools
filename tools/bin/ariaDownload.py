@@ -171,7 +171,8 @@ class Downloader(object):
             try:
                 S, N, W, E = self.inps.bbox.split()
             except:
-                raise Exception('Cannot understand the --bbox argument. Input string was entered incorrectly or path does not exist.')
+                raise Exception('Cannot understand the --bbox argument. '\
+                'Input string was entered incorrectly or path does not exist.')
         return ','.join([W,S,E,N])
 
     def _fmt_dst(self):
@@ -215,15 +216,11 @@ class Downloader(object):
        elif op.exists(path_netrc):
            log.info('Attempting to obtaining user/pass from .netrc')
            try:
+               os.chmod(path_netrc, 600)
                user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
            except Exception as E:
-               if 'permissive' in E:
-                   os.chmod(path_netrc, 600)
-               try:
-                   user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
-               except:
-                   log.warning('Could not obtain credentials from existing .netrc')
-                   return None
+               print (E)
+               os.sys.exit()
        else:
            # resort to ASF credential checks (will prompt for input if can't find the cookiejar)
            return None
