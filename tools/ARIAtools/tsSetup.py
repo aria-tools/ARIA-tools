@@ -373,8 +373,9 @@ def generate_stack(aria_prod, input_files, output_file_name,
 def main(inps=None):
     """Run time series prepation."""
     inps = cmd_line_parse()
-
-    print("***Time-series Preparation Function:***")
+    print ('*****************************************************************')
+    print ('*** Time-series Preparation Function ***')
+    print ('*****************************************************************')
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped

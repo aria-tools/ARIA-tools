@@ -929,8 +929,9 @@ def main(inps=None):
        Main workflow for extracting layers from ARIA products
     '''
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-
-    log.info("***Extract Product Function:***")
+    print ('*****************************************************************')
+    print ('*** Extract Product Function ***')
+    print ('*****************************************************************')
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
