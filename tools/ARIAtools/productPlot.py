@@ -10,8 +10,19 @@
 import os
 import numpy as np
 from osgeo import gdal
+import time
+from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
+import matplotlib as mpl
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import pandas as pd
+from pandas.plotting import register_matplotlib_converters
+import warnings
 import logging
+
 from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile
@@ -57,56 +68,35 @@ def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
 
-class plot_class:
-    '''
-    Class to generate standard plots for ARIA products.
-    '''
-
-    # importing dependencies
-    from datetime import datetime, date
-    from dateutil.relativedelta import relativedelta
-    import matplotlib as mpl
-    # supress matplotlib postscript warnings
+class plot_class(object):
+    """ Class to generate standard plots for ARIA products. """
     mpl._log.setLevel('ERROR')
-    import matplotlib.dates as mdates
-    import matplotlib.pyplot as plt
-    from matplotlib.ticker import MaxNLocator
-    import pandas as pd
-    from pandas.plotting import register_matplotlib_converters
-    import warnings
-    register_matplotlib_converters()
 
-    def __init__(self, product_dict, workdir='./', bbox_file=None, prods_TOTbbox=None, mask=None, outputFormat='ENVI', croptounion=False, num_threads='2'):
+    def __init__(self, product_dict, workdir='./', bbox_file=None,
+                        prods_TOTbbox=None, mask=None, outputFormat='ENVI',
+                        croptounion=False, num_threads='2'):
         # Pass inputs, and initialize list of pairs
-        self.product_dict = product_dict
-        self.bbox_file = bbox_file
+        self.product_dict  = product_dict
+        self.bbox_file     = bbox_file
+        self.workdir       = os.path.join(workdir,'figures')
+        self.prods_TOTbbox = prods_TOTbbox
+        self.mask          = mask
+        self.outputFormat  = outputFormat
+        self.croptounion   = croptounion
+        self.num_threads   = num_threads
+        self.pairs         = None
+        self.mask_ext      = '_mask' if self.mask is not None else ''
+
         if self.bbox_file:
             self.bbox_file = open_shapefile(bbox_file, 0, 0).bounds
-        self.workdir = os.path.join(workdir,'figures')
-        self.prods_TOTbbox = prods_TOTbbox
-        self.mask = mask
-        self.outputFormat = outputFormat
-        self.croptounion = croptounion
-        self.num_threads = num_threads
-        # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-        if  self.outputFormat=='VRT':
-            self.outputFormat='ENVI'
 
-        # create workdir if it doesn't exist
-        if not os.path.exists(self.workdir):
-            os.mkdir(self.workdir)
+        if self.outputFormat.upper() == 'VRT':
+            self.outputFormat = 'ENVI'
 
-        self.pairs=None
-        self.mask_ext = '_mask' if self.mask is not None else ''
+        os.path.makedirs(self.workdir, exist_ok=True)
 
     def __date_list__(self):
-        '''
-            Make dictionary of time differences between successive epochs.
-        '''
-
-        # importing dependencies
-        import time
-
+        """ Make dictionary of time differences between successive epochs. """
         dateList = []
         tbase = []
         # Get list of epochs
@@ -126,9 +116,7 @@ class plot_class:
         return dateDict
 
     def __design_matrix__(self):
-        '''
-            Make the design matrix for the inversion.
-        '''
+        """ Make the design matrix for the inversion. """
 
         dateDict = self.__date_list__()
         numDates = len(dateDict)
