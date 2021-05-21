@@ -21,13 +21,14 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, export_products, tropo_correction
 
 
+
 def createParser():
     '''
         Extract unwrapped interferogram, coherence, ⊥ baseline, and LOS file(s) for TS analysis.
     '''
 
     import argparse
-    parser = argparse.ArgumentParser(description='Get DEM')
+    parser = argparse.ArgumentParser(description='Prepare ARIA products for time series analysis')
     parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies) or tar file(s) containing GACOS products.')

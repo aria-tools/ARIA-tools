@@ -9,6 +9,7 @@
 
 from distutils.core import setup, Extension
 import os
+import subprocess
 
 
 # Path where relax third party is download to
@@ -26,6 +27,25 @@ aria_scripts = [os.path.join(root_path, 'bin', script) for \
                 script in 'ariaPlot.py ariaDownload.py ariaExtract.py '\
                    'ariaTSsetup.py ariaAOIassist.py ariaMisclosure.py'.split()]
 
+## setup version; adapted from MintPy
+cmd = "git describe --tags"
+version  = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL)
+version  = version.decode('utf-8').strip()
+
+
+# if there are new commits after the latest release
+if '-' in version:
+    version, num_commit = version.split('-')[:2]
+    version0 = version
+    version += f'-{num_commit}'
+else:
+    version0 = version
+
+cmd  = f"git log -1 --date=short --format=%cd {version0}"
+date = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL)
+date = date.decode('utf-8').strip()
+print (f'ARIA-tools {version} {date}')
+
 # If third party package is found compile as well
 if os.path.isdir(relax_path):
     print('Installing ARIA-tools with support for RelaxIV')
@@ -34,7 +54,7 @@ if os.path.isdir(relax_path):
              include_dirs=[os.path.join(root_path, 'include')] + relax_dirs)
 
     setup (name = 'ARIAtools',
-           version = '1.0',
+           version = version0,
            description = 'This is the ARIA tools package with RelaxIV support',
            ext_modules = [module1],
            packages=['ARIAtools'],
@@ -45,7 +65,7 @@ else:
     print('Installing ARIA-tools without support for RelaxIV')
 
     setup (name = 'ARIAtools',
-           version = '1.0',
+           version = version0,
            description = 'This is the ARIA tools package without RelaxIV support',
            packages=['ARIAtools'],
            package_dir={'ARIAtools': os.path.join(root_path, 'ARIAtools')},
