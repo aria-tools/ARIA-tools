@@ -6,8 +6,10 @@ RESERVED. United States Government Sponsorship acknowledged.
 Author(s): Simran Sangha, David Bekaert, & Emre Havazli
 """
 # Import functions
-from ARIAtools.tsSetup import cmd_line_parse, main
+from ARIAtools.tsSetup import cmdLineParse,main
+from pkg_resources import get_distribution
 
 if __name__ == '__main__':
-    inps = cmd_line_parse()
+    print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    inps = cmdLineParse()
     main(inps)
