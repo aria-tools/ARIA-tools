@@ -17,7 +17,6 @@ from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
-from ARIAtools import version
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -930,11 +929,7 @@ def main(inps=None):
        Main workflow for extracting layers from ARIA products
     '''
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-    print ('**********************************************************************')
-    print (version.release_description)
-    print ('*** Extract Product Function ***')
-    print ('**********************************************************************')
-
+    
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)

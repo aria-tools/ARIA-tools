@@ -551,7 +551,6 @@ def main(inps=None):
     from ARIAtools.ARIAProduct import ARIA_standardproduct
     logger.setLevel(logging.INFO)
     print ('*****************************************************************')
-    print (version.release_description)
     print ('*** Plotting Function ***')
     print ('*****************************************************************')
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.

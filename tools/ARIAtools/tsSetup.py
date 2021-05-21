@@ -374,7 +374,6 @@ def main(inps=None):
     """Run time series prepation."""
     inps = cmd_line_parse()
     print ('*****************************************************************')
-    print (version.release_description)
     print ('*** Time-series Preparation Function ***')
     print ('*****************************************************************')
     # if user bbox was specified, file(s) not meeting imposed spatial
