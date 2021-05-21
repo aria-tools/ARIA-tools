@@ -528,6 +528,7 @@ class PlotClass(object):
         return colors, mapper
 
 
+    # no longer working
     def _adaptive_xticks(self, dates):
         """ Adjust the number of xticks based on the time interval """
         dates = sorted([datetime.strptime(i, '%Y%m%d') for i in dates])
@@ -535,16 +536,19 @@ class PlotClass(object):
         en    = max(dates) + relativedelta(months=1)
         elap  = en - min(dates)
 
-        if len(dates) == 2 or elap.days <= 365*2.5:
-            st     = min(dates).replace(day=1)
-            labels = pd.date_range(st, en, freq='MS')
+        if elap.days < 30:
+            st   = min(dates).replace(day=1)
+            freq = '10D'
+        elif len(dates) == 2 or elap.days <= 365*2.5:
+            st   = min(dates).replace(day=1)
+            freq = 'MS'
         elif elap.days > 365*2.5 and elap.days <= 365*5.5:
-            labels = pd.date_range(st, en, freq='3MS')
+            freq = '3MS'
         elif elap.days > 365*5.5 and elap.days <= 365*8.5:
-            labels = pd.date_range(st, en, freq='6MS')
+            freq = '6MS'
         else:
-            labels = pd.date_range(st, en, freq='AS')
-
+            freq = 'AS'
+        labels = pd.date_range(st, en, freq=freq)
         xticks = [x.toordinal() for x in labels]
         return xticks, labels
 
