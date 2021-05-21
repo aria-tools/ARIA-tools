@@ -17,6 +17,7 @@ from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 from osgeo import ogr
 from shapely.geometry import Polygon, MultiPolygon
+from pkg_resources import get_distribution
 
 
 
@@ -721,12 +722,8 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
 
 # Main
 if __name__ == "__main__":
-    '''
-        Main workflow for extracting and visualizing meta data.
-    '''
-
-    # Inputs
-    # Gather inputs from command line
+    """ Main workflow for extracting and visualizing meta data. """
+    print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
     inps = cmdLineParse(iargs=None)
 
 
