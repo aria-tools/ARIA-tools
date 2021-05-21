@@ -25,24 +25,45 @@ log = logging.getLogger('ARIAtools')
 
 def createParser():
     """ Download a bulk download script and execute it """
-    parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. GUNW products are hosted at the NASA ASF DAAC.\nDownloading them requires a NASA Earthdata URS user login and requires users to add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.',
-                                     epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-o', '--output', dest='output', default='Download', type=str, help='Output type, default is "Download". "Download", "Count", "Url" and "Kmz" are currently supported. Use "Url" for ingestion to aria*.py')
-    parser.add_argument('-t', '--track', dest='track', default=None, type=str, help='track to download; single number (including leading zeros) or comma separated')
-    parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str, help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON geometry.')
-    parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str, help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
-    parser.add_argument('-s', '--start', dest='start', default=None, type=str, help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2014).')
-    parser.add_argument('-e', '--end', dest='end', default=None, type=str, help='End date as YYYYMMDD. If none provided, ends today.')
-    parser.add_argument('-u', '--user', dest='user', default=None, type=str, help='NASA Earthdata URS user login. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
-    parser.add_argument('-p', '--pass', dest='passw', default=None, type=str, help='NASA Earthdata URS user password. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
-    parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int, help='Take pairs with a temporal baseline -- days less than this value.')
-    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int, help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: ariaDownload.py -t 004 --daysmore 364.')
-    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='1', type=str, help='Specify number of threads for multiprocessing download. By default "1". Can also specify "All" to use all available threads.')
-    parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str, help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
-    parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str, help='Flight direction, options: ascending, a, descending, d')
-    parser.add_argument('--use_all', dest='use_all', action='store_true', help='Consider all calls to ariaDownload when plotting DL speeds')
-    parser.add_argument('-v', '--verbose', dest='v', action='store_true', help='Print products to be downloaded to stdout')
+    parser = argparse.ArgumentParser(description=
+        'Command line interface to download GUNW products from the ASF DAAC. '\
+        'GUNW products are hosted at the NASA ASF DAAC.\nDownloading them '\
+        'requires a NASA Earthdata URS user login and requires users to add '
+        '"GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.',
+        epilog='Examples of use:\n\t ariaDownload.py --track 004 --output count'\
+                '\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"'\
+                '\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
+             formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('-o', '--output', dest='output', default='Download', type=str,
+        help='Output type, default is "Download". "Download", "Count", "Url" and "Kmz" are currently supported. Use "Url" for ingestion to aria*.py')
+    parser.add_argument('-t', '--track', dest='track', default=None, type=str,
+        help='track to download; single number (including leading zeros) or comma separated')
+    parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str,
+        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON geometry.')
+    parser.add_argument('-w', '--workdir', dest='wd', default='./products', type=str,
+        help='Specify directory to deposit all outputs. Default is "products" in local directory where script is launched.')
+    parser.add_argument('-s', '--start', dest='start', default=None, type=str,
+        help='Start date as YYYYMMDD; If none provided, starts at beginning of Sentinel record (2014).')
+    parser.add_argument('-e', '--end', dest='end', default=None, type=str,
+        help='End date as YYYYMMDD. If none provided, ends today.')
+    parser.add_argument('-u', '--user', dest='user', default=None, type=str,
+        help='NASA Earthdata URS user login. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
+    parser.add_argument('-p', '--pass', dest='passw', default=None, type=str,
+        help='NASA Earthdata URS user password. Users must add "GRFN Door (PROD)" and "ASF Datapool Products" to their URS approved applications.')
+    parser.add_argument('-l', '--daysless', dest='dayslt', default=None, type=int,
+        help='Take pairs with a temporal baseline -- days less than this value.')
+    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, type=int,
+        help='Take pairs with a temporal baseline -- days greater than this value. Example, annual pairs: ariaDownload.py -t 004 --daysmore 364.')
+    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='1', type=str,
+        help='Specify number of threads for multiprocessing download. By default "1". Can also specify "All" to use all available threads.')
+    parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str,
+        help='Retrieve one interferogram by its start/end date, specified as YYYYMMDD_YYYYMMDD (order independent)')
+    parser.add_argument('-d', '--direction', dest='flightdir', default=None, type=str,
+        help='Flight direction, options: ascending, a, descending, d')
+    parser.add_argument('--use_all', dest='use_all', action='store_true',
+        help='Consider all calls to ariaDownload when plotting DL speeds')
+    parser.add_argument('-v', '--verbose', dest='v', action='store_true',
+        help='Print products to be downloaded to stdout')
     return parser
 
 def cmdLineParse(iargs=None):
@@ -59,7 +80,8 @@ def cmdLineParse(iargs=None):
     if not inps.output.lower() in ['count', 'kmz', 'kml', 'url', 'download']:
         raise Exception ('Incorrect output keyword. Choose "count", "kmz", "url", or "download"')
 
-    inps.output = 'Kml' if inps.output.lower() == 'kmz' or inps.output.lower() == 'kml' else inps.output.title()
+    inps.output = 'Kml' if inps.output.lower() == 'kmz' or \
+            inps.output.lower() == 'kml' else inps.output.title()
     return inps
 
 class Downloader(object):
@@ -74,7 +96,8 @@ class Downloader(object):
     def __call__(self):
         url              = self.form_url()
         dct_prod, urls  = self.parse_json(url)
-        script = requests.post(f'{self.url_base}&output={self.inps.output}', data=dct_prod).text
+        script = requests.post(f'{self.url_base}&output={self.inps.output}',
+                                                    data=dct_prod).text
 
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
@@ -82,7 +105,8 @@ class Downloader(object):
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
             dst    = self._fmt_dst()
-            script = requests.post(f'{self.url_base}&output={self.inps.output}', data=dct_prod).text
+            script = requests.post(f'{self.url_base}&output={self.inps.output}',
+                                                    data=dct_prod).text
             print(script, file=open(dst, 'w'))
             log.info(f'Wrote .KMZ to:\n\t %s', dst)
 
@@ -107,7 +131,8 @@ class Downloader(object):
         return urls
 
     def form_url(self):
-        url = f'{self.url_base}asfplatform=Sentinel-1%20Interferogram%20(BETA)&processingLevel=GUNW_STD&output=JSON'
+        url = f'{self.url_base}asfplatform=Sentinel-1%20Interferogram%20(BETA)'\
+                    '&processingLevel=GUNW_STD&output=JSON'
         if self.inps.track:
             url += f'&relativeOrbit={self.inps.track}'
         if self.inps.bbox:
@@ -143,8 +168,10 @@ class Downloader(object):
                 if st1 != st or end1 != end: continue
 
             if (self.inps.start or self.inps.end):
-                if self.inps.start and not (st >= datetime.strptime(self.inps.start, '%Y%m%d').date()): continue
-                if self.inps.end and not (end <= datetime.strptime(self.inps.end, '%Y%m%d').date()): continue
+                if self.inps.start and not (st >= datetime.strptime(
+                                self.inps.start, '%Y%m%d').date()): continue
+                if self.inps.end and not (end <= datetime.strptime(
+                                    self.inps.end, '%Y%m%d').date()): continue
 
             if (self.inps.daysgt or self.inps.dayslt):
                 elap = (end - st).days
@@ -231,21 +258,27 @@ class Downloader(object):
 
        # Authenticate against URS, grab all the cookies
        cookie_jar = MozillaCookieJar()
-       opener     = build_opener(HTTPCookieProcessor(cookie_jar), HTTPHandler(), HTTPSHandler(**{}))
+       opener     = build_opener(HTTPCookieProcessor(cookie_jar),
+                                        HTTPHandler(), HTTPSHandler(**{}))
        request    = Request(auth_cookie_url, headers={'Authorization': f'Basic {user_pass}'})
 
        # Watch out cookie rejection!
        try:
           response = opener.open(request)
        except HTTPError as e:
-          if "WWW-Authenticate" in e.headers and "Please enter your Earthdata Login credentials" in e.headers["WWW-Authenticate"]:
-             log.info(' > Username and Password combo was not successful. Please try again.')
+          if "WWW-Authenticate" in e.headers and \
+                "Please enter your Earthdata Login credentials" in \
+                    e.headers["WWW-Authenticate"]:
+             log.info(' > Username and Password combo was not successful. '\
+                             'Please try again.')
              return False
           else:
              # If an error happens here, the user most likely has not confirmed EULA.
              log.info('\nThere was an error obtaining a download cookie')
              log.info('Most likely you lack permission to download data from the ASF Datapool.')
-             log.info('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
+               log.info('\n\nNew users: you must first log into Vertex and accept the EULA. '\
+               'In addition, your Study Area must be set at Earthdata: '\
+               ' https://urs.earthdata.nasa.gov')
              os.sys.exit(1)
 
        except URLError:
@@ -260,9 +293,12 @@ class Downloader(object):
           return True
 
        # if we aren't successful generating the cookie, nothing will work. Stop here!
-       log.warning('Could not generate new cookie! Cannot proceed. Please check credentials and/or .netrc.')
+       log.warning('Could not generate new cookie! Cannot proceed. '\
+                   ' Please check credentials and/or .netrc.')
        log.info(f'Response was {response.getcode()}')
-       log.info('\n\nNew users: you must first log into Vertex and accept the EULA. In addition, your Study Area must be set at Earthdata https://urs.earthdata.nasa.gov')
+       log.info('\n\nNew users: you must first log into Vertex and accept the EULA. '\
+               'In addition, your Study Area must be set at Earthdata: '\
+               ' https://urs.earthdata.nasa.gov')
        os.sys.exit(1)
 
 def prod_dl(inps, dct_prod):
