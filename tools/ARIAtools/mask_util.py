@@ -170,7 +170,6 @@ def make_mask(ds_crop, lc):
 
 def resamp(src, proj, bounds, arrshape, view=False):
     """ Resample a dataset from src dims using result of merged_productbbox """
-    from gdalconst import GDT_Float32, GDT_Int16, GRA_NearestNeighbor
     if isinstance(src, str) and op.exists(src):
         src = gdal.Open(src, gdal.GA_ReadOnly)
     path = path if op.exists(src.GetDescription()) else ''
@@ -182,14 +181,17 @@ def resamp(src, proj, bounds, arrshape, view=False):
     gt = [bounds[0], pix_width, 0, bounds[3], 0, pix_height]
 
     if path:
-        dst = gdal.GetDriverByName('ENVI').Create(path, width, height, 1, GDT_Float32)
+        dst = gdal.GetDriverByName('ENVI').Create(path, width, height, 1,
+                                                        gdalconst.GDT_Float32)
 
     else:
-        dst = gdal.GetDriverByName('MEM').Create(path, width, height, 1, GDT_Int16)
+        dst = gdal.GetDriverByName('MEM').Create(path, width, height, 1,
+                                                        gdalconst.GDT_Int16)
 
     dst.SetGeoTransform(gt)
     dst.SetProjection(proj)
-    gdal.ReprojectImage(src, dst, src.GetProjection(), proj, GRA_NearestNeighbour)
+    gdal.ReprojectImage(src, dst, src.GetProjection(), proj,
+                                                gdalconst.GRA_NearestNeighbour)
     del src
     return dst
 
