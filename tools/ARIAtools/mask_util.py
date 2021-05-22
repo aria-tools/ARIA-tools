@@ -145,9 +145,12 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     mask.SetProjection(proj)
     mask.SetDescription(maskfilename)
 
-    ## remove extra files
-    os.remove(path_shorelines) if os.path.exists(path_shorelines) else ''
-    os.remove(path_lakes) if os.path.exists(path_lakes) else ''
+    try:
+        ## remove extra files
+        os.remove(path_shorelines) if os.path.exists(path_shorelines) else ''
+        os.remove(path_lakes) if os.path.exists(path_lakes) else ''
+    except:
+        pass
 
     return mask
 
