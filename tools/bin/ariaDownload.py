@@ -426,7 +426,7 @@ class Downloader(object):
              # If an error happens here, the user most likely has not confirmed EULA.
              log.info('\nThere was an error obtaining a download cookie')
              log.info('Most likely you lack permission to download data from the ASF Datapool.')
-               log.info('\n\nNew users: you must first log into Vertex and accept the EULA. '\
+             log.info('\n\nNew users: you must first log into Vertex and accept the EULA. '\
                'In addition, your Study Area must be set at Earthdata: '\
                ' https://urs.earthdata.nasa.gov')
              os.sys.exit(1)
