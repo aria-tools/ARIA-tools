@@ -10,6 +10,7 @@
 from distutils.core import setup, Extension
 import os
 import subprocess
+from datetime import datetime
 
 
 # Path where relax third party is download to
@@ -18,8 +19,12 @@ relaxPath='tools/thirdParty/Min-Cost-Flow-Class'
 
 ## setup version; adapted from MintPy
 cmd = "git describe --tags"
-version  = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL)
-version  = version.decode('utf-8').strip()
+try:
+    version  = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL)
+    version  = version.decode('utf-8').strip()
+except:
+    # for circle ci
+    version  = 'v0'
 
 
 # if there are new commits after the latest release
@@ -31,8 +36,13 @@ else:
     version0 = version
 
 cmd  = f"git log -1 --date=short --format=%cd {version0}"
-date = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL)
-date = date.decode('utf-8').strip()
+try:
+    date = subprocess.check_output(cmd.split(), stderr=subprocess.DEVNULL)
+    date = date.decode('utf-8').strip()
+except:
+    # for circle ci
+    date = datetime.strftime(datetime.today(), '%Y-%m-%d')
+
 print (f'ARIA-tools {version} {date}')
 
 # If third party package is found compile as well
