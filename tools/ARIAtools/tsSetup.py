@@ -14,6 +14,7 @@ import glob
 import logging
 import argparse
 import multiprocessing
+from collections import defaultdict
 from datetime import datetime
 from osgeo import gdal
 
@@ -373,8 +374,9 @@ def generate_stack(aria_prod, input_files, output_file_name,
 def main(inps=None):
     """Run time series prepation."""
     inps = cmd_line_parse()
-
-    print("***Time-series Preparation Function:***")
+    print ('*****************************************************************')
+    print ('*** Time-series Preparation Function ***')
+    print ('*****************************************************************')
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
@@ -423,14 +425,13 @@ def main(inps=None):
 
     # Load or download mask (if specified).
     if inps.mask is not None:
-        inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude']))
-                              for d in standardproduct_info.products[1]
-                              if 'amplitude' in d]
-                              for item in sublist], [item for sublist
-                              in [list(set(d['pair_name'])) for d
-                                  in standardproduct_info.products[1]
-                                  if 'pair_name' in d]
-                              for item in sublist]], inps.mask,
+        # Extract amplitude layers
+        amplitude_products = []
+        for d in standardproduct_info.products[1]:
+            if 'amplitude' in d:
+                for item in list(set(d['amplitude'])):
+                    amplitude_products.append(item)
+        inps.mask = prep_mask(amplitude_products, inps.mask,
                               standardproduct_info.bbox_file,
                               prods_tot_bbox, proj, amp_thresh=inps.amp_thresh,
                               arrshape=arrshape,
@@ -453,14 +454,13 @@ def main(inps=None):
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
           'files valid over common interferometric grid')
-    export_products([dict(zip([k for k in set(k for d in
-                    standardproduct_info.products[1] for k in d)],
-                    [[item for sublist in [list(set(d[k]))
-                      for d in standardproduct_info.products[1]
-                      if k in d] for item in sublist]
-                        for k in set(k for d in
-                                     standardproduct_info.products[1]
-                                     for k in d)]))],
+    # Remove pairing and pass combined dictionary of all layers
+    extract_dict = defaultdict(list)
+    for d in standardproduct_info.products[1]:
+        for key in standardproduct_info.products[1][0].keys():
+            for item in list(set(d[key])):
+                extract_dict[key].append(item)
+    export_products([extract_dict],
                     standardproduct_info.bbox_file, prods_tot_bbox, layers,
                     dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask,
                     outDir=inps.workdir, outputFormat=inps.outputFormat,

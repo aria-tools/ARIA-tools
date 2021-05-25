@@ -65,6 +65,14 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             # Convert relative paths to absolute paths
             self.files=[os.path.abspath(i) for i in self.files]
 
+        # remove files that arent .nc; iterate over copy of list thats edited
+        tmp_files = self.files.copy()
+        for f in tmp_files:
+            ext = os.path.splitext(f)[1].lower()
+            if not ext == '.nc':
+                self.files.remove(f)
+                log.warning('%s is not a supported NetCDF... skipping', f)
+
         # If URLs, append with '/vsicurl/'
         self.files=['/vsicurl/{}'.format(i) if 'https://' in i else i for i in self.files]
         #check if virtual file reader is being captured as netcdf

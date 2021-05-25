@@ -31,27 +31,43 @@ def createParser():
        Extract specified product layers. The default will export all layers.
     '''
     import argparse
-    parser = argparse.ArgumentParser(description='Program to extract data and meta-data layers from ARIA standard GUNW products. Program will handle cropping/stitching when needed. By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
+    parser = argparse.ArgumentParser(description= \
+            'Program to extract data and meta-data layers from ARIA standard GUNW products.'\
+            ' Program will handle cropping/stitching when needed. '\
+            'By default, the program will crop all IFGs to bounds determined by the common intersection and bbox (if specified)')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
             required=True, help='ARIA file')
-    parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None, help='Path to director(ies) or tar file(s) containing GACOS products.')
-    parser.add_argument('-l', '--layers', dest='layers', default=None, help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
+    parser.add_argument('-w', '--workdir', dest='workdir', default='./',
+        help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
+    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None,
+        help='Path to director(ies) or tar file(s) containing GACOS products.')
+    parser.add_argument('-l', '--layers', dest='layers', default=None,
+        help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
             help='projection for DEM. By default WGS84.')
-    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None, help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None, help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: https://www.mrlc.gov/national-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover-database-nlcd-2016")
-    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str, help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
-    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str, help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
+    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None,
+        help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
+    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None,
+        help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: https://www.mrlc.gov/national-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover-database-nlcd-2016")
+    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
+        help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
+    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
+        help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
 #    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Either 'overlap', where product overlap is minimized, or '2stage', where minimization is done on connected components, are allowed methods. Default is 'overlap'.")
-    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT', help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
-    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion', help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None, help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
-    parser.add_argument('-rr', '--rankedResampling', action='store_true', dest='rankedResampling', help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
-    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081, help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
-    parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose', help="Toggle verbose mode on.")
+    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
+        help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
+    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion',
+        help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
+    parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int, default=None,
+        help='Multilooking factor is an integer multiple of standard resolution. E.g. 2 = 90m*2 = 180m')
+    parser.add_argument('-rr', '--rankedResampling', action='store_true', dest='rankedResampling',
+        help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
+    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081,
+        help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
+    parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
+        help="Toggle verbose mode on.")
 
     return parser
 
@@ -84,7 +100,8 @@ class InterpCube(object):
         from scipy.interpolate import RectBivariateSpline
         self.offset = np.mean(self.data)
         for i in range(len(self.hgts)):
-            self.interp.append( RectBivariateSpline(self.latobj, self.lonobj, self.data[i]-self.offset))
+            self.interp.append(RectBivariateSpline(self.latobj, self.lonobj,
+                                                    self.data[i]-self.offset))
 
     def __call__(self, line, pix, h):
         '''
@@ -97,11 +114,11 @@ class InterpCube(object):
         return est(h) + self.offset
 
 class metadata_qualitycheck:
-    '''
-        Metadata quality control function. Artifacts recognized based off of covariance of cross-profiles.
-        Bug-fix varies based off of layer of interest.
-        Verbose mode generates a series of quality control plots with these profiles.
-    '''
+    """ Metadata quality control function. Artifacts recognized based off of covariance of cross-profiles.
+
+    Bug-fix varies based off of layer of interest.
+    Verbose mode generates a series of quality control plots with these profiles.
+    """
 
     def __init__(self, data_array, prod_key, outname, verbose=None):
         # Pass inputs
@@ -111,9 +128,11 @@ class metadata_qualitycheck:
         self.verbose = verbose
         self.data_array_band=data_array.GetRasterBand(1).ReadAsArray()
         #mask by nodata value
-        self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(1).GetNoDataValue(), self.data_array_band)
+        self.data_array_band=np.ma.masked_where(self.data_array_band ==
+                self.data_array.GetRasterBand(1).GetNoDataValue(),
+                self.data_array_band)
 
-        if self.verbose: logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG) if self.verbose else ''
 
         # Run class
         self.__run__()
@@ -137,19 +156,21 @@ class metadata_qualitycheck:
         from scipy.stats import linregress
         # Mask columns/rows which are entirely made up of 0s
         if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-            self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
+            Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1),
+                                    np.arange(0, self.data_array_band.shape[0], 1))
+            self.data_array_band, Xmask, Ymask = self.__truncateArray__(
+                                            self.data_array_band, Xmask, Ymask)
 
         #append prefix for plot names
-        prof_direc=profprefix+prof_direc
+        prof_direc = profprefix + prof_direc
 
         #iterate through transpose of matrix if looking in azimuth
         arrT=''
         if 'azimuth' in prof_direc:
             arrT='.T'
         # Cycle between range and azimuth profiles
-        rsquaredarr=[]
-        std_errarr=[]
+        rsquaredarr = []
+        std_errarr  = []
         for i in enumerate(eval('self.data_array_band%s'%(arrT))):
             mid_line=i[1]
             xarr=np.array(range(len(mid_line)))
@@ -165,7 +186,8 @@ class metadata_qualitycheck:
                 chunk = mid_line.tolist()[j:j+chunk_size]
                 xarr_chunk = xarr[j:j+chunk_size]
                 # make sure each iteration contains at least minimum number of elements
-                if j==range(0, len(mid_line.tolist()), chunk_size)[-2] and len(mid_line.tolist()) % chunk_size != 0:
+                if j==range(0, len(mid_line.tolist()), chunk_size)[-2] and \
+                                    len(mid_line.tolist()) % chunk_size != 0:
                     chunk = mid_line.tolist()[j:]
                     xarr_chunk = xarr[j:]
                 #linear regression and get covariance
@@ -177,7 +199,8 @@ class metadata_qualitycheck:
                     break
 
             #exit loop/make plots in verbose mode if R^2 and standard error anomalous, or if on last iteration
-            if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
+            if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or \
+                        (i[0]==(len(eval('self.data_array_band%s'%(arrT)))-1)):
                 if self.verbose:
                     #Make quality-control plots
                     import matplotlib.pyplot as plt
@@ -225,31 +248,47 @@ class metadata_qualitycheck:
             for i in range(1,5):
                 self.data_array_band=self.data_array.GetRasterBand(i).ReadAsArray()
                 #mask by nodata value
-                self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), self.data_array_band)
-                negs_percent=((self.data_array_band < 0).sum()/self.data_array_band.size)*100
-                #Unique bug-fix for bPerp layers with sign-flips
-                if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) \
-                    and (negs_percent != 100 or negs_percent != 0):
+                self.data_array_band=np.ma.masked_where(self.data_array_band == \
+                    self.data_array.GetRasterBand(i).GetNoDataValue(),
+                                        self.data_array_band)
+                negs_percent=((self.data_array_band < 0).sum() \
+                                /self.data_array_band.size)*100
+
+                # Unique bug-fix for bPerp layers with sign-flips
+                if (self.prod_key=='bPerpendicular' and min(rsquaredarr) < 0.8 \
+                                    and max(std_errarr) > 0.1) \
+                                and (negs_percent != 100 or negs_percent != 0):
                     #Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
                     self.data_array_band=abs(self.data_array_band)
                     if negs_percent>50:
                         self.data_array_band*=-1
                 else:
                     # regular grid covering the domain of the data
-                    X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
-                    Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1), np.arange(0, self.data_array_band.shape[0], 1))
+                    X,Y = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1),
+                                np.arange(0, self.data_array_band.shape[0], 1))
+                    Xmask,Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1),
+                                    np.arange(0, self.data_array_band.shape[0], 1))
                     # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
                     if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.0015:
-                        maj_percent=((self.data_array_band < self.data_array_band.mean()).sum()/self.data_array_band.size)*100
+                        maj_percent=((self.data_array_band < \
+                                self.data_array_band.mean()).sum() \
+                                / self.data_array_band.size)*100
                         #mask all values above mean
                         if maj_percent>50:
-                            self.data_array_band = np.ma.masked_where(self.data_array_band > self.data_array_band.mean(), self.data_array_band)
+                            self.data_array_band = np.ma.masked_where(
+                                self.data_array_band > self.data_array_band.mean(),
+                                self.data_array_band)
                         #mask all values below mean
                         else:
-                            self.data_array_band = np.ma.masked_where(self.data_array_band < self.data_array_band.mean(), self.data_array_band)
+                            self.data_array_band = np.ma.masked_where(
+                                self.data_array_band < self.data_array_band.mean(),
+                                self.data_array_band)
                     # Mask columns/rows which are entirely made up of 0s
-                    if self.data_array_band.mask.size!=1 and True in self.data_array_band.mask:
-                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(self.data_array_band, Xmask, Ymask)
+                    if self.data_array_band.mask.size!=1 and \
+                                    True in self.data_array_band.mask:
+                        self.data_array_band, Xmask, Ymask = self.__truncateArray__(
+                                    self.data_array_band, Xmask, Ymask)
+
                     # truncated grid covering the domain of the data
                     Xmask=Xmask[~self.data_array_band.mask]
                     Ymask=Ymask[~self.data_array_band.mask]
@@ -261,9 +300,12 @@ class metadata_qualitycheck:
                     # evaluate it on grid
                     self.data_array_band = C[0]*X + C[1]*Y + C[2]
                     #mask by nodata value
-                    self.data_array_band=np.ma.masked_where(self.data_array_band == self.data_array.GetRasterBand(i).GetNoDataValue(), \
-                        self.data_array_band)
-                    np.ma.set_fill_value(self.data_array_band, self.data_array.GetRasterBand(i).GetNoDataValue())
+                    self.data_array_band=np.ma.masked_where(
+                        self.data_array_band == self.data_array.GetRasterBand(i
+                                    ).GetNoDataValue(), self.data_array_band)
+
+                    np.ma.set_fill_value(self.data_array_band,
+                            self.data_array.GetRasterBand(i).GetNoDataValue())
                 #update band
                 self.data_array.GetRasterBand(i).WriteArray(self.data_array_band.filled())
                 # Pass warning and get R^2/standard error across range/azimuth (only do for first band)
@@ -280,11 +322,14 @@ class metadata_qualitycheck:
 
         return self.data_array
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, proj, arrshape=None, workdir='./', outputFormat='ENVI', num_threads='2'):
-    '''
-        Function to load and export DEM, lat, lon arrays.
-        If "Download" flag is specified, DEM will be donwloaded on the fly.
-    '''
+
+def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
+                        proj, arrshape=None, workdir='./',
+                        outputFormat='ENVI', num_threads='2'):
+    """Function to load and export DEM, lat, lon arrays.
+
+    If "Download" flag is specified, DEM will be donwloaded on the fly.
+    """
     # If specified DEM subdirectory exists, delete contents
     workdir      = os.path.join(workdir,'DEM')
     aria_dem     = os.path.join(workdir, 'SRTM_3arcsec.dem')
@@ -415,13 +460,17 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     # Need to track bounds of max extent to avoid metadata interpolation issues
     prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
-    save_shapefile(prods_TOTbbox_metadatalyr, open_shapefile(product_dict[sceneareas.index(max(sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+    save_shapefile(prods_TOTbbox_metadatalyr,
+        open_shapefile(product_dict[sceneareas.index(max(
+                sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
         save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0), 'GeoJSON')
     # Intiate intersection with largest scene, if bbox NOT specified
     else:
-        save_shapefile(prods_TOTbbox, open_shapefile(product_dict[sceneareas.index(max(sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+        save_shapefile(prods_TOTbbox, open_shapefile(
+            product_dict[sceneareas.index(max(
+                    sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     rejected_scenes=[]
     for scene in product_dict:
         prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
@@ -518,7 +567,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
 
     bounds=open_shapefile(bbox_file, 0, 0).bounds
     if dem is not None:
-        dem_bounds=[dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+(dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+(dem.GetGeoTransform()[1]*dem.RasterXSize),dem.GetGeoTransform()[3]]
+        dem_bounds=[dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+ \
+        (dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+ \
+        (dem.GetGeoTransform()[1]*dem.RasterXSize),dem.GetGeoTransform()[3]]
     # Loop through user expected layers
     for key in layers:
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
@@ -929,8 +980,9 @@ def main(inps=None):
        Main workflow for extracting layers from ARIA products
     '''
     from ARIAtools.ARIAProduct import ARIA_standardproduct
-
-    log.info("***Extract Product Function:***")
+    print ('*****************************************************************')
+    print ('*** Extract Product Function ***')
+    print ('*****************************************************************')
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
