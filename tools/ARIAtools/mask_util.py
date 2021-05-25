@@ -125,7 +125,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     ## Make average amplitude mask
     if amp_thresh is not None:
         amp_file = rasterAverage(os.path.join(workdir, 'avgamplitude'),
-                        product_dict[0], bounds, prods_TOTbbox,
+                        product_dict, bounds, prods_TOTbbox,
                         outputFormat=outputFormat, thresh=amp_thresh)
 
         # Update mask with average amplitude
