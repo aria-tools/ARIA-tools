@@ -393,7 +393,7 @@ class Downloader(object):
        elif op.exists(path_netrc):
            log.info('Attempting to obtaining user/pass from .netrc')
            try:
-               os.chmod(path_netrc, 600)
+               os.chmod(path_netrc, 0o600)
                user, _,  passw = netrc.netrc().authenticators('urs.earthdata.nasa.gov')
            except Exception as E:
                print (E)
