@@ -100,6 +100,8 @@ def prod_dl(inps, dct_prod):
     log.info('Using  %s threads for parallel downloads', nt)
 
     files          = dct_prod['product_list'].split(',')
+    ## remove duplicates
+    files          = [op.splitext(f)[0] for f in url_versions(files)]
     chunks1        = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
     check          = []
     dl_id          = time.time()  # for tracking the download attempts
@@ -234,6 +236,33 @@ def status_plot(inps, rates=None, elaps=None, use_all=False):
     return
 
 
+def url_versions(urls):
+    """ For duplicate products (other than version number) take the latest """
+    url_bases = []
+    for url in urls:
+        url_base = '-'.join(url.split('-')[:-1])
+        if not url_base in url_bases:
+            url_bases.append(url_base)
+
+    urls_final = []
+    for url_base in url_bases:
+        # get the possible matches
+        duplicates = [url for url in urls if url_base in url]
+        if len(duplicates) == 1:
+            urls_final.append(duplicates[0])
+        else:
+            versions = []
+            for dupe in duplicates:
+                ver_str = dupe.split('-')[-1]
+                versions.append(float(ver_str.lstrip('v').rstrip('.nc')))
+            version = str(max(versions))
+            version = f'v{version[0]}_{version[1]}_{version[2]}.nc'
+
+            urls_final.append(f'{url_base}-{version}')
+    return urls_final
+
+
+
 class Downloader(object):
     def __init__(self, inps):
         self.inps        = inps
@@ -249,8 +278,12 @@ class Downloader(object):
         script = requests.post(f'{self.url_base}&output={self.inps.output}',
                                                     data=dct_prod).text
 
+        ## get rid of duplicated old versions; only matters in count, urls opts
+        urls  = url_versions(urls)
+
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
+
 
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
@@ -297,10 +330,12 @@ class Downloader(object):
     def parse_json(self, url):
         response = requests.get(url)
         if not response.ok:
-            raise Exception('Problem accessing ASF; should self resolve in a minute or two')
+            raise Exception('Problem accessing ASF; '\
+                            'should self resolve in a minute or two')
         j        = json.loads(response.text)[0]
         if len(j) == 0:
-            raise Exception('No products found with given url; check inputs for errors.')
+            raise Exception('No products found with given url; '\
+                            'check inputs for errors.')
 
         prod_ids = []; dl_urls = []
         i=0
@@ -313,7 +348,9 @@ class Downloader(object):
             st, end = sorted(dates)
 
             if self.inps.ifg:
-                dates1 = [datetime.strptime(i, '%Y%m%d').date() for i in self.inps.ifg.split('_')]
+
+                dates1 = [datetime.strptime(i, '%Y%m%d').date() for
+                                    i in self.inps.ifg.split('_')]
                 st1, end1 = sorted(dates1)
                 if st1 != st or end1 != end: continue
 
