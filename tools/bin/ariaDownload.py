@@ -280,6 +280,8 @@ class Downloader(object):
 
         ## get rid of duplicated old versions; only matters in count, urls opts
         urls  = url_versions(urls)
+        [log.debug('Found: %s', url) for url in urls]
+
 
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
@@ -367,7 +369,6 @@ class Downloader(object):
 
             prod_ids.append(FileId); dl_urls.append(prod['downloadUrl'])
 
-            log.debug('Found: %s', FileId)
 
         if len(prod_ids) == 0:
             raise Exception('No products found that satisfy requested conditions.')
