@@ -64,6 +64,8 @@ def createParser():
         help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('--use_all', dest='use_all', action='store_true',
         help='Consider all calls to ariaDownload when plotting DL speeds')
+    parser.add_argument('--version', dest='version',  default=None,
+        help='Specify version as str, e.g. 2_0_4 or all prods; default: newest')
     parser.add_argument('-v', '--verbose', dest='v', action='store_true',
         help='Print products to be downloaded to stdout')
     return parser
@@ -99,15 +101,15 @@ def prod_dl(inps, dct_prod):
     nt     = nt if nt < max_threads else max_threads
     log.info('Using  %s threads for parallel downloads', nt)
 
-    files          = dct_prod['product_list'].split(',')
+    files   = dct_prod['product_list'].split(',')
     ## remove duplicates
-    files          = [op.splitext(f)[0] for f in url_versions(files)]
-    chunks1        = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
-    check          = []
-    dl_id          = time.time()  # for tracking the download attempts
+    files   = [op.splitext(f)[0] for f in url_versions(files, inps.version)]
+    chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
+    check   = []
+    dl_id   = time.time()  # for tracking the download attempts
     for chunk in chunks1:
-        chunks     = np.array_split(chunk, nt)
-        lst_dcts   = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
+        chunks   = np.array_split(chunk, nt)
+        lst_dcts = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
         for i, chunk1 in enumerate(chunks):
             lst_dcts[i]['files'] = chunk1 # put split up files to the objects for threads
             lst_dcts[i]['ext']   = i      # for unique bulk downloader file name
@@ -236,8 +238,14 @@ def status_plot(inps, rates=None, elaps=None, use_all=False):
     return
 
 
-def url_versions(urls):
-    """ For duplicate products (other than version number) take the latest """
+def url_versions(urls, user_version):
+    """ For duplicate products (other than version number)
+
+    Uses the the latest if user_version is None else use that
+    """
+    if user_version.lower() == 'all':
+        return urls
+
     url_bases = []
     for url in urls:
         url_base = '-'.join(url.split('-')[:-1])
@@ -255,8 +263,13 @@ def url_versions(urls):
             for dupe in duplicates:
                 ver_str = dupe.split('-')[-1]
                 versions.append(float(ver_str.lstrip('v').rstrip('.nc')))
-            version = str(max(versions))
-            version = f'v{version[0]}_{version[1]}_{version[2]}.nc'
+
+            ## default, use latest version
+            if user_version is None:
+                version = str(max(versions))
+                version = f'v{version[0]}_{version[1]}_{version[2]}.nc'
+            else:
+                version=f'v{user_version}.nc'
 
             urls_final.append(f'{url_base}-{version}')
     return urls_final
@@ -279,7 +292,7 @@ class Downloader(object):
                                                     data=dct_prod).text
 
         ## get rid of duplicated old versions; only matters in count, urls opts
-        urls  = url_versions(urls)
+        urls  = url_versions(urls, self.inps.version)
         [log.debug('Found: %s', url) for url in urls]
 
 
