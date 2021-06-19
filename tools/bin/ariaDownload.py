@@ -243,7 +243,7 @@ def url_versions(urls, user_version):
 
     Uses the the latest if user_version is None else use that
     """
-    if user_version.lower() == 'all':
+    if isinstance(user_version, str) and user_version.lower() == 'all':
         return urls
 
     url_bases = []
