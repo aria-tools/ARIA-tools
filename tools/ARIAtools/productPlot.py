@@ -580,7 +580,8 @@ def main(inps=None):
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile,
-                    bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
+                    bbox=inps.bbox, workdir=inps.workdir,
+                    num_threads=inps.num_threads, verbose=inps.verbose)
 
     # If user requests to generate all plots.
     if inps.plotall:

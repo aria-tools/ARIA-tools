@@ -386,7 +386,7 @@ def main(inps=None):
     # (if bbox specified)
     standardproduct_info = ARIA_standardproduct(
         inps.imgfile, bbox=inps.bbox,
-        workdir=inps.workdir, verbose=inps.verbose)
+        workdir=inps.workdir, num_threads=inps.num_threads, verbose=inps.verbose)
 
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower() == 'all':

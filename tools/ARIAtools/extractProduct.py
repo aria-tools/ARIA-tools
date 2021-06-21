@@ -993,7 +993,8 @@ def main(inps=None):
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
+    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox,
+      workdir=inps.workdir, num_threads=inps.num_threads, verbose=inps.verbose)
 
     if not inps.layers and not inps.tropo_products:
         log.info('No layers specified; only creating bounding box shapes')
