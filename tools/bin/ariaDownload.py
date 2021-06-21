@@ -90,7 +90,7 @@ def cmdLineParse(iargs=None):
     return inps
 
 
-def prod_dl(inps, dct_prod):
+def prod_dl(inps, dct_prod,wd):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
     max_threads = multiprocessing.cpu_count()
 
@@ -103,7 +103,8 @@ def prod_dl(inps, dct_prod):
 
     files   = dct_prod['product_list'].split(',')
     ## remove duplicates
-    files   = [op.splitext(f)[0] for f in url_versions(files, inps.version)]
+    files   = [op.splitext(f)[0] for f in \
+         url_versions(files, inps.version, wd)]
     chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
     check   = []
     dl_id   = time.time()  # for tracking the download attempts
@@ -238,10 +239,9 @@ def status_plot(inps, rates=None, elaps=None, use_all=False):
     return
 
 
-def url_versions(urls, user_version):
+def url_versions(urls, user_version, wd):
     """ For duplicate products (other than version number)
-
-    Uses the the latest if user_version is None else use that
+    Uses the the latest if user_version is None else use specified ver.
     """
     if isinstance(user_version, str) and user_version.lower() == 'all':
         return urls
@@ -272,6 +272,14 @@ def url_versions(urls, user_version):
                 version=f'v{user_version}.nc'
 
             urls_final.append(f'{url_base}-{version}')
+
+            ## delete duplicates
+            for dupe in duplicates:
+                dupe_path = os.path.join(wd, os.path.basename(dupe))
+                if os.path.basename(dupe) != \
+                     os.path.basename(urls_final[-1]) and \
+                     os.path.exists(dupe_path):
+                    os.remove(dupe_path)
     return urls_final
 
 
@@ -292,7 +300,7 @@ class Downloader(object):
                                                     data=dct_prod).text
 
         ## get rid of duplicated old versions; only matters in count, urls opts
-        urls  = url_versions(urls, self.inps.version)
+        urls  = url_versions(urls, self.inps.version, self.inps.wd)
         [log.debug('Found: %s', url) for url in urls]
 
 
@@ -321,7 +329,7 @@ class Downloader(object):
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
             inps.url_base = self.url_base
-            prod_dl(self.inps, dct_prod)
+            prod_dl(self.inps, dct_prod, self.inps.wd)
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
