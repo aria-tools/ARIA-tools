@@ -352,7 +352,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         del ds_u
 
     # write cropped DEM
-    if demfilename == aria_dem:
+    if demfilename == os.path.abspath(aria_dem):
         log.warning('The DEM you specified already exists in %s, '\
                 'using the existing one...', os.path.dirname(aria_dem))
         ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
