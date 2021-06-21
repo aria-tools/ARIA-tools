@@ -273,15 +273,16 @@ def url_versions(urls, user_version, wd):
 
             urls_final.append(f'{url_base}-{version}')
 
-            ## delete duplicates
+            ## move duplicates to a different folder
+            dupe_folder = op.join(wd, 'duplicated_products')
+            os.makedirs(dupe_folder, exist_ok=True)
             for dupe in duplicates:
-                dupe_path = os.path.join(wd, os.path.basename(dupe))
+                dupe_path = os.path.join(dupe_folder, os.path.basename(dupe))
                 if os.path.basename(dupe) != \
                      os.path.basename(urls_final[-1]) and \
                      os.path.exists(dupe_path):
-                    os.remove(dupe_path)
+                    os.rename(dupe, dupe_path)
     return urls_final
-
 
 
 class Downloader(object):
@@ -527,6 +528,7 @@ class MiniLog(object):
             self.avg_rates.append(float(msg[-1].strip('MB/sec')))
             self.elap.append(float(msg[3].strip('secs,')))
         return
+
 
 if __name__ == '__main__':
     print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
