@@ -470,6 +470,10 @@ class MiniLog(object):
         return
 
 if __name__ == '__main__':
-    print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    try:
+        print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    except:
+        pass
+        
     inps = cmdLineParse()
     Downloader(inps)()
