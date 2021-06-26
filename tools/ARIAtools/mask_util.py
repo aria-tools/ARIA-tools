@@ -33,8 +33,12 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
 
     # Import functions
     from ARIAtools.vrtmanager import renderOGRVRT
-    _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp' for i in range(1, 5)]
-    _world_watermask.append( ' /vsizip/vsicurl/https://osmdata.openstreetmap.de/download/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp')
+    _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/'\
+                        f'gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp'\
+                        for i in range(1, 5)]
+    _world_watermask.append( ' /vsizip/vsicurl/https://osmdata.openstreetmap.de'\
+                             '/download/land-polygons-complete-4326.zip/'\
+                             'land-polygons-complete-4326/land_polygons.shp')
     # If specified DEM subdirectory exists, delete contents
     workdir = os.path.join(workdir,'mask')
     os.makedirs(workdir, exist_ok=True)
@@ -98,27 +102,32 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         user_mask_n = os.path.basename(os.path.splitext(user_mask)[0])
         local_mask  = os.path.join(workdir, f'{user_mask_n}.msk')
         local_mask_unc = os.path.join(workdir, f'{user_mask_n}_uncropped.msk')
+        if user_mask == local_mask:
+            log.warning('The mask you specified already exists in %s, '\
+                    'using the existing one...', os.path.dirname(local_mask))
 
-        # move the mask to the local directory and built a VRT for it
-        gdal.UseExceptions()
-        # shutil.copy(user_mask, local_mask_unc)
-        ds = gdal.BuildVRT(f'{local_mask_unc}.vrt', user_mask, outputBounds=bounds)
+        else:
+            # move the mask to the local directory and built a VRT for it
+            gdal.UseExceptions()
+            # shutil.copy(user_mask, local_mask_unc)
+            ds = gdal.BuildVRT(f'{local_mask_unc}.vrt', user_mask,
+                                                    outputBounds=bounds)
 
-        assert ds is not None, f'GDAL could not open user mask: {user_mask}'
+            assert ds is not None, f'GDAL could not open user mask: {user_mask}'
 
-        # crop the user mask and write
-        gdal.Warp(f'{local_mask}', ds,
-                        format=outputFormat, cutlineDSName=prods_TOTbbox,
-                        outputBounds=bounds, width=arrshape[1],
-                        height=arrshape[0], multithread=True,
-                        options=[f'NUM_THREADS={num_threads}'])
+            # crop the user mask and write
+            gdal.Warp(f'{local_mask}', ds,
+                            format=outputFormat, cutlineDSName=prods_TOTbbox,
+                            outputBounds=bounds, width=arrshape[1],
+                            height=arrshape[0], multithread=True,
+                            options=[f'NUM_THREADS={num_threads}'])
 
-        # set projection of the local mask
-        mask_file = gdal.Open(local_mask, gdal.GA_Update)
-        mask_file.SetProjection(proj); del mask_file
+            # set projection of the local mask
+            mask_file = gdal.Open(local_mask, gdal.GA_Update)
+            mask_file.SetProjection(proj); del mask_file
 
-        # create vrt for local cropped mask
-        gdal.Translate(f'{local_mask}.vrt', local_mask, format='VRT')
+            # create vrt for local cropped mask
+            gdal.Translate(f'{local_mask}.vrt', local_mask, format='VRT')
         # assign new local mask for amp thresh
         maskfilename = local_mask
 

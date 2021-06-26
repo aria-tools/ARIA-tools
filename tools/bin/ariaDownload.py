@@ -64,6 +64,8 @@ def createParser():
         help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('--use_all', dest='use_all', action='store_true',
         help='Consider all calls to ariaDownload when plotting DL speeds')
+    parser.add_argument('--version', dest='version',  default=None,
+        help='Specify version as str, e.g. 2_0_4 or all prods; default: newest')
     parser.add_argument('-v', '--verbose', dest='v', action='store_true',
         help='Print products to be downloaded to stdout')
     return parser
@@ -88,7 +90,7 @@ def cmdLineParse(iargs=None):
     return inps
 
 
-def prod_dl(inps, dct_prod):
+def prod_dl(inps, dct_prod,wd):
     """ Perform downloading using ASF bulk dl; parallel processing supported """
     max_threads = multiprocessing.cpu_count()
 
@@ -99,13 +101,16 @@ def prod_dl(inps, dct_prod):
     nt     = nt if nt < max_threads else max_threads
     log.info('Using  %s threads for parallel downloads', nt)
 
-    files          = dct_prod['product_list'].split(',')
-    chunks1        = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
-    check          = []
-    dl_id          = time.time()  # for tracking the download attempts
+    files   = dct_prod['product_list'].split(',')
+    ## remove duplicates
+    files   = [op.splitext(f)[0] for f in \
+         url_versions(files, inps.version, wd)]
+    chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
+    check   = []
+    dl_id   = time.time()  # for tracking the download attempts
     for chunk in chunks1:
-        chunks     = np.array_split(chunk, nt)
-        lst_dcts   = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
+        chunks   = np.array_split(chunk, nt)
+        lst_dcts = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
         for i, chunk1 in enumerate(chunks):
             lst_dcts[i]['files'] = chunk1 # put split up files to the objects for threads
             lst_dcts[i]['ext']   = i      # for unique bulk downloader file name
@@ -234,6 +239,52 @@ def status_plot(inps, rates=None, elaps=None, use_all=False):
     return
 
 
+def url_versions(urls, user_version, wd):
+    """ For duplicate products (other than version number)
+    Uses the the latest if user_version is None else use specified ver.
+    """
+    if isinstance(user_version, str) and user_version.lower() == 'all':
+        return urls
+
+    url_bases = []
+    for url in urls:
+        url_base = '-'.join(url.split('-')[:-1])
+        if not url_base in url_bases:
+            url_bases.append(url_base)
+
+    urls_final = []
+    for url_base in url_bases:
+        # get the possible matches
+        duplicates = [url for url in urls if url_base in url]
+        if len(duplicates) == 1:
+            urls_final.append(duplicates[0])
+        else:
+            versions = []
+            for dupe in duplicates:
+                ver_str = dupe.split('-')[-1]
+                versions.append(float(ver_str.lstrip('v').rstrip('.nc')))
+
+            ## default, use latest version
+            if user_version is None:
+                version = str(max(versions))
+                version = f'v{version[0]}_{version[1]}_{version[2]}.nc'
+            else:
+                version=f'v{user_version}.nc'
+
+            urls_final.append(f'{url_base}-{version}')
+
+            ## move duplicates to a different folder
+            dupe_folder = op.join(wd, 'duplicated_products')
+            os.makedirs(dupe_folder, exist_ok=True)
+            for dupe in duplicates:
+                dupe_path = os.path.join(dupe_folder, os.path.basename(dupe))
+                if os.path.basename(dupe) != \
+                     os.path.basename(urls_final[-1]) and \
+                     os.path.exists(dupe_path):
+                    os.rename(dupe, dupe_path)
+    return urls_final
+
+
 class Downloader(object):
     def __init__(self, inps):
         self.inps        = inps
@@ -249,8 +300,14 @@ class Downloader(object):
         script = requests.post(f'{self.url_base}&output={self.inps.output}',
                                                     data=dct_prod).text
 
+        ## get rid of duplicated old versions; only matters in count, urls opts
+        urls  = url_versions(urls, self.inps.version, self.inps.wd)
+        [log.debug('Found: %s', url) for url in urls]
+
+
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(urls))
+
 
         elif self.inps.output == 'Kml':
             os.makedirs(self.inps.wd, exist_ok=True)
@@ -273,7 +330,7 @@ class Downloader(object):
             ## make a cookie from a .netrc that ASFDataDload will pick up
             self.make_nc_cookie()
             inps.url_base = self.url_base
-            prod_dl(self.inps, dct_prod)
+            prod_dl(self.inps, dct_prod, self.inps.wd)
 
             # Delete temporary files
             shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
@@ -297,10 +354,12 @@ class Downloader(object):
     def parse_json(self, url):
         response = requests.get(url)
         if not response.ok:
-            raise Exception('Problem accessing ASF; should self resolve in a minute or two')
+            raise Exception('Problem accessing ASF; '\
+                            'should self resolve in a minute or two')
         j        = json.loads(response.text)[0]
         if len(j) == 0:
-            raise Exception('No products found with given url; check inputs for errors.')
+            raise Exception('No products found with given url; '\
+                            'check inputs for errors.')
 
         prod_ids = []; dl_urls = []
         i=0
@@ -313,7 +372,9 @@ class Downloader(object):
             st, end = sorted(dates)
 
             if self.inps.ifg:
-                dates1 = [datetime.strptime(i, '%Y%m%d').date() for i in self.inps.ifg.split('_')]
+
+                dates1 = [datetime.strptime(i, '%Y%m%d').date() for
+                                    i in self.inps.ifg.split('_')]
                 st1, end1 = sorted(dates1)
                 if st1 != st or end1 != end: continue
 
@@ -330,7 +391,6 @@ class Downloader(object):
 
             prod_ids.append(FileId); dl_urls.append(prod['downloadUrl'])
 
-            log.debug('Found: %s', FileId)
 
         if len(prod_ids) == 0:
             raise Exception('No products found that satisfy requested conditions.')
@@ -468,6 +528,7 @@ class MiniLog(object):
             self.avg_rates.append(float(msg[-1].strip('MB/sec')))
             self.elap.append(float(msg[3].strip('secs,')))
         return
+
 
 if __name__ == '__main__':
     try:

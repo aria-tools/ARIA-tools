@@ -21,7 +21,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
-# Unpacking class fuction of readproduct to be become global fucntion that can be called in parallel
+# Unpacking class fuction of readproduct to become global fucntion that can be called in parallel
 def unwrap_self_readproduct(arg):
     # arg is the self argument and the filename is of the file to be read
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
@@ -33,7 +33,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
     # import dependencies
     import glob
-    def __init__(self, filearg, bbox=None, workdir='./', verbose=False):
+    def __init__(self, filearg, bbox=None, workdir='./', num_threads=1, verbose=False):
         # If user wants verbose mode
         # Parse through file(s)/bbox input
         if verbose: logger.setLevel(logging.DEBUG)
@@ -44,12 +44,17 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Pair name for layer extraction
         self.pairname = None
 
+        self.num_threads = int(num_threads)
+
         ### Determine if file input is single file, a list, or wildcard.
         # If list of files
         if len([str(val) for val in filearg.split(',')])>1:
             self.files=[str(i) for i in filearg.split(',')]
             # If wildcard
-            self.files=[os.path.abspath(item) for sublist in [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in self.files] for item in sublist]
+            self.files=[os.path.abspath(item) for sublist in \
+                [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) \
+                if '*' in i else [i] for i in self.files] for item in sublist]
+
         # If list of URLs provided
         elif os.path.basename(filearg).endswith('.txt'):
             with open(filearg, 'r') as fh:
@@ -437,24 +442,33 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # will try multi-core version (if multiple files are passed) and default to for loop in case of failure
 
         if len(self.files)>1:
-            try:
-                log.info('Multi-core version')
-                # would probably be better not to write to the same self, and concatenate at completion.
-                self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(delayed(unwrap_self_readproduct)(i) for i in zip([self]*len(self.files), self.files))
-            except Exception:
-                log.info('Multi-core version failed, will try single for loop')
+            if self.num_threads > 1:
+                try:
+                    log.info('Multi-core version')
+                    # would probably be better not to write to the same self, and concatenate at completion.
+                    self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(
+                                delayed(unwrap_self_readproduct)(i) for i in
+                                        zip([self]*len(self.files), self.files))
+                except Exception:
+                    log.info('Multi-core version failed, will try single loop')
+                    for f in self.files:
+                        self.products += self.__readproduct__(f)
+            else:
                 for f in self.files:
                     self.products += self.__readproduct__(f)
         else:
             self.products += self.__readproduct__(self.files[0])
 
         # Sort by pair and start time.
-        self.products = sorted(self.products, key=lambda k: (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
-        self.products=list(self.products)
+        self.products = sorted(self.products, key=lambda k:
+                    (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
+        self.products = list(self.products)
 
         # Exit if products from different sensors were mixed
-        if not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products) and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products):
-            raise Exception('Specified input contains standard products from different sensors, please proceed with homogeneous products.')
+        if not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products) \
+            and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products):
+            raise Exception('Specified input contains standard products from '\
+                'different sensors, please proceed with homogeneous products.')
 
         # Check if any pairs meet criteria
         if self.products==[]:

@@ -328,7 +328,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         outputFormat='ENVI', num_threads='2'):
     """Function to load and export DEM, lat, lon arrays.
 
-    If "Download" flag is specified, DEM will be donwloaded on the fly.
+    If "Download" flag is specified, DEM will be downloaded on the fly.
     """
     # If specified DEM subdirectory exists, delete contents
     workdir      = os.path.join(workdir,'DEM')
@@ -346,30 +346,36 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     else: # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
         assert os.path.exists(demfilename), f'Cannot open DEM at: {demfilename}'
-        ds_u = gdal.Open(demfilename)
+        ds_u = gdal.Open(demfilename, gdal.GA_ReadOnly)
         epsg = osr.SpatialReference(wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY',1)
         assert epsg is not None, f'No projection information in DEM: {demfilename}'
         del ds_u
 
     # write cropped DEM
-    gdal.Warp(aria_dem, demfilename, format=outputFormat,
+    if demfilename == os.path.abspath(aria_dem):
+        log.warning('The DEM you specified already exists in %s, '\
+                'using the existing one...', os.path.dirname(aria_dem))
+        ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
+
+    else:
+        gdal.Warp(aria_dem, demfilename, format=outputFormat,
                 cutlineDSName=prods_TOTbbox, outputBounds=bounds,
                 outputType=gdal.GDT_Int16, width=arrshape[1], height=arrshape[0],
                 multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
 
-    update_file = gdal.Open(aria_dem, gdal.GA_Update)
-    update_file.SetProjection(proj); del update_file
-    ds_aria     = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
-    log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
+        update_file = gdal.Open(aria_dem, gdal.GA_Update)
+        update_file.SetProjection(proj); del update_file
+        ds_aria     = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
+        log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
 
-    # Load DEM and setup lat and lon arrays
-    # pass expanded DEM for metadata field interpolation
-    bounds  = list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
-    gt      = ds_aria.GetGeoTransform()
-    ds_aria = gdal.Warp('', aria_dem, format='MEM', outputBounds=bounds,
-                             xRes=abs(gt[1]), yRes=abs(gt[-1]), multithread=True,
-                                     options=['NUM_THREADS=%s'%(num_threads)])
-    ds_aria.SetProjection(proj); ds_aria.SetDescription(aria_dem)
+        # Load DEM and setup lat and lon arrays
+        # pass expanded DEM for metadata field interpolation
+        bounds  = list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
+        gt      = ds_aria.GetGeoTransform()
+        ds_aria = gdal.Warp('', aria_dem, format='MEM', outputBounds=bounds,
+                                         xRes=abs(gt[1]), yRes=abs(gt[-1]),
+                     multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+        ds_aria.SetProjection(proj); ds_aria.SetDescription(aria_dem)
 
     # Define lat/lon arrays for fullres layers
     gt, xs, ys  = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
@@ -987,7 +993,8 @@ def main(inps=None):
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox, workdir=inps.workdir, verbose=inps.verbose)
+    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox,
+      workdir=inps.workdir, num_threads=inps.num_threads, verbose=inps.verbose)
 
     if not inps.layers and not inps.tropo_products:
         log.info('No layers specified; only creating bounding box shapes')
