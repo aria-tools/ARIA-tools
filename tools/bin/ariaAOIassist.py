@@ -723,7 +723,11 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
 # Main
 if __name__ == "__main__":
     """ Main workflow for extracting and visualizing meta data. """
-    print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    try:
+        print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    except:
+        pass
+        
     inps = cmdLineParse(iargs=None)
 
 

@@ -10,6 +10,9 @@ from ARIAtools.tsSetup import cmd_line_parse, main
 from pkg_resources import get_distribution
 
 if __name__ == '__main__':
-    print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    try:
+        print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    except:
+        pass
     inps = cmd_line_parse()
     main(inps)
