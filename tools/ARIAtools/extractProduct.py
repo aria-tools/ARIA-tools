@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
 # Copyright 2019, by the California Institute of Technology. ALL RIGHTS
@@ -395,12 +395,15 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     root      = os.path.splitext(path_dem)[0]
     prod_shapefile = open_shapefile(path_prod_union, 0, 0)
     WSEN      = prod_shapefile.bounds
-    # If area > 225000 km2, must split requests into chunks to successfully access data
+    # If area > 450000 km2, must split requests into chunks to successfully access data
     chunk = False
-    if shapefile_area(prod_shapefile) > 300000:
+    if shapefile_area(prod_shapefile, bounds = True) > 450000:
         chunk = True
         # Increase chunking size to discretize box into smaller grids
-        log.warning('User-defined bounds results in an area of %d km which exceeds the maximum download area of 450000; downloading in chunks', shapefile_area(prod_shapefile))
+        log.warning('User-defined bounds results in an area of %d km which ' \
+                    'exceeds the maximum download area of 450000; ' \
+                    'downloading in chunks', \
+                    shapefile_area(prod_shapefile, bounds = True))
         rows, cols = chunk_area(WSEN)
 
     if chunk: # Download in chunks (if necessary)
