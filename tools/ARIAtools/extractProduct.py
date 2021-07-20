@@ -389,7 +389,7 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     WSEN      = prod_shapefile.bounds
     # If area > 450000 km2, must split requests into chunks to successfully access data
     chunk = False
-    if shapefile_area(prod_shapefile, bounds = True) > 450000:
+    if shapefile_area(prod_shapefile, bounds = True) > 400000:
         chunk = True
         # Increase chunking size to discretize box into smaller grids
         log.warning('User-defined bounds results in an area of %d km which ' \
@@ -756,7 +756,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
 
 def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox, outDir='./',outputFormat='VRT', verbose=None, num_threads='2'):
     """
-        Perform tropospheric corrections. Must provide valid path to 
+        Perform tropospheric corrections. Must provide valid path to
         GACOS products.
         All products are cropped by the bounds from the input bbox_file,
         and clipped to the track extent denoted by the input prods_TOTbbox.
