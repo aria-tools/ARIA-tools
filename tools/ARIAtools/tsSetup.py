@@ -313,7 +313,13 @@ def generate_stack(aria_prod, input_files, output_file_name,
             data_set = None
 
             metadata['wavelength'] = wavelength
-            metadata['utcTime'] = utc_time[dates]
+            try:
+                metadata['utcTime'] = utc_time[dates]
+            except:
+                log.debug('Skipping %s; it likely exists in the %s, '\
+                          'but was not specified in the product list',
+                          dates, os.path.dirname(data[1]))
+                continue
             metadata['bPerp'] = b_perp[dates]
             metadata['incAng'] = inc_angle[dates]
             metadata['lookAng'] = look_ang[dates]
