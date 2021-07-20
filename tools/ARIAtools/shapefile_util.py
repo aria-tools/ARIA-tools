@@ -18,7 +18,7 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 def open_shapefile(fname, lyrind, ftind):
-    """Open a existing shapefile and pass the coordinates back"""
+    """Open a existing shapefile and pass the coordinates back."""
     # import dependencies
     from shapely.wkt import loads
 
@@ -38,7 +38,7 @@ def open_shapefile(fname, lyrind, ftind):
     return file_bbox
 
 def save_shapefile(fname, polygon, drivername):
-    """Save a polygon shapefile"""
+    """Save a polygon shapefile."""
     # open file
     ds = ogr.GetDriverByName(drivername).CreateDataSource(fname)
     # create layer
@@ -59,7 +59,7 @@ def save_shapefile(fname, polygon, drivername):
     return
 
 def shapefile_area(file_bbox, bounds = False):
-    """Compute km\u00b2 area of shapefile"""
+    """Compute km\u00b2 area of shapefile."""
     # import dependencies
     from pyproj import Proj
     from shapely.geometry import shape
@@ -90,7 +90,8 @@ def shapefile_area(file_bbox, bounds = False):
     return shape_area
 
 def chunk_area(WSEN):
-    """Chunk an area ~evenly pieces < 450000 km required by the SRTM server"""
+    """Chunk an area ~evenly pieces < 450000 km required by the
+       SRTM server."""
     from shapely.geometry import Polygon
     max_area   = 400000 # need buffer for projections inconsistencies
     W, S, E, N = WSEN
@@ -139,7 +140,7 @@ def plot_shapefile(fname):
             if geom_name == 'MULTIPOLYGON':
                 r = geom.GetGeometryRef(i)
                 for j in range(r.GetGeometryCount()):
-                    p = r.GetGeometryRef(0)
+                    p = r.GetGeometryRef(j)
                     r = p
             x = [r.GetX(j) for j in range(r.GetPointCount())]
             y = [r.GetY(j) for j in range(r.GetPointCount())]
@@ -153,7 +154,8 @@ def plot_shapefile(fname):
         paths.append(path)
 
     with plt.style.context(('seaborn')):
-        fig, ax = plt.subplots(figsize=(12, 9))
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot(111)
         ax.set_xlim(ext[0]-xoff,ext[1]+xoff)
         ax.set_ylim(ext[2]-yoff,ext[3]+yoff)
 
