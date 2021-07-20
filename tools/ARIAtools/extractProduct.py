@@ -27,9 +27,7 @@ log = logging.getLogger(__name__)
 _world_dem = "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
 
 def createParser():
-    '''
-       Extract specified product layers. The default will export all layers.
-    '''
+    """Extract specified product layers. The default will export all layers."""
     import argparse
     parser = argparse.ArgumentParser(description= \
             'Program to extract data and meta-data layers from ARIA standard GUNW products.'\
@@ -76,14 +74,10 @@ def cmdLineParse(iargs = None):
     return parser.parse_args(args=iargs)
 
 class InterpCube(object):
-    '''
-        Class to interpolate intersection of cube with DEM
-    '''
+    """Class to interpolate intersection of cube with DEM."""
 
     def __init__(self, inobj, hgtobj, latobj, lonobj):
-        '''
-            Init with h5py dataset.
-        '''
+        """Init with h5py dataset."""
         self.data = inobj[:]
         self.hgts = hgtobj[:]
         self.offset = None
@@ -94,9 +88,7 @@ class InterpCube(object):
         self.createInterp()
 
     def createInterp(self):
-        '''
-            Create interpolators.
-        '''
+        """Create interpolators."""
         from scipy.interpolate import RectBivariateSpline
         self.offset = np.mean(self.data)
         for i in range(len(self.hgts)):
@@ -114,11 +106,10 @@ class InterpCube(object):
         return est(h) + self.offset
 
 class metadata_qualitycheck:
-    """ Metadata quality control function. Artifacts recognized based off of covariance of cross-profiles.
-
-    Bug-fix varies based off of layer of interest.
-    Verbose mode generates a series of quality control plots with these profiles.
-    """
+    """Metadata quality control function. Artifacts recognized based off of
+    covariance of cross-profiles. Bug-fix varies based off of layer of
+    interest. Verbose mode generates a series of quality control plots with
+    these profiles."""
 
     def __init__(self, data_array, prod_key, outname, verbose=None):
         # Pass inputs
@@ -326,9 +317,9 @@ class metadata_qualitycheck:
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         proj, arrshape=None, workdir='./',
                         outputFormat='ENVI', num_threads='2'):
-    """Function to load and export DEM, lat, lon arrays.
-
-    If "Download" flag is specified, DEM will be downloaded on the fly.
+    """
+        Function to load and export DEM, lat, lon arrays.
+        If "Download" flag is specified, DEM will be downloaded on the fly.
     """
     # If specified DEM subdirectory exists, delete contents
     workdir      = os.path.join(workdir,'DEM')
@@ -387,8 +378,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     return aria_dem, ds_aria, Latitude, Longitude
 
 def dl_dem(path_dem, path_prod_union, num_threads):
-    """Download the DEM over product bbox union."""
-
+    """
+        Download the DEM over product bbox union.
+    """
     # Import functions
     from ARIAtools.shapefile_util import shapefile_area
 
@@ -432,10 +424,12 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     return dst
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
-    '''
-        Extract/merge productBoundingBox layers for each pair and update dict, report common track bbox (default is to take common intersection, but user may specify union), report common track union to accurately interpolate metadata fields, and expected shape for DEM.
-    '''
-
+    """
+        Extract/merge productBoundingBox layers for each pair and update dict,
+        report common track bbox (default is to take common intersection, but
+        user may specify union), report common track union to accurately
+        interpolate metadata fields, and expected shape for DEM.
+    """
     # Import functions
     from ARIAtools.shapefile_util import save_shapefile, shapefile_area
     from shapely.geometry import Polygon
@@ -563,12 +557,14 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """
         Export layer and 2D meta-data layers (at the product resolution).
-        The function finalize_metadata is called to derive the 2D metadata layer. Dem/lat/lon arrays must be passed for this process.
+        The function finalize_metadata is called to derive the
+        2D metadata layer.
+        Dem/lat/lon arrays must be passed for this process.
         The keys specify which layer to extract from the dictionary.
-        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+        All products are cropped by the bounds from the input bbox_file,
+        and clipped to the track extent denoted by the input prods_TOTbbox.
         Optionally, a user may pass a mask-file.
     """
-
     ##Import functions
     from ARIAtools.vrtmanager import resampleRaster
 
@@ -673,10 +669,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
     return
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
-    '''
-        2D metadata layer is derived by interpolating and then intersecting 3D layers with a DEM. Lat/lon arrays must also be passed for this process.
-    '''
-
+    """
+        2D metadata layer is derived by interpolating and then intersecting
+        3Dlayers with a DEM.
+        Lat/lon arrays must also be passed for this process.
+    """
     # import dependencies
     import scipy
 
@@ -759,10 +756,11 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
 
 def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox, outDir='./',outputFormat='VRT', verbose=None, num_threads='2'):
     """
-        Perform tropospheric corrections. Must provide valid path to GACOS products.
-        All products are cropped by the bounds from the input bbox_file, and clipped to the track extent denoted by the input prods_TOTbbox.
+        Perform tropospheric corrections. Must provide valid path to 
+        GACOS products.
+        All products are cropped by the bounds from the input bbox_file,
+        and clipped to the track extent denoted by the input prods_TOTbbox.
     """
-
     # Import functions
     from ARIAtools.vrtmanager import renderVRT
     import tarfile
@@ -985,9 +983,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file, prods_TOTbbox
         log.debug(missing_products)
 
 def main(inps=None):
-    '''
-       Main workflow for extracting layers from ARIA products
-    '''
+    """
+       Main workflow for extracting layers from ARIA products.
+    """
     from ARIAtools.ARIAProduct import ARIA_standardproduct
     print ('*****************************************************************')
     print ('*** Extract Product Function ***')
