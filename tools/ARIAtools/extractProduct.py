@@ -64,6 +64,9 @@ def createParser():
         help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081,
         help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
+    parser.add_argument('--version', dest='version',  default=None,
+        help='Specify version as str, e.g. 2_0_4 or all prods; default: '
+             'newest')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
 
@@ -393,7 +396,7 @@ def dl_dem(path_dem, path_prod_union, num_threads):
         chunk = True
         # Increase chunking size to discretize box into smaller grids
         log.warning('User-defined bounds results in an area of %d km which ' \
-                    'exceeds the maximum download area of 450000; ' \
+                    'exceeds the maximum download area of 400000; ' \
                     'downloading in chunks', \
                     shapefile_area(prod_shapefile, bounds = True))
         rows, cols = chunk_area(WSEN)
@@ -994,8 +997,12 @@ def main(inps=None):
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile, bbox=inps.bbox,
-      workdir=inps.workdir, num_threads=inps.num_threads, verbose=inps.verbose)
+    standardproduct_info = ARIA_standardproduct(inps.imgfile,
+                                                bbox=inps.bbox,
+                                                workdir=inps.workdir,
+                                                num_threads=inps.num_threads,
+                                                url_version=inps.version,
+                                                verbose=inps.verbose)
 
     if not inps.layers and not inps.tropo_products:
         log.info('No layers specified; only creating bounding box shapes')

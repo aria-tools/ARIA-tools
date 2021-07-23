@@ -13,6 +13,7 @@ from joblib import Parallel, delayed
 import logging
 from osgeo import gdal
 
+from ARIAtools.url_manager import url_versions
 from ARIAtools.shapefile_util import open_shapefile,save_shapefile
 from ARIAtools.logger import logger
 
@@ -27,13 +28,13 @@ def unwrap_self_readproduct(arg):
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
-    '''
-        Class which loads ARIA standard products and splits them into spatiotemporally contigeous interferograms.
-    '''
-
+    """Class which loads ARIA standard products and splits them into
+    spatiotemporally contigeous interferograms.
+    """
     # import dependencies
     import glob
-    def __init__(self, filearg, bbox=None, workdir='./', num_threads=1, verbose=False):
+    def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
+                 url_version='None', verbose=False):
         # If user wants verbose mode
         # Parse through file(s)/bbox input
         if verbose: logger.setLevel(logging.DEBUG)
@@ -43,7 +44,6 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         self.bbox_file = None
         # Pair name for layer extraction
         self.pairname = None
-
         self.num_threads = int(num_threads)
 
         ### Determine if file input is single file, a list, or wildcard.
@@ -69,6 +69,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 self.files=self.glob.glob(os.path.expanduser(os.path.expandvars(filearg)))
             # Convert relative paths to absolute paths
             self.files=[os.path.abspath(i) for i in self.files]
+
+        # capture and remove duplicate files (if applicable)
+        self.files = url_versions(self.files, url_version,
+                                 os.path.dirname(self.files[0]))
 
         # remove files that arent .nc; iterate over copy of list thats edited
         tmp_files = self.files.copy()
@@ -131,10 +135,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __readproduct__(self, fname):
-        '''
-            Read product, determine expected layer names based off of version number, and populate corresponding product dictionary accordingly.
-        '''
-
+        """Read product, determine expected layer names based off of version
+        number, and populate corresponding product dictionary accordingly.
+        """
         ### Get standard product version from file
         try:
             #version accessed differently between URL vs downloaded product
@@ -163,12 +166,15 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __OGmappingVersion__(self, fname, version):
-        '''
-            Track the mapping of ARIA standard product versions.
-            The order of the keys needs to be consistent with the keys in the mappingData function.
-            E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
-        '''
-
+        """Track the mapping of ARIA standard product versions.
+        The order of the keys needs to be consistent with the keys in the 
+        mappingData function.
+        E.g. a new expected radar-metadata key can be added as XXX to the end
+        of the list "rmdkeys" below, and correspondingly to the end of the list
+        "radarkeys" inside the mappingData function. Same protocol for new
+        expected layer keys in the list "sdskeys" below, and correspondingly in
+        "layerkeys" inside the mappingData function.
+        """
         import netCDF4
         # ARIA standard product version 1a and 1b have same mapping
         if version=='1a' or version=='1b':
@@ -191,10 +197,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __OGmappingData__(self, fname, rmdkeys, sdskeys):
-        '''
-            Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
-            The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
-        '''
+        """Output and group together 2 dictionaries containing the
+        “radarmetadata info” and “data layer keys+paths”, respectively
+        The order of the dictionary keys below needs to be consistent with
+        the keys in the __mappingVersion__ function of the ARIA_standardproduct
+        class (see instructions on how to appropriately add new keys there).
+        """
         import netCDF4
         # Expected radarmetadata
         radarkeys=['missionID', 'wavelength', 'centerFrequency', 'productType',
@@ -244,12 +252,15 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __mappingVersion__(self, fname, version):
-        '''
-            Track the mapping of ARIA standard product versions.
-            The order of the keys needs to be consistent with the keys in the mappingData function.
-            E.g. a new expected radar-metadata key can be added as XXX to the end of the list "rmdkeys" below, and correspondingly to the end of the list "radarkeys" inside the mappingData function. Same protocol for new expected layer keys in the list "sdskeys" below, and correspondingly in "layerkeys" inside the mappingData function.
-        '''
-
+        """Track the mapping of ARIA standard product versions.
+        The order of the keys needs to be consistent with the keys in the
+        mappingData function.
+        E.g. a new expected radar-metadata key can be added as XXX to the end
+        of the list "rmdkeys" below, and correspondingly to the end of the list
+        "radarkeys" inside the mappingData function. Same protocol for new
+        expected layer keys in the list "sdskeys" below, and correspondingly in
+        "layerkeys" inside the mappingData function.
+        """
         # ARIA standard product version 1a and 1b have same mapping
         # ARIA standard product version 1c differs with inclusion of ionosphere layer
         rdrmetadata_dict={}
@@ -291,10 +302,18 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 raise Exception('Sensor %s for file %s not supported.'%(basename.split('-')[0],fname))
 
             # Layer names for these versions
-            sdskeys=['productBoundingBox','/science/grids/data/unwrappedPhase','/science/grids/data/coherence',
-            '/science/grids/data/connectedComponents','/science/grids/data/amplitude','/science/grids/imagingGeometry/perpendicularBaseline',
-            '/science/grids/imagingGeometry/parallelBaseline','/science/grids/imagingGeometry/incidenceAngle',
-            '/science/grids/imagingGeometry/lookAngle','/science/grids/imagingGeometry/azimuthAngle']
+            sdskeys = [
+                'productBoundingBox',
+                '/science/grids/data/unwrappedPhase',
+                '/science/grids/data/coherence',
+                '/science/grids/data/connectedComponents',
+                '/science/grids/data/amplitude',
+                '/science/grids/imagingGeometry/perpendicularBaseline',
+                '/science/grids/imagingGeometry/parallelBaseline',
+                '/science/grids/imagingGeometry/incidenceAngle',
+                '/science/grids/imagingGeometry/lookAngle',
+                '/science/grids/imagingGeometry/azimuthAngle'
+            ]
             if version.lower()=='1c':
                 sdskeys.append('/science/grids/corrections/derived/ionosphere/ionosphere')
 
@@ -302,11 +321,13 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __mappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
-        '''
-            Output and group together 2 dictionaries containing the “radarmetadata info” and “data layer keys+paths”, respectively
-            The order of the dictionary keys below needs to be consistent with the keys in the __mappingVersion__ function of the ARIA_standardproduct class (see instructions on how to appropriately add new keys there).
-        '''
-
+        """Output and group together 2 dictionaries containing the
+        “radarmetadata info” and “data layer keys+paths”, respectively
+        The order of the dictionary keys below needs to be consistent with the
+        keys in the __mappingVersion__ function of the ARIA_standardproduct
+        class (see instructions on how to appropriately add new 
+        keys there).
+        """
         # Expected layers
         layerkeys=['productBoundingBox','unwrappedPhase',
         'coherence','connectedComponents','amplitude','bPerpendicular',
@@ -331,11 +352,15 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __continuous_time__(self):
-        '''
-            Split the products into spatiotemporally continuous groups (i.e. by individual, continuous interferograms). Input must be already sorted by pair and start-time to fit the logic scheme below.
-            Using their time-tags, this function determines whether or not successive products are in the same orbit. If in the same orbit, the program determines whether or not they overlap in time and are therefore spatially contiguous, and rejects/reports cases for which there is no temporal overlap and therefore a spatial gap.
-        '''
-
+        """Split the products into spatiotemporally continuous groups
+        (i.e. by individual, continuous interferograms). Input must be already
+        sorted by pair and start-time to fit the logic scheme below.
+        Using their time-tags, this function determines whether or not
+        successive products are in the same orbit. If in the same orbit, the
+        program determines whether or not they overlap in time and are
+        therefore spatially contiguous, and rejects/reports cases for which
+        there is no temporal overlap and therefore a spatial gap.
+        """
         # import dependencies
         from datetime import datetime, timedelta
         import itertools

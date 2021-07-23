@@ -73,6 +73,9 @@ def createParser():
         "Default 0.0081 = 0.0081km\u00b2=area of single pixel at standard 90m resolution")
     parser.add_argument('--figwidth', dest='figwidth', type=str, default='standard',
         help='Width of lat extents figure in inches. Default is \"standard\", i.e., the 6.4-inch-wide standard figure size. Optionally, theuser may define the width manually, e.g,. 8 [inches] or set the parameter to \"wide\" format, i.e., the width of the figure automatically scales with the number of interferograms. Other options include')
+    parser.add_argument('--version', dest='version',  default=None,
+        help='Specify version as str, e.g. 2_0_4 or all prods; default: '
+             'newest')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     return parser
@@ -580,8 +583,11 @@ def main(inps=None):
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile,
-                    bbox=inps.bbox, workdir=inps.workdir,
-                    num_threads=inps.num_threads, verbose=inps.verbose)
+                                                bbox=inps.bbox,
+                                                workdir=inps.workdir,
+                                                num_threads=inps.num_threads,
+                                                url_version=inps.version,
+                                                verbose=inps.verbose)
 
     # If user requests to generate all plots.
     if inps.plotall:
