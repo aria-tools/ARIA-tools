@@ -533,8 +533,10 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(
                                 delayed(unwrap_self_readproduct)(i) for i in
                                         zip([self]*len(self.files), self.files))
-                except Exception:
-                    log.info('Multi-core version failed, will try single loop')
+                except Exception as E:
+                    log.warning('Multi-core version failed with error: %s', E)
+                    log.info('Will try single loop')
+
                     for f in self.files:
                         self.products += self.__readproduct__(f)
             else:
