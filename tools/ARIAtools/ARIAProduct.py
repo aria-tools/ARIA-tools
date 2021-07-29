@@ -28,15 +28,22 @@ def unwrap_self_readproduct(arg):
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
-    """Load ARIA standard products
+    """
+
+    Load ARIA standard products
 
     Load ARIA standard products and split them into
     spatiotemporally contigeous interferograms.
+
     """
-    # import dependencies
     import glob
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', verbose=False):
+        """
+        
+        Parse products and input bounding box (if specified)
+        
+        """
         # If user wants verbose mode
         # Parse through file(s)/bbox input
         if verbose: logger.setLevel(logging.DEBUG)
@@ -142,10 +149,13 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __readproduct__(self, fname):
-        """Read products
+        """
+
+        Read products.
 
         Read product, determine expected layer names based off of version
         number, and populate corresponding product dictionary accordingly.
+
         """
         ### Get standard product version from file
         try:
@@ -178,7 +188,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __OGmappingVersion__(self, fname, version):
-        """Track the mapping of ARIA standard product versions.
+        """
+
+        Track the mapping of ARIA standard product versions.
 
         The order of the keys needs to be consistent with the keys in the
         mappingData function.
@@ -187,6 +199,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         "radarkeys" inside the mappingData function. Same protocol for new
         expected layer keys in the list "sdskeys" below, and correspondingly in
         "layerkeys" inside the mappingData function.
+
         """
         import netCDF4
         # ARIA standard product version 1a and 1b have same mapping
@@ -213,11 +226,16 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __OGmappingData__(self, fname, rmdkeys, sdskeys):
-        """Output and group together 2 dictionaries containing the
+        """
+
+        Track the mapping of ARIA standard product versions.
+
+        Output and group together 2 dictionaries containing the
         “radarmetadata info” and “data layer keys+paths”, respectively
         The order of the dictionary keys below needs to be consistent with
         the keys in the __mappingVersion__ function of the ARIA_standardproduct
         class (see instructions on how to appropriately add new keys there).
+
         """
         import netCDF4
         # Expected radarmetadata
@@ -268,7 +286,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __mappingVersion__(self, fname, version):
-        """Track the mapping of ARIA standard product versions.
+        """
+
+        Track the mapping of ARIA standard product versions.
 
         The order of the keys needs to be consistent with the keys in the
         mappingData function.
@@ -277,6 +297,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         "radarkeys" inside the mappingData function. Same protocol for new
         expected layer keys in the list "sdskeys" below, and correspondingly in
         "layerkeys" inside the mappingData function.
+
         """
         # ARIA standard product version 1a and 1b have same mapping
         # ARIA standard product version 1c differs with inclusion of ionosphere layer
@@ -345,14 +366,17 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __mappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
-        """Pass product record of metadata and layers
+        """
+
+        Pass product record of metadata and layers
 
         Output and group together 2 dictionaries containing the
         “radarmetadata info” and “data layer keys+paths”, respectively
         The order of the dictionary keys below needs to be consistent with the
         keys in the __mappingVersion__ function of the ARIA_standardproduct
-        class (see instructions on how to appropriately add new 
+        class (see instructions on how to appropriately add new
         keys there).
+
         """
         # Expected layers
         layerkeys=['productBoundingBox','unwrappedPhase',
@@ -378,7 +402,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
 
     def __continuous_time__(self):
-        """Split the products into spatiotemporally continuous groups
+        """
+
+        Split the products into spatiotemporally continuous groups.
 
         Split products by individual, continuous interferograms.
         Input must be already sorted by pair and start-time to fit
@@ -389,6 +415,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         overlap in time and are therefore spatially contiguous,
         and rejects/reports cases for which there is no temporal overlap
         and therefore a spatial gap.
+
         """
         # import dependencies
         from datetime import datetime, timedelta
