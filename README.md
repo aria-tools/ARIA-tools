@@ -10,7 +10,7 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series. 
 
-Actual time-series processing is not supported in ARIA-tools. However, outputs are compatible with thrid-party time-series InSAR packages such as the "Generic InSAR Analysis Toolbox" ([GIAnT](http://earthdef.caltech.edu/projects/giant/wiki)) and the "Miami INsar Time-series software in PYthon" ([MintPy](https://github.com/insarlab/MintPy)).
+Actual time-series processing is not supported in ARIA-tools. However, outputs are compatible with third-party time-series InSAR packages such as the "Generic InSAR Analysis Toolbox" ([GIAnT](http://earthdef.caltech.edu/projects/giant/wiki)) and the "Miami INsar Time-series software in PYthon" ([MintPy](https://github.com/insarlab/MintPy)).
 <p align="center">
 <img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/Hawaii.png">
 <img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/CA.png">
