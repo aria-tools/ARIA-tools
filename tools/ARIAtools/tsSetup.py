@@ -123,6 +123,9 @@ def create_parser():
                         'area of overlap of scenes wrt specified bounding box.'
                         ' Default 0.0081 = 0.0081km\u00b2 = area of single'
                         ' pixel at standard 90m resolution')
+    parser.add_argument('--version', dest='version',  default=None,
+                        help='Specify version as str, e.g. 2_0_4 or all prods;'
+                        'default: newest')
     parser.add_argument('-verbose', '--verbose', action='store_true',
                         dest='verbose', help="Toggle verbose mode on.")
 
@@ -313,7 +316,13 @@ def generate_stack(aria_prod, input_files, output_file_name,
             data_set = None
 
             metadata['wavelength'] = wavelength
-            metadata['utcTime'] = utc_time[dates]
+            try:
+                metadata['utcTime'] = utc_time[dates]
+            except:
+                log.debug('Skipping %s; it likely exists in the %s, '\
+                          'but was not specified in the product list',
+                          dates, os.path.dirname(data[1]))
+                continue
             metadata['bPerp'] = b_perp[dates]
             metadata['incAng'] = inc_angle[dates]
             metadata['lookAng'] = look_ang[dates]
@@ -384,9 +393,12 @@ def main(inps=None):
     # standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file']
     # (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(
-        inps.imgfile, bbox=inps.bbox,
-        workdir=inps.workdir, num_threads=inps.num_threads, verbose=inps.verbose)
+    standardproduct_info = ARIA_standardproduct(inps.imgfile,
+                                                bbox=inps.bbox,
+                                                workdir=inps.workdir,
+                                                num_threads=inps.num_threads,
+                                                url_version=inps.version,
+                                                verbose=inps.verbose)
 
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower() == 'all':

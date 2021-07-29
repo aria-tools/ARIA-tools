@@ -261,8 +261,8 @@ class NLCDMasker(object):
             outputFormat='ENVI'
 
         ## crop the raw nlcd in memory
-        path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/NLCD_2016'\
-                    '_Land_Cover_L48_20190424.zip/NLCD_2016_Land_Cover_L48_20190424.img'
+        path_nlcd = '/vsizip/vsicurl/https://s3-us-west-2.amazonaws.com/mrlc/nlcd_2019'\
+                    '_land_cover_l48_20210604.zip/nlcd_2019_land_cover_l48_20210604.img'
 
         log.info('Cropping raw NLCD...')
         ds_crop   = crop_ds(path_nlcd, self.path_bbox)

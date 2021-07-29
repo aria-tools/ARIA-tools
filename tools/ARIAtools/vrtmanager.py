@@ -6,7 +6,9 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+import os
+import glob
+import numpy as np
 from osgeo import gdal
 gdal.UseExceptions()
 # Suppress warnings
@@ -14,9 +16,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
-    '''
-        Exports raster and renders corresponding VRT file.
-    '''
+    """Exports raster and renders corresponding VRT file."""
     gdalMap = { 'byte'   : 1,
                 'int16'  : 3,
                 'int32'    : 5,
@@ -46,13 +46,7 @@ def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float
 
 ###Make OGR VRT file
 def renderOGRVRT(vrt_filename, src_datasets):
-    '''
-        Generate VRT of shapefile unions.
-    '''
-
-    # Import functions
-    import os
-
+    """Generate VRT of shapefile unions."""
     vrt_head='<OGRVRTDataSource>\n  <OGRVRTUnionLayer name="merged">\n    <FieldStrategy>Union</FieldStrategy>\n'
     vrt_tail='  </OGRVRTUnionLayer>\n</OGRVRTDataSource>\n'
 
@@ -70,16 +64,10 @@ def renderOGRVRT(vrt_filename, src_datasets):
 
 ###Resample raster
 def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=False, outputFormat='ENVI', num_threads='2'):
-    '''
-        Resample rasters and update corresponding VRTs.
-    '''
-
+    """Resample rasters and update corresponding VRTs."""
     # Import functions
-    import os
     from scipy import stats
-    import numpy as np
     from decimal import Decimal, ROUND_HALF_UP
-    import glob
 
     # Check if physical raster exists and needs to be updated
     # Also get datasource name (inputname)
@@ -195,19 +183,11 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
 
 ###Average rasters
 def rasterAverage(outname, product_dict, bounds, prods_TOTbbox, outputFormat='ENVI', thresh=None):
-    '''
-        Generate average of rasters.
-        Currently implemented for:
-        1. amplitude under 'mask_util.py'
-        2. coherence under 'plot_avgcoherence' function of productPlot
-    '''
+    """Generate average of rasters.
 
-    # Import functions
-    from ARIAtools.vrtmanager import renderVRT
-    import glob
-    import numpy as np
-    import os
-
+    Currently implemented for:
+    1. amplitude under 'mask_util.py'
+    2. coherence under 'plot_avgcoherence' function of productPlot"""
     ###Make average raster
     # Delete existing average raster file
     for i in glob.glob(outname+'*'): os.remove(i)
@@ -243,3 +223,59 @@ def rasterAverage(outname, product_dict, bounds, prods_TOTbbox, outputFormat='EN
     arr_file = gdal.Open(outname).ReadAsArray()
 
     return arr_file
+
+
+###Generate GACOS rsc
+def rscGacos(outvrt, merged_rsc, tropo_date_dict):
+    """Generate GACOS product .rsc files"""
+    in_file = gdal.Open(outvrt)
+    date = os.path.basename(outvrt[:-4]).split('.tif')[0].split('.ztd')[0]
+    # Create merge rsc file
+    with open(outvrt[:-4]+'.rsc','w') as merged_rsc:
+        merged_rsc.write('WIDTH %s\n'%(in_file.RasterXSize))
+        merged_rsc.write('FILE_LENGTH %s\n'%(in_file.RasterYSize))
+        merged_rsc.write('XMIN %s\n'%(0))
+        merged_rsc.write('XMAX %s\n'%(in_file.RasterXSize))
+        merged_rsc.write('YMIN %s\n'%(0))
+        merged_rsc.write('YMAX %s\n'%(in_file.RasterYSize))
+        merged_rsc.write('X_FIRST %f\n'%(in_file.GetGeoTransform()[0]))
+        merged_rsc.write('Y_FIRST %f\n'%(in_file.GetGeoTransform()[3]))
+        merged_rsc.write('X_STEP %f\n'%(in_file.GetGeoTransform()[1]))
+        merged_rsc.write('Y_STEP %f\n'%(in_file.GetGeoTransform()[-1]))
+        merged_rsc.write('X_UNIT %s\n'%('degres'))
+        merged_rsc.write('Y_UNIT %s\n'%('degres'))
+        merged_rsc.write('Z_OFFSET %s\n'%(0))
+        merged_rsc.write('Z_SCALE %s\n'%(1))
+        merged_rsc.write('PROJECTION %s\n'%('LATLON'))
+        merged_rsc.write('DATUM %s\n'%('WGS84'))
+        merged_rsc.write('TIME_OF_DAY %s\n'%(''.join( \
+                                             tropo_date_dict[date+"_UTC"])))
+
+    return
+
+
+###Parse GACOS metadata from TIF
+def tifGacos(intif):
+    """Pass GACOS metadata as dict from TIF"""
+    tropo_rsc_dict={}
+    in_file = gdal.Open(intif)
+    #Populate dict
+    tropo_rsc_dict['WIDTH'] = in_file.RasterXSize
+    tropo_rsc_dict['FILE_LENGTH'] = in_file.RasterYSize
+    tropo_rsc_dict['XMIN'] = 0
+    tropo_rsc_dict['XMAX'] = in_file.RasterXSize
+    tropo_rsc_dict['YMIN'] = 0
+    tropo_rsc_dict['YMAX'] = in_file.RasterYSize
+    tropo_rsc_dict['X_FIRST'] = in_file.GetGeoTransform()[0]
+    tropo_rsc_dict['Y_FIRST'] = in_file.GetGeoTransform()[3]
+    tropo_rsc_dict['X_STEP'] = in_file.GetGeoTransform()[1]
+    tropo_rsc_dict['Y_STEP'] = in_file.GetGeoTransform()[-1]
+    tropo_rsc_dict['X_UNIT'] = 'degres'
+    tropo_rsc_dict['Y_UNIT'] = 'degres'
+    tropo_rsc_dict['Z_OFFSET'] = 0
+    tropo_rsc_dict['Z_SCALE'] = 1
+    tropo_rsc_dict['PROJECTION'] = 'LATLON'
+    tropo_rsc_dict['DATUM'] = 'WGS84'
+    tropo_rsc_dict['TIME_OF_DAY'] = 'NoneUTC'
+
+    return tropo_rsc_dict

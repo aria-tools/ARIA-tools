@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
 # Copyright 2019, by the California Institute of Technology. ALL RIGHTS
@@ -18,11 +18,7 @@ gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 def open_shapefile(fname, lyrind, ftind):
-    '''
-        Open a existing shapefile and pass the coordinates back.
-        ##SS => see commend on projection of the shapefile, expand the desciption of what the function would do based on this.
-    '''
-
+    """Open a existing shapefile and pass the coordinates back."""
     # import dependencies
     from shapely.wkt import loads
 
@@ -37,15 +33,12 @@ def open_shapefile(fname, lyrind, ftind):
     else:
         file_bbox = file_bbox.GetLayerByIndex(lyrind).GetFeature(ftind)
     geom = file_bbox.GetGeometryRef()
-    file_bbox = loads(geom.ExportToWkt())                       ##SS => We should track the projection of the shapefile adn pass it up? e.g. what it the data has different projection than that of the shapefile?
+    file_bbox = loads(geom.ExportToWkt())
 
     return file_bbox
 
 def save_shapefile(fname, polygon, drivername):
-    '''
-        ##SS => add descritpion and limitations. Is there not a way to add the projection pf the shape file as well?
-    '''
-
+    """Save a polygon shapefile."""
     # open file
     ds = ogr.GetDriverByName(drivername).CreateDataSource(fname)
     # create layer
@@ -65,11 +58,8 @@ def save_shapefile(fname, polygon, drivername):
 
     return
 
-def shapefile_area(file_bbox):
-    '''
-        Compute km\u00b2 area of shapefile.
-    '''
-
+def shapefile_area(file_bbox, bounds = False):
+    """Compute km\u00b2 area of shapefile."""
     # import dependencies
     from pyproj import Proj
     from shapely.geometry import shape
@@ -80,32 +70,43 @@ def shapefile_area(file_bbox):
     if file_bbox.type == 'Polygon': file_bbox = [file_bbox]
     for polyobj in file_bbox:
         # get coords
-        lon, lat=polyobj.exterior.coords.xy
+        if bounds:
+            # Pass coordinates of bounds as opposed to cutline
+            # Necessary for estimating DEM/mask footprints
+            WSEN = polyobj.bounds
+            lon = np.array([WSEN[0],WSEN[0],WSEN[2],WSEN[2],WSEN[0]])
+            lat = np.array([WSEN[1],WSEN[3],WSEN[3],WSEN[1],WSEN[1]])
+        else:
+            lon, lat = polyobj.exterior.coords.xy
 
         # use equal area projection centered on/bracketing AOI
-        pa = Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(min(lat), max(lat), (max(lat)+min(lat))/2, (max(lon)+min(lon))/2))
+        pa = Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}". \
+             format(min(lat), max(lat), (max(lat)+min(lat))/2, \
+             (max(lon)+min(lon))/2))
         x, y = pa(lon, lat)
         cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-        shape_area+=shape(cop).area/1e6  # area in km^2
+        shape_area += shape(cop).area/1e6  # area in km^2
 
     return shape_area
 
 def chunk_area(WSEN):
-    """ Chunk an area ~evenly pieces < 450000 km required by the SRTM server """
+    """Chunk an area ~evenly pieces < 450000 km required by the
+       SRTM server."""
     from shapely.geometry import Polygon
     max_area   = 400000 # need buffer for projections inconsistencies
     W, S, E, N = WSEN
-    n    = 2 # start with a 2 x 2 chunk
-    area = max_area+1
+    n = 2 # start with a 2 x 2 chunk
+    area = max_area + 1
     while area > max_area:
-        cols = np.linspace(W, E, n+1)
-        rows = np.linspace(S, N, n+1)
+        cols = np.linspace(W, E, n + 1)
+        rows = np.linspace(S, N, n + 1)
         Wi, Si, Ei, Ni = [cols[0], rows[0], cols[1], rows[1]]
         poly = Polygon([(Wi,Ni), (Wi,Si), (Ei,Si), (Ei,Ni)])
         area = shapefile_area(poly)
         n+=1
         if n>100:
-            log.error('There was a problem chunking the DEM; check input bounds')
+            log.error('There was a problem chunking the DEM; check input '
+                      'bounds')
             os.sys.exit()
     return rows, cols
 
@@ -139,7 +140,7 @@ def plot_shapefile(fname):
             if geom_name == 'MULTIPOLYGON':
                 r = geom.GetGeometryRef(i)
                 for j in range(r.GetGeometryCount()):
-                    p = r.GetGeometryRef(0)
+                    p = r.GetGeometryRef(j)
                     r = p
             x = [r.GetX(j) for j in range(r.GetPointCount())]
             y = [r.GetY(j) for j in range(r.GetPointCount())]
@@ -153,19 +154,22 @@ def plot_shapefile(fname):
         paths.append(path)
 
     with plt.style.context(('seaborn')):
-        fig, ax = plt.subplots(figsize=(12, 9))
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot(111)
         ax.set_xlim(ext[0]-xoff,ext[1]+xoff)
         ax.set_ylim(ext[2]-yoff,ext[3]+yoff)
 
         # Add paths as patches to axes
         for path in paths:
-            patch = mpatches.PathPatch(path, fill=False, facecolor='blue', edgecolor='black', linewidth=1)
+            patch = mpatches.PathPatch(path, fill=False, facecolor='blue', \
+                 edgecolor='black', linewidth=1)
 
             ax.add_patch(patch)
 
         ax.set_xlabel('longitude', labelpad=15, fontsize=15)
         ax.set_ylabel('latitude', labelpad=15, fontsize=15)
-        ax.set_title(os.path.basename(os.path.splitext(fname)[0]), fontsize=15)
+        ax.set_title(os.path.basename(os.path.splitext(fname)[0]), \
+             fontsize=15)
         ax.set_aspect(1.0)
         ax.grid(False)
     plt.show()
