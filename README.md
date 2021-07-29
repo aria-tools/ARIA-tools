@@ -7,7 +7,7 @@
 
 ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the GNU General Public License. Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.
 
-For a full overview of available ARIA standard products and their specification see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be download for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
+For a full overview of available ARIA standard products and their specification, see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be downloaded for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series. 
 
 Actual time-series processing is not supported in ARIA-tools. However, outputs are compatible with third-party time-series InSAR packages such as the "Generic InSAR Analysis Toolbox" ([GIAnT](http://earthdef.caltech.edu/projects/giant/wiki)) and the "Miami INsar Time-series software in PYthon" ([MintPy](https://github.com/insarlab/MintPy)).
@@ -69,10 +69,10 @@ Below we list the dependencies for ARIA-tools
 
 ------
 ## Installation
-ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. Easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and use the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
+ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. The easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and using the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
 
 ### Conda
-Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Running the commands below to download/clone the ARIA-tools package to your local directory:
+Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Run the commands below to download/clone the ARIA-tools package to your local directory:
 
 ```.tcsh
 git clone https://github.com/aria-tools/ARIA-tools.git
@@ -92,7 +92,7 @@ Or run the commands below to install dependencies to an existing conda environme
 conda install -c conda-forge --yes --file ./ARIA-tools/requirements.txt
 ```
 
-We have included a setup.py script which allows for easy compilation and installation of third-party dependencies (c-code), as well as setting up the ARIA-tools package itself (python and command line tools).
+We have included a setup.py script which allows for easy compilation and installation of third-party dependencies (c-code), as well as for setting up the ARIA-tools package itself (python and command line tools).
 ```.tcsh
 python setup.py build
 python setup.py install
