@@ -5,6 +5,6 @@ joblib
 scipy
 matplotlib
 pandas
-gdal>=3
+gdal>=3.2.1
 requests
 cartopy
