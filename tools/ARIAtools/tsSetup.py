@@ -335,7 +335,7 @@ def generate_stack(aria_prod, input_files, output_file_name,
                 print('Orbit direction not recognized')
                 metadata['orbit_direction'] = 'UNKNOWN'
 
-            path = os.path.abspath(data[1])
+            path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
             outstr = '''  <VRTRasterBand dataType="{data_type}" band="{index}">
         <SimpleSource>
             <SourceFilename relativeToVRT="1">{path}</SourceFilename>
