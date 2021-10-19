@@ -20,10 +20,15 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import multiprocessing
 from pkg_resources import get_distribution
+import asf_search as asf
+
+## TEMP
+from BZ import *
 
 mpl.use('agg')
 
 log = logging.getLogger('ARIAtools')
+
 
 def createParser():
     """ Download a bulk download script and execute it """
@@ -116,80 +121,6 @@ def cmdLineParse(iargs=None):
     return inps
 
 
-def prod_dl(inps, dct_prod,wd):
-    """Perform downloading using ASF bulk dl; parallel processing supported"""
-    max_threads = multiprocessing.cpu_count()
-
-    if inps.num_threads == 'all':
-        nt = max_threads
-    else:
-        nt = int(inps.num_threads)
-    nt     = nt if nt < max_threads else max_threads
-    log.info('Using  %s threads for parallel downloads', nt)
-
-    files   = dct_prod['product_list'].split(',')
-    ## remove duplicates
-    files   = [op.splitext(f)[0] for f in \
-         url_versions(files, inps.version, wd)]
-    chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
-    check   = []
-    dl_id   = time.time()  # for tracking the download attempts
-    for chunk in chunks1:
-        chunks   = np.array_split(chunk, nt)
-        lst_dcts = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
-        for i, chunk1 in enumerate(chunks):
-            lst_dcts[i]['files'] = chunk1 # put split up files to the objects for threads
-            lst_dcts[i]['ext']   = i      # for unique bulk downloader file name
-            lst_dcts[i]['id']    = dl_id
-
-        with multiprocessing.Pool(nt) as pool:
-            try:
-                info = pool.map(_dl_helper, lst_dcts)
-            except Exception as E:
-                print ('ASF bulk downloader error:', E)
-                print ('Likely a bad handshake with the ASF DAAC. '
-                       'Try rerunning')
-                os.sys.exit(1)
-
-        check.extend(chunkc for chunkc in chunks) # in case products missed in split
-
-    rewrite_summary(info)
-
-    check = [item for sublist in check for item in sublist]
-    for f in files:
-        if not f in check:
-            log.critical('File splitting missed: %s; subset your ARIA in '
-                         'command in time to try again', f)
-    return
-
-
-def _dl_helper(inp_dct):
-    """Helper function for parallel processing"""
-    # import threading
-    prod_dct = {'product_list': ','.join(inp_dct['files'])}
-    log.debug ('# of files: %d', len(inp_dct['files']))
-    script   = requests.post(f'{inp_dct["url_base"]}&output=Download', \
-               data=prod_dct).text
-
-    fname    = f'ASFDataDload{inp_dct["ext"]}.py'
-    fpath    = os.path.join(inp_dct['wd'], fname)
-    with open(fpath, 'w') as f: f.write(script)
-    AD = __import__(os.path.splitext(fname)[0])
-    os.sys.argv = [] # gets around spurious messages
-    ## capture stdout for plotting dl speed / time, also print to screen
-    mini   = MiniLog(inp_dct['id'], time.time())
-    console, os.sys.stdout = os.sys.stdout, mini
-    inp_dct['st'] = time.time()
-    dler  = AD.bulk_downloader()
-    dler.download_files()
-    os.sys.stdout = console
-
-    status_plot(inp_dct, mini.avg_rates, mini.elap)
-
-    return dler.success, dler.failed, dler.skipped, dler.total_time, \
-           dler.total_bytes
-
-
 def check_cookie_is_logged_in(cj):
     """Make sure successfully logged into URS; try to get cookie"""
     for cookie in cj:
@@ -230,7 +161,7 @@ def rewrite_summary(infos):
 
 
 def status_plot(inps, rates=None, elaps=None, use_all=False):
-    """Save plot after each chunk on each core; use_all shows all calls 
+    """Save plot after each chunk on each core; use_all shows all calls
        to script"""
     if len(rates) <= 1: # in case all successful (for testing)
         return
@@ -273,6 +204,43 @@ def status_plot(inps, rates=None, elaps=None, use_all=False):
     return
 
 
+def make_bbox(inp_bbox):
+    """ Make a WKT from SNWE or a shapefile """
+    if inp_bbox is None:
+        return None
+    from shapely.geometry import Polygon
+    if op.exists(op.abspath(inps.bbox)):
+        from ARIAtools.shapefile_util import open_shapefile
+        ring = open_shapefile(inps.bbox, 0, 0).exterior
+        poly = Polygon(ring)
+    else:
+        try:
+            S, N, W, E = [float(i) for i in inps.bbox.split()]
+            ## adjust for degrees easting / northing (0 - 360 / 0:180)
+            if W > 180: W -= 360; print('AdjustedW')
+            if E > 180: E -= 360; print('AdjustedE')
+            if N > 90: N-=90; S-=90; print('Adjusted N/S')
+        except:
+            raise Exception('Cannot understand the --bbox argument. '
+            'Input string was entered incorrectly or path does not '
+            'exist.')
+
+        poly = Polygon([(W, N), (W,S), (E,S), (E, N)])
+    return poly
+
+
+def get_url_ifg(scenes):
+    """ Get url, ifg of fetched ASF scene """
+    urls, ifgs =  [], []
+    for scene in scenes:
+        s   = scene.geojson()['properties']
+        f   = s['fileID'].split('-')
+        ifgs.append(f[6])
+        urls.append(s['url'])
+
+    return urls, ifgs
+
+
 class Downloader(object):
     def __init__(self, inps):
         self.inps        = inps
@@ -284,7 +252,7 @@ class Downloader(object):
         return
 
     def __call__(self):
-        url              = self.form_url()
+        url             = self.form_url()
         dct_prod, urls  = self.parse_json(url)
         script = requests.post(f'{self.url_base}&output={self.inps.output}',
                                                     data=dct_prod).text
@@ -423,12 +391,12 @@ class Downloader(object):
                 else:
                     WSEN_fmt.append(math.ceil(float(coord)))
             dst = f'{dst}_{WSEN_fmt[0]}W{WSEN_fmt[1]}S{WSEN_fmt[2]}E' \
-                   '{WSEN_fmt[3]}Nbbox'
+                  f'{WSEN_fmt[3]}Nbbox'
         dst  += f'_0{ext}'
         count = 1 # don't overwrite if already exists
         while op.exists(dst):
             basen  = f'{re.split(str(count-1)+ext, op.basename(dst))[0]}' \
-                      '{count}{ext}'
+                     f'{count}{ext}'
             dst    = op.join(op.dirname(dst), basen)
             count += 1
         return dst
@@ -537,11 +505,113 @@ class MiniLog(object):
         return
 
 
+class Downloader_new(object):
+    def __init__(self, inps):
+        self.inps            = inps
+        self.inps.output     = self.inps.output.title()
+        self.inps.wd         = op.abspath(self.inps.wd)
+        os.makedirs(self.inps.wd, exist_ok=True)
+
+    def __call__(self):
+        scenes     = self.query_asf()
+        urls, ifgs = get_url_ifg(scenes)
+        scenes1  = scenes
+
+        ## subset everything by version
+        urls_new = url_versions(urls, self.inps.version, self.inps.wd)
+        idx      = [urls.index(url) for url in urls_new]
+        scenes   = [scenes[i] for i in idx]
+        urls     = [urls[i] for i in idx]
+        ifgs     = [ifgs[i] for i in idx]
+
+        ## optionally subset by ifg
+        if self.inps.ifg is not None:
+            dates1    = [datetime.strptime(i, '%Y%m%d').date() for
+                                i in self.inps.ifg.split('_')]
+            st1, end1 = sorted(dates1)
+            idx       = []
+            for i, ifg in enumerate(ifgs):
+                en, st = ifg.split()
+                if st1 != st or end1 != end:
+                    continue
+                idx.append(i)
+            scenes   = [scenes[i] for i in idx]
+            urls     = [urls[i] for i in idx]
+            ifgs     = [ifgs[i] for i in idx]
+
+        ## optionally subset by elapsed time
+        if (self.inps.daysgt or self.inps.dayslt):
+            idx = []
+            for i, ifg in enumerate(ifgs):
+                en, st = ifg.split()
+                elap = (end - st).days
+                if self.inps.daysgt and not (elap > self.inps.daysgt):
+                    continue
+                if self.inps.dayslt and not (elap < self.inps.dayslt):
+                    continue
+                idx.append(i)
+            scenes   = [scenes[i] for i in idx]
+            urls     = [urls[i] for i in idx]
+            ifgs     = [ifgs[i] for i in idx]
+
+        if self.inps.output == 'Count':
+            log.info('\nFound -- %d -- products', len(scenes))
+
+        elif self.inps.output == 'Kml':
+            dst    = self._fmt_dst()
+            self.log.error('Kml option is not yet supported. '\
+                           'Revert to an older version of ARIAtools')
+
+        elif self.inps.output == 'Url':
+            dst  = self._fmt_dst()
+            with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) \
+                                        for url in urls]
+            log.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
+
+
+        elif self.inps.output == 'Download':
+            ## turn the list back into an ASF object
+            scenes = asf.ASFSearchResults(scenes)
+            nt     = int(self.inps.num_threads) # so legacy works
+            ## allow a user to specify username / password
+            if self.inps.user is not None:
+                session = asf.ASFSession()
+                session.auth_with_creds(self.inps.user, self.inps.passw)
+                scenes.download(self.inps.wd, processes=nt, session=session)
+
+            else:
+                scenes.download(self.inps.wd, processes=nt)
+            log.info(f'Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
+
+        return
+
+    def query_asf(self):
+        st     = datetime.strptime(self.inps.start, '%Y%m%d') \
+                    if self.inps.start is not None else None
+        en     = datetime.strptime(self.inps.end, '%Y%m%d') \
+                    if self.inps.end is not None else None
+        bbox   = make_bbox(self.inps.bbox)
+
+        if self.inps.track is not None:
+            tracks = self.inps.track.split(',')
+            tracks = [int(track) for track in tracks]
+        else:
+            tracks = self.inps.track
+        dct_kw = dict(platform=asf.constants.SENTINEL1,
+                    processingLevel=asf.constants.GUNW_STD,
+                    relativeOrbit=tracks,
+                    start=st, end=en, lookDirection=self.inps.flightdir,
+                    intersectsWith=bbox)
+        scenes = asf.geo_search(**dct_kw)
+        return scenes
+
+
 if __name__ == '__main__':
     try:
         print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
     except:
         pass
-        
+
     inps = cmdLineParse()
-    Downloader(inps)()
+    # Downloader(inps)()
+    Downloader_new(inps)()
