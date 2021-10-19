@@ -28,3 +28,4 @@ dependencies:
   - jupyterlab
   - jupyter_contrib_nbextensions
   - rise
+  - asf_search

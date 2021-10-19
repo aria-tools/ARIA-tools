@@ -22,7 +22,10 @@ log = logging.getLogger('ARIAtools')
 
 
 def createParser():
-    """ Download a bulk download script and execute it """
+    """Download ARIA products using asf_search
+
+    see: https://github.com/asfadmin/Discovery-asf_search
+    """
     parser = argparse.ArgumentParser(description=
         'Command line interface to download GUNW products from the ASF DAAC. '
         'GUNW products are hosted at the NASA ASF DAAC.\nDownloading them '
@@ -36,8 +39,8 @@ def createParser():
              formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--output', dest='output', default='Download', \
                         type=str,
-        help='Output type, default is "Download". "Download", "Count", "Url"'
-             'and "Kmz" are currently supported. Use "Url" for ingestion to '
+        help='Output type, default is "Download". "Download", "Count", and "Url"'
+             '"Kmz" are currently supported. Use "Url" for ingestion to '
              'aria*.py')
     parser.add_argument('-t', '--track', dest='track', default=None, type=str,
         help='track to download; single number (including leading zeros) or '
@@ -82,8 +85,6 @@ def createParser():
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, \
                         type=str,
         help='Flight direction, options: ascending, a, descending, d')
-    parser.add_argument('--use_all', dest='use_all', action='store_true',
-        help='Consider all calls to ariaDownload when plotting DL speeds')
     parser.add_argument('--version', dest='version',  default=None,
         help='Specify version as str, e.g. 2_0_4 or all prods; default: '
              'newest')
@@ -113,7 +114,7 @@ def cmdLineParse(iargs=None):
 
 
 def make_bbox(inp_bbox):
-    """ Make a WKT from SNWE or a shapefile """
+    """Make a WKT from SNWE or a shapefile"""
     if inp_bbox is None:
         return None
     from shapely.geometry import Polygon
@@ -138,7 +139,7 @@ def make_bbox(inp_bbox):
 
 
 def get_url_ifg(scenes):
-    """ Get url, ifg of fetched ASF scene """
+    """Get url, ifg of fetched ASF scene"""
     urls, ifgs =  [], []
     for scene in scenes:
         s   = scene.geojson()['properties']
@@ -150,6 +151,7 @@ def get_url_ifg(scenes):
 
 
 def fmt_dst(inps):
+    """Format the save name"""
     ext  = '.kmz' if inps.output == 'Kml' else '.txt'
 
     if inps.track is not None:
@@ -190,7 +192,6 @@ class Downloader(object):
     def __call__(self):
         scenes     = self.query_asf()
         urls, ifgs = get_url_ifg(scenes)
-        scenes1  = scenes
 
         ## subset everything by version
         urls_new = url_versions(urls, self.inps.version, self.inps.wd)
@@ -261,6 +262,7 @@ class Downloader(object):
 
 
     def query_asf(self):
+        """Get the scenes from ASF"""
         st     = datetime.strptime(self.inps.start, '%Y%m%d') \
                     if self.inps.start is not None else None
         en     = datetime.strptime(self.inps.end, '%Y%m%d') \
