@@ -76,12 +76,13 @@ Below we outline the different steps for setting up the ARIA-tools while leverag
 
 ```.tcsh
 git clone https://github.com/aria-tools/ARIA-tools.git
+cd ARIA-tools
 ```
 
 Run the commands below to install dependencies to a new conda environment `ARIA-tools` and activate it:
 
 ```.tcsh
-conda env create -f ./ARIA-tools/environment.yml
+conda env create -f environment.yml
 conda activate ARIA-tools
 ```
 
@@ -89,19 +90,18 @@ Or run the commands below to install dependencies to an existing conda environme
 
 ```.tcsh
 # add "jupyterlab jupyter_contrib_nbextensions rise" below to install the extra requirements for ARIA-tools-docs
-conda install -c conda-forge --yes --file ./ARIA-tools/requirements.txt
+conda install -c conda-forge --yes --file requirements.txt
 ```
 
-We have included a setup.py script which allows for easy compilation and installation of third-party dependencies (c-code), as well as for setting up the ARIA-tools package itself (python and command line tools).
+We have included a `setup.py` script which allows for easy compilation and installation of third-party dependencies (c-code), as well as for setting up the ARIA-tools package itself (python and command line tools).
 ```.tcsh
-python setup.py build
-python setup.py install
+python -m pip install .
 ```
 
 If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For c-shell this can be done as follows (replace "ARIAtoolsREPO" to the location where you have cloned the ARIAtools repository):
 ```.tcsh
-setenv PYTHONPATH $PYTHONPATH:/ARIAtoolsREPO/tools/ARIAtools
-set PATH $PATH:'/ARIAtoolsREPO/tools/bin'
+setenv PYTHONPATH ${PYTHONPATH}:{$PWD}/tools/ARIAtools
+setenv PATH ${PATH}:${PWD}/tools/ARIAtools
 ```
 
 ### Other installation options
