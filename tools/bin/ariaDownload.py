@@ -207,7 +207,7 @@ class Downloader(object):
             st1, end1 = sorted(dates1)
             idx       = []
             for i, ifg in enumerate(ifgs):
-                en, st = ifg.split()
+                en, st = ifg.split('_')
                 if st1 != st or end1 != end:
                     continue
                 idx.append(i)
