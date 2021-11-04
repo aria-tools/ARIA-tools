@@ -29,11 +29,15 @@ jobs:
           command: |
             export PATH="$HOME/miniconda/bin:$PATH"
             source $HOME/miniconda/etc/profile.d/conda.sh
-            conda update -y conda
-            conda env create -f environment.yml
-            conda install -c anaconda git
-            conda install -c anaconda wget
+            conda install mamba -n base -c conda-forge --yes
+            mamba update -y conda
+            mamba update -y mamba
+            mamba env create -f environment.yml
+
+            mamba install -c anaconda git
+            mamba install -c anaconda wget
             conda activate ARIA-tools
+
             echo "machine urs.earthdata.nasa.gov login $URSname password $URSkey" > ~/.netrc
             chmod 600 ~/.netrc
             git clone https://github.com/insarlab/MintPy.git $HOME/miniconda/MintPy

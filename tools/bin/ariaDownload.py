@@ -8,25 +8,24 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os, os.path as op
-import argparse, time
-import shutil, math
-import re, json, requests
-import numpy as np
+import argparse
+import math
+import re
 from datetime import datetime
 import logging
+import asf_search as asf
 from ARIAtools.logger import logger
 from ARIAtools.url_manager import url_versions
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import multiprocessing
 from pkg_resources import get_distribution
-
-mpl.use('agg')
 
 log = logging.getLogger('ARIAtools')
 
+
 def createParser():
-    """ Download a bulk download script and execute it """
+    """Download ARIA products using asf_search
+
+    see: https://github.com/asfadmin/Discovery-asf_search
+    """
     parser = argparse.ArgumentParser(description=
         'Command line interface to download GUNW products from the ASF DAAC. '
         'GUNW products are hosted at the NASA ASF DAAC.\nDownloading them '
@@ -40,8 +39,8 @@ def createParser():
              formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-o', '--output', dest='output', default='Download', \
                         type=str,
-        help='Output type, default is "Download". "Download", "Count", "Url"'
-             'and "Kmz" are currently supported. Use "Url" for ingestion to '
+        help='Output type, default is "Download". "Download", "Count", and "Url"'
+             '"Kmz" are currently supported. Use "Url" for ingestion to '
              'aria*.py')
     parser.add_argument('-t', '--track', dest='track', default=None, type=str,
         help='track to download; single number (including leading zeros) or '
@@ -86,8 +85,6 @@ def createParser():
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, \
                         type=str,
         help='Flight direction, options: ascending, a, descending, d')
-    parser.add_argument('--use_all', dest='use_all', action='store_true',
-        help='Consider all calls to ariaDownload when plotting DL speeds')
     parser.add_argument('--version', dest='version',  default=None,
         help='Specify version as str, e.g. 2_0_4 or all prods; default: '
              'newest')
@@ -116,425 +113,175 @@ def cmdLineParse(iargs=None):
     return inps
 
 
-def prod_dl(inps, dct_prod,wd):
-    """Perform downloading using ASF bulk dl; parallel processing supported"""
-    max_threads = multiprocessing.cpu_count()
-
-    if inps.num_threads == 'all':
-        nt = max_threads
+def make_bbox(inp_bbox):
+    """Make a WKT from SNWE or a shapefile"""
+    if inp_bbox is None:
+        return None
+    from shapely.geometry import Polygon
+    if op.exists(op.abspath(inps.bbox)):
+        from ARIAtools.shapefile_util import open_shapefile
+        ring = open_shapefile(inps.bbox, 0, 0).exterior
+        poly = Polygon(ring)
     else:
-        nt = int(inps.num_threads)
-    nt     = nt if nt < max_threads else max_threads
-    log.info('Using  %s threads for parallel downloads', nt)
+        try:
+            S, N, W, E = [float(i) for i in inps.bbox.split()]
+            ## adjust for degrees easting / northing (0 - 360 / 0:180)
+            if W > 180: W -= 360; print('AdjustedW')
+            if E > 180: E -= 360; print('AdjustedE')
+            if N > 90: N-=90; S-=90; print('Adjusted N/S')
+        except:
+            raise Exception('Cannot understand the --bbox argument. '
+            'Input string was entered incorrectly or path does not '
+            'exist.')
 
-    files   = dct_prod['product_list'].split(',')
-    ## remove duplicates
-    files   = [op.splitext(f)[0] for f in \
-         url_versions(files, inps.version, wd)]
-    chunks1 = np.array_split(files, np.ceil(len(files)/200)) # split by 200s
-    check   = []
-    dl_id   = time.time()  # for tracking the download attempts
-    for chunk in chunks1:
-        chunks   = np.array_split(chunk, nt)
-        lst_dcts = [vars(inps).copy() for i in range(nt)]  # Namespace->dictionary, repeat it
-        for i, chunk1 in enumerate(chunks):
-            lst_dcts[i]['files'] = chunk1 # put split up files to the objects for threads
-            lst_dcts[i]['ext']   = i      # for unique bulk downloader file name
-            lst_dcts[i]['id']    = dl_id
-
-        with multiprocessing.Pool(nt) as pool:
-            try:
-                info = pool.map(_dl_helper, lst_dcts)
-            except Exception as E:
-                print ('ASF bulk downloader error:', E)
-                print ('Likely a bad handshake with the ASF DAAC. '
-                       'Try rerunning')
-                os.sys.exit(1)
-
-        check.extend(chunkc for chunkc in chunks) # in case products missed in split
-
-    rewrite_summary(info)
-
-    check = [item for sublist in check for item in sublist]
-    for f in files:
-        if not f in check:
-            log.critical('File splitting missed: %s; subset your ARIA in '
-                         'command in time to try again', f)
-    return
+        poly = Polygon([(W, N), (W,S), (E,S), (E, N)])
+    return poly
 
 
-def _dl_helper(inp_dct):
-    """Helper function for parallel processing"""
-    # import threading
-    prod_dct = {'product_list': ','.join(inp_dct['files'])}
-    log.debug ('# of files: %d', len(inp_dct['files']))
-    script   = requests.post(f'{inp_dct["url_base"]}&output=Download', \
-               data=prod_dct).text
+def get_url_ifg(scenes):
+    """Get url, ifg of fetched ASF scene"""
+    urls, ifgs =  [], []
+    for scene in scenes:
+        s   = scene.geojson()['properties']
+        f   = s['fileID'].split('-')
+        ifgs.append(f[6])
+        urls.append(s['url'])
 
-    fname    = f'ASFDataDload{inp_dct["ext"]}.py'
-    fpath    = os.path.join(inp_dct['wd'], fname)
-    with open(fpath, 'w') as f: f.write(script)
-    AD = __import__(os.path.splitext(fname)[0])
-    os.sys.argv = [] # gets around spurious messages
-    ## capture stdout for plotting dl speed / time, also print to screen
-    mini   = MiniLog(inp_dct['id'], time.time())
-    console, os.sys.stdout = os.sys.stdout, mini
-    inp_dct['st'] = time.time()
-    dler  = AD.bulk_downloader()
-    dler.download_files()
-    os.sys.stdout = console
-
-    status_plot(inp_dct, mini.avg_rates, mini.elap)
-
-    return dler.success, dler.failed, dler.skipped, dler.total_time, \
-           dler.total_bytes
+    return urls, ifgs
 
 
-def check_cookie_is_logged_in(cj):
-    """Make sure successfully logged into URS; try to get cookie"""
-    for cookie in cj:
-        if cookie.name == 'urs_user_already_logged':
-            return True
-    return False
+def fmt_dst(inps):
+    """Format the save name"""
+    ext  = '.kmz' if inps.output == 'Kml' else '.txt'
 
-
-def rewrite_summary(infos):
-    succeed, failed, skipped, tot_time, tot_bytes = [], [], [], 0, 0
-    for info in infos:
-        if info[0]: succeed.extend(info[0])
-        if info[1]: failed.extend(info[1])
-        if info[2]: skipped.extend(info[2])
-        tot_time += float(info[3])
-        tot_bytes += float(info[4])
-
-
-    log.info ('Successes: %d files, %s bytes', len(succeed), tot_bytes)
-    _ = [print ('\n\t-', sf['file'], f'{sf["size"]/1024**2:.2f}') \
-                for sf in succeed]
-
-    if skipped: log.info('Skipped: %d files', len(skipped))
-    _ = [print ('\n\t-', sf) for sf in skipped]
-
-    if failed: log.info('Failures: %d files', len(failed))
-    _ = [print ('\n\t-', sf) for sf in failed]
-
-    if succeed: log.info('Average Rate: %.2f MB/sec', \
-                         (tot_bytes/1024.0**2)/tot_time)
-
-    if failed:
-        log.critical('We recommend rerunning the same ariaDownload command '
-                     'to address the %d failures', len(failed))
+    if inps.track is not None:
+        fn_track = f'track{inps.track}'.replace(',', '-')
     else:
-        log.info ('All files have been downloaded successfully')
-    return
+        fn_track = ''
 
-
-def status_plot(inps, rates=None, elaps=None, use_all=False):
-    """Save plot after each chunk on each core; use_all shows all calls 
-       to script"""
-    if len(rates) <= 1: # in case all successful (for testing)
-        return
-    with open(op.join(inps['wd'], 'avg_rates.csv'), 'a') as fh:
-        fh.write(','.join([str(avg_rate) for avg_rate in rates]) + '\n')
-        fh.write(','.join([str(elap) for elap in elaps]) + '\n')
-
-    timestamps, rates, elaps = [], [], []
-    with open(op.join(inps['wd'], 'avg_rates.csv'), 'r') as fh:
-        for line in fh:
-            dat = line.strip().split(',')[1:]
-            st  = line.split(',')[0]
-            if 'elap' in st:
-                elaps.extend(dat)
+    if inps.bbox is not None:
+        WSEN = make_bbox(inps.bbox).bounds
+        WSEN_fmt = []
+        for i, coord in enumerate(WSEN):
+            if i < 2:
+                WSEN_fmt.append(math.floor(float(coord)))
             else:
-                rates.extend(dat)
-                timestamps.extend([st]*len(dat)) # repeat for later idx
+                WSEN_fmt.append(math.ceil(float(coord)))
+        fn_bbox = f'_bbox{WSEN_fmt[0]}W{WSEN_fmt[1]}S{WSEN_fmt[2]}E{WSEN_fmt[3]}N'
+    else:
+        fn_bbox = ''
 
-    timestamps = np.array([float(t) for t in timestamps])
-    rates      = np.array([float(rate) for rate in rates])
-    elaps      = np.array([float(elap) for elap in elaps])
-
-    if not inps['use_all']:
-        rates = rates[timestamps==timestamps.max()]
-        elaps = elaps[timestamps==timestamps.max()]
-
-    fig, axes = plt.subplots(ncols=2, sharey=True)
-
-    axes[0].scatter(range(len(rates)), rates, color='k', s=7)
-    axes[0].set_xlabel('ARIA Product Index')
-    axes[0].set_ylabel('MB/sec')
-    fig.suptitle(f'Last Update: {str(datetime.now())}')
-
-    axes[1].scatter(elaps, rates, color='k', s=7)
-    axes[1].set_xlabel('Time / prod (s)')
-    # axes.axhline(np.mean(rates), color='k', linestyle='--', label=f'Overall Mean {np.mean(rates):.2f} MB/sec)')
-
-    kws = dict(dpi=150, bbox_inches='tight', pad_inches=0.025, transparent=False)
-    fig.savefig(op.join(inps['wd'], 'AvgDlSpeed'), **kws)
-    return
+    dst   = op.join(inps.wd, f'{fn_track}{fn_bbox}_0{ext}'.lstrip('_'))
+    count = 1 # don't overwrite if already exists
+    while op.exists(dst):
+        basen  = f'{re.split(str(count-1)+ext, op.basename(dst))[0]}' \
+                 f'{count}{ext}'
+        dst    = op.join(op.dirname(dst), basen)
+        count += 1
+    return dst
 
 
 class Downloader(object):
     def __init__(self, inps):
-        self.inps        = inps
-        self.inps.output = self.inps.output.title()
-        self.inps.wd     = op.abspath(self.inps.wd)
-        self.url_base    = 'https://api.daac.asf.alaska.edu/services/' \
-                           'search/param?'
-        if self.inps.v: log.setLevel('DEBUG')
-        return
+        self.inps            = inps
+        self.inps.output     = self.inps.output.title()
+        self.inps.wd         = op.abspath(self.inps.wd)
+        os.makedirs(self.inps.wd, exist_ok=True)
+
 
     def __call__(self):
-        url              = self.form_url()
-        dct_prod, urls  = self.parse_json(url)
-        script = requests.post(f'{self.url_base}&output={self.inps.output}',
-                                                    data=dct_prod).text
+        scenes     = self.query_asf()
+        urls, ifgs = get_url_ifg(scenes)
 
-        ## get rid of duplicated old versions; only matters in count, urls opts
-        urls  = url_versions(urls, self.inps.version, self.inps.wd)
-        [log.debug('Found: %s', url) for url in urls]
+        ## subset everything by version
+        urls_new = url_versions(urls, self.inps.version, self.inps.wd)
+        idx      = [urls.index(url) for url in urls_new]
+        scenes   = [scenes[i] for i in idx]
+        urls     = [urls[i] for i in idx]
+        ifgs     = [ifgs[i] for i in idx]
 
+        ## optionally subset by ifg
+        if self.inps.ifg is not None:
+            dates1    = [datetime.strptime(i, '%Y%m%d').date() for
+                                i in self.inps.ifg.split('_')]
+            st1, end1 = sorted(dates1)
+            idx       = []
+            for i, ifg in enumerate(ifgs):
+                en, st = ifg.split('_')
+                if st1 != st or end1 != end:
+                    continue
+                idx.append(i)
+            scenes   = [scenes[i] for i in idx]
+            urls     = [urls[i] for i in idx]
+            ifgs     = [ifgs[i] for i in idx]
 
-        if self.inps.output == 'Count':
-            log.info('\nFound -- %d -- products', len(urls))
-
-
-        elif self.inps.output == 'Kml':
-            os.makedirs(self.inps.wd, exist_ok=True)
-            dst    = self._fmt_dst()
-            script = requests.post(
-                f'{self.url_base}&output={self.inps.output}', \
-                data=dct_prod).text
-            print(script, file=open(dst, 'w'))
-            log.info(f'Wrote .KMZ to:\n\t %s', dst)
-
-        elif self.inps.output == 'Url':
-            os.makedirs(self.inps.wd, exist_ok=True)
-            dst = self._fmt_dst()
-            with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) \
-                                        for url in urls]
-            log.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
-
-        elif self.inps.output == 'Download':
-            os.makedirs(self.inps.wd, exist_ok=True)
-            os.chdir(self.inps.wd)
-            os.sys.path.append(os.path.abspath(self.inps.wd))
-            ## make a cookie from a .netrc that ASFDataDload will pick up
-            self.make_nc_cookie()
-            inps.url_base = self.url_base
-            prod_dl(self.inps, dct_prod, self.inps.wd)
-
-            # Delete temporary files
-            shutil.rmtree(op.abspath(op.join(self.inps.wd,'__pycache__')))
-
-        return urls
-
-    def form_url(self):
-        url = f'{self.url_base}asfplatform=Sentinel-1%20Interferogram%20' \
-                    '(BETA)&processingLevel=GUNW_STD&output=JSON'
-        if self.inps.track:
-            url += f'&relativeOrbit={self.inps.track}'
-        if self.inps.bbox:
-            url += '&bbox=' + self._get_bbox()
-        if self.inps.flightdir:
-            url += f'&flightDirection={self.inps.flightdir.upper()}'
-
-        url = url.replace(' ', '+')
-        log.info(url)
-        return url
-
-    def parse_json(self, url):
-        response = requests.get(url)
-        if not response.ok:
-            raise Exception('Problem accessing ASF; '\
-                            'should self resolve in a minute or two')
-        j        = json.loads(response.text)[0]
-        if len(j) == 0:
-            raise Exception('No products found with given url; '\
-                            'check inputs for errors.')
-
-        prod_ids = []; dl_urls = []
-        i=0
-        for prod in j:
-            if 'layer' in prod['downloadUrl']: continue
-            i+=1
-            FileId = prod['product_file_id']
-            match = re.search(r'\d{8}_\d{8}', FileId).group()
-            dates = [datetime.strptime(i, '%Y%m%d').date() for i in \
-                     match.split('_')]
-            st, end = sorted(dates)
-
-            if self.inps.ifg:
-
-                dates1 = [datetime.strptime(i, '%Y%m%d').date() for
-                                    i in self.inps.ifg.split('_')]
-                st1, end1 = sorted(dates1)
-                if st1 != st or end1 != end: continue
-
-            if (self.inps.start or self.inps.end):
-                if self.inps.start and not (st >= datetime.strptime(
-                                self.inps.start, '%Y%m%d').date()): continue
-                if self.inps.end and not (end <= datetime.strptime(
-                                    self.inps.end, '%Y%m%d').date()): continue
-
-            if (self.inps.daysgt or self.inps.dayslt):
+        ## optionally subset by elapsed time
+        if (self.inps.daysgt or self.inps.dayslt):
+            idx = []
+            for i, ifg in enumerate(ifgs):
+                en, st = ifg.split()
                 elap = (end - st).days
                 if self.inps.daysgt and not (elap > self.inps.daysgt):
                     continue
                 if self.inps.dayslt and not (elap < self.inps.dayslt):
                     continue
+                idx.append(i)
+            scenes   = [scenes[i] for i in idx]
+            urls     = [urls[i] for i in idx]
+            ifgs     = [ifgs[i] for i in idx]
 
-            prod_ids.append(FileId); dl_urls.append(prod['downloadUrl'])
+        if self.inps.output == 'Count':
+            log.info('\nFound -- %d -- products', len(scenes))
+
+        elif self.inps.output == 'Kml':
+            dst    = self._fmt_dst()
+            self.log.error('Kml option is not yet supported. '\
+                           'Revert to an older version of ARIAtools')
+
+        elif self.inps.output == 'Url':
+            dst  = fmt_dst(inps)
+            with open(dst, 'w') as fh: [print(url, sep='\n', file=fh) \
+                                        for url in urls]
+            log.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
+
+        elif self.inps.output == 'Download':
+            ## turn the list back into an ASF object
+            scenes = asf.ASFSearchResults(scenes)
+            nt     = int(self.inps.num_threads) # so legacy works
+            ## allow a user to specify username / password
+            if self.inps.user is not None:
+                session = asf.ASFSession()
+                session.auth_with_creds(self.inps.user, self.inps.passw)
+                scenes.download(self.inps.wd, processes=nt, session=session)
+
+            else:
+                scenes.download(self.inps.wd, processes=nt)
+            log.info(f'Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
+
+        return
 
 
-        if len(prod_ids) == 0:
-            raise Exception('No products found that satisfy requested '
-                            'conditions.')
+    def query_asf(self):
+        """Get the scenes from ASF"""
+        st     = datetime.strptime(self.inps.start, '%Y%m%d') \
+                    if self.inps.start is not None else None
+        en     = datetime.strptime(self.inps.end, '%Y%m%d') \
+                    if self.inps.end is not None else None
+        bbox   = make_bbox(self.inps.bbox)
 
-        data = {'product_list': ','.join(prod_ids)}
-        return data, dl_urls
-
-    ## utility functions
-    def _get_bbox(self):
-        if op.exists(op.abspath(self.inps.bbox)):
-            from ARIAtools.shapefile_util import open_shapefile
-            bounds = open_shapefile(self.inps.bbox, 0, 0).bounds
-            W, S, E, N = [str(i) for i in bounds]
+        if self.inps.track is not None:
+            tracks = self.inps.track.split(',')
+            tracks = [int(track) for track in tracks]
         else:
-            try:
-                S, N, W, E = self.inps.bbox.split()
-            except:
-                raise Exception('Cannot understand the --bbox argument. '
-                'Input string was entered incorrectly or path does not '
-                'exist.')
-        return ','.join([W,S,E,N])
-
-    def _fmt_dst(self):
-        dst = op.join(self.inps.wd, 'download_products')
-        ext      = '.kmz' if self.inps.output == 'Kml' else '.txt'
-        if self.inps.track:
-            dst = f'{dst}_{self.inps.track}track'.replace(',', '-')
-
-        if self.inps.bbox:
-            WSEN     = self._get_bbox().split(',')
-            WSEN_fmt = []
-            for i, coord in enumerate(WSEN):
-                if i < 2:
-                    WSEN_fmt.append(math.floor(float(coord)))
-                else:
-                    WSEN_fmt.append(math.ceil(float(coord)))
-            dst = f'{dst}_{WSEN_fmt[0]}W{WSEN_fmt[1]}S{WSEN_fmt[2]}E' \
-                   '{WSEN_fmt[3]}Nbbox'
-        dst  += f'_0{ext}'
-        count = 1 # don't overwrite if already exists
-        while op.exists(dst):
-            basen  = f'{re.split(str(count-1)+ext, op.basename(dst))[0]}' \
-                      '{count}{ext}'
-            dst    = op.join(op.dirname(dst), basen)
-            count += 1
-        return dst
-
-    def make_nc_cookie(self):
-       import netrc, base64
-       from urllib.request import build_opener, Request
-       from urllib.request import HTTPHandler, HTTPSHandler, \
-                                  HTTPCookieProcessor
-       from urllib.error import HTTPError, URLError
-       from http.cookiejar import MozillaCookieJar
-
-       cookie_jar_path = op.join(op.expanduser('~'), \
-                                 '.bulk_download_cookiejar.txt')
-       asf_urs4        = {'url': \
-                           'https://urs.earthdata.nasa.gov/oauth/authorize',
-                         'client': 'BO_n7nTIlMljdvU6kRRB3g',
-                         'redir': 'https://auth.asf.alaska.edu/login'}
-       path_netrc      = op.join(op.expanduser('~'), '.netrc')
-       if self.inps.user is not None and self.inps.passw is not None:
-           user  = self.inps.user
-           passw = self.inps.passw
-       elif op.exists(path_netrc):
-           log.info('Attempting to obtaining user/pass from .netrc')
-           try:
-               os.chmod(path_netrc, 0o600)
-               user, _,  passw = netrc.netrc().authenticators( \
-                                 'urs.earthdata.nasa.gov')
-           except Exception as E:
-               print (E)
-               os.sys.exit()
-       else:
-           # resort to ASF credential checks (will prompt for input if can't find the cookiejar)
-           return None
-
-       # Build URS4 Cookie request
-       auth_cookie_url = f"{asf_urs4['url']}?client_id={asf_urs4['client']}" \
-                          f"&redirect_uri={asf_urs4['redir']}&response_type=" \
-                          f"code&state="
-       user_pass = base64.b64encode(bytes(f'{user}:{passw}', 'utf-8')).decode('utf-8')
-
-       # Authenticate against URS, grab all the cookies
-       cookie_jar = MozillaCookieJar()
-       opener     = build_opener(HTTPCookieProcessor(cookie_jar),
-                                        HTTPHandler(), HTTPSHandler(**{}))
-       request    = Request(auth_cookie_url, headers={'Authorization': \
-           f'Basic {user_pass}'})
-
-       # Watch out cookie rejection!
-       try:
-          response = opener.open(request)
-       except HTTPError as e:
-          if "WWW-Authenticate" in e.headers and \
-                "Please enter your Earthdata Login credentials" in \
-                    e.headers["WWW-Authenticate"]:
-             log.info(' > Username and Password combo was not successful. '\
-                             'Please try again.')
-             return False
-          else:
-             # If an error happens here, the user most likely has not confirmed EULA.
-             log.info('\nThere was an error obtaining a download cookie')
-             log.info('Most likely you lack permission to download data from '\
-                      'the ASF Datapool.')
-             log.info('\n\nNew users: you must first log into Vertex and '\
-                      'accept the EULA. In addition, your Study Area must '\
-                      'be set at Earthdata: https://urs.earthdata.nasa.gov')
-             os.sys.exit(1)
-
-       except URLError:
-          log.info('\nThere was a problem communicating with URS, unable to '
-                   'obtain cookie')
-          log.info('Try cookie generation later.')
-          os.sys.exit(1)
-
-       # Did we get a cookie?
-       if check_cookie_is_logged_in(cookie_jar):
-          #COOKIE SUCCESS!
-          cookie_jar.save(cookie_jar_path)
-          return True
-
-       # if we aren't successful generating the cookie, nothing will work. Stop here!
-       log.warning('Could not generate new cookie! Cannot proceed. '\
-                   ' Please check credentials and/or .netrc.')
-       log.info(f'Response was {response.getcode()}')
-       log.info('\n\nNew users: you must first log into Vertex and accept the EULA. '\
-               'In addition, your Study Area must be set at Earthdata: '\
-               ' https://urs.earthdata.nasa.gov')
-       os.sys.exit(1)
-
-
-class MiniLog(object):
-    def __init__(self, tid, st):
-        """Helper to capture stdout for plotting"""
-        # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
-        self.terminal  = os.sys.stdout
-        self.avg_rates = [tid]
-        self.elap      = [f'{st}elap']
-        return
-
-    def write(self, message):
-        self.terminal.write(message)
-        if 'Average Rate' in message:
-            msg = message.strip().split()
-            self.avg_rates.append(float(msg[-1].strip('MB/sec')))
-            self.elap.append(float(msg[3].strip('secs,')))
-        return
+            tracks = self.inps.track
+        dct_kw = dict(platform=asf.constants.SENTINEL1,
+                    processingLevel=asf.constants.GUNW_STD,
+                    relativeOrbit=tracks,
+                    start=st, end=en,
+                    lookDirection=self.inps.flightdir,
+                    intersectsWith=bbox)
+        scenes = asf.geo_search(**dct_kw)
+        return scenes
 
 
 if __name__ == '__main__':
@@ -542,6 +289,6 @@ if __name__ == '__main__':
         print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
     except:
         pass
-        
+
     inps = cmdLineParse()
     Downloader(inps)()
