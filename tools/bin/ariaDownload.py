@@ -52,10 +52,10 @@ def createParser():
                         type=str,
         help='Specify directory to deposit all outputs. Default is '
              '"products" in local directory where script is launched.')
-    parser.add_argument('-s', '--start', dest='start', default=None, type=str,
+    parser.add_argument('-s', '--start', dest='start', default='20140101', type=str,
         help='Start date as YYYYMMDD; If none provided, starts at beginning '
              'of Sentinel record (2014).')
-    parser.add_argument('-e', '--end', dest='end', default=None, type=str,
+    parser.add_argument('-e', '--end', dest='end', default='21000101', type=str,
         help='End date as YYYYMMDD. If none provided, ends today.')
     parser.add_argument('-u', '--user', dest='user', default=None, type=str,
         help='NASA Earthdata URS user login. Users must add "GRFN Door '
@@ -65,11 +65,11 @@ def createParser():
         help='NASA Earthdata URS user password. Users must add "GRFN Door '
              '(PROD)" and "ASF Datapool Products" to their URS approved '
              'applications.')
-    parser.add_argument('-l', '--daysless', dest='dayslt', default=None, \
+    parser.add_argument('-l', '--daysless', dest='dayslt', default=math.inf, \
                         type=int,
         help='Take pairs with a temporal baseline -- days less than this '
              'value.')
-    parser.add_argument('-m', '--daysmore', dest='daysgt', default=None, \
+    parser.add_argument('-m', '--daysmore', dest='daysgt', default=0, \
                         type=int,
         help='Take pairs with a temporal baseline -- days greater than this '
              'value. Example, annual pairs: ariaDownload.py -t 004 '
@@ -100,6 +100,10 @@ def cmdLineParse(iargs=None):
         os.sys.exit(2)
 
     inps = parser.parse_args(args=iargs)
+
+    ## format dates
+    inps.start = datetime.strptime(inps.start, '%Y%m%d')
+    inps.end   = datetime.strptime(inps.end, '%Y%m%d')
 
     if not inps.track and not inps.bbox:
         raise Exception('Must specify either a bbox or track')
@@ -200,35 +204,33 @@ class Downloader(object):
         urls     = [urls[i] for i in idx]
         ifgs     = [ifgs[i] for i in idx]
 
-        ## optionally subset by ifg
-        if self.inps.ifg is not None:
-            dates1    = [datetime.strptime(i, '%Y%m%d').date() for
-                                i in self.inps.ifg.split('_')]
-            st1, end1 = sorted(dates1)
-            idx       = []
-            for i, ifg in enumerate(ifgs):
-                en, st = ifg.split('_')
-                if st1 != st or end1 != end:
+        ## loop over ifgs to check for subset options
+        idx = []
+        for i, ifg in enumerate(ifgs):
+            eni, sti = [datetime.strptime(d, '%Y%m%d') for d in ifg.split('_')]
+            ## optionally match a single ifg
+            if self.inps.ifg is not None:
+                dates1    = [datetime.strptime(i, '%Y%m%d').date() for
+                                    i in self.inps.ifg.split('_')]
+                st1, en1 = sorted(dates1)
+                if st1 == sti.date() and en1 == eni.date():
+                    idx.append(i)
+                else:
                     continue
-                idx.append(i)
-            scenes   = [scenes[i] for i in idx]
-            urls     = [urls[i] for i in idx]
-            ifgs     = [ifgs[i] for i in idx]
 
-        ## optionally subset by elapsed time
-        if (self.inps.daysgt or self.inps.dayslt):
-            idx = []
-            for i, ifg in enumerate(ifgs):
-                en, st = ifg.split()
-                elap = (end - st).days
-                if self.inps.daysgt and not (elap > self.inps.daysgt):
+            ## optionally match other conditions (st/end date, elapsed time)
+            else:
+                sten_chk = sti >= self.inps.start and  eni <= self.inps.end
+                elap     = (eni-sti).days
+                elap_chk =  elap >= self.inps.daysgt and elap <= self.inps.dayslt
+                if sten_chk and elap_chk:
+                    idx.append(i)
+                else:
                     continue
-                if self.inps.dayslt and not (elap < self.inps.dayslt):
-                    continue
-                idx.append(i)
-            scenes   = [scenes[i] for i in idx]
-            urls     = [urls[i] for i in idx]
-            ifgs     = [ifgs[i] for i in idx]
+
+        scenes   = [scenes[i] for i in idx]
+        urls     = [urls[i] for i in idx]
+        ifgs     = [ifgs[i] for i in idx]
 
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(scenes))
@@ -263,10 +265,6 @@ class Downloader(object):
 
     def query_asf(self):
         """Get the scenes from ASF"""
-        st     = datetime.strptime(self.inps.start, '%Y%m%d') \
-                    if self.inps.start is not None else None
-        en     = datetime.strptime(self.inps.end, '%Y%m%d') \
-                    if self.inps.end is not None else None
         bbox   = make_bbox(self.inps.bbox)
 
         if self.inps.track is not None:
@@ -277,10 +275,11 @@ class Downloader(object):
         dct_kw = dict(platform=asf.constants.SENTINEL1,
                     processingLevel=asf.constants.GUNW_STD,
                     relativeOrbit=tracks,
-                    start=st, end=en,
                     lookDirection=self.inps.flightdir,
                     intersectsWith=bbox)
         scenes = asf.geo_search(**dct_kw)
+
+
         return scenes
 
 
