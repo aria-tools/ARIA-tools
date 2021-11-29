@@ -19,6 +19,7 @@ from ARIAtools.logger import logger
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+gdal.SetConfigOption('CPL_VSIL_CURL_USE_HEAD', 'NO')
 
 log = logging.getLogger(__name__)
 
