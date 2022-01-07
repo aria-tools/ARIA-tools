@@ -32,6 +32,8 @@ from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 
 log = logging.getLogger(__name__)
+# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'EMPTY_DIR')
+# print ('Set new gdal option')
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}

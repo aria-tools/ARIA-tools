@@ -19,12 +19,12 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 
 gdal.UseExceptions()
-#Suppress warnings
+## Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
-log = logging.getLogger(__name__)
-
-_world_dem = "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
+log        = logging.getLogger(__name__)
+_world_dem = "https://portal.opentopography.org/API/globaldem?demtype="\
+               "SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
 
 def createParser():
     """Extract specified product layers. The default will export all layers."""
@@ -72,9 +72,11 @@ def createParser():
 
     return parser
 
+
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
+
 
 class InterpCube(object):
     """Class to interpolate intersection of cube with DEM."""
@@ -105,9 +107,10 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
+
 class metadata_qualitycheck:
     """Metadata quality control function.
-    
+
     Artifacts recognized based off of covariance of cross-profiles.
     Bug-fix varies based off of layer of interest.
     Verbose mode generates a series of quality control plots with
@@ -340,7 +343,17 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     else: # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
         assert os.path.exists(demfilename), f'Cannot open DEM at: {demfilename}'
-        ds_u = gdal.Open(demfilename, gdal.GA_ReadOnly)
+        try:
+            ds_u = gdal.Open(demfilename, gdal.GA_ReadOnly)
+            demfilename1 = None
+        except:
+            # demfilename1 = f'{os.path.splitext(demfilename)[0]}.vrt'
+            demfilename1 = f'{demfilename}.vrt'
+            log.warning(f'gdal failed to read: {demfilename}\n\ttrying: {demfilename1}')
+            # demfilename  = demfilename1
+            ds_u = gdal.Open(demfilename1, gdal.GA_ReadOnly)
+
+
         epsg = osr.SpatialReference(wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY',1)
         assert epsg is not None, f'No projection information in DEM: {demfilename}'
         del ds_u
@@ -349,7 +362,10 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     if demfilename == os.path.abspath(aria_dem):
         log.warning('The DEM you specified already exists in %s, '\
                 'using the existing one...', os.path.dirname(aria_dem))
-        ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
+        if demfilename1 is None:
+            ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
+        else:
+            ds_aria = gdal.Open(f'{aria_dem}.vrt', gdal.GA_ReadOnly)
 
     else:
         gdal.Warp(aria_dem, demfilename, format=outputFormat,
@@ -379,6 +395,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     Longitude   = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
 
     return aria_dem, ds_aria, Latitude, Longitude
+
 
 def dl_dem(path_dem, path_prod_union, num_threads):
     """Download the DEM over product bbox union."""
@@ -424,6 +441,7 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     del r
     return dst
 
+
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
 
@@ -441,10 +459,12 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
     # If specified, check if user's bounding box meets minimum threshold area
     if bbox_file is not None:
-        user_bbox=open_shapefile(bbox_file, 0, 0)
-        overlap_area=shapefile_area(user_bbox)
-        if overlap_area<minimumOverlap:
-            raise Exception("User bound box '%s' has an area of only %fkm\u00b2, below specified minimum threshold area %fkm\u00b2"%(bbox_file,overlap_area,minimumOverlap))
+        user_bbox    = open_shapefile(bbox_file, 0, 0)
+        overlap_area = shapefile_area(user_bbox)
+        if overlap_area < minimumOverlap:
+            raise Exception("User bound box '%s' has an area of only %fkm\u00b2, \
+                             below specified minimum threshold area %fkm\u00b2"\
+                             %(bbox_file,overlap_area,minimumOverlap))
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
@@ -454,20 +474,21 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
         # Create union of productBoundingBox layers
         for frame in scene["productBoundingBox"]:
-            prods_bbox=open_shapefile(frame, 'productBoundingBox', 1)
+            prods_bbox = open_shapefile(frame, 'productBoundingBox', 1)
             if os.path.exists(outname):
-                union_bbox=open_shapefile(outname, 0, 0)
-                prods_bbox=prods_bbox.union(union_bbox)
-            save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
+                union_bbox = open_shapefile(outname, 0, 0)
+                prods_bbox = prods_bbox.union(union_bbox)
+            ##SS can we track and provide the proj information of the geojson?
+            save_shapefile(outname, prods_bbox, 'GeoJSON')
         scene["productBoundingBox"]=[outname]
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.json')
     # Need to track bounds of max extent to avoid metadata interpolation issues
     prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
-    save_shapefile(prods_TOTbbox_metadatalyr,
-        open_shapefile(product_dict[sceneareas.index(max(
-                sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+    save_shapefile(prods_TOTbbox_metadatalyr, open_shapefile(product_dict[
+        sceneareas.index(max(sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
         save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0), 'GeoJSON')
@@ -478,21 +499,21 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
                     sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     rejected_scenes=[]
     for scene in product_dict:
-        prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
-        total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
-        total_bbox_metadatalyr=open_shapefile(prods_TOTbbox_metadatalyr, 0, 0)
+        prods_bbox = open_shapefile(scene['productBoundingBox'][0], 0, 0)
+        total_bbox = open_shapefile(prods_TOTbbox, 0, 0)
+        total_bbox_metadatalyr = open_shapefile(prods_TOTbbox_metadatalyr, 0, 0)
         # Generate footprint for the union of all products
         if croptounion:
             # Get union
-            total_bbox=total_bbox.union(prods_bbox)
-            total_bbox_metadatalyr=total_bbox_metadatalyr.union(prods_bbox)
+            total_bbox             = total_bbox.union(prods_bbox)
+            total_bbox_metadatalyr = total_bbox_metadatalyr.union(prods_bbox)
             # Save to file
             save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON')
             save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
-            prods_bbox=prods_bbox.intersection(total_bbox)
+            prods_bbox = prods_bbox.intersection(total_bbox)
             # Estimate percentage of overlap with bbox
             if prods_bbox.bounds==():
                 log.debug('Rejected scene %s has no common overlap with bbox'%(scene['productBoundingBox'][0]))
@@ -501,7 +522,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             else:
                 overlap_area=shapefile_area(prods_bbox)
                 # Kick out scenes below specified overlap threshold
-                if overlap_area<minimumOverlap:
+                if overlap_area < minimumOverlap:
                     log.debug("Rejected scene %s has only %fkm\u00b2 overlap with bbox"%(scene['productBoundingBox'][0],overlap_area))
                     rejected_scenes.append(product_dict.index(scene))
                     os.remove(scene['productBoundingBox'][0])
@@ -533,9 +554,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     OG_bounds = list(open_shapefile(bbox_file, 0, 0).bounds)
     arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
     arrres = [abs(arrres.GetGeoTransform()[1]), abs(arrres.GetGeoTransform()[-1])]
-    ds = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", \
+    ds    = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), format="MEM", \
         outputBounds = OG_bounds, xRes = arrres[0], yRes = arrres[1], targetAlignedPixels = True, multithread = True, \
-        options = ['NUM_THREADS = %s'%(num_threads)]))
+        options = ['NUM_THREADS = %s'%(num_threads)])
+
     # Get shape of full res layers
     arrshape=[ds.RasterYSize, ds.RasterXSize]
     new_bounds = [ds.GetGeoTransform()[0], ds.GetGeoTransform()[3] + (ds.GetGeoTransform()[-1] * arrshape[0]), \
@@ -551,10 +573,11 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
         user_bbox = user_bbox.intersection(total_bbox)
         save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
     # Get projection of full res layers
-    proj=ds.GetProjection()
+    proj = ds.GetProjection()
     del ds
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
+
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
     """Export layer and 2D meta-data layers (at the product resolution).
@@ -669,6 +692,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
         prog_bar.close()
     return
 
+
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
 
@@ -755,6 +779,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
         del update_file
 
     del out_interpolated, interpolator, interp_2d, data_array
+
 
 def tropo_correction(full_product_dict, tropo_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
@@ -1030,9 +1055,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                     ]
 
                 # Check and report if tropospheric product falls outside of standard product range
-                latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime'] 
+                latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime']
                                    + [min(tropo_rsc_dict['TIME_OF_DAY'])])
-                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime'] 
+                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime']
                                    + [max(tropo_rsc_dict['TIME_OF_DAY'])])
                 delta = (earliest_end - latest_start).total_seconds() + 1
                 if delta<0:
@@ -1076,7 +1101,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             tropo_product   = np.subtract(tropo_secondary, tropo_product)
 
             # Convert troposphere to rad
-            tropo_product = np.divide(tropo_product, 
+            tropo_product = np.divide(tropo_product,
                                       float(metadata_dict[1][i][0]) \
                                       / (4*np.pi))
             # Account for lookAngle
@@ -1120,6 +1145,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
         missing_products = [os.path.basename(i)[:8] for i in missing_products]
         log.debug("Tropo products for the following dates are missing:")
         log.debug(missing_products)
+
 
 def main(inps=None):
     """Main workflow for extracting layers from ARIA products."""
@@ -1169,7 +1195,19 @@ def main(inps=None):
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
-    standardproduct_info.products[0], standardproduct_info.products[1], standardproduct_info.bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(standardproduct_info.products[0], standardproduct_info.products[1], os.path.join(inps.workdir,'productBoundingBox'), standardproduct_info.bbox_file, inps.croptounion, num_threads=inps.num_threads, minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
+    standardproduct_info.products[0], \
+    standardproduct_info.products[1], \
+    standardproduct_info.bbox_file, \
+    prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj \
+        = merged_productbbox(standardproduct_info.products[0],
+                            standardproduct_info.products[1],
+                            os.path.join(inps.workdir,'productBoundingBox'),
+                            standardproduct_info.bbox_file,
+                            inps.croptounion,
+                            num_threads=inps.num_threads,
+                            minimumOverlap=inps.minimumOverlap,
+                            verbose=inps.verbose)
+
     # Load or download mask (if specified).
     if inps.mask is not None:
         inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude']))
@@ -1199,7 +1237,7 @@ def main(inps=None):
     if inps.multilooking is not None:
         # Import functions
         from ARIAtools.vrtmanager import resampleRaster
-        bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
+        bounds = open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
             resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox,

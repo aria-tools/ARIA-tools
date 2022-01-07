@@ -10,12 +10,15 @@
 import os
 import numpy as np
 import logging
+from osgeo import gdal, ogr
+
 log = logging.getLogger(__name__)
 
-from osgeo import gdal, ogr
 gdal.UseExceptions()
+
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
 
 def open_shapefile(fname, lyrind, ftind):
     """Open a existing shapefile and pass the coordinates back."""
@@ -37,6 +40,7 @@ def open_shapefile(fname, lyrind, ftind):
 
     return file_bbox
 
+
 def save_shapefile(fname, polygon, drivername):
     """Save a polygon shapefile."""
     # open file
@@ -57,6 +61,7 @@ def save_shapefile(fname, polygon, drivername):
     ds = layer = feat = geom = None
 
     return
+
 
 def shapefile_area(file_bbox, bounds = False):
     """Compute km\u00b2 area of shapefile."""
@@ -89,6 +94,7 @@ def shapefile_area(file_bbox, bounds = False):
 
     return shape_area
 
+
 def chunk_area(WSEN):
     """Chunk an area ~evenly pieces < 450000 km required by the
        SRTM server."""
@@ -109,6 +115,7 @@ def chunk_area(WSEN):
                       'bounds')
             os.sys.exit()
     return rows, cols
+
 
 def plot_shapefile(fname):
     import matplotlib.path as mpath
