@@ -553,15 +553,18 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     # ensure output-bounds are an integer multiple of interferometric grid and adjust if necessary
     OG_bounds = list(open_shapefile(bbox_file, 0, 0).bounds)
     arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
-    arrres = [abs(arrres.GetGeoTransform()[1]), abs(arrres.GetGeoTransform()[-1])]
-    ds    = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), format="MEM", \
+    gt     = arrres.GetGeoTransform()
+    arrres = [abs(gt[1]), abs(gt[-1])]
+    ds     = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), format="MEM", \
         outputBounds = OG_bounds, xRes = arrres[0], yRes = arrres[1], targetAlignedPixels = True, multithread = True, \
         options = ['NUM_THREADS = %s'%(num_threads)])
 
     # Get shape of full res layers
-    arrshape=[ds.RasterYSize, ds.RasterXSize]
-    new_bounds = [ds.GetGeoTransform()[0], ds.GetGeoTransform()[3] + (ds.GetGeoTransform()[-1] * arrshape[0]), \
-        ds.GetGeoTransform()[0] + (ds.GetGeoTransform()[1] * arrshape[1]), ds.GetGeoTransform()[3]]
+    arrshape = [ds.RasterYSize, ds.RasterXSize]
+    gtn      = ds.GetGeoTransform()
+    new_bounds = [gtn[0], gtn[3] + (gtn[-1] * arrshape[0]), gtn[0] +
+                                            (gtn[1] * arrshape[1]), gtn[3]]
+
     if OG_bounds != new_bounds:
         # Use shapely to make list
         user_bbox = Polygon(np.column_stack((np.array([new_bounds[0],new_bounds[2],new_bounds[2],new_bounds[0],new_bounds[0]]),
