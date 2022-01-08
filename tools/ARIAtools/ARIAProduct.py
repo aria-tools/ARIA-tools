@@ -113,7 +113,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         if len(self.files)==0:
             raise Exception('No file match found')
-            
+
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)

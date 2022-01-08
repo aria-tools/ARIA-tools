@@ -555,9 +555,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
     gt     = arrres.GetGeoTransform()
     arrres = [abs(gt[1]), abs(gt[-1])]
-    ds     = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), format="MEM", \
-        outputBounds = OG_bounds, xRes = arrres[0], yRes = arrres[1], targetAlignedPixels = True, multithread = True, \
-        options = ['NUM_THREADS = %s'%(num_threads)])
+    vrt0   = gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
+    ds     = gdal.Warp('', vrt0, format="MEM", outputBounds=OG_bounds, xRes=arrres[0],
+                             yRes=arrres[1],targetAlignedPixels=True, multithread=True,
+                                options=['NUM_THREADS = %s'%(num_threads)])
 
     # Get shape of full res layers
     arrshape = [ds.RasterYSize, ds.RasterXSize]
@@ -594,21 +595,24 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
     """
     ##Import functions
     from ARIAtools.vrtmanager import resampleRaster
+    from ARIAtools import progBar
 
-    if not layers: return # only bbox
+    if not layers:
+        # only get bbox
+        return
+    bounds         = open_shapefile(bbox_file, 0, 0).bounds
 
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
     if dem is not None:
-        dem_bounds=[dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+ \
-        (dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+ \
-        (dem.GetGeoTransform()[1]*dem.RasterXSize),dem.GetGeoTransform()[3]]
+        gt         = dem.GetGeoTransform()
+        dem_bounds = [gt[0], gt[3] + (gt[-1]*dem.RasterYSize),
+                                gt[0] + (gt[1]*dem.RasterXSize), gt[3]]
+
     # Loop through user expected layers
     for key in layers:
-        product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
-        workdir=os.path.join(outDir,key)
+        product_dict = [[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
+        workdir      = os.path.join(outDir,key)
 
         ##Progress bar
-        from ARIAtools import progBar
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),prefix='Generating: '+key+' - ')
 
         # If specified workdir doesn't exist, create it
@@ -616,19 +620,19 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
             os.mkdir(workdir)
         # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
         if outputFormat=='VRT' and mask is not None:
-           outputFormat='ENVI'
+           outputFormat = 'ENVI'
 
         # Iterate through all IFGs
         for i in enumerate(product_dict[0]):
-            outname=os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
+            outname = os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
             ##Update progress bar
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
                 #create directory for quality control plots
-                if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots',key)):
-                    os.makedirs(os.path.join(outDir,'metadatalyr_plots',key))
+                if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots', key)):
+                    os.makedirs(os.path.join(outDir,'metadatalyr_plots', key))
 
                 #make VRT pointing to metadata layers in standard product
                 gdal.BuildVRT(outname +'.vrt', [i[1]][0])
@@ -646,43 +650,63 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                 finalize_metadata(outname, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
-            elif key!='unwrappedPhase' and key!='connectedComponents':
+            elif key != 'unwrappedPhase' and key != 'connectedComponents':
+                opts  = gdal.WarpOptions(format=outputFormat,
+                                         cutlineDSName=prods_TOTbbox,
+                                         outputBounds=bounds,
+                                         multithread=True,
+                                     options=['NUM_THREADS=%s'%(num_threads)])
+
                 if outputFormat=='VRT' and mask is None:
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', [i[1]][0])
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=opts)
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname +'.vrt', [i[1]][0])
-                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname, outname+'.vrt', options=opts)
 
                     # Update VRT
-                    gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
+                    gdal.Translate(outname+'.vrt', outname, format="VRT")
 
                     # Apply mask (if specified).
                     if mask is not None:
-                        update_file=gdal.Open(outname,gdal.GA_Update)
-                        update_file.GetRasterBand(1).WriteArray(mask.ReadAsArray()*gdal.Open(outname+'.vrt').ReadAsArray())
+                        update_file = gdal.Open(outname, gdal.GA_Update)
+                        arr         = gdal.Open(outname+'.vrt').ReadAsArray()
+                        update_file.GetRasterBand(1).WriteArray(mask.ReadAsArray()*arr)
                         del update_file
 
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
                 # Check if unw phase and connected components are already generated
-                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])):
+                pname = product_dict[1][i[0]][0]
+                f1    = os.path.join(outDir,'unwrappedPhase', pname)
+                f2    = os.path.join(outDir,'connectedComponents', pname)
+                if not os.path.exists(f1) or not os.path.exists(f2):
                     # extract the inputs required for stitching of unwrapped and connected component files
-                    unw_files = full_product_dict[i[0]]['unwrappedPhase']
-                    conn_files = full_product_dict[i[0]]['connectedComponents']
-                    prod_bbox_files = full_product_dict[i[0]]['productBoundingBoxFrames']
+                    full_prod       = full_product_dict[i[0]]
+                    unw_files       = full_prod['unwrappedPhase']
+                    conn_files      = full_prod['connectedComponents']
+                    prod_bbox_files = full_prod['productBoundingBoxFrames']
                     # based on the key define the output directories
-                    outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])
-                    outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])
+                    outFileUnw      = os.path.join(outDir,'unwrappedPhase',  pname)
+                    outFileConnComp = os.path.join(outDir,'connectedComponents',  pname)
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
-                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_overlap(unw_files, conn_files,
+                                prod_bbox_files,bounds, prods_TOTbbox, outFileUnw,
+                                outFileConnComp, mask, outputFormat, verbose)
+
                     elif stitchMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_2stage(unw_files, conn_files, prod_bbox_files,
+                                            bounds, prods_TOTbbox,
+                                            outFileUnw=outFileUnw,
+                                            outFileConnComp=outFileConnComp,
+                                            mask=mask,
+                                            outputFormat=outputFormat,
+                                            verbose=verbose)
 
                     #If necessary, resample both unw/conn_comp files
                     if multilooking is not None:

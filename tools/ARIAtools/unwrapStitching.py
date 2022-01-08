@@ -1434,7 +1434,10 @@ def gdalTest(file, verbose=False):
 
 
 
-def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged', outputFormat='ENVI', mask=None, verbose=False):
+def product_stitch_overlap(unw_files, conn_files, prod_bbox_files,
+                            bbox_file, prods_TOTbbox, outFileUnw='./unwMerged',
+                            outFileConnComp='./connCompMerged',
+                            outputFormat='ENVI', mask=None, verbose=False):
     '''
         Stitching of products minimizing overlap betnween products
     '''
@@ -1459,7 +1462,11 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
-def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox,
+                            unwrapper_2stage_name=None, solver_2stage=None,
+                            outFileUnw='./unwMerged',
+                            outFileConnComp='./connCompMerged',
+                            outputFormat='ENVI', mask=None, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
