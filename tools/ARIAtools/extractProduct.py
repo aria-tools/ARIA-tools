@@ -695,17 +695,19 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
+                        print ('\nStitching:', stitchMethodType)
                         product_stitch_overlap(unw_files, conn_files,
-                                prod_bbox_files,bounds, prods_TOTbbox, outFileUnw,
-                                outFileConnComp, mask, outputFormat, verbose)
+                                prod_bbox_files, bounds, prods_TOTbbox, outFileUnw,
+                                outFileConnComp, outputFormat, mask, verbose)
 
                     elif stitchMethodType == '2stage':
+                        print ('\nStitching:', stitchMethodType)
                         product_stitch_2stage(unw_files, conn_files, prod_bbox_files,
                                             bounds, prods_TOTbbox,
                                             outFileUnw=outFileUnw,
                                             outFileConnComp=outFileConnComp,
-                                            mask=mask,
                                             outputFormat=outputFormat,
+                                            mask=mask,
                                             verbose=verbose)
 
                     #If necessary, resample both unw/conn_comp files
