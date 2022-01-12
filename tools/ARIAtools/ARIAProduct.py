@@ -258,7 +258,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         rdrmetadata_dict={}
 
         # Parse layers
-        sdsdict = gdal.Open(fname).GetMetadata('SUBDATASETS')
+        sdsdict = gdal.Info(fname,format='json')['metadata']['SUBDATASETS']
         sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
         datalyr_dict={}
 
