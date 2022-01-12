@@ -343,16 +343,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     else: # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
         assert os.path.exists(demfilename), f'Cannot open DEM at: {demfilename}'
-        try:
-            ds_u = gdal.Open(demfilename, gdal.GA_ReadOnly)
-            demfilename1 = None
-        except:
-            # demfilename1 = f'{os.path.splitext(demfilename)[0]}.vrt'
-            demfilename1 = f'{demfilename}.vrt'
-            log.warning(f'gdal failed to read: {demfilename}\n\ttrying: {demfilename1}')
-            # demfilename  = demfilename1
-            ds_u = gdal.Open(demfilename1, gdal.GA_ReadOnly)
-
+        ds_u = gdal.Open(demfilename, gdal.GA_ReadOnly)
 
         epsg = osr.SpatialReference(wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY',1)
         assert epsg is not None, f'No projection information in DEM: {demfilename}'
@@ -362,10 +353,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     if demfilename == os.path.abspath(aria_dem):
         log.warning('The DEM you specified already exists in %s, '\
                 'using the existing one...', os.path.dirname(aria_dem))
-        if demfilename1 is None:
-            ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
-        else:
-            ds_aria = gdal.Open(f'{aria_dem}.vrt', gdal.GA_ReadOnly)
+        ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
 
     else:
         gdal.Warp(aria_dem, demfilename, format=outputFormat,
@@ -630,11 +618,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
-                #create directory for quality control plots
-                if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots', key)):
-                    os.makedirs(os.path.join(outDir,'metadatalyr_plots', key))
+                # create directory for quality control plots
+                if verbose:
+                    os.makedirs(os.path.join(outDir,'metadatalyr_plots', key), exist_ok=True)
 
-                #make VRT pointing to metadata layers in standard product
+                # make VRT pointing to metadata layers in standard product
                 gdal.BuildVRT(outname +'.vrt', [i[1]][0])
 
                 if dem is None:
@@ -705,7 +693,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                         print ('\nStitching:', stitchMethodType)
                         product_stitch_overlap(unw_files, conn_files,
                                 prod_bbox_files, bounds, prods_TOTbbox, outFileUnw,
-                                outFileConnComp, outputFormat, mask, verbose)
+                                outFileConnComp, outputFormat, mask, num_threads, verbose)
 
                     elif stitchMethodType == '2stage':
                         print ('\nStitching:', stitchMethodType)
@@ -714,7 +702,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                                             outFileUnw=outFileUnw,
                                             outFileConnComp=outFileConnComp,
                                             outputFormat=outputFormat,
-                                            mask=mask,
+                                            mask=mask, num_threads=num_threads,
                                             verbose=verbose)
 
                     #If necessary, resample both unw/conn_comp files

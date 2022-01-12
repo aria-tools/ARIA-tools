@@ -256,48 +256,57 @@ class Stitching:
 
         # combining all conComp and unw files that need to be blended
         conCompFiles = []
-        unwFiles = []
+        unwFiles     = []
         for intermediateFile in intermediateFiles:
             conCompFiles.append(intermediateFile[0])
             unwFiles.append(intermediateFile[1])
 
         # check if the folder exist to which files are being generated.
-        outPathUnw = os.path.dirname(os.path.abspath(self.outFileUnw))
+        outPathUnw      = os.path.dirname(os.path.abspath(self.outFileUnw))
         outPathConnComp = os.path.dirname(os.path.abspath(self.outFileConnComp))
-        if not os.path.isdir(outPathUnw):
-            os.makedirs(outPathUnw)
-        if not os.path.isdir(outPathConnComp):
-            os.makedirs(outPathConnComp)
+        os.makedirs(outPathUnw, exist_ok=True)
+        os.makedirs(outPathConnComp, exist_ok=True)
 
         ## Will now merge the unwrapped and connected component files
         # remove existing output file(s)
         for file in glob.glob(self.outFileUnw + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
-        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, srcNodata=0)
+        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', format=self.outputFormat,
+                  cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file,
+                  multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
         # Update VRT
-        gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
+        gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, format="VRT")
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file=gdal.Open(self.outFileUnw,gdal.GA_Update)
-            update_file=update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
-            update_file=None
+            update_file = gdal.Open(self.outFileUnw, gdal.GA_Update)
+            mask        = self.mask.ReadAsArray()
+            unw_file    = gdal.Open(self.outFileUnw+'.vrt').ReadAsArray()
+            update_file = update_file.GetRasterBand(1).WriteArray(mask*unw_file)
+            update_file = None
 
         # remove existing output file(s)
         for file in glob.glob(self.outFileConnComp + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles, options=gdal.BuildVRTOptions(srcNodata=-1))
-        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles, srcNodata=-1)
+        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt',
+                format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile,
+                outputBounds=self.bbox_file, multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
+
         # Update VRT
-        gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, options=gdal.TranslateOptions(format="VRT"))
+        gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, format="VRT")
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file=gdal.Open(self.outFileConnComp,gdal.GA_Update)
-            #mask value for conncomp must be set to nodata value -1
-            ma_update_file=np.ma.masked_where(self.mask.ReadAsArray() == 0., gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
-            np.ma.set_fill_value(ma_update_file, update_file.GetRasterBand(1).GetNoDataValue())
-            update_file=update_file.GetRasterBand(1).WriteArray(ma_update_file.filled())
-            update_file=None
+            update_file = gdal.Open(self.outFileConnComp, gdal.GA_Update)
+            # mask value for conncomp must be set to nodata value -1
+            ma_update_file = np.ma.masked_where(
+                                np.isclose(self.mask.ReadAsArray(), 0),
+                                gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
+
+            band        = update_file.GetRasterBand(1)
+            np.ma.set_fill_value(ma_update_file, band.GetNoDataValue())
+            update_file = band.WriteArray(ma_update_file.filled())
+            update_file = None
 
         cmd = "gdal_translate -of png -scale -ot Byte -q " + self.outFileUnw + ".vrt " + self.outFileUnw + ".png"
         os.system(cmd)
@@ -311,12 +320,13 @@ class UnwrapOverlap(Stitching):
         Stiching/unwrapping using product overlap minimization
     '''
 
-    def __init__(self):
+    def __init__(self, num_threads):
         '''
             Inheret properties from the parent class
             Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
         '''
         Stitching.__init__(self)
+        self.num_threads = num_threads
 
     def UnwrapOverlap(self):
 
@@ -352,7 +362,7 @@ class UnwrapOverlap(Stitching):
         '''
 
         # only need to comptue the minimize the phase offset if the number of files is larger than 2
-        if self.nfiles>1:
+        if self.nfiles > 1:
 
             # initiate the residuals and design matrix
             residualcycles = np.zeros((self.nfiles-1,1))
@@ -386,15 +396,27 @@ class UnwrapOverlap(Stitching):
                 # connected component
                 out_data,connCompNoData1,geoTrans,proj = GDALread(self.ccFile[counter],data_band=1,loadData=False)
                 out_data,connCompNoData2,geoTrans,proj = GDALread(self.ccFile[counter+1],data_band=1,loadData=False)
-                connCompFile1 = gdal.Warp('', self.ccFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData1))
-                connCompFile2 = gdal.Warp('', self.ccFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData2))
+                connCompFile1 = gdal.Warp('', self.ccFile[counter], format="MEM",
+                                    cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                                    dstNodata=connCompNoData1, multithread=True,
+                                    options=['NUM_THREADS=%s'%(self.num_threads)])
+                connCompFile2 = gdal.Warp('', self.ccFile[counter+1], format="MEM",
+                                        cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                                        dstNodata=connCompNoData2, multithread=True,
+                                        options=['NUM_THREADS=%s'%(self.num_threads)])
 
 
                 # unwrapped phase
                 out_data,unwNoData1,geoTrans,proj = GDALread(self.inpFile[counter],data_band=1,loadData=False)
                 out_data,unwNoData2,geoTrans,proj = GDALread(self.inpFile[counter+1],data_band=1,loadData=False)
-                unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData1))
-                unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
+                unwFile1 = gdal.Warp('', self.inpFile[counter], format="MEM",
+                                cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                                dstNodata=unwNoData1, multithread=True,
+                                options=['NUM_THREADS=%s'%(self.num_threads)])
+                unwFile2 = gdal.Warp('', self.inpFile[counter+1], format="MEM",
+                                cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                                dstNodata=unwNoData2, multithread=True,
+                                options=['NUM_THREADS=%s'%(self.num_threads)])
 
 
                 # finding the component with the largest overlap
@@ -420,7 +442,7 @@ class UnwrapOverlap(Stitching):
                     # masking the unwrapped phase and only use the largest overlapping connected component
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     unwData1[(unwData1==unwNoData1) | (temp!=maxKey)]=np.nan
-                    unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
+                    unwData2 = unwFile2.GetRasterBand(1).ReadAsArray()
                     unwData2[(unwData2==unwNoData2) | (temp!=maxKey)]=np.nan
 
                     # Calculation of the range correction
@@ -528,12 +550,13 @@ class UnwrapComponents(Stitching):
         Stiching/unwrapping using 2-Stage Phase Unwrapping
     '''
 
-    def __init__(self):
+    def __init__(self, num_threads):
         '''
             Inheret properties from the parent class
             Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
         '''
         Stitching.__init__(self)
+        self.num_threads = num_threads
 
 
     def unwrapComponents(self):
@@ -1437,7 +1460,7 @@ def gdalTest(file, verbose=False):
 def product_stitch_overlap(unw_files, conn_files, prod_bbox_files,
                             bbox_file, prods_TOTbbox, outFileUnw='./unwMerged',
                             outFileConnComp='./connCompMerged',
-                            outputFormat='ENVI', mask=None, verbose=False):
+                            outputFormat='ENVI', mask=None, num_threads=4, verbose=False):
     '''
         Stitching of products minimizing overlap betnween products
     '''
@@ -1447,7 +1470,7 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files,
     # print('Solver: Minimize overlap')
 
     # Hand over to product overlap stitch code
-    unw = UnwrapOverlap()
+    unw = UnwrapOverlap(num_threads)
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
     unw.setOutFileConnComp(outFileConnComp)
@@ -1466,7 +1489,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox,
                             unwrapper_2stage_name=None, solver_2stage=None,
                             outFileUnw='./unwMerged',
                             outFileConnComp='./connCompMerged',
-                            outputFormat='ENVI', mask=None, verbose=False):
+                            outputFormat='ENVI', mask=None, num_threads=4, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
@@ -1487,7 +1510,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox,
     log.info('Solver: %s', solver_2stage)
 
     # Hand over to 2Stage unwrap
-    unw = UnwrapComponents()
+    unw = UnwrapComponents(num_threads)
     unw._legacy_flag = True
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
