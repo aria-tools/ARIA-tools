@@ -165,7 +165,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         try:
             #version accessed differently between URL vs downloaded product
             version = gdal.Info( \
-                      fname,format='json')['metadata']['']['NC_GLOBAL#version']
+                      fname, format='json')['metadata']['']['NC_GLOBAL#version']
         except:
             log.warning('%s is not a supported file type... skipping', fname)
             return []
@@ -260,7 +260,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         rdrmetadata_dict={}
 
         # Parse layers
-        sdsdict = gdal.Info(fname,format='json')['metadata']['SUBDATASETS']
+        sdsdict = gdal.Info(fname, format='json')['metadata']['SUBDATASETS']
         sdsdict = {k:v for k,v in sdsdict.items() if 'NAME' in k}
         datalyr_dict={}
 
