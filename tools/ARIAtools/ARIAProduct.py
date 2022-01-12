@@ -162,7 +162,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         ### Get standard product version from file
         try:
             #version accessed differently between URL vs downloaded product
-            version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+            version = gdal.Info( \
+                      fname,format='json')['metadata']['']['NC_GLOBAL#version']
         except:
             log.warning('%s is not a supported file type... skipping', fname)
             return []
