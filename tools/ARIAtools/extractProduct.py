@@ -540,8 +540,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
     # Warp the first scene with the output-bounds defined above
     # ensure output-bounds are an integer multiple of interferometric grid and adjust if necessary
     OG_bounds = list(open_shapefile(bbox_file, 0, 0).bounds)
-    gt = gdal.Info(product_dict[0]['unwrappedPhase'][0], \
-             format='json')['description']['geoTransform']
+    gt     = gdal.Info(product_dict[0]['unwrappedPhase'][0], \
+             format='json')['geoTransform']
     arrres = [abs(gt[1]), abs(gt[-1])]
     vrt0   = gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
     ds     = gdal.Warp('', vrt0, format="MEM", outputBounds=OG_bounds, xRes=arrres[0],
