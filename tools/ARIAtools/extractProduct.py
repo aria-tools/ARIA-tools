@@ -641,10 +641,17 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
                 # Check if height layers are consistent, and if not exit with error
-                if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]]))==1:
-                    gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open([i[1]][0][0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
+                height_list = [gdal.Info(i, format='json')['metadata'][''] \
+                              ['NETCDF_DIM_heightsMeta_VALUES'] \
+                              for i in [i[1]][0]]
+                if len(set(height_list))==1:
+                    gdal.Open(outname+'.vrt').SetMetadataItem( \
+                              'NETCDF_DIM_heightsMeta_VALUES', \
+                              gdal.Info([i[1]][0][0], format='json') \
+                              ['metadata'][''] \
+                              ['NETCDF_DIM_heightsMeta_VALUES'])
                 else:
-                    raise Exception('Inconsistent heights for metadata layer(s) ', [i[1]][0], ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]])
+                    raise Exception('Inconsistent heights for metadata layer(s) ', [i[1]][0], ' corresponding heights: ', height_list)
 
                 # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
