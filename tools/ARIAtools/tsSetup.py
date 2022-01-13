@@ -147,8 +147,6 @@ def extract_meta_dict(aria_prod, metadata):
     for i in aria_prod.products[1]:
         meta_name = i[metadata][0]
         data_set = gdal.Info(meta_name, stats=True, format='json')
-        # return [min, max, mean, std]
-        stat = data_set.GetRasterBand(1).GetStatistics(True, True)
         meta[i['pair_name'][0]] = float(data_set['bands'][0] \
             ['metadata']['']['STATISTICS_MEAN'])
         data_set = None
