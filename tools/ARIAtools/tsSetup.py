@@ -30,6 +30,8 @@ from ARIAtools.extractProduct import (merged_productbbox, prep_dem,
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+# Suppress aux.xml generation when accessing stats
+gdal.SetConfigOption("GDAL_PAM_ENABLED",'NO')
 
 log = logging.getLogger(__name__)
 
@@ -144,10 +146,11 @@ def extract_meta_dict(aria_prod, metadata):
     meta = {}
     for i in aria_prod.products[1]:
         meta_name = i[metadata][0]
-        data_set = gdal.Open(meta_name)
+        data_set = gdal.Info(meta_name, stats=True, format='json')
         # return [min, max, mean, std]
         stat = data_set.GetRasterBand(1).GetStatistics(True, True)
-        meta[i['pair_name'][0]] = stat[2]
+        meta[i['pair_name'][0]] = float(data_set['bands'][0] \
+            ['metadata']['']['STATISTICS_MEAN']))
         data_set = None
 
     return meta
