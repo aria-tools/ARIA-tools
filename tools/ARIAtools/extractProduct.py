@@ -735,8 +735,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
         outputFormat='ENVI'
 
     # get final shape
-    arrshape = list(map(gdal.Info(dem.GetDescription(), \
-                    format='json')['size'][::-1], int))
+    arrshape = gdal.Info(dem.GetDescription(), format='json')['size'][::-1]
     # load layered metadata array
     data_array = gdal.Warp('', outname+'.vrt', \
                  options=gdal.WarpOptions(format="MEM", multithread=True, \
@@ -746,7 +745,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     data_array = metadata_qualitycheck(data_array, os.path.basename(os.path.dirname(outname)), outname, verbose).data_array
 
     # Define lat/lon/height arrays for metadata layers
-    heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
+    heightsMeta = np.array(gdal.Info(outname+'.vrt', format='json') \
+                ['metadata']['']['NETCDF_DIM_heightsMeta_VALUES'] \
+                [1:-1].split(','), dtype='float32')
     ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
