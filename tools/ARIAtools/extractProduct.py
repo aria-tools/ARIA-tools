@@ -955,8 +955,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                         float(tropo_rsc_dict['Y_STEP'])),
                         drivername=outputFormat,
                         gdal_fmt='float32',
-                        proj=gdal.Open(os.path.join(outDir,'unwrappedPhase', \
-                         product_dict[2][0][0])).GetProjection(),
+                        proj = ''.join(os.path.join(outDir,'unwrappedPhase', \
+                              product_dict[2][0][0])['coordinateSystem'] \
+                              ['wkt'].split()),
                         nodata=0.)
                     gacos_prod = None
                     log.debug('GACOS product %s successfully converted to ' \
