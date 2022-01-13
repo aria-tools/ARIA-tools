@@ -142,9 +142,9 @@ def cmd_line_parse(iargs=None):
 
 def extract_meta_dict(aria_prod, metadata):
     """Extract metadata from products."""
-    #os.environ['GDAL_PAM_ENABLED'] = 'NO'
+    os.environ['GDAL_PAM_ENABLED'] = 'NO'
     # Suppress aux.xml generation when accessing stats
-    gdal.SetConfigOption("GDAL_PAM_ENABLED",'NO')
+    #gdal.SetConfigOption("GDAL_PAM_ENABLED",'NO')
     meta = {}
     for i in aria_prod.products[1]:
         meta_name = i[metadata][0]
