@@ -735,7 +735,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
         outputFormat='ENVI'
 
     # get final shape
-    arrshape = gdal.Info(dem.GetDescription())['size'][::-1]
+    arrshape = list(map(gdal.Info(dem.GetDescription(), \
+                    format='json')['size'][::-1], int))
     # load layered metadata array
     data_array = gdal.Warp('', outname+'.vrt', \
                  options=gdal.WarpOptions(format="MEM", multithread=True, \
