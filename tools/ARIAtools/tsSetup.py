@@ -275,12 +275,12 @@ def generate_stack(aria_prod, input_files, output_file_name,
         width = None
         height = None
 
-        data_set = gdal.Open(data, gdal.GA_ReadOnly)
-        width = data_set.RasterXSize
-        height = data_set.RasterYSize
-        geo_trans = data_set.GetGeoTransform()
-        projection = data_set.GetProjection()
-        data_set = None
+        data_set = gdal.Info(data, format='json')
+        width = data_set['size'][0]
+        height = data_set['size'][1]
+        geo_trans = data_set['geoTransform']
+        projection = ''.join(data_set['coordinateSystem']['wkt'].split())
+        del data_set
 
     # setting up a subset of the stack
     ymin, ymax, xmin, xmax = [0, height, 0, width]
@@ -313,10 +313,10 @@ def generate_stack(aria_prod, input_files, output_file_name,
             # Update progress bar
             prog_bar.update(data[0]+1, suffix=dates)
 
-            data_set = gdal.Open(data[1], gdal.GA_ReadOnly)
-            width = data_set.RasterXSize
-            height = data_set.RasterYSize
-            data_set = None
+            data_set = gdal.Info(data[1], format='json')
+            width = data_set['size'][0]
+            height = data_set['size'][1]
+            del data_set
 
             metadata['wavelength'] = wavelength
             try:
