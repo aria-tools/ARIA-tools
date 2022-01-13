@@ -150,7 +150,7 @@ def extract_meta_dict(aria_prod, metadata):
         # return [min, max, mean, std]
         stat = data_set.GetRasterBand(1).GetStatistics(True, True)
         meta[i['pair_name'][0]] = float(data_set['bands'][0] \
-            ['metadata']['']['STATISTICS_MEAN']))
+            ['metadata']['']['STATISTICS_MEAN'])
         data_set = None
 
     return meta
