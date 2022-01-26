@@ -109,7 +109,6 @@ The following pages might be of use to those trying to build third party package
 -   [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/LinuxSourceBuild.md)
 -   [Installing dependencies from source on mac](https://github.com/aria-tools/ARIA-tools/blob/master/MacOSSourceBuild.md)
 
-
 ### REQUIRED: Acquire API key to access/download DEMs
 Follow instructions listed here to generate and access API key through OpenTopography: https://opentopography.org/blog/introducing-api-keys-access-opentopography-global-datasets.
 
@@ -118,7 +117,6 @@ Add this API key to your '~/.topoapi' file and set permissions as so
 echo "myAPIkey" > ~/.topoapi
 chmod 600 ~/.topoapi
 ```
-
 
 ### ARIA-tools with support for S3 virtual data access
 GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools to avoid download of product during processing. 
