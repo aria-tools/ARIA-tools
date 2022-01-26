@@ -12,7 +12,6 @@ import glob
 from osgeo import gdal, osr
 import logging
 import requests
-from pathlib import Path
 from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile, chunk_area
@@ -28,7 +27,7 @@ log = logging.getLogger(__name__)
 ## Set DEM path
 _world_dem = "https://portal.opentopography.org/API/globaldem?demtype="\
                "SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
-dot_topo = Path.home() / '.topoapi'
+dot_topo = os.path.expanduser('~/.topoapi')
 if dot_topo.exists():
     topapi = '&API_Key='
     with open(dot_topo) as f:
