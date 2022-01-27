@@ -54,6 +54,8 @@ jobs:
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
             export VSI_CACHE=YES
+            echo $CC_OT > ~/.topoapi
+            chmod 600 ~/.topoapi
             python setup.py build
             python setup.py install
             ariaDownload.py -h
