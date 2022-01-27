@@ -24,7 +24,18 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
-_world_dem = "https://portal.opentopography.org/API/globaldem?demtype=SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
+## Set DEM path
+_world_dem = "https://portal.opentopography.org/API/globaldem?demtype="\
+               "SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
+dot_topo = os.path.expanduser('~/.topoapi')
+if os.path.exists(dot_topo):
+    topapi = '&API_Key='
+    with open(dot_topo) as f:
+        topapi = topapi + f.readlines()[0].split('\n')[0]
+    _world_dem = _world_dem + topapi
+else:  # your .topoapi does not exist
+    raise ValueError('Add your Open Topo API key to `~/.topoapi`.'
+                     'Refer to ARIAtools installation instructions.')
 
 def createParser():
     """Extract specified product layers. The default will export all layers."""
