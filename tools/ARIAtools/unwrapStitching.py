@@ -833,8 +833,8 @@ class UnwrapComponents(Stitching):
                 # 2) when the two polygons are from the same connected component
                 # and originate from the same connected comp file
                 if [poly_counter_1, connCompID1, connFile1] == \
-                    [poly_counter_2, connCompID2, connFile2]:
-                    continue
+                   [poly_counter_2, connCompID2, connFile2]:
+                   continue
 
                 # finding the minMatch of closest points between two
                 # polygons lists
@@ -920,10 +920,10 @@ class UnwrapComponents(Stitching):
                 point2_array = point2_array.reshape((1,point2_array.shape[0]))
 
                 # append the list of points
-                try:
-                    tablePoints = np.concatenate((tablePoints,point1_array,
+                if tablePoints:
+                    tablePoints = np.concatenate((tablePoints, point1_array,
                                                   point2_array), axis=0)
-                except:
+                else:
                     tablePoints = np.concatenate((point1_array, point2_array),
                                                   axis=0)
 
@@ -931,7 +931,8 @@ class UnwrapComponents(Stitching):
         # making sure the points are unique based on coordinate and unique
         # connected compoenent id
         tablePoints_unique, unique_indices = np.unique(tablePoints[:, (0,4,5) ],
-                                                       axis=0,return_index=True)
+                                                       axis=0,
+                                                       return_index=True)
         self.tablePoints =tablePoints[unique_indices[:],:]
 
         # compute the phase values
