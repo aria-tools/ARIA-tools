@@ -35,127 +35,129 @@ log = logging.getLogger(__name__)
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
-stitchMethodTypes = ['overlap','2stage']
+stitchMethodTypes = ['overlap', '2stage']
 
 class Stitching:
-    '''
-    This is the parent class of all stiching codes.
+    """This is the parent class of all stiching codes.
     It is whatever is shared between the different variants of stitching methods
     e.g. - setting of the main input arguments,
          - functions to verify GDAL compatibility,
          - function to write new connected component of merged product based on a mapping table,
          - fucntion to write unwrapped phase of merged product based on a mapping table
-    '''
+    """
 
     def __init__(self):
-        '''
-        Setting the default arguments needed by the class.
+        """Setting the default arguments needed by the class.
         Parse the filenames and bbox as None as they need to be set by the user,
-        which will be caught when running the child classes of the respective stitch method
-        '''
+        which will be caught when running the child classes of the
+        respective stitch method.
+        """
         self.inpFile = None
         self.ccFile = None
         self.prodbboxFile = None
         self.prodbbox = None
-        self.solver ='pulp'
-        self.redArcs =-1
+        self.solver = 'pulp'
+        self.redArcs = -1
         self.mask = None
         self.outFileUnw = './unwMerged'
         self.outFileConnComp = './connCompMerged'
-        self.outputFormat='ENVI'
+        self.outputFormat = 'ENVI'
 
         # stitching methods, by default leverage product overlap method
         # other options would be to leverage connected component
         self.setStitchMethod("overlap")
 
-
     def setInpFile(self, input):
-        """ Set the input Filename for stitching/unwrapping """
+        """Set the input Filename for stitching/unwrapping."""
         # Convert a string (i.e. user gave single file) to a list
         if isinstance(input, np.str):
             input = [input]
         self.inpFile = input
 
-        # the number of files that needs to be merged/ unwrapped
+        # The number of files that needs to be merged/ unwrapped
         self.nfiles = np.shape(self.inpFile)[0]
 
     def setOutFile(self, output):
-        """ Set the output File name """
+        """Set the output File name."""
         self.outFile = output
 
     def setConnCompFile(self, connCompFile):
-        """ Set the connected Component file """
+        """Set the connected Component file."""
         # Convert a string (i.e. user gave single file) to a list
         if isinstance(connCompFile, np.str):
             connCompFile = [connCompFile]
         self.ccFile = connCompFile
 
     def setProdBBoxFile(self, ProdBBoxFile):
-        """ Set the product bounding box file(s) """
+        """Set the product bounding box file(s)."""
         # Convert a string (i.e. user gave single file) to a list
         if isinstance(ProdBBoxFile, np.str):
             ProdBBoxFile = [ProdBBoxFile]
         self.prodbboxFile = ProdBBoxFile
 
     def setBBoxFile(self, BBoxFile):
-        """ Set bounds of bbox """
+        """Set bounds of bbox."""
         self.bbox_file = BBoxFile
 
     def setTotProdBBoxFile(self, prods_TOTbbox):
-        """ Set common track bbox file"""
+        """Set common track bbox file."""
         self.setTotProdBBoxFile = prods_TOTbbox
 
     def setStitchMethod(self,stitchMethodType):
-        """ Set the stitch method to be used to handle parant class internals """
+        """Set the stitch method to be used to handle parent class internals."""
         if stitchMethodType not in stitchMethodTypes:
             raise ValueError(stitchMethodType + ' must be in ' + str(stitchMethodTypes))
         else:
-            self.stitchMethodType =stitchMethodType
+            self.stitchMethodType = stitchMethodType
 
-        if self.stitchMethodType=='2stage':
+        if self.stitchMethodType == '2stage':
             self.description="Two-stage corrected/stiched Unwrapped Phase"
-        elif self.stitchMethodType=='overlap':
+        elif self.stitchMethodType == 'overlap':
             self.description = "Overlap-based stiched Unwrapped Phase"
 
     def setRedArcs(self, redArcs):
-        """ Set the Redundant Arcs to use for LP unwrapping """
+        """Set the Redundant Arcs to use for LP unwrapping."""
         self.redArcs = redArcs
 
     def setSolver(self, solver):
-        """ Set the solver to use for unwrapping """
+        """Set the solver to use for unwrapping."""
         self.solver = solver
 
     def setMask(self, mask):
-        """ Set the mask file """
+        """Set the mask file."""
         self.mask = mask
 
     def setOutputFormat(self,outputFormat):
-        """ Set the output format of the files to be generated """
-        # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+        """Set the output format of the files to be generated."""
+        # File must be physically extracted, cannot proceed with VRT format.
+        # Defaulting to ENVI format.
         self.outputFormat = outputFormat
         if self.outputFormat=='VRT':
             self.outputFormat='ENVI'
 
     def setOutFileUnw(self,outFileUnw):
-        """ Set the output file name for the unwrapped stiched file to be generated"""
+        """Set the output file name for the unwrapped stitched file to
+        be generated.
+        """
         self.outFileUnw = outFileUnw
 
     def setOutFileConnComp(self,outFileConnComp):
-        """ Set the output file name for the connected component stiched file to be generated"""
+        """Set the output file name for the connected component stitched
+        file to be generated.
+        """
         self.outFileConnComp = outFileConnComp
 
     def setVerboseMode(self,verbose):
-        """ Set verbose output mode"""
+        """Set verbose output mode."""
         logger.setLevel(logging.DEBUG)
 
     def __verifyInputs__(self):
-        '''
-            Verify if the unwrapped and connected component inputs are gdal compatible.
-            That the provided shape files are well-formed.
-            If not remove them from the list to be stiched.
-            If a vrt exist and gdalcompatible update the file to be a vrt
-        '''
-        # track a list of files to keep
+        """Verify if the unwrapped and connected component inputs are
+        GDAL-compatible and that the provided shape files are well-formed.
+        If not remove them from the list to be stitched.
+        If a VRT exists and is GDAL-compatible update the file to be a VRT.
+        """
+        # Track a list of files to keep
         inpFile_keep = []
         ccFile_keep = []
         prodbboxFile_keep = []
@@ -164,7 +166,7 @@ class Stitching:
             # unw and corresponding conncomponent file
             inFile = self.inpFile[k_file]
             ccFile = self.ccFile[k_file]
-            # shape file in case passed through
+            # Shape file in case passed through
             if self.stitchMethodType == "overlap":
                 prodbboxFile = self.prodbboxFile[k_file]
 
@@ -197,46 +199,52 @@ class Stitching:
                     bbox_keep.append(bbox_temp)
                     prodbboxFile_keep.append(prodbboxFile_temp)
 
-        # update the input files and only keep those being GDAL compatible
+        # Update the input files and only keep those that are GDAL-compatible
         self.inpFile=inpFile_keep
         self.ccFile=ccFile_keep
-        # shape file in case passed through
+
+        # Shape file in case passed through
         if self.stitchMethodType == "overlap":
             self.prodbbox=bbox_keep
             self.prodbboxFile=prodbboxFile_keep
 
-        # update the number of file in case some got removed
+        # Update the number of files in case some got removed
         self.nfiles = np.shape(self.inpFile)[0]
 
-        if self.nfiles==0:
+        if self.nfiles == 0:
             log.info('No files left after GDAL compatibility check')
             sys.exit(0)
+
     def __createImages__(self):
-        '''
-            This function will write the final merged unw and conencted component file. As intermediate step tiff   files are generated with integer values which will represent the shift to be applied to connected componenet and the moduli shift to be applied to the unwrapped phase.
-        '''
+        """This function will write the final merged unw and conencted
+        component file. As intermediate step tiff files are generated
+        with integer values which will represent the shift to be applied
+        to connected componenet and the moduli shift to be applied to
+        the unwrapped phase.
+        """
 
         ## Will first make intermediate files in a temp folder.
         # For each product there will be a connComp file and 3 files related unw files.
         # The connected component file will show the unique wrt to all merged files
         # For the unwrapped related files, there will be an integer offset tif file, a vrt file which scale this integer map by 2pi, and a vrt which combines the orginal unw phase file with the scaled map. The latter will be used for merging of the unwrapped phase.
-        tempdir = tempfile.mkdtemp(prefix='IntermediateFiles_',dir='.')
+        tempdir = tempfile.mkdtemp(prefix='IntermediateFiles_', dir='.')
 
-        # will try multi-core version and default to for loop in case of failure
+        # Will try multi-core version and default to for loop in case of failure
         try:
-            # need to combine all inputs together as single argument tuple
+            # Need to combine all inputs together as single argument tuple
             all_inputs = ()
             for counter in  range(len(self.fileMappingDict)):
                 fileMappingDict = self.fileMappingDict[counter]
                 fileMappingDict['saveDir'] = tempdir
                 fileMappingDict['saveNameID'] = "Product_" + str(counter)
                 fileMappingDict['description'] = self.description
-                # parse inputs as a tuple
+                # Parse inputs as a tuple
                 inputs = (fileMappingDict)
-                # append all tuples in a single tuple
+                # Append all tuples in a single tuple
                 all_inputs = all_inputs + (inputs,)
-            # compute the phase value using multi-thread functionality
-            intermediateFiles = Parallel(n_jobs=-1,max_nbytes=1e6)(delayed(createConnComp_Int)(ii) for ii in all_inputs)
+            # Compute the phase value using multi-thread functionality
+            intermediateFiles = Parallel(n_jobs=-1, max_nbytes=1e6)\
+                (delayed(createConnComp_Int)(ii) for ii in all_inputs)
 
         except:
             log.info('Multi-core version failed, will try single for loop')
@@ -246,20 +254,20 @@ class Stitching:
                 fileMappingDict['saveDir'] = tempdir
                 fileMappingDict['saveNameID'] = "Product_n" + str(counter)
                 fileMappingDict['description'] = self.description
-                # parse inputs as a tuple
+                # Parse inputs as a tuple
                 inputs = (fileMappingDict)
-                # compute the phase value
+                # Compute the phase value
                 intermediateFiles_temp = createConnComp_Int(inputs)
                 intermediateFiles.append(intermediateFiles_temp)
 
-        # combining all conComp and unw files that need to be blended
-        conCompFiles = []
+        # Combine all connComp and unw files that need to be blended
+        connCompFiles = []
         unwFiles = []
         for intermediateFile in intermediateFiles:
-            conCompFiles.append(intermediateFile[0])
+            connCompFiles.append(intermediateFile[0])
             unwFiles.append(intermediateFile[1])
 
-        # check if the folder exist to which files are being generated.
+        # Check if the folder to which files are being generated exists
         outPathUnw = os.path.dirname(os.path.abspath(self.outFileUnw))
         outPathConnComp = os.path.dirname(os.path.abspath(self.outFileConnComp))
         if not os.path.isdir(outPathUnw):
@@ -268,23 +276,31 @@ class Stitching:
             os.makedirs(outPathConnComp)
 
         ## Will now merge the unwrapped and connected component files
-        # remove existing output file(s)
+        # Remove existing unwrapped output file(s)
         for file in glob.glob(self.outFileUnw + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
-        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
-        # Update VRT
-        gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
-        # Apply mask (if specified).
-        if self.mask is not None:
-            update_file=gdal.Open(self.outFileUnw,gdal.GA_Update)
-            update_file=update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
-            update_file=None
 
-        # remove existing output file(s)
+        # Create new output file(s)
+        vrtName = '{:s}.vrt'.format(self.outFileUnw)
+        gdal.BuildVRT(vrtName, unwFiles,
+            options=gdal.BuildVRTOptions(srcNodata=0))
+        gdal.Warp(self.outFileUnw, vrtName,
+            options=gdal.WarpOptions(format=self.outputFormat,
+                                    cutlineDSName=self.setTotProdBBoxFile,
+                                    outputBounds=self.bbox_file))
+        # Update VRT
+        gdal.Translate(vrtName, self.outFileUnw,
+            options=gdal.TranslateOptions(format="VRT"))
+        # Apply mask (if specified)
+        if self.mask is not None:
+            update_file = gdal.Open(self.outFileUnw,gdal.GA_Update)
+            update_file = update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
+            update_file = None
+
+        # Remove existing connected component output file(s)
         for file in glob.glob(self.outFileConnComp + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles, options=gdal.BuildVRTOptions(srcNodata=-1))
+        gdal.BuildVRT(self.outFileConnComp+'.vrt', connCompFiles, options=gdal.BuildVRTOptions(srcNodata=-1))
         gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
         # Update VRT
         gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, options=gdal.TranslateOptions(format="VRT"))
@@ -305,23 +321,21 @@ class Stitching:
 
 
 class UnwrapOverlap(Stitching):
-    '''
-        Stiching/unwrapping using product overlap minimization
-    '''
+    """Stiching/unwrapping using product overlap minimization."""
 
     def __init__(self):
-        '''
-            Inheret properties from the parent class
-            Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
-        '''
+        """Inherit properties from the parent class.
+
+        Parse the filenames and bbox as None as they need to be set by
+        the user, which will be caught when running the class.
+        """
         Stitching.__init__(self)
 
     def UnwrapOverlap(self):
-
-        ## setting the method
+        ## Set the method
         self.setStitchMethod("overlap")
 
-        ## check if required inputs are set
+        ## Check if required inputs are set
         if self.inpFile is None:
             log.error("Input unwrapped file(s) is (are) not set.")
             raise Exception
@@ -333,161 +347,231 @@ class UnwrapOverlap(Stitching):
             raise Exception
 
         ## Verify if all the inputs are well-formed/GDAL compatible
-        # Update files to be vrt if they exist and remove files which failed the gdal compatibility
+        # Update files to be vrt if they exist and remove files which
+        # failed the gdal compatibility
         self.__verifyInputs__()
 
-        ## Calculating the number of phase cycles needed to miminize the residual between products
+        ## Calculating the number of phase cycles needed to miminize
+        # the residual between products
         self.__calculateCyclesOverlap__()
 
         ## Write out merged phase and connected component files
         self.__createImages__()
 
-
         return
 
     def __calculateCyclesOverlap__(self):
-        '''Function that will calculate the number of cycles each component needs to be shifted in order to minimize the two-pi modulu residual between a neighboring component. Outputs a fileMappingDict with as key a file number. Within fileMappingDict with a integer phase shift value for each unique connected component.
-        '''
+        """Function that will calculate the number of cycles each
+        component needs to be shifted in order to minimize the two-pi
+        modulo residual between a neighboring component.
 
-        # only need to comptue the minimize the phase offset if the number of files is larger than 2
-        if self.nfiles>1:
+        Outputs a fileMappingDict with a file number as a key. Within
+        fileMappingDict with a integer phase shift value for each unique
+        connected component.
+        """
 
-            # initiate the residuals and design matrix
-            residualcycles = np.zeros((self.nfiles-1,1))
-            residualrange = np.zeros((self.nfiles-1,1))
-            A = np.zeros((self.nfiles-1,self.nfiles))
+        # Only need to comptue the minimize the phase offset if the number
+        # of files is larger than 2
+        if self.nfiles > 1:
+            # Initiate the residuals and design matrix
+            residualcycles = np.zeros((self.nfiles-1, 1))
+            residualrange = np.zeros((self.nfiles-1, 1))
+            A = np.zeros((self.nfiles-1, self.nfiles))
 
-            # the files are already sorted in the ARIAproduct class, will make consecutive overlaps between these sorted products
+            # The files are already sorted in the ARIAproduct class, will
+            # make consecutive overlaps between these sorted products
             for counter in range(self.nfiles-1):
-                # getting the two neighboring frames
+                # Getting the two neighboring frames
                 bbox_frame1 = self.prodbbox[counter]
                 bbox_frame2 = self.prodbbox[counter+1]
 
-                # determining the intersection between the two frames
+                # Determine the intersection between the two frames
                 if not bbox_frame1.intersects(bbox_frame2):
-                    log.error("Products do not overlap or were not provided in a contigious sorted list.")
+                    log.error("Products do not overlap or were not " \
+                        "provided in a contigious sorted list.")
                     raise Exception
                 polyOverlap = bbox_frame1.intersection(bbox_frame2)
 
-                # will save the geojson under a temp local filename
-                tmfile = tempfile.NamedTemporaryFile(mode='w+b',suffix='.json', prefix='Overlap_', dir='.')
+                # Will save the geojson under a temp local filename
+                # Do this just to get the file outname
+                tmfile = tempfile.NamedTemporaryFile(mode='w+b', suffix='.json',
+                    prefix='Overlap_', dir='.')
                 outname = tmfile.name
-                # will remove it as GDAL polygonize function cannot overwrite files
+
+                # Remove it as GDAL polygonize function cannot overwrite files
                 tmfile.close()
                 tmfile = None
-                # saving the temp geojson
+
+                # Save the temp geojson
                 save_shapefile(outname, polyOverlap, 'GeoJSON')
 
-                # calculate the mean of the phase for each product in the overlap region alone
-                # will first attempt to mask out connected component 0, and default to complete overlap if this fails.
-                # Cropping the unwrapped phase and connected component to the overlap region alone, inhereting the no-data.
-                # connected component
-                out_data,connCompNoData1,geoTrans,proj = GDALread(self.ccFile[counter],data_band=1,loadData=False)
-                out_data,connCompNoData2,geoTrans,proj = GDALread(self.ccFile[counter+1],data_band=1,loadData=False)
-                connCompFile1 = gdal.Warp('', self.ccFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData1))
-                connCompFile2 = gdal.Warp('', self.ccFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData2))
+                # Calculate the mean of the phase for each product in
+                # the overlap region alone.
+                # Will first attempt to mask out connected component 0,
+                # and default to complete overlap if this fails.
+                # Cropping the unwrapped phase and connected component
+                # to the overlap region alone, inhereting the no-data.
 
+                # Connected component
+                out_data, connCompNoData1, geoTrans, proj = GDALread(
+                        self.ccFile[counter], data_band=1, loadData=False)
+                out_data, connCompNoData2, geoTrans, proj = GDALread(
+                        self.ccFile[counter+1], data_band=1, loadData=False)
 
-                # unwrapped phase
-                out_data,unwNoData1,geoTrans,proj = GDALread(self.inpFile[counter],data_band=1,loadData=False)
-                out_data,unwNoData2,geoTrans,proj = GDALread(self.inpFile[counter+1],data_band=1,loadData=False)
-                unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData1))
-                unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
+                connCompFile1 = gdal.Warp('', self.ccFile[counter],
+                        options=gdal.WarpOptions(format="MEM",
+                                cutlineDSName=outname,
+                                dstAlpha=True,
+                                outputBounds=polyOverlap.bounds,
+                                dstNodata=connCompNoData1))
+                connCompFile2 = gdal.Warp('', self.ccFile[counter+1],
+                        options=gdal.WarpOptions(format="MEM",
+                                cutlineDSName=outname,
+                                dstAlpha=True,
+                                outputBounds=polyOverlap.bounds,
+                                dstNodata=connCompNoData2))
 
+                # Reformat output bounds for GDAL translate
+                ulx, lry, lrx, uly = polyOverlap.bounds
+                projWin = (ulx, uly, lrx, lry)
 
-                # finding the component with the largest overlap
-                connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
-                connCompData1[(connCompData1==connCompNoData1) | (connCompData1==0)]=np.nan
-                connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
-                connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
+                # Unwrapped phase
+                out_data, unwNoData1, geoTrans, proj = GDALread(
+                        self.inpFile[counter], data_band=1, loadData=False)
+                out_data, unwNoData2, geoTrans, proj = GDALread(
+                        self.inpFile[counter+1], data_band=1, loadData=False)
+
+                unwFile1 = gdal.Translate('', self.inpFile[counter],
+                        options=gdal.TranslateOptions(format="MEM",
+                        projWin=projWin,
+                        noData=unwNoData1))
+                unwFile2 = gdal.Translate('', self.inpFile[counter+1],
+                        options=gdal.TranslateOptions(format="MEM",
+                        projWin=projWin,
+                        noData=unwNoData2))
+
+                # Find the component with the largest overlap
+                connCompData1 = connCompFile1.GetRasterBand(1).ReadAsArray()
+                connCompData1[((connCompData1==connCompNoData1)
+                                | (connCompData1==0))] = np.nan
+                connCompData2 = connCompFile2.GetRasterBand(1).ReadAsArray()
+                connCompData2[((connCompData2==connCompNoData2)
+                                | (connCompData2==0))] = np.nan
                 connCompData2_temp = (connCompData2*100)
-                temp = connCompData2_temp.astype(np.int)-connCompData1.astype(np.int)
-                temp[(temp<0) | (temp>2000)]=0
-                temp_count = collections.Counter(temp.flatten())
+                connCompDiff = (connCompData2_temp.astype(np.int)
+                        - connCompData1.astype(np.int))
+                connCompDiff[(connCompDiff<0) | (connCompDiff>2000)] = 0
+                temp_count = collections.Counter(connCompDiff.flatten())
                 maxKey = 0
                 maxCount = 0
                 for key, keyCount in temp_count.items():
-                    if key!=0:
-                        if keyCount>maxCount:
-                            maxKey =key
-                            maxCount=keyCount
+                    if key != 0:
+                        if keyCount  > maxCount:
+                            maxKey   = key
+                            maxCount = keyCount
+                print('Max key, count:', maxKey, maxCount)
 
-                # if the max key count is 0, this means there is no good overlap region between products.
+                # If the max key count is 0, this means there is no good
+                # overlap region between products.
                 # In that scenario default to different stitching approach.
-                if maxKey!=0 and maxCount>75:
-                    # masking the unwrapped phase and only use the largest overlapping connected component
+                if maxKey != 0 and maxCount > 75:
+                    # Masking the unwrapped phase and only use the
+                    # largest overlapping connected component
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
-                    unwData1[(unwData1==unwNoData1) | (temp!=maxKey)]=np.nan
-                    unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
-                    unwData2[(unwData2==unwNoData2) | (temp!=maxKey)]=np.nan
+                    unwData2 = unwFile2.GetRasterBand(1).ReadAsArray()
+
+                    cutlineMask1 = connCompFile1.GetRasterBand(2).ReadAsArray()
+                    cutlineMask2 = connCompFile2.GetRasterBand(2).ReadAsArray()
+
+                    unwData1[((unwData1==unwNoData1)
+                                | (connCompDiff!=maxKey)
+                                | (cutlineMask1==0))] = np.nan
+                    unwData2[((unwData2==unwNoData2)
+                                | (connCompDiff!=maxKey)
+                                | (cutlineMask2==0))] = np.nan
 
                     # Calculation of the range correction
-                    unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
-                    unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
-                    arr =unwData1_wrapped-unwData2_wrapped
+                    unwData1_wrapped = (unwData1
+                                    - np.round(unwData1/(2*np.pi))*(2*np.pi))
+                    unwData2_wrapped = (unwData2
+                                    - np.round(unwData2/(2*np.pi))*(2*np.pi))
+                    arr = unwData1_wrapped - unwData2_wrapped
 
-                    # data is not fully decorrelated
+                    # Data is not fully decorrelated
                     arr = arr - np.round(arr/(2*np.pi))*2*np.pi
-                    range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
+                    range_temp = np.angle(np.nanmean(np.exp(1j*arr)))
 
-                    # calculation of the number of 2 pi cycles accounting for range correction
-                    cycles_temp = np.round((np.nanmean(unwData1-(unwData2+range_temp)))/(2*np.pi))
+                    # Calculation of the number of 2PI cycles accounting
+                    # for range correction
+                    corrected_range = unwData1 - (unwData2+range_temp)
+                    cycles_temp = np.round((np.nanmean(corrected_range))/(2*np.pi))
+                    print(cycles_temp)
 
                 else:
-                    # account for the case that no-data was left, e.g. fully decorrelated
-                    # in that scenario use all data and estimate from wrapped, histogram will be broader...
+                    # Account for the case that no data was left, e.g.
+                    # fully decorrelated
+                    # In that scenario use all data and estimate from
+                    # wrapped, histogram will be broader ...
                     unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
-                    unwData1[(unwData1==unwNoData1)]
-                    unwData2 =unwFile2.GetRasterBand(1).ReadAsArray()
-                    unwData2[(unwData2==unwNoData2)]
-                    # Calculation of the range correction
-                    unwData1_wrapped = unwData1-np.round(unwData1/(2*np.pi))*(2*np.pi)
-                    unwData2_wrapped =unwData2-np.round(unwData2/(2*np.pi))*(2*np.pi)
-                    arr =unwData1_wrapped-unwData2_wrapped
-                    arr = arr - np.round(arr/(2*np.pi))*2*np.pi
-                    range_temp =  np.angle(np.nanmean(np.exp(1j*arr)))
+                    unwData2 = unwFile2.GetRasterBand(1).ReadAsArray()
 
-                    # data is decorelated assume no 2-pi cycles
+                    cutlineMask1 = connCompFile1.GetRasterBand(2).ReadAsArray()
+                    cutlineMask2 = connCompFile2.GetRasterBand(2).ReadAsArray()
+
+                    unwData1[((unwData1==unwNoData1)
+                                | (cutlineMask1==0))] = np.nan
+                    unwData2[((unwData2==unwNoData2)
+                                | (cutlineMask2==0))] = np.nan
+
+                    # Calculation of the range correction
+                    unwData1_wrapped = (unwData1
+                                        - np.round(unwData1/(2*np.pi))*(2*np.pi))
+                    unwData2_wrapped = (unwData2
+                                        - np.round(unwData2/(2*np.pi))*(2*np.pi))
+                    arr = unwData1_wrapped - unwData2_wrapped
+                    arr = arr - np.round(arr/(2*np.pi))*2*np.pi
+                    range_temp = np.angle(np.nanmean(np.exp(1j*arr)))
+
+                    # Data is decorelated assume no 2-pi cycles
                     cycles_temp = 0
 
-
-                # closing the files
+                # Closing the files
                 unwFile1 = None
                 unwFile2 = None
                 connCompFile1 = None
                 connCompFile2 = None
 
-                # remove the tempfile
+                # Remove the tempfile
                 shutil.os.remove(outname)
 
-                # store the residual and populate the design matrix
-                residualcycles[counter]=cycles_temp
-                residualrange[counter]=range_temp
-                A[counter,counter]=1
-                A[counter,counter+1]=-1
+                # Store the residual and populate the design matrix
+                residualcycles[counter] = cycles_temp
+                residualrange[counter] = range_temp
+                A[counter,counter] = 1
+                A[counter,counter+1] = -1
 
-
-            # invert the offsets with respect to the first product
-            cycles = np.round(np.linalg.lstsq(A[:,1:], residualcycles,rcond=None)[0])
-            rangesoffset = np.linalg.lstsq(A[:,1:], residualrange,rcond=None)[0]
+            # Invert the offsets with respect to the first product
+            cycles = np.round(np.linalg.lstsq(A[:,1:],
+                            residualcycles,rcond=None)[0])
+            rangesoffset = np.linalg.lstsq(A[:,1:],
+                            residualrange,rcond=None)[0]
             #pdb.set_trace()
 
-            # force first product to have 0 as offset
+            # Force first product to have 0 as offset
             cycles = -1*np.concatenate((np.zeros((1,1)), cycles), axis=0)
             rangesoffset = -1*np.concatenate((np.zeros((1,1)), rangesoffset), axis=0)
 
         else:
-            # nothing to be done, i.e. no phase cycles to be added
+            # Nothing to be done, i.e. no phase cycles to be added
             cycles = np.zeros((1,1))
             rangesoffset = np.zeros((1,1))
 
-        # build the mapping dictionary
+        # Build the mapping dictionary
         fileMappingDict = {}
-        connCompOffset =0
+        connCompOffset = 0
 
         for fileCounter in range(self.nfiles):
-
-            # get the number of connected components
+            # Get the number of connected components
             n_comp = 20
 
             # The original connected components
@@ -501,42 +585,43 @@ class UnwrapOverlap(Stitching):
             # Generate the mapping of connectedComponents
             # Increment based on unique components of the merged product, 0 is grouped for all products
             connCompMapping = connComp
-            connCompMapping[1:]=connComp[1:]+connCompOffset
+            connCompMapping[1:] = connComp[1:]+connCompOffset
 
             # concatenate and generate a connComponent based mapping matrix
             # [original comp, new component, 2pi unw offset]
-            connCompMapping = np.concatenate((connComp, connCompMapping,cycleMapping,rangeOffsetMapping), axis=1)
+            connCompMapping = np.concatenate(
+                (connComp, connCompMapping, cycleMapping, rangeOffsetMapping),
+                axis=1)
 
             # Increment the count of total number of unique components
-            connCompOffset = connCompOffset+n_comp
+            connCompOffset = connCompOffset + n_comp
 
-            # populate mapping dictionary for each product
+            # Populate mapping dictionary for each product
             fileMappingDict_temp = {}
             fileMappingDict_temp['connCompMapping'] = connCompMapping
-            fileMappingDict_temp['connFile'] =  self.ccFile[fileCounter]
+            fileMappingDict_temp['connFile'] = self.ccFile[fileCounter]
             fileMappingDict_temp['unwFile'] = self.inpFile[fileCounter]
-            # store it in the general mapping dictionary
-            fileMappingDict[fileCounter]=fileMappingDict_temp
 
-        # pass the fileMapping back into self
+            # Store it in the general mapping dictionary
+            fileMappingDict[fileCounter] = fileMappingDict_temp
+
+        # Pass the fileMapping back into self
         self.fileMappingDict = fileMappingDict
 
+
 class UnwrapComponents(Stitching):
-    '''
-        Stiching/unwrapping using 2-Stage Phase Unwrapping
-    '''
+    """Stiching/unwrapping using 2-Stage Phase Unwrapping."""
 
     def __init__(self):
-        '''
-            Inheret properties from the parent class
-            Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
-        '''
+        """Inheret properties from the parent class.
+        Parse the filenames and bbox as None as they need to be set by
+        the user, which will be caught when running the class.
+        """
         Stitching.__init__(self)
 
 
     def unwrapComponents(self):
-
-        ## setting the method
+        ## Setting the method
         self.setStitchMethod("2stage")
         self.region=5
 
@@ -578,7 +663,6 @@ class UnwrapComponents(Stitching):
 
         ## Write out merged phase and connected component files
         self.__createImages__()
-
 
         return
 
@@ -1112,13 +1196,16 @@ def GDALread(filename,data_band=1,loadData=True):
 
 
 def createConnComp_Int(inputs):
-    '''
-        Function to generate intermediate connected component files and unwrapped VRT files that have with interger 2pi pixel shift applied.
-        Will parse inputs in a single argument as it allows for parallel processing.
-        Return a list of files in a unqiue temp folder
-    '''
+    """Function to generate intermediate connected component files and
+    unwrapped VRT files that have with interger 2pi pixel shift applied.
 
-    # parsing the inputs to variables
+    Will parse inputs in a single argument as it allows for parallel
+    processing.
+
+    Return a list of files in a unqiue temp folder.
+    """
+
+    # Parse the inputs to variables
     saveDir = inputs['saveDir']
     saveNameID = inputs['saveNameID']
     connFile = inputs['connFile']
@@ -1127,51 +1214,62 @@ def createConnComp_Int(inputs):
 
     ## Generating the intermediate files
     ## STEP 1: set-up the mapping functions
-    # loading the connected component
-    connData,connNoData,connGeoTrans,connProj = GDALread(connFile)
+    # Load the connected component
+    connData, connNoData, connGeoTrans, connProj = GDALread(connFile)
 
-    ## Defining the mapping tables
-    # setting up the connected component unique ID mapping
+    ## Define the mapping tables
+    # Set up the connected component unique ID mapping
     connIDMapping = connCompMapping[:,1]
-    # Will add the no-data to the mapping as well (such we can handle no-data region)
-    # i.e. num comp  + 1 = Nodata connected component which gets mapped to no-data value again
+
+    # Add the no-data to the mapping as well (such that we can handle a
+    # no-data region)
+    # I.e. num comp + 1 = Nodata connected component which gets mapped
+    # to no-data value again
     NoDataMapping = len(connIDMapping)
     connIDMapping = np.append(connIDMapping, [connNoData])
 
-    # setting up the connected component integer 2PI shift mapping
+    # Set up the connected component integer 2PI shift mapping
     intMapping = connCompMapping[:,2]
-    # Will add the no-data to the mapping as well (such we can handle no-data region)
-    # i.e. max comp ID + 1 = Nodata connected component which gets mapped to 0 integer shift such no-data region remains unaffected
+
+    # Add the no-data to the mapping as well (such that we can handle a
+    # no-data region)
+    # I.e. max comp ID + 1 = Nodata connected component which gets
+    # mapped to 0 integer shift such that the no-data region remains
+    # unaffected
     intMapping = np.append(intMapping, [0])
 
-    # update the connected component with the new no-data value used in the mapping
-    connData[connData==connNoData]=NoDataMapping
+    # Update the connected component with the new no-data value used
+    # in the mapping
+    connData[connData==connNoData] = NoDataMapping
 
     ## STEP 2: apply the mapping functions
-    # interger 2PI scaling mapping for unw phase
-
+    # Interger 2PI scaling mapping for unw phase
     intShift = intMapping[connData.astype('int')]
-    # connected component mapping to unique ID
+
+    # Connected component mapping to unique ID
     connData = connIDMapping[connData.astype('int')]
 
-    ## STEP 3: writing out the datasets
-    # writing out the unqiue ID connected component file
-    connDataName = os.path.abspath(os.path.join(saveDir,'connComp', saveNameID + '_connComp.tif'))
-    write_ambiguity(connData,connDataName,connProj,connGeoTrans,connNoData)
+    ## STEP 3: write out the datasets
+    # Write out the unqiue ID connected component file
+    connDataName = os.path.abspath(os.path.join(saveDir, 'connComp',
+            saveNameID+'_connComp.tif'))
+    write_ambiguity(connData, connDataName, connProj, connGeoTrans, connNoData)
 
-    # writing out the integer map as tiff file
-    intShiftName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_intShift.tif'))
-    write_ambiguity(intShift,intShiftName,connProj,connGeoTrans)
+    # Write out the integer map as tiff file
+    intShiftName = os.path.abspath(os.path.join(saveDir, 'unw',
+            saveNameID+'_intShift.tif'))
+    write_ambiguity(intShift, intShiftName, connProj, connGeoTrans)
 
-
-    # writing out the scalled vrt => 2PI * integer map
+    # Write out the scalled vrt => 2PI * integer map
     length = intShift.shape[0]
     width = intShift.shape[1]
-    scaleVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_scale.vrt'))
-    build2PiScaleVRT(scaleVRTName,intShiftName,length=length,width=width)
+    scaleVRTName = os.path.abspath(
+            os.path.join(saveDir, 'unw', saveNameID+'_scale.vrt'))
+    build2PiScaleVRT(scaleVRTName, intShiftName, length=length, width=width)
 
-    # Offseting the vrt for the range offset correctiom
-    unwRangeOffsetVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_rangeOffset.vrt'))
+    # Offset the VRT for the range offset correction
+    unwRangeOffsetVRTName = os.path.abspath(
+        os.path.join(saveDir, 'unw', saveNameID + '_rangeOffset.vrt'))
     buildScaleOffsetVRT(unwRangeOffsetVRTName,unwFile,connProj,connGeoTrans,File1_offset=connCompMapping[1,3],length=length,width=width)
 
     # writing out the corrected unw phase vrt => phase + 2PI * integer map
@@ -1180,49 +1278,45 @@ def createConnComp_Int(inputs):
 
     return [connDataName, unwVRTName]
 
-def write_ambiguity(data, outName,proj, geoTrans,noData=False):
-    '''
-       Write out an integer mapping in the Int16/Byte data range of values
-    '''
-
+def write_ambiguity(data, outName,proj, geoTrans, noData=False):
+    """Write out an integer mapping in the Int16/Byte data range of values."""
     # GDAL precision support in tif
     Byte = gdal.GDT_Byte
     Int16 = gdal.GDT_Int16
 
-    # check if the path to the file needs to be created
+    # Check if the path to the file needs to be created
     dirname = os.path.dirname(outName)
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
 
-    # Getting the GEOTIFF driver
+    # Get the GEOTIFF driver
     driver = gdal.GetDriverByName('GTIFF')
-    # leverage the compression option to ensure small file size
+    # Leverage the compression option to ensure small file size
     dst_options = ['COMPRESS=LZW']
-    # create the dataset
-    ds = driver.Create(outName , data.shape[1], data.shape[0], 1, Int16, dst_options)
-    # setting the proj and transformation
+    # Create the dataset
+    ds = driver.Create(outName , data.shape[1], data.shape[0], 1, Int16,
+        dst_options)
+    # Set the proj and transformation
     ds.SetGeoTransform(geoTrans)
     ds.SetProjection(proj)
-    # populate the first band with data
+    # Populate the first band with data
     bnd = ds.GetRasterBand(1)
     bnd.WriteArray(data)
-    # setting the no-data value
+    # Set the no-data value
     if noData is not None:
         bnd.SetNoDataValue(noData)
     bnd.FlushCache()
-    # close the file
+    # Close the file
     ds = None
 
 
-def build2PiScaleVRT(output,File,width=False,length=False):
-    '''
-        Building a VRT file which scales a GDAL byte file with 2PI
-    '''
+def build2PiScaleVRT(output, File, width=False, length=False):
+    """Build a VRT file which scales a GDAL byte file with 2PI."""
 
     # DBTODO: The datatype should be loaded by default from the source raster to be applied.
     # should be ok for now, but could be an issue for large connected com
 
-    # the vrt template with 2-pi scaling functionality
+    # The VRT template with 2PI scaling functionality
     vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
     <VRTRasterBand dataType="Float32" band="1">
     <ComplexSource>
@@ -1235,28 +1329,28 @@ def build2PiScaleVRT(output,File,width=False,length=False):
     </VRTRasterBand>
 </VRTDataset>'''
 
-    # the inputs needed to build the vrt
-    # load the width and length from the GDAL file in case not specified
+    # The inputs needed to build the VRT
+    # Load the width and length from the GDAL file in case not specified
     if not width or not length:
         ds = gdal.Open(File, gdal.GA_ReadOnly)
         width = ds.RasterXSize
         ysize = ds.RasterYSize
         ds = None
 
-    # check if the path to the file needs to be created
+    # Check if the path to the file needs to be created
     dirname = os.path.dirname(output)
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
 
-    # write out the VRT file
+    # Write out the VRT file
     with open(output, 'w') as fid:
         fid.write(vrttmpl.format(width = width, length = length, File = File))
 
 
 def buildScaleOffsetVRT(output,File1,proj,geoTrans,File1_offset=0, File1_scale = 1, width=False,length=False,description='Scalled and offsetted VRT'):
-    '''
-        Building a VRT file which sums two files together using pixel functionality
-        '''
+    """Building a VRT file which sums two files together using pixel
+    functionality.
+    """
 
     # the vrt template with sum pixel functionality
     vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
@@ -1275,30 +1369,29 @@ def buildScaleOffsetVRT(output,File1,proj,geoTrans,File1_offset=0, File1_scale =
 </VRTDataset>'''
     #<SourceProperties RasterXSize="{lengthwidth}" RasterYSize="{length}" DataType="Float32"/>
 
-
-    # the inputs needed to build the vrt
-    # load the width and length from the GDAL file in case not specified
+    # The inputs needed to build the VRT
+    # Load the width and length from the GDAL file in case not specified
     if not width or not length:
         ds = gdal.Open(File1, gdal.GA_ReadOnly)
         width = ds.RasterXSize
         ysize = ds.RasterYSize
         ds = None
 
-    # check if the path to the file needs to be created
+    # Check if the path to the file needs to be created
     dirname = os.path.dirname(output)
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
 
-    # write out the VRT file
+    # Write out the VRT file
     with open('{0}'.format(output) , 'w') as fid:
         fid.write( vrttmpl.format(width=width,length=length,File1=File1,File1_offset=File1_offset, File1_scale = File1_scale, proj=proj,geoTrans=str(geoTrans)[1:-1],description=description))
 
 def buildSumVRT(output,File1,File2,proj,geoTrans,length=False, width=False,description='Unwrapped Phase'):
-    '''
-        Building a VRT file which sums two files together using pixel functionality
-    '''
+    """Building a VRT file which sums two files together using pixel
+    functionality.
+    """
 
-    # the vrt template with sum pixel functionality
+    # The VRT template with sum pixel functionality
     vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
     <SRS>{proj}</SRS>
     <GeoTransform>{geoTrans}</GeoTransform>
@@ -1316,20 +1409,20 @@ def buildSumVRT(output,File1,File2,proj,geoTrans,length=False, width=False,descr
     </VRTRasterBand>
 </VRTDataset>'''
 
-    # the inputs needed to build the vrt
-    # load the width and length from the GDAL file in case not specified
+    # The inputs needed to build the vrt
+    # Load the width and length from the GDAL file in case not specified
     if not width or not length:
         ds = gdal.Open(File1, gdal.GA_ReadOnly)
         width = ds.RasterXSize
         ysize = ds.RasterYSize
         ds = None
 
-    # check if the path to the file needs to be created
+    # Check if the path to the file needs to be created
     dirname = os.path.dirname(output)
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
 
-    # write out the VRT file
+    # Write out the VRT file
     with open('{0}'.format(output) , 'w') as fid:
         fid.write( vrttmpl.format(width=width,length=length,File1=File1,File2=File2, proj=proj,geoTrans=str(geoTrans)[1:-1],description=description))
 
@@ -1432,9 +1525,12 @@ def gdalTest(file, verbose=False):
 
 
 
-def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged', outputFormat='ENVI', mask=None, verbose=False):
+def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file,
+    prods_TOTbbox, outFileUnw = './unwMerged',
+    outFileConnComp = './connCompMerged', outputFormat='ENVI',
+    mask=None, verbose=False):
     '''
-        Stitching of products minimizing overlap betnween products
+    Stitching of products minimizing overlap betnween products
     '''
 
     # report method to user
