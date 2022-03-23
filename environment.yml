@@ -3,7 +3,7 @@
 # remove environment : conda env remove -n ARIA-tools
 # enter  environment : conda activate ARIA-tools
 # exit   environment : conda deactivate
-name: ARIA-tools
+name: ariax
 channels:
   - conda-forge
   - defaults
