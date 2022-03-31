@@ -1278,7 +1278,7 @@ def createConnComp_Int(inputs):
 
     return [connDataName, unwVRTName]
 
-def write_ambiguity(data, outName,proj, geoTrans, noData=False):
+def write_ambiguity(data, outName, proj, geoTrans, noData=False):
     """Write out an integer mapping in the Int16/Byte data range of values."""
     # GDAL precision support in tif
     Byte = gdal.GDT_Byte
