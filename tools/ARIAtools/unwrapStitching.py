@@ -225,7 +225,7 @@ class Stitching:
 
     def __createImages__(self):
         """This function will write the final merged unw and conncomp file.
-        
+
         As intermediate step tiff files are generated
         with integer values which will represent the shift to be applied
         to connected componenet and the moduli shift to be applied to
@@ -680,7 +680,7 @@ class UnwrapComponents(Stitching):
 
         if self.solver not in solverTypes:
             raise ValueError(self.treeType + ' must be in '
-                + str(unwTreeTypes))
+                + str(self.unwTreeTypes))
 
         if self.redArcs not in redarcsTypes.keys():
             raise ValueError(self.redArcs + ' must be in '
@@ -1738,7 +1738,7 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file,
     prods_TOTbbox, outFileUnw = './unwMerged',
     outFileConnComp = './connCompMerged', outputFormat='ENVI',
     mask=None, verbose=False):
-    """Stitching of products minimizing overlap between products"""
+    """Stitching of products minimizing overlap between products."""
     # report method to user
     # print('STITCH Settings: Product overlap approach')
     # print('Solver: Minimize overlap')
