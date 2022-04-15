@@ -39,6 +39,7 @@ stitchMethodTypes = ['overlap', '2stage']
 
 class Stitching:
     """This is the parent class of all stiching codes.
+
     It is whatever is shared between the different stitching method variants
     e.g. - setting of the main input arguments,
          - functions to verify GDAL compatibility,
@@ -50,6 +51,7 @@ class Stitching:
 
     def __init__(self):
         """Setting the default arguments needed by the class.
+        
         Parse the filenames and bbox as None as they need to be set
             by the user,
         which will be caught when running the child classes of the
@@ -140,15 +142,11 @@ class Stitching:
             self.outputFormat='ENVI'
 
     def setOutFileUnw(self,outFileUnw):
-        """Set the output file name for the unwrapped stitched file to
-        be generated.
-        """
+        """Set the output file name for the unw stitched file."""
         self.outFileUnw = outFileUnw
 
     def setOutFileConnComp(self,outFileConnComp):
-        """Set the output file name for the connected component stitched
-        file to be generated.
-        """
+        """Set the output file name for the conncomp stitched file."""
         self.outFileConnComp = outFileConnComp
 
     def setVerboseMode(self,verbose):
@@ -156,8 +154,9 @@ class Stitching:
         logger.setLevel(logging.DEBUG)
 
     def __verifyInputs__(self):
-        """Verify if the unwrapped and connected component inputs are
-        GDAL-compatible and that the provided shape files are well-formed.
+        """Verify if the unw and conncomp inputs are GDAL-compatible
+        and that the provided shape files are well-formed.
+
         If not remove them from the list to be stitched.
         If a VRT exists and is GDAL-compatible update the file to be a VRT.
         """
@@ -225,8 +224,9 @@ class Stitching:
             sys.exit(0)
 
     def __createImages__(self):
-        """This function will write the final merged unw and conencted
-        component file. As intermediate step tiff files are generated
+        """This function will write the final merged unw and conncomp file.
+        
+        As intermediate step tiff files are generated
         with integer values which will represent the shift to be applied
         to connected componenet and the moduli shift to be applied to
         the unwrapped phase.
@@ -402,7 +402,6 @@ class UnwrapOverlap(Stitching):
         fileMappingDict with a integer phase shift value for each unique
         connected component.
         """
-
         # Only need to comptue the minimize the phase offset if the number
         # of files is larger than 2
         if self.nfiles > 1:
@@ -447,9 +446,9 @@ class UnwrapOverlap(Stitching):
                 # to the overlap region alone, inhereting the no-data.
 
                 # Connected component
-                out_data, connCompNoData1, geoTrans, proj = GDALread(
+                _, connCompNoData1, geoTrans, proj = GDALread(
                         self.ccFile[counter], data_band=1, loadData=False)
-                out_data, connCompNoData2, geoTrans, proj = GDALread(
+                _, connCompNoData2, geoTrans, proj = GDALread(
                         self.ccFile[counter+1], data_band=1, loadData=False)
 
                 connCompFile1 = gdal.Warp('', self.ccFile[counter],
@@ -470,9 +469,9 @@ class UnwrapOverlap(Stitching):
                 projWin = (ulx, uly, lrx, lry)
 
                 # Unwrapped phase
-                out_data, unwNoData1, geoTrans, proj = GDALread(
+                _, unwNoData1, geoTrans, proj = GDALread(
                         self.inpFile[counter], data_band=1, loadData=False)
-                out_data, unwNoData2, geoTrans, proj = GDALread(
+                _, unwNoData2, geoTrans, proj = GDALread(
                         self.inpFile[counter+1], data_band=1, loadData=False)
 
                 unwFile1 = gdal.Translate('', self.inpFile[counter],
@@ -1357,7 +1356,7 @@ def GDALread(filename,data_band=1,loadData=True):
     if loadData:
         out_data = raster.ReadAsArray()
     else:
-        out_data=None
+        out_data = None
     # parsing no-data
     try:
         NoData = raster.GetNoDataValue()
@@ -1381,7 +1380,6 @@ def createConnComp_Int(inputs):
 
     Return a list of files in a unqiue temp folder.
     """
-
     # Parse the inputs to variables
     saveDir = inputs['saveDir']
     saveNameID = inputs['saveNameID']
@@ -1502,7 +1500,6 @@ def write_ambiguity(data, outName,proj, geoTrans, noData=False):
 
 def build2PiScaleVRT(output, File, width=False, length=False):
     """Build a VRT file which scales a GDAL byte file with 2PI."""
-
     # DBTODO: The datatype should be loaded by default from the
     #     source raster to be applied.
     # should be ok for now, but could be an issue for large connected com
@@ -1544,7 +1541,6 @@ def buildScaleOffsetVRT(output,File1,proj,geoTrans,File1_offset=0,
     """Building a VRT file which sums two files together using pixel
     functionality.
     """
-
     # the vrt template with sum pixel functionality
     vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
     <VRTRasterBand dataType="Float32" band="1">
