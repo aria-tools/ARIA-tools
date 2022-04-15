@@ -51,7 +51,7 @@ class Stitching:
 
     def __init__(self):
         """Setting the default arguments needed by the class.
-        
+
         Parse the filenames and bbox as None as they need to be set
             by the user,
         which will be caught when running the child classes of the
@@ -109,7 +109,7 @@ class Stitching:
         self.setTotProdBBoxFile = prods_TOTbbox
 
     def setStitchMethod(self,stitchMethodType):
-        """Set stitch method to be used to handle parent class internals"""
+        """Set stitch method to be used to handle parent class internals."""
         if stitchMethodType not in stitchMethodTypes:
             raise ValueError(stitchMethodType + ' must be in '
                 + str(stitchMethodTypes))
@@ -180,7 +180,7 @@ class Stitching:
             # check if it exist and well-formed and pass back shapefile of it
             if self.stitchMethodType == "overlap":
                 bbox_temp = open_shapefile(
-                                prodbboxFile,'productBoundingBox', 
+                                prodbboxFile,'productBoundingBox',
                                 1)
                 prodbboxFile_temp = prodbboxFile
             else:
@@ -446,9 +446,9 @@ class UnwrapOverlap(Stitching):
                 # to the overlap region alone, inhereting the no-data.
 
                 # Connected component
-                _, connCompNoData1, geoTrans, proj = GDALread(
+                _, connCompNoData1, _, _ = GDALread(
                         self.ccFile[counter], data_band=1, loadData=False)
-                _, connCompNoData2, geoTrans, proj = GDALread(
+                _, connCompNoData2, _, _ = GDALread(
                         self.ccFile[counter+1], data_band=1, loadData=False)
 
                 connCompFile1 = gdal.Warp('', self.ccFile[counter],
@@ -469,9 +469,9 @@ class UnwrapOverlap(Stitching):
                 projWin = (ulx, uly, lrx, lry)
 
                 # Unwrapped phase
-                _, unwNoData1, geoTrans, proj = GDALread(
+                _, unwNoData1, _, _ = GDALread(
                         self.inpFile[counter], data_band=1, loadData=False)
-                _, unwNoData2, geoTrans, proj = GDALread(
+                _, unwNoData2, _, _ = GDALread(
                         self.inpFile[counter+1], data_band=1, loadData=False)
 
                 unwFile1 = gdal.Translate('', self.inpFile[counter],
@@ -539,7 +539,7 @@ class UnwrapOverlap(Stitching):
                     # Calculation of the number of 2PI cycles accounting
                     # for range correction
                     corrected_range = unwData1 - (unwData2+range_temp)
-                    cycles_temp = np.round((np.nanmean(corrected_range)) 
+                    cycles_temp = np.round((np.nanmean(corrected_range))
                                       / (2*np.pi))
                     print(cycles_temp)
 
@@ -968,21 +968,21 @@ class UnwrapComponents(Stitching):
                 point2_array = point2_array.reshape((1,point2_array.shape[0]))
 
                 # append the list of points
-                try:
-                    tablePoints = np.concatenate((tablePoints, 
+                if 'tablePoints' in locals():
+                    tablePoints = np.concatenate((tablePoints,
                                                   point1_array,
                                                   point2_array), axis=0)
-                except:
+                else:
                     tablePoints = np.concatenate((point1_array,
                                                   point2_array), axis=0)
 
 
         ## making sure the points are unique based on coordinate
         ##    and unique connected compoenent id
-        tablePoints_unique, unique_indices = np.unique(
+        _, unique_indices = np.unique(
                                                 tablePoints[:, (0,4,5)],
                                                 axis=0,return_index=True)
-        self.tablePoints =tablePoints[unique_indices[:],:]
+        self.tablePoints = tablePoints[unique_indices[:],:]
 
         # compute the phase values
         log.info('Calculating the phase values for %s points',
@@ -1090,7 +1090,7 @@ class UnwrapComponents(Stitching):
                         + random.sample(range(-3,3),matches.shape[0]-1)
 
             test = np.concatenate((X_coordinate, Y_coordinate), axis=1)
-            test_unique, test_unique_indices = np.unique(test,
+            test_unique, _ = np.unique(test,
                                                          axis=0,
                                                          return_index=True)
             log.info('Shifting coordinates by a pixel to make '
@@ -1198,8 +1198,7 @@ class UnwrapComponents(Stitching):
 
 
 def minDistancePoints(pairing):
-    """Finding closest two points between a list of two polygons"""
-
+    """Finding closest two points between a list of two polygons."""
     poly1= pairing[0]
     poly2 = pairing[1]
     poly1_source = pairing[2]
@@ -1538,9 +1537,7 @@ def build2PiScaleVRT(output, File, width=False, length=False):
 def buildScaleOffsetVRT(output,File1,proj,geoTrans,File1_offset=0,
                         File1_scale = 1, width=False,length=False,
                         description='Scalled and offsetted VRT'):
-    """Building a VRT file which sums two files together using pixel
-    functionality.
-    """
+    """Build VRT file summing 2 files together using pixel functionality."""
     # the vrt template with sum pixel functionality
     vrttmpl = '''<VRTDataset rasterXSize="{width}" rasterYSize="{length}">
     <VRTRasterBand dataType="Float32" band="1">
@@ -1741,9 +1738,7 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file,
     prods_TOTbbox, outFileUnw = './unwMerged',
     outFileConnComp = './connCompMerged', outputFormat='ENVI',
     mask=None, verbose=False):
-    """Stitching of products minimizing overlap betnween products
-    """
-
+    """Stitching of products minimizing overlap between products"""
     # report method to user
     # print('STITCH Settings: Product overlap approach')
     # print('Solver: Minimize overlap')
@@ -1772,7 +1767,6 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox,
     """Stitching of products using the two-stage unwrapper approach
     i.e. minimize the discontinuities between connected components
     """
-
     # The solver used in minimizing the stiching of products
     if unwrapper_2stage_name is None:
         unwrapper_2stage_name = 'REDARC0'
