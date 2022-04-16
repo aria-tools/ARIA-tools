@@ -1222,7 +1222,7 @@ def minDistancePoints(pairing):
     # 2) if from different connected component files, then it is from
        # the overlap region, nearest points will not give an incorrect
        # estimate as there is overlap
-    
+
     #pdb.set_trace()
     Poly2 = Polygon(poly2)
     Poly1 = Polygon(poly1)
@@ -1377,7 +1377,7 @@ def createConnComp_Int(inputs):
     Will parse inputs in a single argument as it allows for parallel
     processing.
 
-    Return a list of files in a unqiue temp folder.
+    Return a list of files in a unique temp folder.
     """
     # Parse the inputs to variables
     saveDir = inputs['saveDir']
@@ -1764,7 +1764,8 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox,
                           outFileUnw = './unwMerged',
                           outFileConnComp = './connCompMerged',
                           outputFormat='ENVI',mask=None, verbose=False):
-    """Stitching of products using the two-stage unwrapper approach
+    """Stitching of products using the two-stage unwrapper approach.
+    
     i.e. minimize the discontinuities between connected components
     """
     # The solver used in minimizing the stiching of products
