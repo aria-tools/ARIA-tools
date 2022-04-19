@@ -11,7 +11,7 @@ dependencies:
   - python>=3.6
   - asf_search
   - cartopy
-  - gdal>=3.2.1,<3.4
+  - gdal>=3.2.1
   - hdf5
   - joblib
   - libgdal
