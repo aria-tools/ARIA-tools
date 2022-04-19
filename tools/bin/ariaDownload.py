@@ -289,5 +289,6 @@ if __name__ == '__main__':
     except:
         pass
 
+    print ('this is a test')
     inps = cmdLineParse()
     Downloader(inps)()
