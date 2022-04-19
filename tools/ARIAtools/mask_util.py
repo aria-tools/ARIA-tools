@@ -45,6 +45,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
 
     # Get bounds of user bbox_file
     bounds = open_shapefile(bbox_file, 0, 0).bounds
+    will_stop = False
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
@@ -94,6 +95,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
             log.info("***Accessing and cropping the NLCD mask...***")
             maskfilename = NLCDMasker(os.path.dirname(workdir))(
                                             proj, bounds, arrshape, outputFormat)
+            will_stop=True
 
     ## User specified mask
     else:
@@ -146,8 +148,9 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         del mask_file, amp_file
 
     # crop/expand mask to DEM size?
-    print (maskfilename)
-    breakpoint()
+    if will_stop:
+        print (maskfilename)
+        breakpoint()
     mask = gdal.Warp('', maskfilename, format='MEM',
                     cutlineDSName=prods_TOTbbox, outputBounds=bounds,
                     width=arrshape[1], height=arrshape[0], multithread=True,
