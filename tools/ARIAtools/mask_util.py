@@ -146,6 +146,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         del mask_file, amp_file
 
     # crop/expand mask to DEM size?
+    breakpoint()
     mask = gdal.Warp('', maskfilename+'.vrt', format='MEM',
                     cutlineDSName=prods_TOTbbox, outputBounds=bounds,
                     width=arrshape[1], height=arrshape[0], multithread=True,
