@@ -146,11 +146,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         del mask_file, amp_file
 
     # crop/expand mask to DEM size?
-    # force vrt, as python gdal cant read the .msk 
-    print ('maskfilename', maskfilename)
-    print ('maskfilename exists?', op.exists(maskfilename))
-    print ('maskfilename vrt', maskfilename+'.vrt')
-    mask = gdal.Warp('', maskfilename+'.vrt', format='MEM',
+    mask = gdal.Warp('', maskfilename, format='MEM',
                     cutlineDSName=prods_TOTbbox, outputBounds=bounds,
                     width=arrshape[1], height=arrshape[0], multithread=True,
                     options=[f'NUM_THREADS={num_threads}'])
