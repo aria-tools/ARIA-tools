@@ -7,7 +7,7 @@
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
+from IPython import embed
 import pdb
 import os
 import time
@@ -15,8 +15,12 @@ import sys
 import logging
 
 import numpy as np
-from osgeo import gdal,ogr
+from osgeo import ogr
+from osgeo.gdal import BuildVRT, Warp
 from osgeo.gdalconst import *
+import rasterio as rio
+import rasterio.mask as rmask
+
 import tempfile
 import shutil
 from shapely.geometry import Point,Polygon,shape, LinearRing
@@ -32,8 +36,6 @@ from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 
 log = logging.getLogger(__name__)
-# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
-print ('original gdal option')
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
@@ -213,6 +215,8 @@ class Stitching:
         if self.nfiles==0:
             log.info('No files left after GDAL compatibility check')
             sys.exit(0)
+
+
     def __createImages__(self):
         '''
             This function will write the final merged unw and conencted component file. As intermediate step tiff   files are generated with integer values which will represent the shift to be applied to connected componenet and the moduli shift to be applied to the unwrapped phase.
@@ -271,12 +275,35 @@ class Stitching:
         # remove existing output file(s)
         for file in glob.glob(self.outFileUnw + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, srcNodata=0)
+        BuildVRT(self.outFileUnw+'.vrt', unwFiles, srcNodata=0)
+
+        from osgeo import gdal
         gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', format=self.outputFormat,
                   cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file,
                   multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
+
+
+        # ds1 = gdal.Open(self.outFileUnw)
+        # total_bbox=open_shapefile(self.setTotProdBBoxFile, 0, 0)
+        # with rio.open(self.outFileUnw) as ds2:
+        #     prof = ds2.profile
+        #
+        #
+        # with rio.open(f'{self.outFileUnw}.vrt') as ds:
+        #     out_image, out_transform = rmask.mask(ds, [total_bbox], crop=False)
+            # out_image = out_image.squeeze()
+            # prof      = ds.profile
+            # prof['transform'] = out_transform
+            # prof['width'] = out_image.shape[1]
+            # prof['height'] = out_image.shape[0]
+
+        # embed(colors='neutral')
+        # ds2 = rio.warp.reproject(out_image, src_transform=out_transform)
+
+
         # Update VRT
         gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, format="VRT")
+
         # Apply mask (if specified).
         if self.mask is not None:
             update_file = gdal.Open(self.outFileUnw, gdal.GA_Update)
@@ -396,33 +423,97 @@ class UnwrapOverlap(Stitching):
                 # connected component
                 out_data,connCompNoData1,geoTrans,proj = GDALread(self.ccFile[counter],data_band=1,loadData=False)
                 out_data,connCompNoData2,geoTrans,proj = GDALread(self.ccFile[counter+1],data_band=1,loadData=False)
-                connCompFile1 = gdal.Warp('', self.ccFile[counter], format="MEM",
-                                    cutlineDSName=outname, outputBounds=polyOverlap.bounds,
-                                    dstNodata=connCompNoData1, multithread=True,
-                                    options=['NUM_THREADS=%s'%(self.num_threads)])
-                connCompFile2 = gdal.Warp('', self.ccFile[counter+1], format="MEM",
-                                        cutlineDSName=outname, outputBounds=polyOverlap.bounds,
-                                        dstNodata=connCompNoData2, multithread=True,
-                                        options=['NUM_THREADS=%s'%(self.num_threads)])
+                # from osgeo import gdal
+                # from rasterio.vrt import WarpedVRT
+                # from rasterio import MemoryFile, Affine
+                # from rasterio.enums import Resampling
+
+                with rio.open(self.ccFile[counter]) as ds:
+                    out_image, out_transform = rmask.mask(ds, [polyOverlap], crop=True)
+                    # out_image = out_image.squeeze()
+                    # prof      = ds.profile
+                    # prof['transform'] = out_transform
+                    # prof['width'] = out_image.shape[1]
+                    # prof['height'] = out_image.shape[0]
+
+                connCompData1 = out_image.squeeze()
+
+
+                # connCompFile1 = gdal.Warp('', self.ccFile[counter], format="MEM",
+                #                     cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                #                     dstNodata=connCompNoData1, multithread=True,
+                #                     options=['NUM_THREADS=%s'%(self.num_threads)])
+
+
+                # memfile = MemoryFile()
+                # with MemoryFile() as memfile:
+                # with memfile.open(**prof) as ds:
+                #     ds.write(out_image)
+                # prof['driver'] = 'GTiff'
+                #
+                #
+                # with rio.open("temp.tif", "w", **prof) as dest:
+                #     dest.write(out_image)
+                #
+                # with rio.open("temp.tif") as src:
+                #     prof = src.profile
+                #     prof['width']  = connCompFile1.RasterXSize
+                #     prof['height']  = connCompFile1.RasterYSize
+                #     prof['transform'] = Affine.from_gdal(*connCompFile1.GetGeoTransform())
+                #     data = src.read(out_shape=(src.count, prof['height'], prof['width']),resampling=Resampling.nearest)
+                #
+                #
+                    # arr = src.read()
+
+
+
+                # connCompFile2 = gdal.Warp('', self.ccFile[counter+1], format="MEM",
+                #                         cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                #                         dstNodata=connCompNoData2, multithread=True,
+                #                         options=['NUM_THREADS=%s'%(self.num_threads)])
+                with rio.open(self.ccFile[counter+1]) as ds:
+                    out_image, out_transform = rmask.mask(ds, [polyOverlap], crop=True)
+                connCompData2 = out_image.squeeze()
+
 
 
                 # unwrapped phase
                 out_data,unwNoData1,geoTrans,proj = GDALread(self.inpFile[counter],data_band=1,loadData=False)
                 out_data,unwNoData2,geoTrans,proj = GDALread(self.inpFile[counter+1],data_band=1,loadData=False)
-                unwFile1 = gdal.Warp('', self.inpFile[counter], format="MEM",
-                                cutlineDSName=outname, outputBounds=polyOverlap.bounds,
-                                dstNodata=unwNoData1, multithread=True,
-                                options=['NUM_THREADS=%s'%(self.num_threads)])
-                unwFile2 = gdal.Warp('', self.inpFile[counter+1], format="MEM",
-                                cutlineDSName=outname, outputBounds=polyOverlap.bounds,
-                                dstNodata=unwNoData2, multithread=True,
-                                options=['NUM_THREADS=%s'%(self.num_threads)])
+                # unwFile1 = Warp('', self.inpFile[counter], format="MEM",
+                #                 cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                #                 dstNodata=unwNoData1, multithread=True,
+                #                 options=['NUM_THREADS=%s'%(self.num_threads)])
+                with rio.open(self.inpFile[counter]) as ds:
+                    out_image, out_transform = rmask.mask(ds, [polyOverlap], crop=True)
+                unwData1 = out_image.squeeze()
+
+                with rio.open(self.inpFile[counter+1]) as ds:
+                    out_image, out_transform = rmask.mask(ds, [polyOverlap], crop=True)
+                unwData2 = out_image.squeeze()
+
+                # unwFile2 = Warp('', self.inpFile[counter+1], format="MEM",
+                #                 cutlineDSName=outname, outputBounds=polyOverlap.bounds,
+                #                 dstNodata=unwNoData2, multithread=True,
+                #                 options=['NUM_THREADS=%s'%(self.num_threads)])
+
+                # robs change
+                # ulx, lry, lrx, uly = polyOverlap.bounds
+                # projWin = (ulx, uly, lrx, lry)
+
+
+                # unwFile1_rob = gdal.Translate('', self.inpFile[counter],
+                #         options=gdal.TranslateOptions(format="MEM",
+                #         projWin=projWin,
+                #         noData=unwNoData1))
+                # embed(colors='neutral')
+                # os.sys.exit()
 
 
                 # finding the component with the largest overlap
-                connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
+                # connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
                 connCompData1[(connCompData1==connCompNoData1) | (connCompData1==0)]=np.nan
-                connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
+                # connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
                 connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
                 connCompData2_temp = (connCompData2*100)
                 temp = connCompData2_temp.astype(np.int)-connCompData1.astype(np.int)
@@ -440,9 +531,9 @@ class UnwrapOverlap(Stitching):
                 # In that scenario default to different stitching approach.
                 if maxKey!=0 and maxCount>75:
                     # masking the unwrapped phase and only use the largest overlapping connected component
-                    unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
+                    # unwData1 = unwFile1.GetRasterBand(1).ReadAsArray()
                     unwData1[(unwData1==unwNoData1) | (temp!=maxKey)]=np.nan
-                    unwData2 = unwFile2.GetRasterBand(1).ReadAsArray()
+                    # unwData2 = unwFile2.GetRasterBand(1).ReadAsArray()
                     unwData2[(unwData2==unwNoData2) | (temp!=maxKey)]=np.nan
 
                     # Calculation of the range correction
@@ -478,8 +569,8 @@ class UnwrapOverlap(Stitching):
                 # closing the files
                 unwFile1 = None
                 unwFile2 = None
-                connCompFile1 = None
-                connCompFile2 = None
+                # connCompFile1 = None
+                # connCompFile2 = None
 
                 # remove the tempfile
                 shutil.os.remove(outname)
@@ -1061,6 +1152,7 @@ def polygonizeConn(ccFile):
     dst_layer = dst_ds.CreateLayer("out", srs = None)
     dst_layer.CreateField(ogr.FieldDefn("DN", ogr.OFTInteger))
     dst_field = dst_layer.GetLayerDefn().GetFieldIndex("DN")
+    import gdal
     src_ds = gdal.Open(ccFile)
     srcband = src_ds.GetRasterBand(1)
     gdal.Polygonize(srcband, None, dst_layer, dst_field, [], callback=None)
@@ -1094,13 +1186,13 @@ def polygonizeConn(ccFile):
         poly_unique.append(polylist)
 
     # track the projection and geotransform
-    data =  gdal.Open(ccFile, gdal.GA_ReadOnly)
-    geoTrans = data.GetGeoTransform()
-    proj = data.GetProjection()
-    cols = data.RasterXSize
-    rows = data.RasterYSize
+    # data =  gdal.Open(ccFile, gdal.GA_ReadOnly)
+    with rio.open(ccfile) as ds:
+        geoTrans = ds.get_transform()
+        proj = ds.crs.to_wkt()
+        cols = ds.width
+        rows = ds.height
     sizeData = [cols,rows]
-    data = None
 
     return poly_unique,ccomp_unique,geoTrans,proj,sizeData
 
@@ -1112,28 +1204,26 @@ def GDALread(filename,data_band=1,loadData=True):
 
     # open the GDAL file and get typical data information
     try:
-        data =  gdal.Open(filename, gdal.GA_ReadOnly)
+        with rio.open(filename) as ds:
+            # loading the requested band or by default all
+            if loadData:
+                out_data = ds.read()
+            else:
+                out_data = None
+            # parsing no-data
+            try:
+                NoData = ds.nodata
+            except:
+                log.warning('Could not find a no-data value...')
+                NoData = None
+
+            # getting the gdal transform and projection
+            geoTrans = ds.get_transform()
+            proj = ds.crs.to_wkt()
     except:
         raise Exception(filename + " is not a GDAL supported")
 
-    # loading the requested band or by default all
-    raster = data.GetRasterBand(data_band)
-    if loadData:
-        out_data = raster.ReadAsArray()
-    else:
-        out_data=None
-    # parsing no-data
-    try:
-        NoData = raster.GetNoDataValue()
-    except:
-        log.warning('Could not find a no-data value...')
-        NoData = None
-
-    # getting the gdal transform and projection
-    geoTrans = data.GetGeoTransform()
-    proj = data.GetProjection()
-
-    return out_data,NoData,geoTrans,proj
+    return out_data, NoData, geoTrans, proj
 
 
 def createConnComp_Int(inputs):
@@ -1182,11 +1272,11 @@ def createConnComp_Int(inputs):
     ## STEP 3: writing out the datasets
     # writing out the unqiue ID connected component file
     connDataName = os.path.abspath(os.path.join(saveDir,'connComp', saveNameID + '_connComp.tif'))
-    write_ambiguity(connData,connDataName,connProj,connGeoTrans,connNoData)
+    write_ambiguity(connData.squeeze(),connDataName,connProj,connGeoTrans,connNoData)
 
     # writing out the integer map as tiff file
     intShiftName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_intShift.tif'))
-    write_ambiguity(intShift,intShiftName,connProj,connGeoTrans)
+    write_ambiguity(intShift.squeeze(),intShiftName,connProj,connGeoTrans)
 
 
     # writing out the scalled vrt => 2PI * integer map
@@ -1210,6 +1300,7 @@ def write_ambiguity(data, outName,proj, geoTrans,noData=False):
        Write out an integer mapping in the Int16/Byte data range of values
     '''
 
+    from osgeo import gdal
     # GDAL precision support in tif
     Byte = gdal.GDT_Byte
     Int16 = gdal.GDT_Int16
@@ -1263,10 +1354,9 @@ def build2PiScaleVRT(output,File,width=False,length=False):
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
     if not width or not length:
-        ds = gdal.Open(File, gdal.GA_ReadOnly)
-        width = ds.RasterXSize
-        ysize = ds.RasterYSize
-        ds = None
+        with rio.open(File) as ds:
+            width = ds.width
+            ysize = ds.height
 
     # check if the path to the file needs to be created
     dirname = os.path.dirname(output)
@@ -1304,10 +1394,9 @@ def buildScaleOffsetVRT(output,File1,proj,geoTrans,File1_offset=0, File1_scale =
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
     if not width or not length:
-        ds = gdal.Open(File1, gdal.GA_ReadOnly)
-        width = ds.RasterXSize
-        ysize = ds.RasterYSize
-        ds = None
+        with rio.open(File) as ds:
+            width = ds.width
+            ysize = ds.height
 
     # check if the path to the file needs to be created
     dirname = os.path.dirname(output)
@@ -1344,10 +1433,9 @@ def buildSumVRT(output,File1,File2,proj,geoTrans,length=False, width=False,descr
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
     if not width or not length:
-        ds = gdal.Open(File1, gdal.GA_ReadOnly)
-        width = ds.RasterXSize
-        ysize = ds.RasterYSize
-        ds = None
+        with rio.open(File1) as ds:
+            width = ds.RasterXSize
+            ysize = ds.RasterYSize
 
     # check if the path to the file needs to be created
     dirname = os.path.dirname(output)
@@ -1390,6 +1478,7 @@ def point2unwPhase(inputs):
         yoff=0
 
     # loading a chunk of the connected component data
+    from osgeo import gdal
     ds_connFile = gdal.Open(connFile, gdal.GA_ReadOnly)
     connData=ds_connFile.ReadAsArray(xoff=xoff,yoff=yoff,xsize=region, ysize=region)
     ds_connFile = None
@@ -1418,7 +1507,7 @@ def gdalTest(file, verbose=False):
     '''
     # GDAL by default does not error out, so catch exception as error.
     # note warnings are not captured, e.g. warning in case netcdf file exist, but variable is not contained.
-    gdal.UseExceptions()
+    # gdal.UseExceptions()
 
     # DBTODO: Beyond GDAL compatible we should check if the file is GEO-CODED!
     #         e.g. use of proj, if not remove the file from list. Do not rely on .geo string in name
@@ -1426,8 +1515,9 @@ def gdalTest(file, verbose=False):
     file_success = None
     # check first if the file is GDAL compatible
     try:
-        ds = gdal.Open(file, gdal.GA_ReadOnly)
-        ds = None
+
+        with rio.open(file) as ds:
+            pass
     except:
         log.debug('%s is not GDAL compatible', file)
         return file_success
@@ -1444,9 +1534,8 @@ def gdalTest(file, verbose=False):
     try:
         # will first check if file exist, as for a netcdf file one will modify the variable and gdal will give a warning not and error
         if os.path.isfile(filetest):
-            ds = gdal.Open(filetest, gdal.GA_ReadOnly)
-            ds = None
-            log.debug("%s is GDAL compatible", filetest)
+            with rio.open(filetest) as ds:
+                log.debug("%s is GDAL compatible", filetest)
             return filetest
         else:
             log.debug("%s is GDAL compatible", file)

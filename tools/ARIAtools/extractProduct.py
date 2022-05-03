@@ -621,7 +621,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         dem_dict['lon'] = lon
         # pass chunked data
         dem_dict['chunked_dem'] = np.array_split(dem.ReadAsArray(), 100)
-        dem_dict['chunked_dem'] = [x for x in dem_dict['chunked_dem'] 
+        dem_dict['chunked_dem'] = [x for x in dem_dict['chunked_dem']
                                       if x.size > 0]
         dem_dict['chunked_lat'] = np.array_split(lat, 100)
         dem_dict['chunked_dem'] = [x for x in dem_dict['chunked_lat']
@@ -777,7 +777,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox,
     data_arr = gdal.Warp('', outname+'.vrt', \
                    options=gdal.WarpOptions(format="MEM", multithread=True, \
                    options=['NUM_THREADS=%s'%(num_threads)]))
-    
+
     #metadata layer quality check, correction applied if necessary
     data_arr = metadata_qualitycheck(data_arr, \
                      os.path.basename(os.path.dirname(outname)), outname, \
