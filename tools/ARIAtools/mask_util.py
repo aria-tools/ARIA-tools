@@ -290,7 +290,8 @@ class NLCDMasker(object):
         plt.savefig(op.join(path_mask, 'NLCD_crop.msk.png'))
 
         if test: self.__test__(ds_mask)
-
+        ds.FlushCache()
+        del ds, ds_mask, ds_resamp, ds_crop
         return dst
 
     def __test__(self, ds_maskre):

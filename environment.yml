@@ -9,6 +9,7 @@ channels:
   - defaults
 dependencies:
   - python>=3.6
+  - asf_search
   - cartopy
   - gdal>=3.2.1
   - hdf5
@@ -28,4 +29,3 @@ dependencies:
   - jupyterlab
   - jupyter_contrib_nbextensions
   - rise
-  - asf_search
