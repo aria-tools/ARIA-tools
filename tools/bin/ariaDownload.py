@@ -13,6 +13,7 @@ import math
 import re
 from datetime import datetime
 import logging
+import warnings
 import asf_search as asf
 from ARIAtools.logger import logger
 from ARIAtools.url_manager import url_versions
@@ -37,27 +38,25 @@ def createParser():
                 '\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"'
                 '\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
              formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-o', '--output', dest='output', default='Download', \
-                        type=str,
-        help='Output type, default is "Download". "Download", "Count", and "Url"'
-             '"Kmz" are currently supported. Use "Url" for ingestion to '
-             'aria*.py')
-    parser.add_argument('-t', '--track', dest='track', default=None, type=str,
+    parser.add_argument('-o', '--output', default='Download', type=str.title,
+                 choices=('Download', 'Count', 'Url'), help='Output type. '\
+                     'Default="Download". Use "Url" for ingestion to aria*.py')
+    parser.add_argument('-t', '--track', default=None, type=str,
         help='track to download; single number (including leading zeros) or '
              'comma separated')
-    parser.add_argument('-b', '--bbox', dest='bbox',  default=None, type=str,
+    parser.add_argument('-b', '--bbox',  default=None, type=str,
         help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
              'POLYGON geometry.')
     parser.add_argument('-w', '--workdir', dest='wd', default='./products', \
                         type=str,
         help='Specify directory to deposit all outputs. Default is '
              '"products" in local directory where script is launched.')
-    parser.add_argument('-s', '--start', dest='start', default='20140101', type=str,
+    parser.add_argument('-s', '--start', default='20140101', type=str,
         help='Start date as YYYYMMDD; If none provided, starts at beginning '
              'of Sentinel record (2014).')
-    parser.add_argument('-e', '--end', dest='end', default='21000101', type=str,
+    parser.add_argument('-e', '--end', default='21000101', type=str,
         help='End date as YYYYMMDD. If none provided, ends today.')
-    parser.add_argument('-u', '--user', dest='user', default=None, type=str,
+    parser.add_argument('-u', '--user', default=None, type=str,
         help='NASA Earthdata URS user login. Users must add "GRFN Door '
              '(PROD)" and "ASF Datapool Products" to their URS approved '
              'applications.')
@@ -74,21 +73,21 @@ def createParser():
         help='Take pairs with a temporal baseline -- days greater than this '
              'value. Example, annual pairs: ariaDownload.py -t 004 '
              '--daysmore 364.')
-    parser.add_argument('-nt', '--num_threads', dest='num_threads', \
-                        default='1', type=str,
+    parser.add_argument('-nt', '--num_threads', default='1', type=str,
         help='Specify number of threads for multiprocessing '
              'download. By default "1". Can also specify "All" to use all '
              'available threads.')
-    parser.add_argument('-i', '--ifg', dest='ifg', default=None, type=str,
+    parser.add_argument('-i', '--ifg', default=None, type=str,
         help='Retrieve one interferogram by its start/end date, specified as '
              'YYYYMMDD_YYYYMMDD (order independent)')
     parser.add_argument('-d', '--direction', dest='flightdir', default=None, \
                         type=str,
         help='Flight direction, options: ascending, a, descending, d')
-    parser.add_argument('--version', dest='version',  default=None,
+    parser.add_argument('--version',  default=None,
         help='Specify version as str, e.g. 2_0_4 or all prods; default: '
-             'newest')
-    parser.add_argument('-v', '--verbose', dest='v', action='store_true',
+             'newest. All products are downloaded. Unspecified versions are '
+             'stored in "workdir"/duplicated_products')
+    parser.add_argument('-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
     return parser
 
@@ -108,12 +107,6 @@ def cmdLineParse(iargs=None):
     if not inps.track and not inps.bbox:
         raise Exception('Must specify either a bbox or track')
 
-    if not inps.output.lower() in ['count', 'kmz', 'kml', 'url', 'download']:
-        raise Exception ('Incorrect output keyword. Choose "count", "kmz", '
-                         '"url", or "download"')
-
-    inps.output = 'Kml' if inps.output.lower() == 'kmz' or \
-            inps.output.lower() == 'kml' else inps.output.title()
     return inps
 
 
@@ -235,10 +228,10 @@ class Downloader(object):
         if self.inps.output == 'Count':
             log.info('\nFound -- %d -- products', len(scenes))
 
-        elif self.inps.output == 'Kml':
-            dst    = self._fmt_dst()
-            self.log.error('Kml option is not yet supported. '\
-                           'Revert to an older version of ARIAtools')
+        # elif self.inps.output == 'Kml':
+        #     dst    = fmt_dst(inps)
+        #     log.error('Kml option is not yet supported. '\
+        #                    'Revert to an older version of ARIAtools')
 
         elif self.inps.output == 'Url':
             dst  = fmt_dst(inps)
@@ -259,6 +252,9 @@ class Downloader(object):
             else:
                 scenes.download(self.inps.wd, processes=nt)
             log.info(f'Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
+
+        if inps.verbose:
+           [print (scene.geojson()['properties']['sceneName']) for scene in scenes]
 
         return
 
