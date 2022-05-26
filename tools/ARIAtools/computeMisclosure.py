@@ -149,6 +149,7 @@ class stack:
         self.basename = os.path.basename(self.imgfile)
         self.imgdir = os.path.dirname(self.imgfile)
         self.workdir = os.path.abspath(workdir)
+        self.verbose = verbose
 
         # Check if output directory exists
         if not os.path.exists(self.workdir):
@@ -164,7 +165,8 @@ class stack:
         self.excludePairs = excludePairs
 
         # Other
-        if self.verbose: logger.setLevel(logging.DEBUG)
+        if self.verbose:
+            logger.setLevel(logging.DEBUG)
 
 
         # Read stack data and retrieve list of dates

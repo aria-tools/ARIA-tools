@@ -244,6 +244,7 @@ class Downloader(object):
             scenes = asf.ASFSearchResults(scenes)
             nt     = int(self.inps.num_threads) # so legacy works
             ## allow a user to specify username / password
+            log.info (f'Downloading {len(scenes)} products...')
             if self.inps.user is not None:
                 session = asf.ASFSession()
                 session.auth_with_creds(self.inps.user, self.inps.passw)
@@ -251,7 +252,7 @@ class Downloader(object):
 
             else:
                 scenes.download(self.inps.wd, processes=nt)
-            log.info(f'Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
+            log.info(f'Download complete. Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
 
         if inps.verbose:
            [print (scene.geojson()['properties']['sceneName']) for scene in scenes]
