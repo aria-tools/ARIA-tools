@@ -30,8 +30,8 @@ jobs:
             export PATH="$HOME/miniconda/bin:$PATH"
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda install mamba -n base -c conda-forge --yes
-            mamba update -y conda
-            mamba update -y mamba
+            # mamba update -y conda
+            # mamba update -y mamba
             mamba env create -f environment.yml
 
             mamba install -c anaconda git
@@ -55,6 +55,7 @@ jobs:
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
             export VSI_CACHE=YES
             echo $CC_OT > ~/.topoapi
+            echo gdalinfo --version
             chmod 600 ~/.topoapi
             python setup.py build
             python setup.py install
