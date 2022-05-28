@@ -297,7 +297,7 @@ class SentinelMetadata:
         for date in dates:
             # Indices of frames matching non-RAW and date
             dateIndices=self.metadata[self.metadata['Common Date']==date].index
-            passIndices=set(SLCindices).intersection(dateIndices)
+            passIndices=list(set(SLCindices).intersection(dateIndices))
 
             # Sort tracks south-north and compare latitude extents
             # "satPass" refers to all the acquisitions from a single satellite pass
@@ -437,8 +437,8 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
         if flagPartialCoverage==True:
             slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
             partialIndices=self.metadata[self.metadata['Extent Covered']==False].index
-            partialIndices=set(slcIndices).intersection(partialIndices)
-            partialDates=set([date for date in self.metadata.loc[partialIndices,'Common Date']])
+            partialIndices=list(set(slcIndices).intersection(partialIndices))
+            partialDates=list(set([date for date in self.metadata.loc[partialIndices,'Common Date']]))
 
             # Change date label to red if only partial coverage
             [self.ax.get_xticklabels()[n].set_color('r') for n,date in enumerate(datelabels) if
@@ -506,7 +506,7 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
 
         for date in dates:
             dateIndices=self.metadata[self.metadata['Common Date']==date].index
-            dateIndices=set(slcIndices).intersection(dateIndices)
+            dateIndices=list(set(slcIndices).intersection(dateIndices))
 
             # Create KML layer
             layer=DS.CreateLayer(date,None,ogr.wkbPolygon)
@@ -597,7 +597,7 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
 
         # Collect indices of date
         dateIndices=self.metadata[self.metadata['Common Date']==date].index
-        dateIndices=set(slcIndices).intersection(dateIndices)
+        dateIndices=list(set(slcIndices).intersection(dateIndices))
 
         # Compute polygons
         datePolygons=[]
@@ -727,7 +727,7 @@ if __name__ == "__main__":
         print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
     except:
         pass
-        
+
     inps = cmdLineParse(iargs=None)
 
 
