@@ -293,7 +293,7 @@ class NLCDMasker(object):
         plt.savefig(f'{op.splitext(dst)[0]}.png')
 
         if test: self.__test__(ds_mask)
-
+        ds.FlushCache()
         del ds, ds1, ds_crop, ds_resamp, ds_mask
 
         return dst
