@@ -161,6 +161,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     except:
         pass
 
+    mask.FlushCache()
     return mask
 
 
@@ -252,6 +253,7 @@ class NLCDMasker(object):
         self.lc        = lc # landcover classes to mask
         gdal.PushErrorHandler('CPLQuietErrorHandler')
 
+
     def __call__(self, proj, bounds, arrshape, outputFormat='ENVI', test=False):
         """ view=True to plot the mask; test=True to apply mask to dummy data """
         import matplotlib.pyplot as plt
@@ -279,20 +281,23 @@ class NLCDMasker(object):
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
         dst = op.join(path_mask, 'NLCD_crop.msk')
-        ds  = gdal.Translate(dst, ds_mask, options=gdal.TranslateOptions(format=outputFormat, outputType=gdal.GDT_Byte))
-        gdal.BuildVRT(dst + '.vrt' ,ds)
+        ds  = gdal.Translate(dst, ds_mask, format=outputFormat, outputType=gdal.GDT_Byte)
+
+        ds1 = gdal.BuildVRT(dst+'.vrt', ds)
 
         ## save a view of the mask
         arr = ds.ReadAsArray()
         plt.imshow(arr, cmap=plt.cm.Greys_r, interpolation='nearest')
         plt.colorbar();
         plt.title(f'Resampled mask\nDims: {arr.shape}')
-        plt.savefig(op.join(path_mask, 'NLCD_crop.msk.png'))
+        plt.savefig(f'{op.splitext(dst)[0]}.png')
 
         if test: self.__test__(ds_mask)
         ds.FlushCache()
-        del ds, ds_mask, ds_resamp, ds_crop
+        del ds, ds1, ds_crop, ds_resamp, ds_mask
+
         return dst
+
 
     def __test__(self, ds_maskre):
         ## apply mask to dummy data FOR TESTING
@@ -304,6 +309,7 @@ class NLCDMasker(object):
         arr = np.where(arr>9990, np.nan, arr)
         plt.imshow(arr, cmap='jet_r', interpolation='nearest'); plt.colorbar()
         plt.title('Mask applied to dummy data'); plt.show()
+
 
     def _dummy_data(self, ds2match):
         """ Create raster of dummy data using the dem (for sizing); For test """
@@ -317,6 +323,7 @@ class NLCDMasker(object):
         ds  = arr2ds(ds2match, arr)
         arr1 = ds.ReadAsArray()
         return ds
+
 
     def _apply_mask(self, ds_mask, ds_2mask):
         """ Apply mask to test viewing """

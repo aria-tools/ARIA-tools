@@ -49,7 +49,8 @@ def createParser():
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
         help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None,
-        help='Path to director(ies) or tar file(s) containing GACOS products.')
+        help='Path to director(ies) or tar file(s) containing GACOS products. Will use new version of products (.tif) if they exist.'\
+             'Further information on GACOS available at: http://www.gacos.net.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
         help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -118,7 +119,7 @@ class InterpCube(object):
 
 class metadata_qualitycheck:
     """Metadata quality control function.
-    
+
     Artifacts recognized based off of covariance of cross-profiles.
     Bug-fix varies based off of layer of interest.
     Verbose mode generates a series of quality control plots with
@@ -1041,9 +1042,9 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                     ]
 
                 # Check and report if tropospheric product falls outside of standard product range
-                latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime'] 
+                latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime']
                                    + [min(tropo_rsc_dict['TIME_OF_DAY'])])
-                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime'] 
+                earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime']
                                    + [max(tropo_rsc_dict['TIME_OF_DAY'])])
                 delta = (earliest_end - latest_start).total_seconds() + 1
                 if delta<0:
@@ -1087,7 +1088,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             tropo_product   = np.subtract(tropo_secondary, tropo_product)
 
             # Convert troposphere to rad
-            tropo_product = np.divide(tropo_product, 
+            tropo_product = np.divide(tropo_product,
                                       float(metadata_dict[1][i][0]) \
                                       / (4*np.pi))
             # Account for lookAngle

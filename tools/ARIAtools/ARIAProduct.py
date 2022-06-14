@@ -14,12 +14,12 @@ import logging
 from osgeo import gdal
 
 from ARIAtools.url_manager import url_versions
-from ARIAtools.shapefile_util import open_shapefile,save_shapefile
+from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 from ARIAtools.logger import logger
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
-gdal.SetConfigOption('CPL_VSIL_CURL_USE_HEAD', 'NO')
+# gdal.SetConfigOption('CPL_VSIL_CURL_USE_HEAD', 'NO')
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ def unwrap_self_readproduct(arg):
     # arg is the self argument and the filename is of the file to be read
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
+    
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
     """
 
@@ -41,9 +42,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', verbose=False):
         """
-        
+
         Parse products and input bounding box (if specified)
-        
+
         """
         # If user wants verbose mode
         # Parse through file(s)/bbox input
