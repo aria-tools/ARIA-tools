@@ -13,7 +13,6 @@ import math
 import re
 from datetime import datetime
 import logging
-import warnings
 import asf_search as asf
 from ARIAtools.logger import logger
 from ARIAtools.url_manager import url_versions
@@ -255,7 +254,8 @@ class Downloader(object):
             log.info(f'Download complete. Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
 
         if inps.verbose:
-           [print (scene.geojson()['properties']['sceneName']) for scene in scenes]
+            for scene in scenes:
+                print(scene.geojson()['properties']['sceneName'])
 
         return
 
