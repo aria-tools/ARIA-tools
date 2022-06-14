@@ -280,7 +280,7 @@ class NLCDMasker(object):
         ## write mask to disk
         path_mask = op.join(self.path_aria, 'mask')
         os.mkdirs(path_mask) if not op.exists(path_mask) else ''
-        dst = op.join(path_mask, f'NLCD_crop.msk')
+        dst = op.join(path_mask, 'NLCD_crop.msk')
         ds  = gdal.Translate(dst, ds_mask, format=outputFormat, outputType=gdal.GDT_Byte)
 
         ds1 = gdal.BuildVRT(dst+'.vrt', ds)
