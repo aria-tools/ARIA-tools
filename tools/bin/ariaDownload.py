@@ -270,10 +270,10 @@ class Downloader(object):
         else:
             tracks = self.inps.track
         dct_kw = dict(platform=asf.constants.SENTINEL1,
-                    processingLevel=asf.constants.GUNW_STD,
-                    relativeOrbit=tracks,
-                    lookDirection=self.inps.flightdir,
-                    intersectsWith=bbox)
+                      processingLevel=asf.constants.GUNW_STD,
+                      relativeOrbit=tracks,
+                      lookDirection=self.inps.flightdir,
+                      intersectsWith=bbox.wkt)
         scenes = asf.geo_search(**dct_kw)
 
 
