@@ -365,7 +365,7 @@ class UnwrapOverlap(Stitching):
 
                 # determining the intersection between the two frames
                 if not bbox_frame1.intersects(bbox_frame2):
-                    log.error("Products do not overlap or were not provided in a contigious sorted list.")
+                    log.error("Products do not overlap or were not provided in a contiguous sorted list.")
                     raise Exception
                 polyOverlap = bbox_frame1.intersection(bbox_frame2)
 

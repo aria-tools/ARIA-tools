@@ -25,8 +25,41 @@ log = logging.getLogger(__name__)
 
 # Unpacking class fuction of readproduct to become global fucntion that can be called in parallel
 def unwrap_self_readproduct(arg):
-    # arg is the self argument and the filename is of the file to be read
+    """
+
+    Arg is the self argument and the filename is of the file to be read
+
+    """
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
+
+def package_dict(scene, new_scene, scene_ind, \
+                 sorted_dict = None, dict_ind = None):
+    """
+
+    Strip and prep keys and values for dictionary of sorted, spatiotemporally contiguous products
+
+    'scene' = specific reference product
+    'new_scene' = specific secondary product (same as above if appending scenes)
+    'scene_ind' = pass metadata (0) vs data layer (1) values for a given scene
+    'sorted_dict' = dictionary of sorted products to modify
+    'dict_ind' = index of sorted products dictionary being queried
+
+    """
+
+    dict_keys = scene[scene_ind].keys()
+    # initialize new entry for new IFG and extend dict
+    if not sorted_dict:
+        dict_vals = [list(a) for a in zip(scene[scene_ind].values(), \
+            new_scene[scene_ind].values())]
+    # IFG corresponding to reference product already exists, append to dict
+    if sorted_dict:
+        dict_vals = [[subitem for item in a \
+            for subitem in (item if isinstance(item, list) else [item])] \
+                for a in zip(sorted_dict[dict_ind][scene_ind].values(), \
+                    new_scene[scene_ind].values())]
+    new_dict = dict(zip(dict_keys, dict_vals))
+
+    return new_dict
 
     
 class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
@@ -35,7 +68,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
     Load ARIA standard products
 
     Load ARIA standard products and split them into
-    spatiotemporally contigeous interferograms.
+    spatiotemporally contiguous interferograms.
 
     """
     import glob
@@ -430,40 +463,30 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         num_prods = len(self.products)
         num_dups = []
         for i in enumerate(self.products[:-1]):
+            scene = i[1]
+            new_scene = self.products[i[0]+1]
             # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
-            if (self.products[i[0]+1][0]['pair_name'][9:] \
-                 == i[1][0]['pair_name'][9:]) and \
-                 (self.products[i[0]+1][0]['pair_name'][:8] \
-                 == i[1][0]['pair_name'][:8]) and \
-                 (open_shapefile( \
-                 self.products[i[0]+1][1]['productBoundingBox'], \
-                 'productBoundingBox', 1).intersection( \
-                 open_shapefile(i[1][1]['productBoundingBox'], \
-                 'productBoundingBox', 1)).area) \
-                 / (open_shapefile(i[1][1]['productBoundingBox'], \
-                 'productBoundingBox', 1).area) > 0.9:
+            same_time = (new_scene[0]['pair_name'][9:] == \
+                                      scene[0]['pair_name'][9:]) and \
+                                  (new_scene[0]['pair_name'][:8] == \
+                                      scene[0]['pair_name'][:8])
+            scene_shape = open_shapefile( \
+                scene[1]['productBoundingBox'], 'productBoundingBox', 1)
+            new_scene_shape = open_shapefile( \
+                new_scene[1]['productBoundingBox'], 'productBoundingBox', 1)
+            same_area = new_scene_shape.intersection(scene_shape).area \
+                                      / scene_shape.area
+            inv_same_area = scene_shape.intersection(new_scene_shape).area \
+                                      / new_scene_shape.area
+            if same_time and same_area > 0.9:
                 # If applicable, overwrite smaller scene with larger one
-                if (open_shapefile( \
-                     self.products[i[0]+1][1]['productBoundingBox'], \
-                     'productBoundingBox', 1).intersection( \
-                     open_shapefile(i[1][1]['productBoundingBox'], \
-                     'productBoundingBox', 1)).area) \
-                     / (open_shapefile(i[1][1]['productBoundingBox'], \
-                     'productBoundingBox', 1).area) \
-                     > (open_shapefile(i[1][1]['productBoundingBox'], \
-                     'productBoundingBox', 1).intersection( \
-                     open_shapefile( \
-                     self.products[i[0]+1][1]['productBoundingBox'], \
-                     'productBoundingBox', 1)).area) \
-                     / (open_shapefile( \
-                     self.products[i[0]+1][1]['productBoundingBox'], \
-                     'productBoundingBox', 1).area):
-                    i=(i[0]-1,self.products[i[0]+1])
+                if same_area > inv_same_area:
+                    i = (i[0]-1, new_scene)
                 log.debug("Duplicate product captured. Rejecting scene %s",
                     os.path.basename( \
-                     self.products[i[0]+1][1]['unwrappedPhase'].split('"')[1]))
+                     new_scene[1]['unwrappedPhase'].split('"')[1]))
                 # Overwrite latter scene with former
-                self.products[i[0]+1]=i[1]
+                self.products[i[0]+1] = scene
                 num_dups.append(i[0])
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in \
@@ -474,78 +497,127 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
         # If only one pair in list, add it to list.
         if len(self.products)==1:
-            sorted_products.extend([[dict(zip(self.products[0][0].keys(),
-                [list(a) for a in zip(self.products[0][0].values())])),
-                dict(zip(self.products[0][1].keys(),
-                [list(a) for a in zip(self.products[0][1].values())]))]])
+            scene = self.products[0]
+            dict_1 = package_dict(scene, scene, 0)
+            dict_2 = package_dict(scene, scene, 1)
+            new_dict = [dict_1, dict_2]
+            sorted_products.extend([new_dict])
 
         # If multiple pairs in list, cycle through and evaluate temporal connectivity.
         for i in enumerate(self.products[:-1]):
+            scene = i[1]
+            new_scene = self.products[i[0]+1]
             # Get this reference product's times
             scene_start = datetime.strptime(
-                i[1][0]['azimuthZeroDopplerMidTime'],
+                scene[0]['azimuthZeroDopplerMidTime'],
                 "%Y-%m-%dT%H:%M:%S.%f")
-            scene_end = scene_start + timedelta(seconds=i[1][0]['sceneLength'])
-            master = datetime.strptime(i[1][0]['pair_name'][9:],
+            scene_end = scene_start + \
+                timedelta(seconds=scene[0]['sceneLength'])
+            scene_t = datetime.strptime(scene[0]['pair_name'][9:],
                 "%Y%m%d")
+            scene_area = open_shapefile( \
+                                       scene[1]['productBoundingBox'],  \
+                                       'productBoundingBox', 1)
             new_scene_start = datetime.strptime(
-                self.products[i[0]+1][0]['azimuthZeroDopplerMidTime'],
+                new_scene[0]['azimuthZeroDopplerMidTime'],
                 "%Y-%m-%dT%H:%M:%S.%f")
             new_scene_end = new_scene_start + timedelta(
-                seconds = i[1][0]['sceneLength'])
-            slave = datetime.strptime(self.products[i[0]+1][0]['pair_name'][9:],
+                seconds = scene[0]['sceneLength'])
+            new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
                 "%Y%m%d")
+            new_scene_area = open_shapefile( \
+                                               new_scene[1]['productBoundingBox'], \
+                                               'productBoundingBox', 1)
 
             # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
             # If it is within same orbit cycle, try to append scene. This accounts for day change.
-            if abs(new_scene_end-scene_end) <= timedelta(minutes=100) and \
-                 abs(slave-master) <= timedelta(days=1):
+            if scene_area.intersection(new_scene_area).area > 0. and \
+                 abs(new_scene_t-scene_t) <= timedelta(days=1):
                 # Don't export product if it is already tracked as a rejected pair
-                if i[1][0]['pair_name'] in track_rejected_pairs or self.products[i[0]+1][0]['pair_name'] in track_rejected_pairs:
-                    track_rejected_pairs.extend((i[1][0]['pair_name'],self.products[i[0]+1][0]['pair_name']))
+                if scene[0]['pair_name'] in track_rejected_pairs or \
+                        new_scene[0]['pair_name'] in track_rejected_pairs:
+                    track_rejected_pairs.extend((scene[0]['pair_name'], new_scene[0]['pair_name']))
 
                 # Only pass scene if it temporally overlaps with reference scene
-                elif ((scene_end <= new_scene_start) and (new_scene_end <= scene_start)) or ((scene_end >= new_scene_start) and (new_scene_end >= scene_start)):
+                elif ((scene_end <= new_scene_start) and \
+                         (new_scene_end <= scene_start)) or \
+                         ((scene_end >= new_scene_start) and \
+                         (new_scene_end >= scene_start)):
                     # Check if dictionary for IFG corresponding to reference product already exists, and if it does then append values
                     try:
-                        dict_ind=sorted_products.index(next(item for item in sorted_products if i[1][1]['productBoundingBox'] in item[1]['productBoundingBox']))
-                        sorted_products[dict_ind]=[dict(zip(i[1][0].keys(), [[subitem for item in a for subitem in (item if isinstance(item, list) else [item])] for a in zip(sorted_products[dict_ind][0].values(), self.products[i[0]+1][0].values())])), dict(zip(i[1][1].keys(), [[subitem for item in a for subitem in (item if isinstance(item, list) else [item])] for a in zip(sorted_products[dict_ind][1].values(), self.products[i[0]+1][1].values())]))]
+                        dict_ind = sorted_products.index(next(\
+                            item for item in sorted_products \
+                            if scene[1]['productBoundingBox'] in \
+                            item[1]['productBoundingBox']))
+                        dict_1 = package_dict(scene, new_scene, 0, \
+                            sorted_products, dict_ind)
+                        dict_2 = package_dict(scene, new_scene, 1, \
+                            sorted_products, dict_ind)
+                        sorted_products[dict_ind] = [dict_1, dict_2]
                     # Match IFG corresponding to reference product NOT found, so initialize dictionary for new IFG
                     except:
-                        sorted_products.extend([[dict(zip(i[1][0].keys(), [list(a) for a in zip(i[1][0].values(), self.products[i[0]+1][0].values())])), dict(zip(i[1][1].keys(), [list(a) for a in zip(i[1][1].values(), self.products[i[0]+1][1].values())]))]])
+                        dict_1 = package_dict(scene, new_scene, 0)
+                        dict_2 = package_dict(scene, new_scene, 1)
+                        new_dict = [dict_1, dict_2]
+                        sorted_products.extend([new_dict])
 
                 #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
                 else:
-                    track_rejected_pairs.extend((i[1][0]['pair_name'], self.products[i[0]+1][0]['pair_name']))
-                    log.debug("Gap for interferogram %s", i[1][0]['pair_name'])
+                    track_rejected_pairs.extend((scene[0]['pair_name'], new_scene[0]['pair_name']))
+                    log.debug("Gap for interferogram %s", scene[0]['pair_name'])
 
             # Products correspond to different dates, so pass both as separate IFGs.
             else:
                 # Check if dictionary for IFG corresponding to reference product already exists. If not, then pass as new IFG.
-                if [item for item in sorted_products if i[1][1]['productBoundingBox'] in item[1]['productBoundingBox']]==[] and i[1][0]['pair_name'] not in track_rejected_pairs:
-                    sorted_products.extend([[dict(zip(i[1][0].keys(), [list(a) for a in zip(i[1][0].values())])), dict(zip(i[1][1].keys(), [list(a) for a in zip(i[1][1].values())]))]])
+                if [item for item in sorted_products \
+                        if scene[1]['productBoundingBox'] in \
+                            item[1]['productBoundingBox']]==[] \
+                        and scene[0]['pair_name'] not in \
+                            track_rejected_pairs:
+                    dict_1 = package_dict(scene, scene, 0)
+                    dict_2 = package_dict(scene, scene, 1)
+                    new_dict = [dict_1, dict_2]
+                    sorted_products.extend([new_dict])
                 # Check if dictionary for IFG corresponding to next product already exists. If not, then pass as new IFG.
-                if [item for item in sorted_products if self.products[i[0]+1][1]['productBoundingBox'] in item[1]['productBoundingBox']]==[] and self.products[i[0]+1][0]['pair_name'] not in track_rejected_pairs:
-                    sorted_products.extend([[dict(zip(self.products[i[0]+1][0].keys(), [list(a) for a in zip(self.products[i[0]+1][0].values())])), dict(zip(self.products[i[0]+1][1].keys(), [list(a) for a in zip(self.products[i[0]+1][1].values())]))]])
+                if [item for item in sorted_products \
+                        if new_scene[1]['productBoundingBox'] in \
+                            item[1]['productBoundingBox']]==[] \
+                        and new_scene[0]['pair_name'] not in \
+                            track_rejected_pairs:
+                    dict_1 = package_dict(new_scene, new_scene, 0)
+                    dict_2 = package_dict(new_scene, new_scene, 1)
+                    new_dict = [dict_1, dict_2]
+                    sorted_products.extend([new_dict])
 
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            log.warning("%d out of %d interferograms rejected since stitched interferogram would have gaps", len(track_rejected_pairs), len([item[0] for item in sorted_products]))
+            log.warning('%d out of %d interferograms rejected since ' \
+                        'stitched interferogram would have gaps', \
+                        len(track_rejected_pairs), \
+                        len([item[0] for item in sorted_products]))
             # Provide report of which files were kept vs. which were not.
             log.debug("Specifically, the following interferograms were rejected:")
             for item in sorted_products:
                 if item[1]['pair_name'][0] in track_rejected_pairs:
-                    log.debug(str([rejects.split('"')[1] for rejects in item[1]['productBoundingBox']]).strip('[]'))
+                    log.debug(str([rejects.split('"')[1] for rejects in \
+                              item[1]['productBoundingBox']]).strip('[]'))
         else:
-            log.info("All (%d) interferograms are spatially continuous.", len(sorted_products))
+            log.info('All (%d) interferograms are spatially continuous.', \
+                     len(sorted_products))
 
-        sorted_products=[[item[0] for item in sorted_products if (item[0]['pair_name'][0] not in track_rejected_pairs)], \
-            [item[1] for item in sorted_products if (item[1]['pair_name'][0] not in track_rejected_pairs)]]
+        sorted_products=[[item[0] for item in sorted_products \
+                              if (item[0]['pair_name'][0] \
+                              not in track_rejected_pairs)], \
+                         [item[1] for item in sorted_products \
+                              if (item[1]['pair_name'][0] \
+                              not in track_rejected_pairs)]]
 
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs were successfully selected
-            raise Exception('No valid interferogram meet spatial criteria due to gaps and/or invalid input, nothing to export.')
+            raise Exception('No valid interferogram meet spatial criteria ' \
+                            'due to gaps and/or invalid input, ' \
+                            'nothing to export.')
 
         return sorted_products
 
@@ -592,9 +664,14 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             log.warning("%d out of %d GUNW products rejected for not meeting user's bbox spatial criteria", len(self.files)-len(self.products), len(self.files))
             # Provide report of which files were kept vs. which weren't
             log.debug("Specifically, the following GUNW products were rejected:")
-            log.debug([i for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]])
+            log.debug([os.path.basename(i) for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]]) #SSSgoodnew
         else:
             log.info("All (%d) GUNW products meet spatial bbox criteria.", len(self.files))
+        #####
+        for i in enumerate(self.products[:-1]):
+            print(i[0],self.products[i[0]][0]['pair_name'], self.products[i[0]][1]['productBoundingBox'].split('"')[1])
+        #print(adjawiojawioj)
+        #####
 
         ### Split products in spatiotemporally continuous groups
         log.info("Group GUNW products into spatiotemporally continuous interferograms.")
