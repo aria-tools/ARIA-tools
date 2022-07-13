@@ -23,7 +23,8 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
-# Unpacking class fuction of readproduct to become global fucntion that can be called in parallel
+# Unpacking class fuction of readproduct to become
+# global fucntion that can be called in parallel
 def unwrap_self_readproduct(arg):
     """
 
@@ -61,8 +62,9 @@ def package_dict(scene, new_scene, scene_ind, \
 
     return new_dict
 
-    
-class ARIA_standardproduct: #Input file(s) and bbox as either list or physical shape file.
+
+#Input file(s) and bbox as either list or physical shape file.
+class ARIA_standardproduct:
     """
 
     Load ARIA standard products
@@ -90,7 +92,7 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         self.pairname = None
         self.num_threads = int(num_threads)
 
-        ### Determine if file input is single file, a list, or wildcard.
+        ### Determine if file input is single file, a list, or wildcard
         # If list of files
         if len([str(val) for val in filearg.split(',')])>1:
             self.files=[str(i) for i in filearg.split(',')]
@@ -107,12 +109,13 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         else:
             # If single file
             if os.path.isfile(filearg):
-                self.files=[filearg]
+                self.files = [filearg]
             # If wildcard
             else:
-                self.files=self.glob.glob(os.path.expanduser(os.path.expandvars(filearg)))
+                self.files = self.glob.glob(os.path.expanduser( \
+                    os.path.expandvars(filearg)))
             # Convert relative paths to absolute paths
-            self.files=[os.path.abspath(i) for i in self.files]
+            self.files = [os.path.abspath(i) for i in self.files]
 
         # capture and remove duplicate files (if applicable)
         self.files = url_versions(self.files, url_version,
@@ -136,14 +139,20 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             #gdal.SetConfigOption('CPL_VSIL_CURL_CHUNK_SIZE','10485760')
             gdal.SetConfigOption('VSI_CACHE','YES')
 
-            fmt=gdal.Open([s for s in self.files if 'https://' in s][0]).GetDriver().GetDescription()
-            if fmt != 'netCDF': raise Exception ('System update required to ' \
-                'read requested virtual products: Linux kernel >=4.3 and libnetcdf >=4.5')
+            fmt=gdal.Open( \
+                [s for s in self.files if 'https://' in s][0] \
+                ).GetDriver().GetDescription()
+            if fmt != 'netCDF': raise Exception('System update required to '
+                'read requested virtual products: '
+                'Linux kernel >=4.3 and libnetcdf >=4.5')
         #check if local file reader is being captured as netcdf
         if any("https://" not in i for i in self.files):
-            fmt=gdal.Open([s for s in self.files if 'https://' not in s][0]).GetDriver().GetDescription()
-            if fmt != 'netCDF': raise Exception ('System update required to' \
-                'read requested local products: Linux kernel >=4.3 and libnetcdf >=4.5')
+            fmt = gdal.Open( \
+                [s for s in self.files if 'https://' not in s][0] \
+                ).GetDriver().GetDescription()
+            if fmt != 'netCDF': raise Exception('System update required to '
+                'read requested local products: '
+                'Linux kernel >=4.3 and libnetcdf >=4.5')
 
         if len(self.files)==0:
             raise Exception('No file match found')
@@ -154,7 +163,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         ### Check if bbox input is valid list or shapefile.
         if bbox is not None:
             # If list
-            if isinstance ([str(val) for val in bbox.split()], list) and not os.path.isfile(bbox):
+            if isinstance ([str(val) for val in bbox.split()], list) \
+                and not os.path.isfile(bbox):
                 from shapely.geometry import Polygon
                 try:
                     bbox = [float(val) for val in bbox.split()]
@@ -162,17 +172,19 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     raise Exception('Cannot understand the --bbox argument.' \
                         'String input is incorrect or path does not exist.')
                 # Use shapely to make list
-                self.bbox = Polygon(np.column_stack((np.array([bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]),
-                            np.array([bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]])))) #Pass lons/lats to create polygon
+                # Pass lons/lats to create polygon
+                self.bbox = Polygon(np.column_stack((np.array( \
+                    [bbox[2],bbox[3],bbox[3],bbox[2],bbox[2]]), np.array(\
+                    [bbox[0],bbox[0],bbox[1],bbox[1],bbox[0]]))))
                 # Save polygon in shapefile
                 save_shapefile(os.path.join(workdir,'user_bbox.json'),
                               self.bbox, 'GeoJSON')
                 self.bbox_file=os.path.join(workdir,'user_bbox.json')
-                log.info("Shapefile %s created for input user bounds.",
+                log.info('Shapefile %s created for input user bounds',
                          os.path.join(workdir,'user_bbox.json'))
             # If shapefile
             elif os.path.isfile(bbox):
-                self.bbox = open_shapefile(bbox, 0, 0)                       ##SS => We should track the projection of the shapefile. i.e. if user provides this in e.g. UTM etc.
+                self.bbox = open_shapefile(bbox, 0, 0)
                 self.bbox_file = bbox
             else:
                 raise Exception('bbox input neither valid list nor file')
@@ -208,7 +220,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         if self.bbox is not None:
             file_bbox = open_shapefile(fname + '":'+sdskeys[0],
                                        'productBoundingBox', 1)
-            # Only generate dictionaries if there is spatial overlap with user bbox
+            # Only generate dictionaries if there is spatial overlap
+            # with user bbox
             if file_bbox.intersects(self.bbox):
                 product_dicts = [self.__mappingData__( \
                                  fname, rmdkeys, sdskeys, version)]
@@ -253,8 +266,12 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 'azimuthAngle', 'ionosphere']
 
             #Pass pair name
-            read_file=netCDF4.Dataset(fname, keepweakref=True).groups['science'].groups['radarMetaData'].groups['inputSLC']
-            self.pairname=read_file.groups['reference']['L1InputGranules'][:][0][17:25] +'_'+ read_file.groups['secondary']['L1InputGranules'][:][0][17:25]
+            read_file=netCDF4.Dataset(fname, keepweakref=True \
+                ).groups['science'].groups['radarMetaData'].groups['inputSLC']
+            self.pairname = \
+               read_file.groups['reference']['L1InputGranules'][:][0][17:25] \
+               + '_'+ \
+               read_file.groups['secondary']['L1InputGranules'][:][0][17:25]
             del read_file
 
         return rmdkeys, sdskeys
@@ -274,9 +291,11 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         """
         import netCDF4
         # Expected radarmetadata
-        radarkeys=['missionID', 'wavelength', 'centerFrequency', 'productType',
-        'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold', 'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime',
-        'azimuthTimeInterval', 'slantRangeSpacing', 'slantRangeEnd', 'slantRangeStart']
+        radarkeys=['missionID', 'wavelength', 'centerFrequency',
+        'productType', 'ISCEversion', 'unwrapMethod', 'DEM',
+        'ESDthreshold', 'azimuthZeroDopplerStartTime',
+        'azimuthZeroDopplerEndTime',  'azimuthTimeInterval',
+        'slantRangeSpacing', 'slantRangeEnd', 'slantRangeStart']
 
         # Expected layers
         layerkeys=['productBoundingBox','unwrappedPhase',
@@ -285,7 +304,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         'azimuthAngle','ionosphere']
 
         # Parse radarmetadata
-        rdrmetadata = netCDF4.Dataset(fname, keepweakref=True, diskless=True).groups['science'].groups['radarMetaData']
+        rdrmetadata = netCDF4.Dataset(fname, keepweakref=True, \
+            diskless=True).groups['science'].groups['radarMetaData']
         rdrmetakeys = list(rdrmetadata.variables.keys())
         rdrmetadata_dict={}
 
@@ -306,13 +326,17 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         for i in sdsdict.items():
             #If layer expected
             try:
-                datalyr_dict[layerkeys[sdskeys.index(i[1].split(':')[-1].split('/')[-1])]]=i[1]
+                datalyr_dict[layerkeys[sdskeys.index( \
+                    i[1].split(':')[-1].split('/')[-1])]] = i[1]
             #If new, unaccounted layer not expected in layerkeys
             except:
                 log.warning("Data layer key %s not expected in sdskeys", i[1])
         datalyr_dict['pair_name']=self.pairname
-        # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
-        datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
+        # 'productBoundingBox' will be updated to point to shapefile
+        # corresponding to final output raster, so record of
+        # individual frames preserved here
+        datalyr_dict['productBoundingBoxFrames'] = \
+            datalyr_dict['productBoundingBox']
 
         # remove temp variables
         del rdrmetadata, sdsdict
@@ -334,8 +358,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         "layerkeys" inside the mappingData function.
 
         """
-        # ARIA standard product version 1a and 1b have same mapping
-        # ARIA standard product version 1c differs with inclusion of ionosphere layer
+        # ARIA standard prod v1a and 1b have same mapping
+        # ARIA standard prod v1c differs with inclusion of ionosphere layer
         rdrmetadata_dict={}
         if version.lower() in ['1a', '1b', '1c']:
             #Pass pair name
@@ -364,7 +388,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 rdrmetadata_dict['slantRangeSpacing'] = 2.329562187194824
                 rdrmetadata_dict['slantRangeStart'] = 798980.125
                 rdrmetadata_dict['slantRangeEnd'] = 956307.125
-                #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
+                #hardcoded key meant to gauge temporal connectivity of scenes
+                # (i.e. seconds between start and end)
                 rdrmetadata_dict['sceneLength'] = 35
             elif basename.split('-')[0] == 'ALOS2':
                 rdrmetadata_dict['missionID'] = 'ALOS-2'
@@ -374,7 +399,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                 rdrmetadata_dict['slantRangeSpacing'] = 8.582534
                 rdrmetadata_dict['slantRangeStart'] = 695397.
                 rdrmetadata_dict['slantRangeEnd'] = 913840.2
-                #hardcoded key meant to gauge temporal connectivity of scenes (i.e. seconds between start and end)
+                #hardcoded key meant to gauge temporal connectivity of scenes
+                # (i.e. seconds between start and end)
                 rdrmetadata_dict['sceneLength'] = 52
             else:
                 raise Exception('Sensor %s for file %s not supported.' \
@@ -430,8 +456,11 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             except:
                 log.warning("Data layer key %s not expected in sdskeys", i[1])
         datalyr_dict['pair_name']=self.pairname
-        # 'productBoundingBox' will be updated to point to shapefile corresponding to final output raster, so record of indivdual frames preserved here
-        datalyr_dict['productBoundingBoxFrames']=datalyr_dict['productBoundingBox']
+        # 'productBoundingBox' will be updated to point to shapefile
+        # corresponding to final output raster, so record of
+        # indivdual frames preserved here
+        datalyr_dict['productBoundingBoxFrames'] = \
+            datalyr_dict['productBoundingBox']
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -465,7 +494,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         for i in enumerate(self.products[:-1]):
             scene = i[1]
             new_scene = self.products[i[0]+1]
-            # If scenes share >90% spatial overlap AND same dates, they MUST be duplicates. Reject the latter.
+            # If scenes share >90% spatial overlap AND same dates
+            # they MUST be duplicates. Reject the latter.
             same_time = (new_scene[0]['pair_name'][9:] == \
                                       scene[0]['pair_name'][9:]) and \
                                   (new_scene[0]['pair_name'][:8] == \
@@ -503,72 +533,65 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
             new_dict = [dict_1, dict_2]
             sorted_products.extend([new_dict])
 
-        # If multiple pairs in list, cycle through and evaluate temporal connectivity.
+        # If multiple pairs in list
+        # cycle through and evaluate temporal connectivity
         for i in enumerate(self.products[:-1]):
             scene = i[1]
             new_scene = self.products[i[0]+1]
-            # Get this reference product's times
-            scene_start = datetime.strptime(
-                scene[0]['azimuthZeroDopplerMidTime'],
-                "%Y-%m-%dT%H:%M:%S.%f")
-            scene_end = scene_start + \
-                timedelta(seconds=scene[0]['sceneLength'])
             scene_t = datetime.strptime(scene[0]['pair_name'][9:],
                 "%Y%m%d")
             scene_area = open_shapefile( \
                                        scene[1]['productBoundingBox'],  \
                                        'productBoundingBox', 1)
-            new_scene_start = datetime.strptime(
-                new_scene[0]['azimuthZeroDopplerMidTime'],
-                "%Y-%m-%dT%H:%M:%S.%f")
-            new_scene_end = new_scene_start + timedelta(
-                seconds = scene[0]['sceneLength'])
             new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
                 "%Y%m%d")
             new_scene_area = open_shapefile( \
                                                new_scene[1]['productBoundingBox'], \
                                                'productBoundingBox', 1)
 
-            # Determine if next product in time is in same orbit AND overlaps AND corresponds to same pair
-            # If it is within same orbit cycle, try to append scene. This accounts for day change.
+            # Only pass scene if it temporally (i.e. in same orbit)
+            # and spatially overlaps with reference scene
             if scene_area.intersection(new_scene_area).area > 0. and \
                  abs(new_scene_t-scene_t) <= timedelta(days=1):
-                # Don't export product if it is already tracked as a rejected pair
+                # Do not export prod if already tracked as a rejected pair
                 if scene[0]['pair_name'] in track_rejected_pairs or \
-                        new_scene[0]['pair_name'] in track_rejected_pairs:
-                    track_rejected_pairs.extend((scene[0]['pair_name'], new_scene[0]['pair_name']))
+                     new_scene[0]['pair_name'] in track_rejected_pairs:
+                    track_rejected_pairs.extend((scene[0]['pair_name'], \
+                        new_scene[0]['pair_name']))
+                    continue    
+                # Check if IFG dict corresponding to ref prod already exists
+                # and if it does then append values
+                try:
+                    dict_ind = sorted_products.index(next(\
+                                     item for item in sorted_products \
+                                     if scene[1]['productBoundingBox'] in \
+                                     item[1]['productBoundingBox']))
+                    dict_1 = package_dict(scene, new_scene, 0, \
+                                     sorted_products, dict_ind)
+                    dict_2 = package_dict(scene, new_scene, 1, \
+                                     sorted_products, dict_ind)
+                    sorted_products[dict_ind] = [dict_1, dict_2]
+                # Match IFG corresponding to reference product NOT found
+                # so initialize dictionary for new IFG
+                except:
+                    dict_1 = package_dict(scene, new_scene, 0)
+                    dict_2 = package_dict(scene, new_scene, 1)
+                    new_dict = [dict_1, dict_2]
+                    sorted_products.extend([new_dict])
+                    
+            # If pairs are within the same day
+            # but do not intersect this means there is a gap
+            # Reject date from prod list, and keep track of all failed dates
+            elif scene_area.intersection(new_scene_area).area == 0. and \
+                 abs(new_scene_t-scene_t) <= timedelta(days=1):
+                track_rejected_pairs.extend((scene[0]['pair_name'], \
+                    new_scene[0]['pair_name']))
+                log.debug("Gap for interferogram %s \n", scene[0]['pair_name'])
 
-                # Only pass scene if it temporally overlaps with reference scene
-                elif ((scene_end <= new_scene_start) and \
-                         (new_scene_end <= scene_start)) or \
-                         ((scene_end >= new_scene_start) and \
-                         (new_scene_end >= scene_start)):
-                    # Check if dictionary for IFG corresponding to reference product already exists, and if it does then append values
-                    try:
-                        dict_ind = sorted_products.index(next(\
-                            item for item in sorted_products \
-                            if scene[1]['productBoundingBox'] in \
-                            item[1]['productBoundingBox']))
-                        dict_1 = package_dict(scene, new_scene, 0, \
-                            sorted_products, dict_ind)
-                        dict_2 = package_dict(scene, new_scene, 1, \
-                            sorted_products, dict_ind)
-                        sorted_products[dict_ind] = [dict_1, dict_2]
-                    # Match IFG corresponding to reference product NOT found, so initialize dictionary for new IFG
-                    except:
-                        dict_1 = package_dict(scene, new_scene, 0)
-                        dict_2 = package_dict(scene, new_scene, 1)
-                        new_dict = [dict_1, dict_2]
-                        sorted_products.extend([new_dict])
-
-                #Else if scene doesn't overlap, this means there is a gap. Reject date from product list, and keep track of all failed dates
-                else:
-                    track_rejected_pairs.extend((scene[0]['pair_name'], new_scene[0]['pair_name']))
-                    log.debug("Gap for interferogram %s", scene[0]['pair_name'])
-
-            # Products correspond to different dates, so pass both as separate IFGs.
+            # If prods correspond to different orbits entirely
             else:
-                # Check if dictionary for IFG corresponding to reference product already exists. If not, then pass as new IFG.
+                # Check if IFG dict corresponding to ref prod already exists
+                # and if it does not then pass as new IFG
                 if [item for item in sorted_products \
                         if scene[1]['productBoundingBox'] in \
                             item[1]['productBoundingBox']]==[] \
@@ -578,7 +601,8 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                     dict_2 = package_dict(scene, scene, 1)
                     new_dict = [dict_1, dict_2]
                     sorted_products.extend([new_dict])
-                # Check if dictionary for IFG corresponding to next product already exists. If not, then pass as new IFG.
+                # Check if IFG dict corresponding to ref prod already exists
+                # and if it does not then pass as new IFG
                 if [item for item in sorted_products \
                         if new_scene[1]['productBoundingBox'] in \
                             item[1]['productBoundingBox']]==[] \
@@ -592,16 +616,22 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            log.warning('%d out of %d interferograms rejected since ' \
+            log.warning('%d out of %d interferograms rejected since ' 
                         'stitched interferogram would have gaps', \
                         len(track_rejected_pairs), \
                         len([item[0] for item in sorted_products]))
-            # Provide report of which files were kept vs. which were not.
-            log.debug("Specifically, the following interferograms were rejected:")
+            # Provide report of which files were kept vs. which were not
+            log.debug('Specifically, gaps were found between the '
+                        'following interferograms:')
+            record_rejected_scenes = []
             for item in sorted_products:
                 if item[1]['pair_name'][0] in track_rejected_pairs:
-                    log.debug(str([rejects.split('"')[1] for rejects in \
-                              item[1]['productBoundingBox']]).strip('[]'))
+                    record_rejected_scenes.extend([rejects.split('"')[1] \
+                         for rejects in item[1]['productBoundingBox']])
+            record_rejected_scenes = list(set(record_rejected_scenes))
+            record_rejected_scenes = [os.path.basename(i) \
+                 for i in record_rejected_scenes]
+            [log.debug(i) for i in record_rejected_scenes]
         else:
             log.info('All (%d) interferograms are spatially continuous.', \
                      len(sorted_products))
@@ -614,9 +644,9 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
                               not in track_rejected_pairs)]]
 
         ###Report dictionaries for all valid products
-        if sorted_products==[[], []]: #Check if pairs were successfully selected
-            raise Exception('No valid interferogram meet spatial criteria ' \
-                            'due to gaps and/or invalid input, ' \
+        if sorted_products==[[], []]: #Check if pairs successfully selected
+            raise Exception('No valid interferogram meet spatial criteria ' 
+                            'due to gaps and/or invalid input, ' 
                             'nothing to export.')
 
         return sorted_products
@@ -624,13 +654,15 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
 
     def __run__(self):
         # Only populate list of dictionaries if the file intersects with bbox
-        # will try multi-core version (if multiple files are passed) and default to for loop in case of failure
+        # will try multi-core version (if multiple files are passed)
+        # and default to for loop in case of failure
 
         if len(self.files)>1:
             if self.num_threads > 1:
                 try:
                     log.info('Multi-core version')
-                    # would probably be better not to write to the same self, and concatenate at completion.
+                    # would probably be better not to write to the same self,
+                    # and concatenate at completion.
                     self.products += Parallel(n_jobs= -1, max_nbytes=1e6)(
                                 delayed(unwrap_self_readproduct)(i) for i in
                                         zip([self]*len(self.files), self.files))
@@ -655,26 +687,29 @@ class ARIA_standardproduct: #Input file(s) and bbox as either list or physical s
         if not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products) \
             and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products):
             raise Exception('Specified input contains standard products from '
-                'different sensors, please proceed with homogeneous products.')
+                'different sensors, please proceed with homogeneous products')
 
         # Check if any pairs meet criteria
         if self.products==[]:
-            raise Exception('No valid pairs meet spatial criteria, nothing to export.')
+            raise Exception('No valid pairs meet spatial criteria, nothing '
+                'to export.')
         if len(self.products)!=len(self.files):
-            log.warning("%d out of %d GUNW products rejected for not meeting user's bbox spatial criteria", len(self.files)-len(self.products), len(self.files))
+            log.warning('%d out of %d GUNW products rejected for not meeting '
+                'users bbox spatial criteria', \
+                len(self.files)-len(self.products), len(self.files))
             # Provide report of which files were kept vs. which weren't
-            log.debug("Specifically, the following GUNW products were rejected:")
-            log.debug([os.path.basename(i) for i in self.files if i not in [i[1]['productBoundingBox'].split('"')[1] for i in self.products]]) #SSSgoodnew
+            log.debug('Specifically, the following GUNW products '
+                'were rejected:')
+            log.debug([os.path.basename(i) for i in self.files if i not in \
+                [i[1]['productBoundingBox'].split('"')[1] \
+                for i in self.products]])
         else:
-            log.info("All (%d) GUNW products meet spatial bbox criteria.", len(self.files))
-        #####
-        for i in enumerate(self.products[:-1]):
-            print(i[0],self.products[i[0]][0]['pair_name'], self.products[i[0]][1]['productBoundingBox'].split('"')[1])
-        #print(adjawiojawioj)
-        #####
+            log.info('All (%d) GUNW products meet spatial bbox criteria.', \
+                len(self.files))
 
         ### Split products in spatiotemporally continuous groups
-        log.info("Group GUNW products into spatiotemporally continuous interferograms.")
+        log.info('Group GUNW products into spatiotemporally  '
+                'continuous interferograms.')
         self.products = self.__continuous_time__()
 
         return self.products
