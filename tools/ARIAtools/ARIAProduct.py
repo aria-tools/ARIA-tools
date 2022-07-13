@@ -558,7 +558,7 @@ class ARIA_standardproduct:
                      new_scene[0]['pair_name'] in track_rejected_pairs:
                     track_rejected_pairs.extend((scene[0]['pair_name'], \
                         new_scene[0]['pair_name']))
-                    continue    
+                    continue
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
                 try:
@@ -616,7 +616,7 @@ class ARIA_standardproduct:
         # Remove duplicate dates
         track_rejected_pairs=list(set(track_rejected_pairs))
         if len(track_rejected_pairs)>0:
-            log.warning('%d out of %d interferograms rejected since ' 
+            log.warning('%d out of %d interferograms rejected since '
                         'stitched interferogram would have gaps', \
                         len(track_rejected_pairs), \
                         len([item[0] for item in sorted_products]))
@@ -631,7 +631,8 @@ class ARIA_standardproduct:
             record_rejected_scenes = list(set(record_rejected_scenes))
             record_rejected_scenes = [os.path.basename(i) \
                  for i in record_rejected_scenes]
-            [log.debug(i) for i in record_rejected_scenes]
+            for i in record_rejected_scenes:
+                log.debug(i)
         else:
             log.info('All (%d) interferograms are spatially continuous.', \
                      len(sorted_products))
@@ -645,8 +646,8 @@ class ARIA_standardproduct:
 
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs successfully selected
-            raise Exception('No valid interferogram meet spatial criteria ' 
-                            'due to gaps and/or invalid input, ' 
+            raise Exception('No valid interferogram meet spatial criteria '
+                            'due to gaps and/or invalid input, '
                             'nothing to export.')
 
         return sorted_products
