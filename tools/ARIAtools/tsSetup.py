@@ -142,13 +142,13 @@ def extract_meta_dict(aria_prod, metadata):
     """Extract metadata from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
-    for i in aria_prod.products[1]:
-        meta_name = i[metadata][0]
-        data_set = gdal.Open(meta_name)
+    for prod in aria_prod.products[1]:
+        meta_name = prod[metadata][0]
+        # data_set = gdal.Open(meta_name)
         # return [min, max, mean, std]
-        stat = data_set.GetRasterBand(1).GetStatistics(True, True)
-        meta[i['pair_name'][0]] = stat[2]
-        data_set = None
+        # stat = data_set.GetRasterBand(1).GetStatistics(True, True)
+        meta[prod['pair_name'][0]] = 0
+        # data_set = None
 
     return meta
 
@@ -193,15 +193,14 @@ def generate_stack(aria_prod, input_files, output_file_name,
 
     # Progress bar
     prog_bar = progBar.progressBar(maxValue=len(aria_prod.products[1]),
-                                   print_msg='Creating stack:')
+                                   print_msg='Creating stack: ')
 
     # Set up single stack file
     if not os.path.exists(os.path.join(workdir, 'stack')):
-        print('Creating directory: {0}'.format(os.path.join(workdir, 'stack')))
+        print('Creating directory: {os.path.join(workdir, "stack")}')
         os.makedirs(os.path.join(workdir, 'stack'))
     else:
-        print('Directory {0} already exists.'.format(os.path.join(
-              workdir, 'stack')))
+        print(f'Directory {os.path.join(workdir, "stack")} already exists.')
 
     if input_files in ['unwrappedPhase', 'unwrapped', 'unw']:
         domain_name = 'unwrappedPhase'
