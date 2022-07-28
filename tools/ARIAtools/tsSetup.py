@@ -143,7 +143,7 @@ def extract_meta_dict(aria_prod, metadata):
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
     for prod in aria_prod.products[1]:
-        meta_name = prod[metadata][0]
+        # meta_name = prod[metadata][0]
         # data_set = gdal.Open(meta_name)
         # return [min, max, mean, std]
         # stat = data_set.GetRasterBand(1).GetStatistics(True, True)
