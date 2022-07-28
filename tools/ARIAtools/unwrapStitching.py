@@ -365,7 +365,7 @@ class UnwrapOverlap(Stitching):
 
                 # determining the intersection between the two frames
                 if not bbox_frame1.intersects(bbox_frame2):
-                    log.error("Products do not overlap or were not provided in a contigious sorted list.")
+                    log.error("Products do not overlap or were not provided in a contiguous sorted list.")
                     raise Exception
                 polyOverlap = bbox_frame1.intersection(bbox_frame2)
 
@@ -382,17 +382,45 @@ class UnwrapOverlap(Stitching):
                 # will first attempt to mask out connected component 0, and default to complete overlap if this fails.
                 # Cropping the unwrapped phase and connected component to the overlap region alone, inhereting the no-data.
                 # connected component
-                out_data,connCompNoData1,geoTrans,proj = GDALread(self.ccFile[counter],data_band=1,loadData=False)
-                out_data,connCompNoData2,geoTrans,proj = GDALread(self.ccFile[counter+1],data_band=1,loadData=False)
-                connCompFile1 = gdal.Warp('', self.ccFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData1))
-                connCompFile2 = gdal.Warp('', self.ccFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=connCompNoData2))
+                out_data,connCompNoData1,geoTrans,proj = GDALread( \
+                    self.ccFile[counter],data_band=1,loadData=False)
+                out_data,connCompNoData2,geoTrans,proj = GDALread( \
+                    self.ccFile[counter+1],data_band=1,loadData=False)
+                connCompFile1 = gdal.Warp( \
+                    '', self.ccFile[counter], options = gdal.WarpOptions( \
+                    format="MEM", cutlineDSName=outname, \
+                    outputBounds=polyOverlap.bounds, \
+                    dstNodata=connCompNoData1))
+                # need to specify spacing to avoid inconsistent dimensions
+                arrshape = connCompFile1.ReadAsArray().shape
+                connCompFile2 = gdal.Warp( \
+                    '', self.ccFile[counter+1], options=gdal.WarpOptions( \
+                    format="MEM", cutlineDSName=outname, \
+                    outputBounds=polyOverlap.bounds, \
+                    dstNodata=connCompNoData2, \
+                    width = arrshape[1], height = arrshape[0], \
+                    multithread = True))
 
 
                 # unwrapped phase
-                out_data,unwNoData1,geoTrans,proj = GDALread(self.inpFile[counter],data_band=1,loadData=False)
-                out_data,unwNoData2,geoTrans,proj = GDALread(self.inpFile[counter+1],data_band=1,loadData=False)
-                unwFile1 = gdal.Warp('', self.inpFile[counter], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData1))
-                unwFile2 = gdal.Warp('', self.inpFile[counter+1], options=gdal.WarpOptions(format="MEM", cutlineDSName=outname, outputBounds=polyOverlap.bounds, dstNodata=unwNoData2))
+                out_data,unwNoData1,geoTrans,proj = GDALread( \
+                    self.inpFile[counter],data_band=1,loadData=False)
+                out_data,unwNoData2,geoTrans,proj = GDALread( \
+                    self.inpFile[counter+1],data_band=1,loadData=False)
+                unwFile1 = gdal.Warp( \
+                    '', self.inpFile[counter], options=gdal.WarpOptions( \
+                    format="MEM", cutlineDSName=outname, \
+                    outputBounds=polyOverlap.bounds, \
+                    dstNodata=unwNoData1, \
+                    width = arrshape[1], height = arrshape[0], \
+                    multithread = True))
+                unwFile2 = gdal.Warp( \
+                    '', self.inpFile[counter+1], options=gdal.WarpOptions( \
+                    format="MEM", cutlineDSName=outname, \
+                    outputBounds=polyOverlap.bounds, \
+                    dstNodata=unwNoData2, \
+                    width = arrshape[1], height = arrshape[0], \
+                    multithread = True))
 
 
                 # finding the component with the largest overlap

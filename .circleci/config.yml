@@ -34,9 +34,9 @@ jobs:
             # mamba update -y mamba
             mamba env create -f environment.yml
 
-            mamba install -c anaconda git
-            mamba install -c anaconda wget
             conda activate ARIA-tools
+
+            mamba install -c conda-forge git wget pyresample
 
             echo "machine urs.earthdata.nasa.gov login $URSname password $URSkey" > ~/.netrc
             chmod 600 ~/.netrc
