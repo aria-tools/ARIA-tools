@@ -17,7 +17,6 @@ import multiprocessing
 from collections import defaultdict
 from datetime import datetime
 from osgeo import gdal
-print('gdal.VersionInfo()',gdal.VersionInfo())
 
 # Import functions
 from ARIAtools import progBar
@@ -139,17 +138,22 @@ def cmd_line_parse(iargs=None):
     return parser.parse_args(args=iargs)
 
 
-def extract_meta_dict(aria_prod, metadata):
+def extract_meta_dict(domain_name, aria_prod, metadata):
     """Extract metadata from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
-    for i in aria_prod.products[1]:
-        meta_name = i[metadata][0]
-        data_set = gdal.Open(meta_name)
-        # return [min, max, mean, std]
-        stat = data_set.GetRasterBand(1).GetStatistics(True, True)
-        meta[i['pair_name'][0]] = stat[2]
-        data_set = None
+    for i in aria_prod:
+        pair_name = i[-21:-4]
+        # only get stats for unw file
+        # otherwise pass a dummy value
+        if domain_name == 'unwrappedPhase':
+            data_set = gdal.Open(i)
+            # return [min, max, mean, std]
+            stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
+            data_set = None
+        else:
+            stat = 0
+        meta[pair_name] = stat
 
     return meta
 
@@ -186,7 +190,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
                    workdir='./', ref_dlist=None):
     """Generate time series stack."""
     utc_time = extract_utc_time(aria_prod)
-    b_perp = 0
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
@@ -202,7 +205,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
 
     if input_files in ['unwrappedPhase', 'unwrapped', 'unw']:
         domain_name = 'unwrappedPhase'
-        b_perp = extract_meta_dict(aria_prod, 'bPerpendicular')
         int_list = glob.glob(os.path.join(workdir, 'unwrappedPhase',
                              '[0-9]*[0-9].vrt'))
         data_type = "Float32"
@@ -242,6 +244,9 @@ def generate_stack(aria_prod, input_files, output_file_name,
     else:
         print('Stacks can be created for unwrapped interferogram, '
               'coherence and connectedComponent VRT files')
+
+    # get bperp value
+    b_perp = extract_meta_dict(domain_name, dlist, 'bPerpendicular')
 
     # Confirm 1-to-1 match between UNW and other derived products
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
