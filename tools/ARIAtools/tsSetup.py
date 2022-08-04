@@ -142,13 +142,13 @@ def extract_meta_dict(aria_prod, metadata):
     """Extract metadata from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
-    for prod in aria_prod.products[1]:
-        # meta_name = prod[metadata][0]
-        # data_set = gdal.Open(meta_name)
+    for i in aria_prod.products[1]:
+        meta_name = i[metadata][0]
+        data_set = gdal.Open(meta_name)
         # return [min, max, mean, std]
-        # stat = data_set.GetRasterBand(1).GetStatistics(True, True)
-        meta[prod['pair_name'][0]] = 0
-        # data_set = None
+        stat = data_set.GetRasterBand(1).GetStatistics(True, True)
+        meta[i['pair_name'][0]] = stat[2]
+        data_set = None
 
     return meta
 
@@ -186,9 +186,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
     """Generate time series stack."""
     utc_time = extract_utc_time(aria_prod)
     b_perp = extract_meta_dict(aria_prod, 'bPerpendicular')
-    inc_angle = extract_meta_dict(aria_prod, 'incidenceAngle')
-    look_ang = extract_meta_dict(aria_prod, 'lookAngle')
-    azimuth_ang = extract_meta_dict(aria_prod, 'azimuthAngle')
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
@@ -323,9 +320,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
                           dates, os.path.dirname(data[1]))
                 continue
             metadata['bPerp'] = b_perp[dates]
-            metadata['incAng'] = inc_angle[dates]
-            metadata['lookAng'] = look_ang[dates]
-            metadata['azimuthAng'] = azimuth_ang[dates]
             if orbit_direction == 'D':
                 metadata['orbit_direction'] = 'DESCENDING'
             elif orbit_direction == 'A':
@@ -350,9 +344,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
             <MDI key="Wavelength (m)">{wvl}</MDI>
             <MDI key="UTCTime (HH:MM:SS.ss)">{acq}</MDI>
             <MDI key="perpendicularBaseline">{b_perp}</MDI>
-            <MDI key="incidenceAngle">{inc_angle}</MDI>
-            <MDI key="lookAngle">{look_ang}</MDI>
-            <MDI key="azimuthAngle">{azimuth_ang}</MDI>
             <MDI key="startRange">{start_range}</MDI>
             <MDI key="endRange">{end_range}</MDI>
             <MDI key="slantRangeSpacing">{range_spacing}</MDI>
@@ -365,9 +356,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
                                  wvl=metadata['wavelength'], index=data[0]+1,
                                  path=path, data_type=data_type,
                                  b_perp=metadata['bPerp'],
-                                 inc_angle=metadata['incAng'],
-                                 look_ang=metadata['lookAng'],
-                                 azimuth_ang=metadata['azimuthAng'],
                                  start_range=start_range, end_range=end_range,
                                  range_spacing=range_spacing,
                                  orbDir=metadata['orbit_direction'])
