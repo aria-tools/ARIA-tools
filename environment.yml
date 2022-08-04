@@ -11,10 +11,10 @@ dependencies:
   - python>=3.6
   - asf_search
   - cartopy
-  - gdal>=3.2.1, <3.4.2
+  - libgdal>=3.5.1
+  - gdal>=3.5.1
   - hdf5
   - joblib
-  - libgdal
   - matplotlib
   - netcdf4
   - pandas

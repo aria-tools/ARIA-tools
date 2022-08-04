@@ -33,6 +33,7 @@ def unwrap_self_readproduct(arg):
     """
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
+
 def package_dict(scene, new_scene, scene_ind, \
                  sorted_dict = None, dict_ind = None):
     """
@@ -66,12 +67,10 @@ def package_dict(scene, new_scene, scene_ind, \
 #Input file(s) and bbox as either list or physical shape file.
 class ARIA_standardproduct:
     """
-
     Load ARIA standard products
 
-    Load ARIA standard products and split them into
+     and split them into
     spatiotemporally contiguous interferograms.
-
     """
     import glob
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
@@ -130,7 +129,7 @@ class ARIA_standardproduct:
                 log.warning('%s is not a supported NetCDF... skipping', f)
 
         # If URLs, append with '/vsicurl/'
-        self.files=['/vsicurl/{}'.format(i) if 'https://' in i else i for i in self.files]
+        self.files=[f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
         #check if virtual file reader is being captured as netcdf
         if any("https://" in i for i in self.files):
             # must configure gdal to load URLs
@@ -578,7 +577,7 @@ class ARIA_standardproduct:
                     dict_2 = package_dict(scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
                     sorted_products.extend([new_dict])
-                    
+
             # If pairs are within the same day
             # but do not intersect this means there is a gap
             # Reject date from prod list, and keep track of all failed dates

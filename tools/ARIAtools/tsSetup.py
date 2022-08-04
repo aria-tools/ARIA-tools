@@ -138,17 +138,22 @@ def cmd_line_parse(iargs=None):
     return parser.parse_args(args=iargs)
 
 
-def extract_meta_dict(aria_prod, metadata):
+def extract_meta_dict(domain_name, aria_prod, metadata):
     """Extract metadata from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
-    for i in aria_prod.products[1]:
-        meta_name = i[metadata][0]
-        data_set = gdal.Open(meta_name)
-        # return [min, max, mean, std]
-        stat = data_set.GetRasterBand(1).GetStatistics(True, True)
-        meta[i['pair_name'][0]] = stat[2]
-        data_set = None
+    for i in aria_prod:
+        pair_name = i[-21:-4]
+        # only get stats for unw file
+        # otherwise pass a dummy value
+        if domain_name == 'unwrappedPhase':
+            data_set = gdal.Open(i)
+            # return [min, max, mean, std]
+            stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
+            data_set = None
+        else:
+            stat = 0
+        meta[pair_name] = stat
 
     return meta
 
@@ -185,23 +190,18 @@ def generate_stack(aria_prod, input_files, output_file_name,
                    workdir='./', ref_dlist=None):
     """Generate time series stack."""
     utc_time = extract_utc_time(aria_prod)
-    b_perp = extract_meta_dict(aria_prod, 'bPerpendicular')
-    inc_angle = extract_meta_dict(aria_prod, 'incidenceAngle')
-    look_ang = extract_meta_dict(aria_prod, 'lookAngle')
-    azimuth_ang = extract_meta_dict(aria_prod, 'azimuthAngle')
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
     prog_bar = progBar.progressBar(maxValue=len(aria_prod.products[1]),
-                                   print_msg='Creating stack:')
+                                   print_msg='Creating stack: ')
 
     # Set up single stack file
     if not os.path.exists(os.path.join(workdir, 'stack')):
-        print('Creating directory: {0}'.format(os.path.join(workdir, 'stack')))
+        print('Creating directory: {os.path.join(workdir, "stack")}')
         os.makedirs(os.path.join(workdir, 'stack'))
     else:
-        print('Directory {0} already exists.'.format(os.path.join(
-              workdir, 'stack')))
+        print(f'Directory {os.path.join(workdir, "stack")} already exists.')
 
     if input_files in ['unwrappedPhase', 'unwrapped', 'unw']:
         domain_name = 'unwrappedPhase'
@@ -244,6 +244,9 @@ def generate_stack(aria_prod, input_files, output_file_name,
     else:
         print('Stacks can be created for unwrapped interferogram, '
               'coherence and connectedComponent VRT files')
+
+    # get bperp value
+    b_perp = extract_meta_dict(domain_name, dlist, 'bPerpendicular')
 
     # Confirm 1-to-1 match between UNW and other derived products
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
@@ -324,9 +327,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
                           dates, os.path.dirname(data[1]))
                 continue
             metadata['bPerp'] = b_perp[dates]
-            metadata['incAng'] = inc_angle[dates]
-            metadata['lookAng'] = look_ang[dates]
-            metadata['azimuthAng'] = azimuth_ang[dates]
             if orbit_direction == 'D':
                 metadata['orbit_direction'] = 'DESCENDING'
             elif orbit_direction == 'A':
@@ -351,9 +351,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
             <MDI key="Wavelength (m)">{wvl}</MDI>
             <MDI key="UTCTime (HH:MM:SS.ss)">{acq}</MDI>
             <MDI key="perpendicularBaseline">{b_perp}</MDI>
-            <MDI key="incidenceAngle">{inc_angle}</MDI>
-            <MDI key="lookAngle">{look_ang}</MDI>
-            <MDI key="azimuthAngle">{azimuth_ang}</MDI>
             <MDI key="startRange">{start_range}</MDI>
             <MDI key="endRange">{end_range}</MDI>
             <MDI key="slantRangeSpacing">{range_spacing}</MDI>
@@ -366,9 +363,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
                                  wvl=metadata['wavelength'], index=data[0]+1,
                                  path=path, data_type=data_type,
                                  b_perp=metadata['bPerp'],
-                                 inc_angle=metadata['incAng'],
-                                 look_ang=metadata['lookAng'],
-                                 azimuth_ang=metadata['azimuthAng'],
                                  start_range=start_range, end_range=end_range,
                                  range_spacing=range_spacing,
                                  orbDir=metadata['orbit_direction'])
