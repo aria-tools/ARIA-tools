@@ -17,6 +17,7 @@ import multiprocessing
 from collections import defaultdict
 from datetime import datetime
 from osgeo import gdal
+print('gdal.VersionInfo()',gdal.VersionInfo())
 
 # Import functions
 from ARIAtools import progBar
@@ -185,7 +186,7 @@ def generate_stack(aria_prod, input_files, output_file_name,
                    workdir='./', ref_dlist=None):
     """Generate time series stack."""
     utc_time = extract_utc_time(aria_prod)
-    b_perp = extract_meta_dict(aria_prod, 'bPerpendicular')
+    b_perp = 0
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
@@ -201,6 +202,7 @@ def generate_stack(aria_prod, input_files, output_file_name,
 
     if input_files in ['unwrappedPhase', 'unwrapped', 'unw']:
         domain_name = 'unwrappedPhase'
+        b_perp = extract_meta_dict(aria_prod, 'bPerpendicular')
         int_list = glob.glob(os.path.join(workdir, 'unwrappedPhase',
                              '[0-9]*[0-9].vrt'))
         data_type = "Float32"
