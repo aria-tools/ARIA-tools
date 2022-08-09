@@ -18,6 +18,7 @@ dependencies:
   - matplotlib
   - netcdf4
   - pandas
+  - pip
   - pyproj
   - requests
   - scipy
