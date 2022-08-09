@@ -11,20 +11,18 @@ dependencies:
   - python>=3.6
   - asf_search
   - cartopy
-  - libgdal>=3.5.1
   - gdal>=3.5.1
-  - hdf5
+  - libgdal>=3.5.1
+  - h5py
   - joblib
   - matplotlib
   - netcdf4
   - pandas
   - pip
-  - requests
-  - shapely
-  - scipy
   - pyproj
-  - pip:
-    - h5py
+  - requests
+  - scipy
+  - shapely
   #for ARIA-tools-docs
   - jupyterlab
   - jupyter_contrib_nbextensions

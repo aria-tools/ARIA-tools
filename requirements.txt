@@ -1,11 +1,14 @@
 python>=3.6
 asf_search
 cartopy
-gdal>=3
+gdal>=3.5.1
+h5py
 joblib
 matplotlib
 netcdf4
 pandas
+pip
+pyproj
 requests
 scipy
 shapely
