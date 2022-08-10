@@ -519,7 +519,7 @@ class ARIA_standardproduct:
                 scenes = [scene, new_scene]
                 for sc in scenes:
                     path_bbox = sc[1]['productBoundingBox']
-                    ver_str   = re.search('(v.*)\.', path_bbox).group(1)
+                    ver_str   = re.search(r'(v.*)\.', path_bbox).group(1)
                     ver_num   = float(ver_str[1:].replace('_', ''))
                     vers.append(ver_num)
 
