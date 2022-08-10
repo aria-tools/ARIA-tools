@@ -155,7 +155,6 @@ def extract_bperp_dict(domain_name, aria_prod):
                 # return [min, max, mean, std]
                 stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
                 data_set = None
-
         meta[pair_name] = stat
 
     return meta
@@ -249,7 +248,7 @@ def generate_stack(aria_prod, input_files, output_file_name,
               'coherence and connectedComponent VRT files')
 
     # get bperp value
-    b_perp = extract_bperp_dict(domain_name, b_perp)
+    b_perp = extract_bperp_dict(domain_name, dlist)
 
     # Confirm 1-to-1 match between UNW and other derived products
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
