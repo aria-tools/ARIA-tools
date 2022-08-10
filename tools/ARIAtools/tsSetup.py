@@ -2,10 +2,8 @@
 """Extract unwrapped interferogram, coherence, ⊥ baseline, and LOS file(s).
 This script is intended to extract required information and files to carry-out
 time series analysis on ARIA products.
-
 Copyright 2019, by the California Institute of Technology.
 ALL RIGHTS RESERVED. United States Government Sponsorship acknowledged.
-
 Author(s): Simran Sangha, David Bekaert, & Emre Havazli
 """
 
@@ -138,7 +136,7 @@ def cmd_line_parse(iargs=None):
     return parser.parse_args(args=iargs)
 
 
-def extract_meta_dict(domain_name, aria_prod, metadata):
+def extract_meta_dict(domain_name, aria_prod):
     """Extract metadata from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
@@ -246,7 +244,10 @@ def generate_stack(aria_prod, input_files, output_file_name,
               'coherence and connectedComponent VRT files')
 
     # get bperp value
-    b_perp = extract_meta_dict(domain_name, dlist, 'bPerpendicular')
+    b_perp = glob.glob(os.path.join(workdir, 'bPerpendicular',
+                             '[0-9]*[0-9].vrt'))
+    b_perp = sorted(b_perp)
+    b_perp = extract_meta_dict(domain_name, b_perp)
 
     # Confirm 1-to-1 match between UNW and other derived products
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
