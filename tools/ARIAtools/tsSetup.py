@@ -2,10 +2,8 @@
 """Extract unwrapped interferogram, coherence, ⊥ baseline, and LOS file(s).
 This script is intended to extract required information and files to carry-out
 time series analysis on ARIA products.
-
 Copyright 2019, by the California Institute of Technology.
 ALL RIGHTS RESERVED. United States Government Sponsorship acknowledged.
-
 Author(s): Simran Sangha, David Bekaert, & Emre Havazli
 """
 
@@ -102,11 +100,6 @@ def create_parser():
                         '(if specified). Program defaults to crop all IFGs '
                         'to bounds based off of common intersection and '
                         'bbox (if specified).')
-    parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp',
-                        help='If turned on, extracts perpendicular baseline '
-                        'grids. Default: A single perpendicular baseline '
-                        'value is calculated and included in the metadata of '
-                        'stack cubes for each pair.')
     parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int,
                         default=None, help='Multilooking factor is an integer '
                         'multiple of standard resolution. '
@@ -138,21 +131,30 @@ def cmd_line_parse(iargs=None):
     return parser.parse_args(args=iargs)
 
 
-def extract_meta_dict(domain_name, aria_prod, metadata):
-    """Extract metadata from products."""
+def extract_bperp_dict(domain_name, aria_prod):
+    """Extract mean bperp from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
     for i in aria_prod:
         pair_name = i[-21:-4]
         # only get stats for unw file
         # otherwise pass a dummy value
+        stat = 0
         if domain_name == 'unwrappedPhase':
-            data_set = gdal.Open(i)
-            # return [min, max, mean, std]
-            stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
-            data_set = None
-        else:
-            stat = 0
+            # find corresponding bPerp file
+            b_perp = i.split('/')
+            b_perp[-2] = 'bPerpendicular'
+            b_perp = '/'.join(b_perp)
+            if os.path.exists(b_perp):
+                data_set = gdal.Open(b_perp)
+                # returns [min, max, mean, std]
+                try:
+                    # gdal~3.5
+                    stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
+                except Exception as E:
+                    # gdal~3.4
+                    stat = data_set.GetRasterBand(1).GetStatistics(False, True)[2]
+                data_set = None
         meta[pair_name] = stat
 
     return meta
@@ -246,7 +248,7 @@ def generate_stack(aria_prod, input_files, output_file_name,
               'coherence and connectedComponent VRT files')
 
     # get bperp value
-    b_perp = extract_meta_dict(domain_name, dlist, 'bPerpendicular')
+    b_perp = extract_bperp_dict(domain_name, dlist)
 
     # Confirm 1-to-1 match between UNW and other derived products
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
@@ -473,18 +475,17 @@ def main(inps=None):
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
                     multilooking=inps.multilooking)
-    if inps.bperp:
-        layers = ['bPerpendicular']
-        print('\nExtracting perpendicular baseline grids for each '
-              'interferogram pair')
-        export_products(standardproduct_info.products[1],
-                        standardproduct_info.bbox_file, prods_tot_bbox, layers,
-                        dem=demfile, lat=Latitude, lon=Longitude,
-                        mask=inps.mask, outDir=inps.workdir,
-                        outputFormat=inps.outputFormat,
-                        stitchMethodType='overlap', verbose=inps.verbose,
-                        num_threads=inps.num_threads,
-                        multilooking=inps.multilooking)
+    layers = ['bPerpendicular']
+    print('\nExtracting perpendicular baseline grids for each '
+          'interferogram pair')
+    export_products(standardproduct_info.products[1],
+                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
+                    dem=demfile, lat=Latitude, lon=Longitude,
+                    mask=inps.mask, outDir=inps.workdir,
+                    outputFormat=inps.outputFormat,
+                    stitchMethodType='overlap', verbose=inps.verbose,
+                    num_threads=inps.num_threads,
+                    multilooking=inps.multilooking)
 
     # Extracting other layers, if specified
     if inps.layers:
