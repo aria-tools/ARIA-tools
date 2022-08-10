@@ -100,11 +100,6 @@ def create_parser():
                         '(if specified). Program defaults to crop all IFGs '
                         'to bounds based off of common intersection and '
                         'bbox (if specified).')
-    parser.add_argument('-bp', '--bperp', action='store_true', dest='bperp',
-                        help='If turned on, extracts perpendicular baseline '
-                        'grids. Default: A single perpendicular baseline '
-                        'value is calculated and included in the metadata of '
-                        'stack cubes for each pair.')
     parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int,
                         default=None, help='Multilooking factor is an integer '
                         'multiple of standard resolution. '
@@ -475,18 +470,17 @@ def main(inps=None):
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
                     multilooking=inps.multilooking)
-    if inps.bperp:
-        layers = ['bPerpendicular']
-        print('\nExtracting perpendicular baseline grids for each '
-              'interferogram pair')
-        export_products(standardproduct_info.products[1],
-                        standardproduct_info.bbox_file, prods_tot_bbox, layers,
-                        dem=demfile, lat=Latitude, lon=Longitude,
-                        mask=inps.mask, outDir=inps.workdir,
-                        outputFormat=inps.outputFormat,
-                        stitchMethodType='overlap', verbose=inps.verbose,
-                        num_threads=inps.num_threads,
-                        multilooking=inps.multilooking)
+    layers = ['bPerpendicular']
+    print('\nExtracting perpendicular baseline grids for each '
+          'interferogram pair')
+    export_products(standardproduct_info.products[1],
+                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
+                    dem=demfile, lat=Latitude, lon=Longitude,
+                    mask=inps.mask, outDir=inps.workdir,
+                    outputFormat=inps.outputFormat,
+                    stitchMethodType='overlap', verbose=inps.verbose,
+                    num_threads=inps.num_threads,
+                    multilooking=inps.multilooking)
 
     # Extracting other layers, if specified
     if inps.layers:
