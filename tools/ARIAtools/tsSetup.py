@@ -147,8 +147,13 @@ def extract_bperp_dict(domain_name, aria_prod):
             b_perp = '/'.join(b_perp)
             if os.path.exists(b_perp):
                 data_set = gdal.Open(b_perp)
-                # return [min, max, mean, std]
-                stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
+                # returns [min, max, mean, std]
+                try:
+                    # gdal~3.5
+                    stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
+                except:
+                    # gdal~3.4
+                    stat = data_set.GetRasterBand(1).GetStatistics(False, True)[2]
                 data_set = None
         meta[pair_name] = stat
 
