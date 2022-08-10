@@ -151,7 +151,7 @@ def extract_bperp_dict(domain_name, aria_prod):
                 try:
                     # gdal~3.5
                     stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
-                except:
+                except Exception as E:
                     # gdal~3.4
                     stat = data_set.GetRasterBand(1).GetStatistics(False, True)[2]
                 data_set = None
