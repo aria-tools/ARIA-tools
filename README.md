@@ -95,7 +95,7 @@ conda install -c conda-forge --yes --file requirements.txt
 
 We have included a `setup.py` script which allows for easy compilation and installation of third-party dependencies (c-code), as well as for setting up the ARIA-tools package itself (python and command line tools).
 ```.tcsh
-python -m pip install .
+python -m pip install -e .
 ```
 
 If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For c-shell this can be done as follows (replace "ARIAtoolsREPO" to the location where you have cloned the ARIAtools repository):
