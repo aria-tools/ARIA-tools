@@ -8,6 +8,7 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
+import re
 import numpy as np
 from joblib import Parallel, delayed
 import logging
@@ -511,12 +512,25 @@ class ARIA_standardproduct:
                 # If applicable, overwrite smaller scene with larger one
                 if same_area > inv_same_area:
                     i = (i[0]-1, new_scene)
-                log.debug("Duplicate product captured. Rejecting scene %s",
-                    os.path.basename( \
-                     new_scene[1]['unwrappedPhase'].split('"')[1]))
-                # Overwrite latter scene with former
-                self.products[i[0]+1] = scene
+
+                # Try to use newer version
+                # else overwrite latter scene with former (argmax=0 when no max)
+                vers   = []
+                scenes = [scene, new_scene]
+                for sc in scenes:
+                    path_bbox = sc[1]['productBoundingBox']
+                    ver_str   = re.search(r'(v.*)\.', path_bbox).group(1)
+                    ver_num   = float(ver_str[1:].replace('_', ''))
+                    vers.append(ver_num)
+
+                use_scene = scenes[np.argmax(vers)]
+                scenes.remove(use_scene) # now scenes has the rejected scene
+                self.products[i[0]+1] = use_scene
                 num_dups.append(i[0])
+
+                log.debug("Duplicate product captured. Rejecting scene %s",
+                    os.path.basename(scenes[0][1]['unwrappedPhase'].split(':')[1]))
+
         # Delete duplicate products
         self.products=list(self.products for self.products,_ in \
                            itertools.groupby(self.products))
