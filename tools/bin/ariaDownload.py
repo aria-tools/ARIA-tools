@@ -83,9 +83,9 @@ def createParser():
                         type=str,
         help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument('--version',  default=None,
-        help='Specify version as str, e.g. 2_0_4 or all prods; default: '
-             'newest. All products are downloaded. Unspecified versions are '
-             'stored in "workdir"/duplicated_products')
+        help='Specify version as str, e.g. 2_0_4 or all prods.'
+             'All products are downloaded by default. If version is specified, '
+             'only products which match that version are downloaded.')
     parser.add_argument('-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
     return parser
@@ -225,7 +225,7 @@ class Downloader(object):
         ifgs     = [ifgs[i] for i in idx]
 
         if self.inps.output == 'Count':
-            log.info('\nFound -- %d -- products', len(scenes))
+            log.debug('Found -- %d -- products', len(scenes))
 
         # elif self.inps.output == 'Kml':
         #     dst    = fmt_dst(inps)
