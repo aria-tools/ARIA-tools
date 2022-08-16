@@ -1,8 +1,8 @@
 python>=3.6,<3.10
 asf_search
 cartopy
-gdal>=3.4.2
-libgdal>=3.4.2
+gdal<=3.4.2
+libgdal<=3.4.2
 h5py
 joblib
 matplotlib
