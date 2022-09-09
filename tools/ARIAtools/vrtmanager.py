@@ -13,10 +13,11 @@ from osgeo import gdal
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
-gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
-gdal.SetCacheMax('24000')
-gdal.SetConfigOption('VSI_CACHE','YES')
-gdal.SetConfigOption('VSI_CACHE_SIZE','24000000000')
+
+# gdal.SetCacheMax(24000)
+# gdal.SetConfigOption('VSI_CACHE','YES')
+# gdal.SetConfigOption('VSI_CACHE_SIZE','24000000000')
+# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
