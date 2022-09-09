@@ -31,8 +31,10 @@ import collections
 from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 
-# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
-gdal.SetConfigOption('CACHEMAX', '48000')
+gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+gdal.SetCacheMax('24000')
+gdal.SetConfigOption('VSI_CACHE','YES')
+gdal.SetConfigOption('VSI_CACHE_SIZE','24000000000')
 
 log = logging.getLogger(__name__)
 

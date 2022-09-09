@@ -21,9 +21,10 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2st
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
-gdal.SetConfigOption('VSI_CACHE', 'yes')
-# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
-gdal.SetConfigOption('CACHEMAX', '48000')
+gdal.SetCacheMax('24000')
+gdal.SetConfigOption('VSI_CACHE','YES')
+gdal.SetConfigOption('VSI_CACHE_SIZE','24000000000')
+gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
 
 log = logging.getLogger(__name__)
 

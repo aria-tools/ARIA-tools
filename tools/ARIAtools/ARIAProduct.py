@@ -21,6 +21,7 @@ from ARIAtools.logger import logger
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 # gdal.SetConfigOption('CPL_VSIL_CURL_USE_HEAD', 'NO')
+gdal.SetCacheMax('24000')
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +139,7 @@ class ARIA_standardproduct:
             gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', 'cookies.txt')
             #gdal.SetConfigOption('CPL_VSIL_CURL_CHUNK_SIZE','10485760')
             gdal.SetConfigOption('VSI_CACHE','YES')
+            gdal.SetConfigOption('VSI_CACHE_SIZE','24000000000')
 
             fmt=gdal.Open( \
                 [s for s in self.files if 'https://' in s][0] \

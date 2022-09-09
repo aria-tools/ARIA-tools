@@ -22,8 +22,10 @@ from ARIAtools.logger import logger
 log = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
-gdal.SetConfigOption('CACHEMAX', '48000')
+gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+gdal.SetCacheMax('24000')
+gdal.SetConfigOption('VSI_CACHE','YES')
+gdal.SetConfigOption('VSI_CACHE_SIZE','24000000000')
 
 def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
                     amp_thresh=None, arrshape=None, workdir='./',
