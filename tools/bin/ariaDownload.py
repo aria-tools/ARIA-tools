@@ -183,6 +183,7 @@ class Downloader(object):
         self.inps.output     = self.inps.output.title()
         self.inps.wd         = op.abspath(self.inps.wd)
         os.makedirs(self.inps.wd, exist_ok=True)
+        log.setLevel('DEBUG') if self.inps.verbose else log.setLevel('INFO')
 
 
     def __call__(self):
@@ -225,7 +226,7 @@ class Downloader(object):
         ifgs     = [ifgs[i] for i in idx]
 
         if self.inps.output == 'Count':
-            log.debug('Found -- %d -- products', len(scenes))
+            log.info('Found -- %d -- products', len(scenes))
 
         # elif self.inps.output == 'Kml':
         #     dst    = fmt_dst(inps)
