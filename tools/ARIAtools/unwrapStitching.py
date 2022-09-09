@@ -31,7 +31,7 @@ import collections
 from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 
-gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
 gdal.SetConfigOption('CACHEMAX', '48000')
 
 log = logging.getLogger(__name__)
@@ -315,12 +315,12 @@ class UnwrapOverlap(Stitching):
         Stiching/unwrapping using product overlap minimization
     '''
 
-    def __init__(self):
+    def __init__(self, num_threads):
         '''
             Inheret properties from the parent class
             Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
         '''
-        Stitching.__init__(self)
+        Stitching.__init__(self, num_threads)
 
     def UnwrapOverlap(self):
 
@@ -562,12 +562,12 @@ class UnwrapComponents(Stitching):
         Stiching/unwrapping using 2-Stage Phase Unwrapping
     '''
 
-    def __init__(self):
+    def __init__(self, num_threads):
         '''
             Inheret properties from the parent class
             Parse the filenames and bbox as None as they need to be set by the user, which will be caught when running the class
         '''
-        Stitching.__init__(self)
+        Stitching.__init__(self, num_threads)
 
 
     def unwrapComponents(self):
@@ -1468,7 +1468,7 @@ def gdalTest(file, verbose=False):
 
 
 
-def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged', outputFormat='ENVI', mask=None, verbose=False):
+def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged', outputFormat='ENVI', mask=None, verbose=False, num_threads=1):
     '''
         Stitching of products minimizing overlap betnween products
     '''
@@ -1478,7 +1478,7 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     # print('Solver: Minimize overlap')
 
     # Hand over to product overlap stitch code
-    unw = UnwrapOverlap()
+    unw = UnwrapOverlap(num_threads)
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
     unw.setOutFileConnComp(outFileConnComp)
@@ -1493,7 +1493,7 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
-def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False, num_threads=1):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
@@ -1514,7 +1514,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     log.info('Solver: %s', solver_2stage)
 
     # Hand over to 2Stage unwrap
-    unw = UnwrapComponents()
+    unw = UnwrapComponents(num_threads)
     unw._legacy_flag = True
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)

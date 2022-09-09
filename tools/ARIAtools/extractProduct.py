@@ -22,7 +22,7 @@ gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 gdal.SetConfigOption('VSI_CACHE', 'yes')
-gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
 gdal.SetConfigOption('CACHEMAX', '48000')
 
 log = logging.getLogger(__name__)

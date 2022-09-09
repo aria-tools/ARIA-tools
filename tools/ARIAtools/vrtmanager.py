@@ -13,7 +13,7 @@ from osgeo import gdal
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
-gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+# gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
 gdal.SetConfigOption('CACHEMAX', '48000')
 
 ###Save file with gdal
