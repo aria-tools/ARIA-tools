@@ -21,6 +21,9 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2st
 gdal.UseExceptions()
 #Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+gdal.SetConfigOption('VSI_CACHE', 'yes')
+gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+gdal.SetConfigOption('CACHEMAX', '48000')
 
 log = logging.getLogger(__name__)
 
@@ -666,9 +669,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
-                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose, num_threads=num_threads)
                     elif stitchMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose, num_threads=num_threads)
 
                     #If necessary, resample both unw/conn_comp files
                     if multilooking is not None:

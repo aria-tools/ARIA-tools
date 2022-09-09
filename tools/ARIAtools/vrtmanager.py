@@ -13,6 +13,8 @@ from osgeo import gdal
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+gdal.SetConfigOption('CACHEMAX', '48000')
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):

@@ -31,6 +31,9 @@ import collections
 from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 
+gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'TRUE')
+gdal.SetConfigOption('CACHEMAX', '48000')
+
 log = logging.getLogger(__name__)
 
 solverTypes = ['pulp', 'glpk', 'gurobi']
@@ -47,7 +50,7 @@ class Stitching:
          - fucntion to write unwrapped phase of merged product based on a mapping table
     '''
 
-    def __init__(self):
+    def __init__(self, num_threads=1):
         '''
         Setting the default arguments needed by the class.
         Parse the filenames and bbox as None as they need to be set by the user,
@@ -63,6 +66,7 @@ class Stitching:
         self.outFileUnw = './unwMerged'
         self.outFileConnComp = './connCompMerged'
         self.outputFormat='ENVI'
+        self.num_threads = num_threads
 
         # stitching methods, by default leverage product overlap method
         # other options would be to leverage connected component
@@ -272,7 +276,8 @@ class Stitching:
         for file in glob.glob(self.outFileUnw + "*"):
             os.remove(file)
         gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
-        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file,
+                    multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
         # Update VRT
         gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
         # Apply mask (if specified).
@@ -285,7 +290,8 @@ class Stitching:
         for file in glob.glob(self.outFileConnComp + "*"):
             os.remove(file)
         gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles, options=gdal.BuildVRTOptions(srcNodata=-1))
-        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt', format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file,
+                    multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
         # Update VRT
         gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, options=gdal.TranslateOptions(format="VRT"))
         # Apply mask (if specified).
@@ -387,19 +393,21 @@ class UnwrapOverlap(Stitching):
                 out_data,connCompNoData2,geoTrans,proj = GDALread( \
                     self.ccFile[counter+1],data_band=1,loadData=False)
                 connCompFile1 = gdal.Warp( \
-                    '', self.ccFile[counter], options = gdal.WarpOptions( \
-                    format="MEM", cutlineDSName=outname, \
-                    outputBounds=polyOverlap.bounds, \
-                    dstNodata=connCompNoData1))
+                    '', self.ccFile[counter], 
+                    format="MEM", cutlineDSName=outname, 
+                    outputBounds=polyOverlap.bounds, 
+                    dstNodata=connCompNoData1,
+                    multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
+
                 # need to specify spacing to avoid inconsistent dimensions
                 arrshape = connCompFile1.ReadAsArray().shape
                 connCompFile2 = gdal.Warp( \
-                    '', self.ccFile[counter+1], options=gdal.WarpOptions( \
+                    '', self.ccFile[counter+1], 
                     format="MEM", cutlineDSName=outname, \
                     outputBounds=polyOverlap.bounds, \
                     dstNodata=connCompNoData2, \
                     width = arrshape[1], height = arrshape[0], \
-                    multithread = True))
+                    multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
 
 
                 # unwrapped phase
@@ -408,20 +416,20 @@ class UnwrapOverlap(Stitching):
                 out_data,unwNoData2,geoTrans,proj = GDALread( \
                     self.inpFile[counter+1],data_band=1,loadData=False)
                 unwFile1 = gdal.Warp( \
-                    '', self.inpFile[counter], options=gdal.WarpOptions( \
+                    '', self.inpFile[counter], 
                     format="MEM", cutlineDSName=outname, \
                     outputBounds=polyOverlap.bounds, \
                     dstNodata=unwNoData1, \
                     width = arrshape[1], height = arrshape[0], \
-                    multithread = True))
+                    multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
+
                 unwFile2 = gdal.Warp( \
-                    '', self.inpFile[counter+1], options=gdal.WarpOptions( \
+                    '', self.inpFile[counter+1], \
                     format="MEM", cutlineDSName=outname, \
                     outputBounds=polyOverlap.bounds, \
                     dstNodata=unwNoData2, \
                     width = arrshape[1], height = arrshape[0], \
-                    multithread = True))
-
+                    multithread=True, options=['NUM_THREADS=%s'%(self.num_threads)])
 
                 # finding the component with the largest overlap
                 connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
