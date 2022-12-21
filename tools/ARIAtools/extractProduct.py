@@ -52,7 +52,7 @@ def createParser():
         help='Path to director(ies) or tar file(s) containing GACOS products. Will use new version of products (.tif) if they exist.'\
              'Further information on GACOS available at: http://www.gacos.net.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
-        help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
+        help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere", "troposphereWet", "troposphereHydrostatic". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
@@ -611,7 +611,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
 
             # Extract/crop metadata layers
-            if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
+            if any(":/science/grids/imagingGeometry" \
+                 in s for s in [i[1]][0]) or \
+                 any(":/science/grids/corrections" \
+                 in s for s in [i[1]][0]):
                 #create directory for quality control plots
                 if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots',key)):
                     os.makedirs(os.path.join(outDir,'metadatalyr_plots',key))
@@ -704,10 +707,28 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
     #metadata layer quality check, correction applied if necessary
-    data_array = metadata_qualitycheck(data_array, os.path.basename(os.path.dirname(outname)), outname, verbose).data_array
+    #do not apply to correction layers
+    avoid_lyrs = ['ionosphere', 'troposphereWet', 'troposphereHydrostatic']
+    metadatalyr_name = outname.split('/')[-2]
+    if metadatalyr_name not in avoid_lyrs:
+        data_array = metadata_qualitycheck( \
+            data_array, \
+            os.path.basename(os.path.dirname(outname)), \
+            outname, \
+            verbose).data_array
 
     # Define lat/lon/height arrays for metadata layers
-    heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
+    # temporarily hardcode tropo layer heights, as they are absent in metadata
+    data_array_ext = data_array.ReadAsArray()
+    try:
+        heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
+            'NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), \
+             dtype='float32')
+    except TypeError:
+        tropo_levels = data_array.ReadAsArray().shape[0]
+        heightsMeta = np.linspace(-500.0, 48413.94, tropo_levels)
+        # flip height levels vertically
+        data_array_ext = np.flipud(data_array_ext)
     ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)

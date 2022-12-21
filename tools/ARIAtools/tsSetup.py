@@ -50,8 +50,9 @@ def create_parser():
                         'Allowed keys are: "unwrappedPhase", "coherence", '
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
-                        '"ionosphere". If "all" is specified, then all layers'
-                        'are extracted.'
+                        '"ionosphere", "troposphereWet", '
+                        '"troposphereHydrostatic". '
+                        'If "all" is specified, then all layers are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '

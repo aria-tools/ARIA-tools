@@ -415,8 +415,13 @@ class ARIA_standardproduct:
                 '/science/grids/imagingGeometry/azimuthAngle'
             ]
             if version.lower()=='1c':
-                sdskeys.append('/science/grids/corrections' \
-                               '/derived/ionosphere/ionosphere')
+                lyr_pref = '/science/grids/corrections'
+                sdskeys_addlyrs = [
+                    lyr_pref + '/derived/ionosphere/ionosphere',
+                    lyr_pref + '/external/troposphere/troposphereWet',
+                    lyr_pref + '/external/troposphere/troposphereHydrostatic'
+                ]
+                sdskeys.extend(sdskeys_addlyrs)
 
         return rdrmetadata_dict, sdskeys
 
@@ -439,7 +444,8 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.append('ionosphere')
+            layerkeys.extend(['ionosphere', 'troposphereWet', \
+                             'troposphereHydrostatic'])
 
         # Setup datalyr_dict
         datalyr_dict={}
