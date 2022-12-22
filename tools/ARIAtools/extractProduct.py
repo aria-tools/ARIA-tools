@@ -626,7 +626,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
                 # Check if height layers are consistent
-                zdim      = ds.GetMetadataItem('NETCDF_DIM_EXTRA')[1:-1]
+                zdim      = gdal.Open([i[1]][0][0]).GetMetadataItem( \
+                                      'NETCDF_DIM_EXTRA')[1:-1]
                 hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
 
                 if len(set([gdal.Open(i).GetMetadataItem(hgt_field) \
@@ -901,8 +902,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             # Only check files corresponding to standard product dates
             ztd_basename = os.path.basename(k)
             ztd_basename = ztd_basename.split('.tif')[0].split('.ztd')[0]
-            print('date_list',date_list)
-            print('ztd_basename',ztd_basename)
             if ztd_basename in date_list:
                 tropo_date_dict[ztd_basename].append(k)
                 if os.path.exists(k+'.rsc'):
@@ -930,7 +929,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                     else:
                         tropo_rsc_dict = tifGacos(k)
                         gacos_prod = gdal.Open(k).ReadAsArray()
-                        print("tropo_rsc_dict",tropo_rsc_dict)
                     # Save as GDAL file, using proj from first unwrappedPhase file
                     renderVRT(k, gacos_prod,
                         geotrans=(float(tropo_rsc_dict['X_FIRST']),

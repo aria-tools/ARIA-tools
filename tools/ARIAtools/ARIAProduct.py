@@ -52,8 +52,11 @@ def package_dict(scene, new_scene, scene_ind, \
     dict_keys = scene[scene_ind].keys()
     # initialize new entry for new IFG and extend dict
     if not sorted_dict:
-        dict_vals = [list(a) for a in zip(scene[scene_ind].values(), \
-            new_scene[scene_ind].values())]
+        if scene != new_scene:
+            dict_vals = [list(a) for a in zip(scene[scene_ind].values(), \
+                new_scene[scene_ind].values())]
+        else:
+            dict_vals = [list(a) for a in zip(scene[scene_ind].values())]
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
         dict_vals = [[subitem for item in a \
@@ -657,6 +660,8 @@ class ARIA_standardproduct:
                          [item[1] for item in sorted_products \
                               if (item[1]['pair_name'][0] \
                               not in track_rejected_pairs)]]
+
+        print('final sorted_products', sorted_products)
 
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs successfully selected
