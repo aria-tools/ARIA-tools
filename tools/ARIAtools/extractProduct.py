@@ -626,12 +626,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
                 # Check if height layers are consistent
-                if any(":/science/grids/imagingGeometry" \
-                     in s for s in [i[1]][0]):
-                    hgt_field = 'NETCDF_DIM_heightsMeta_VALUES'
-                if any(":/science/grids/corrections" \
-                     in s for s in [i[1]][0]):
-                    hgt_field = 'NETCDF_DIM_z_VALUES'
+                zdim      = ds.GetMetadataItem('NETCDF_DIM_EXTRA')[1:-1]
+                hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
+
                 if len(set([gdal.Open(i).GetMetadataItem(hgt_field) \
                      for i in [i[1]][0]]))==1:
                     gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field, \
