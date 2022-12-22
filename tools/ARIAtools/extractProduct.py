@@ -625,14 +625,29 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                 if dem is None:
                     raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
 
-                # Check if height layers are consistent, and if not exit with error
-                if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]]))==1:
-                    gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open([i[1]][0][0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
+                # Check if height layers are consistent
+                if any(":/science/grids/imagingGeometry" \
+                     in s for s in [i[1]][0]):
+                    hgt_field = 'NETCDF_DIM_heightsMeta_VALUES'
+                if any(":/science/grids/corrections" \
+                     in s for s in [i[1]][0]):
+                    hgt_field = 'NETCDF_DIM_z_VALUES'
+                if len(set([gdal.Open(i).GetMetadataItem(hgt_field) \
+                     for i in [i[1]][0]]))==1:
+                    gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field, \
+                         gdal.Open([i[1]][0][0]).GetMetadataItem(hgt_field))
                 else:
-                    raise Exception('Inconsistent heights for metadata layer(s) ', [i[1]][0], ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]])
+                    raise Exception('Inconsistent heights for '
+                         'metadata layer(s) ', [i[1]][0], \
+                         ' corresponding heights: ', \
+                         [gdal.Open(i).GetMetadataItem( \
+                         hgt_field) \
+                         for i in [i[1]][0]])
 
-                # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
+                # Interpolate/intersect with DEM before cropping
+                finalize_metadata(outname, bounds, dem_bounds, \
+                                  prods_TOTbbox, dem, lat, lon, hgt_field, \
+                                  mask, outputFormat, verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
             elif key!='unwrappedPhase' and key!='connectedComponents':
@@ -684,7 +699,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
         prog_bar.close()
     return
 
-def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
+def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
+                      lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
+                      verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
 
     2D metadata layer is derived by interpolating and then intersecting
@@ -718,17 +735,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
             verbose).data_array
 
     # Define lat/lon/height arrays for metadata layers
-    # temporarily hardcode tropo layer heights, as they are absent in metadata
     data_array_ext = data_array.ReadAsArray()
-    try:
-        heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
-            'NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), \
-             dtype='float32')
-    except TypeError:
-        tropo_levels = data_array.ReadAsArray().shape[0]
-        heightsMeta = np.linspace(-500.0, 48413.94, tropo_levels)
-        # flip height levels vertically
-        data_array_ext = np.flipud(data_array_ext)
+    heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
+         hgt_field)[1:-1].split(','), dtype='float32')
     ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
