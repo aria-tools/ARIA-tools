@@ -18,7 +18,6 @@ dependencies:
   - matplotlib
   - netcdf4
   - pandas
-  - pip
   - pyproj
   - requests
   - scipy
@@ -26,4 +25,6 @@ dependencies:
   #for ARIA-tools-docs
   - jupyterlab
   - jupyter_contrib_nbextensions
-  - rise
+
+  - pip:
+    - rise
