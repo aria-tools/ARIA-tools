@@ -78,7 +78,7 @@ class ARIA_standardproduct:
     """
     import glob
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
-                 url_version='None', verbose=False):
+                 url_version='None', nc_version='None', verbose=False):
         """
 
         Parse products and input bounding box (if specified)
@@ -94,6 +94,8 @@ class ARIA_standardproduct:
         # Pair name for layer extraction
         self.pairname = None
         self.num_threads = int(num_threads)
+        # enforced netcdf version
+        self.nc_version = nc_version
 
         ### Determine if file input is single file, a list, or wildcard
         # If list of files
@@ -213,6 +215,16 @@ class ARIA_standardproduct:
             version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
         except:
             log.warning('%s is not a supported file type... skipping', fname)
+            return []
+
+        # Enforce forward-compatibility of netcdf versions
+        if self.nc_version == '1a': nc_version_check = ['1a', '1b', '1c']
+        if self.nc_version == '1b': nc_version_check = ['1b', '1c']
+        if self.nc_version == '1c': nc_version_check = ['1c']
+        if version not in nc_version_check:
+            log.warning('input nc_version = %s, file %s rejected because '
+                        'it is a version %s product', \
+                        self.nc_version, fname, version)
             return []
 
         ### Get lists of radarmetadata/layer keys for this file version
@@ -661,8 +673,6 @@ class ARIA_standardproduct:
                               if (item[1]['pair_name'][0] \
                               not in track_rejected_pairs)]]
 
-        print('final sorted_products', sorted_products)
-
         ###Report dictionaries for all valid products
         if sorted_products==[[], []]: #Check if pairs successfully selected
             raise Exception('No valid interferogram meet spatial criteria '
@@ -699,6 +709,7 @@ class ARIA_standardproduct:
             self.products += self.__readproduct__(self.files[0])
 
         # Sort by pair and start time.
+        self.products = [i for i in self.products if i != []]
         self.products = sorted(self.products, key=lambda k:
                     (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
         self.products = list(self.products)
@@ -714,8 +725,7 @@ class ARIA_standardproduct:
             raise Exception('No valid pairs meet spatial criteria, nothing '
                 'to export.')
         if len(self.products)!=len(self.files):
-            log.warning('%d out of %d GUNW products rejected for not meeting '
-                'users bbox spatial criteria', \
+            log.warning('%d out of %d GUNW products rejected', \
                 len(self.files)-len(self.products), len(self.files))
             # Provide report of which files were kept vs. which weren't
             log.debug('Specifically, the following GUNW products '

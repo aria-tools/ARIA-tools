@@ -10,9 +10,13 @@ import os
 import glob
 import numpy as np
 from osgeo import gdal
+import logging
 gdal.UseExceptions()
+
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+log = logging.getLogger(__name__)
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
@@ -279,3 +283,79 @@ def tifGacos(intif):
     tropo_rsc_dict['TIME_OF_DAY'] = 'NoneUTC'
 
     return tropo_rsc_dict
+
+
+###Perform initial layer, product, and correction sanity checks
+def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
+    """Check if any conflicts between netcdf versions and expected layers."""
+
+    # Ignore productBoundingBoxes & pair-names, they are not raster layers
+    ignore_lyr = ['productBoundingBox','productBoundingBoxFrames','pair_name']
+    # Check all available layers in stack
+    products = [list(i.keys()) for i in products]
+    products = [[sub for sub in i if sub not in ignore_lyr] for i in products]
+    all_valid_layers = list(set.intersection(*map(set, products)))
+
+    # If specified, extract all layers
+    if layers.lower()=='all':
+        log.info('All layers are to be extracted, pass all keys.')
+        layers = all_valid_layers
+
+    # differentiate between extract and TS pipeline
+    # extract pipeline
+    if extract_or_ts == 'extract':
+        if not layers and not gacos_products:
+            log.info('No layers specified; only creating bounding box shapes')
+        elif gacos_products:
+            log.info('Tropospheric corrections will be applied, making sure '
+                     'at least unwrappedPhase and lookAngle are extracted.')
+            # If no input layers specified, initialize list
+            if not layers:
+                layers = []
+            # If valid argument for input layers passed, parse to list
+            if isinstance(layers, str):
+                layers = list(layers.split(','))
+                layers = [i.replace(' ','') for i in layers]
+            if 'lookAngle' not in layers:
+                layers.append('lookAngle')
+            if 'unwrappedPhase' not in layers:
+                layers.append('unwrappedPhase')
+        else:
+            layers = list(layers.split(','))
+            layers = [i.replace(' ','') for i in layers]
+
+    # TS pipeline
+    ts_layers_dup = ['unwrappedPhase', 'coherence', 'incidenceAngle',
+                     'lookAngle', 'azimuthAngle', 'bPerpendicular']
+    if extract_or_ts == 'tssetup':
+        if layers:
+            if isinstance(layers, str):
+                layers = list(layers.split(','))
+            # remove layers already generated in default TS workflow
+            layers = [i for i in layers if i not in ts_layers_dup]
+    
+
+    # Check to see if internal conflict between tropo correction methods
+    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic', \
+                           'troposphere']
+    user_tropo_layers = list(set.intersection(*map(set, \
+                             [layers, raider_tropo_layers])))
+    if gacos_products and user_tropo_layers != []:
+        raise Exception('User specified extraction of raider-derived '
+                        'tropo layers %s AND gacos products with "-tp %s". ' 
+                        'Proceed with only one.'%(user_tropo_layers,
+                         gacos_products))
+
+    # pass intersection of valid layers and track invalid requests
+    layer_reject = list(set.symmetric_difference(*map(set, \
+                        [all_valid_layers, layers])))
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, raider_tropo_layers])))
+    layers = list(set.intersection(*map(set, [layers, all_valid_layers])))
+    if layer_reject != []:
+        log.warning('User-requested layers %s cannot be extracted as they '
+                    'are not common to all products. Consider fixing input '
+                    '"-nc_version %s" constraint to filter older product '
+                    'variants \n', layer_reject, nc_version)
+
+    return layers

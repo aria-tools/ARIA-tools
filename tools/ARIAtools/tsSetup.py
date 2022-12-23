@@ -21,7 +21,7 @@ from ARIAtools import progBar
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import resampleRaster
+from ARIAtools.vrtmanager import resampleRaster, layerCheck
 from ARIAtools.extractProduct import (merged_productbbox, prep_dem,
                                       export_products, tropo_correction)
 
@@ -41,7 +41,7 @@ def create_parser():
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
                         help='Specify directory to deposit all outputs. '
                         'Default is local directory where script is launched.')
-    parser.add_argument('-tp', '--tropo_products', dest='tropo_products',
+    parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
                         type=str, default=None, help='Path to director(ies) '
                         'or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
@@ -51,7 +51,7 @@ def create_parser():
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic". '
+                        '"troposphereHydrostatic", "troposphere". '
                         'If "all" is specified, then all layers are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -118,8 +118,12 @@ def create_parser():
                         ' Default 0.0081 = 0.0081km\u00b2 = area of single'
                         ' pixel at standard 90m resolution')
     parser.add_argument('--version', dest='version',  default=None,
-                        help='Specify version as str, e.g. 2_0_4 or all prods;'
-                        'default: newest')
+                        help='Specify version as str, e.g. 2_0_4 or all prods; '
+                        'default: all')
+    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
+                        help='Specify netcdf version as str, '
+                        'e.g. 1c or all prods;'
+                        'default: 1b')
     parser.add_argument('-verbose', '--verbose', action='store_true',
                         dest='verbose', help="Toggle verbose mode on.")
 
@@ -395,6 +399,7 @@ def main(inps=None):
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
+                                                nc_version=inps.nc_version,
                                                 verbose=inps.verbose)
 
     # pass number of threads for gdal multiprocessing computation
@@ -476,6 +481,7 @@ def main(inps=None):
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
                     multilooking=inps.multilooking)
+
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
@@ -489,36 +495,22 @@ def main(inps=None):
                     multilooking=inps.multilooking)
 
     # Extracting other layers, if specified
-    if inps.layers:
-        if inps.layers.lower() == 'all':
-            inps.layers = list(standardproduct_info.products[1][0].keys())
-            # Must also remove productBoundingBoxes &
-            # pair-names because they are not raster layers
-            layers_list = ['unwrappedPhase', 'coherence', 'incidenceAngle',
-                           'lookAngle', 'azimuthAngle', 'bPerpendicular',
-                           'productBoundingBox', 'productBoundingBoxFrames',
-                           'pair_name']
-            layers = [i for i in inps.layers if i not in layers_list]
-        else:
-            inps.layers = list(inps.layers.split(','))
-            layers_list = ['unwrappedPhase', 'coherence', 'incidenceAngle',
-                           'lookAngle', 'azimuthAngle', 'bPerpendicular']
-            layers = [i for i in inps.layers if i not in layers_list]
-            layers = [i.replace(' ', '') for i in layers]
-
-        if layers != []:
-            print('\nExtracting optional, user-specified layers %s for each '
-                  'interferogram pair' % (layers))
-            export_products(standardproduct_info.products[1],
-                            standardproduct_info.bbox_file, prods_tot_bbox,
-                            layers, dem=demfile, lat=Latitude, lon=Longitude,
-                            mask=inps.mask, outDir=inps.workdir,
-                            outputFormat=inps.outputFormat,
-                            stitchMethodType='overlap', verbose=inps.verbose,
-                            num_threads=inps.num_threads,
-                            multilooking=inps.multilooking)
-    else:
-        inps.layers = []
+    layers = layerCheck(standardproduct_info.products[1],
+                        inps.layers,
+                        inps.nc_version,
+                        inps.gacos_products,
+                        extract_or_ts = 'tssetup')
+    if layers != []:
+        print('\nExtracting optional, user-specified layers %s for each '
+              'interferogram pair' % (layers))
+        export_products(standardproduct_info.products[1],
+                        standardproduct_info.bbox_file, prods_tot_bbox,
+                        layers, dem=demfile, lat=Latitude, lon=Longitude,
+                        mask=inps.mask, outDir=inps.workdir,
+                        outputFormat=inps.outputFormat,
+                        stitchMethodType='overlap', verbose=inps.verbose,
+                        num_threads=inps.num_threads,
+                        multilooking=inps.multilooking)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # metadata layers and mask output layers, respectively
@@ -539,14 +531,14 @@ def main(inps=None):
                            num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
-    if inps.tropo_products:
-        tropo_correction(standardproduct_info.products, inps.tropo_products,
+    if inps.gacos_products:
+        tropo_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_tot_bbox,
                          outDir=inps.workdir, outputFormat=inps.outputFormat,
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    if inps.tropo_products:
+    if inps.gacos_products:
         ref_dlist = generate_stack(standardproduct_info,
                                    'tropocorrected_products', 'unwrapStack',
                                    workdir=inps.workdir)
@@ -559,7 +551,7 @@ def main(inps=None):
                                'connCompStack', workdir=inps.workdir,
                                ref_dlist=ref_dlist)
     # If amplitude files extracted
-    if 'amplitude' in inps.layers:
+    if 'amplitude' in layers:
         ref_dlist = generate_stack(standardproduct_info, 'amplitude',
                                    'ampStack', workdir=inps.workdir,
                                    ref_dlist=ref_dlist)

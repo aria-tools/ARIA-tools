@@ -17,6 +17,7 @@ from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
+from ARIAtools.vrtmanager import resampleRaster, layerCheck
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -48,11 +49,19 @@ def createParser():
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
         help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None,
+    parser.add_argument('-gp', '--gacos_products', dest='gacos_products', type=str, default=None,
         help='Path to director(ies) or tar file(s) containing GACOS products. Will use new version of products (.tif) if they exist.'\
              'Further information on GACOS available at: http://www.gacos.net.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
-        help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere", "troposphereWet", "troposphereHydrostatic". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
+                        help='Specify layers to extract as a comma '
+                        'deliminated list bounded by single quotes. '
+                        'Allowed keys are: "unwrappedPhase", "coherence", '
+                        '"amplitude", "bPerpendicular", "bParallel", '
+                        '"incidenceAngle", "lookAngle", "azimuthAngle", '
+                        '"ionosphere", "troposphereWet", '
+                        '"troposphereHydrostatic", "troposphere". '
+                        'If "all" is specified, then all layers are extracted.'
+                        'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
@@ -77,8 +86,12 @@ def createParser():
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081,
         help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('--version', dest='version',  default=None,
-        help='Specify version as str, e.g. 2_0_4 or all prods; default: '
-             'newest')
+                        help='Specify version as str, e.g. 2_0_4 or all prods; '
+                        'default: all')
+    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
+                        help='Specify netcdf version as str, '
+                        'e.g. 1c or all prods;'
+                        'default: 1b')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
 
@@ -578,9 +591,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
     and clipped to the track extent denoted by the input prods_TOTbbox.
     Optionally, a user may pass a mask-file.
     """
-    ##Import functions
-    from ARIAtools.vrtmanager import resampleRaster
-
     if not layers: return # only bbox
 
     bounds=open_shapefile(bbox_file, 0, 0).bounds
@@ -732,8 +742,11 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
             outname, \
             verbose).data_array
 
-    # Define lat/lon/height arrays for metadata layers
+    # flip height levels vertically
     data_array_ext = data_array.ReadAsArray()
+    data_array_ext = np.flipud(data_array_ext)
+
+    # Define lat/lon/height arrays for metadata layers
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
          hgt_field)[1:-1].split(','), dtype='float32')
     ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
@@ -744,8 +757,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     # 2D interpolation
     #mask by nodata value
-    interp_2d = InterpCube(np.ma.masked_where(data_array.ReadAsArray() == data_array.GetRasterBand(1).GetNoDataValue(), \
-        data_array.ReadAsArray()),heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta)
+    interp_2d = InterpCube(np.ma.masked_where(data_array_ext == data_array.GetRasterBand(1).GetNoDataValue(), \
+        data_array_ext),heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta)
     out_interpolated=np.zeros((heightsMeta.shape[0],latitudeMeta.shape[0],longitudeMeta.shape[0]))
 
     # 3D interpolation
@@ -796,7 +809,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     del out_interpolated, interpolator, interp_2d, data_array
 
-def tropo_correction(full_product_dict, tropo_products, bbox_file,
+def tropo_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
     """Perform tropospheric corrections.
@@ -837,12 +850,12 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
 
     ### Determine if file input is single file, a list, or wildcard.
     # If list of files
-    if len([str(val) for val in tropo_products.split(',')]) > 1:
-        tropo_products = [str(i) for i in tropo_products.split(',')]
-        #tropo_products=[os.path.abspath(item) for sublist in [glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in tropo_products] for item in sublist]
+    if len([str(val) for val in gacos_products.split(',')]) > 1:
+        gacos_products = [str(i) for i in gacos_products.split(',')]
+        #gacos_products=[os.path.abspath(item) for sublist in [glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in gacos_products] for item in sublist]
         # Sort and parse tropo products
         tropo_sublist = []
-        for i in tropo_products:
+        for i in gacos_products:
             # If wildcard
             if '*' in i:
                 tropo_sublist.append( \
@@ -850,23 +863,23 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             else:
                 tropo_sublist.append([i])
         # Finalize list of tropo products
-        tropo_products = []
+        gacos_products = []
         for sublist in tropo_sublist:
             for item in sublist:
-                tropo_products.append(os.path.abspath(item))
+                gacos_products.append(os.path.abspath(item))
 
     # If single file or wildcard
     else:
         # If single file
-        if os.path.isfile(tropo_products):
-            tropo_products = [tropo_products]
+        if os.path.isfile(gacos_products):
+            gacos_products = [gacos_products]
         # If wildcard
         else:
-            tropo_products = glob.glob(os.path.expanduser( \
-                                       os.path.expandvars(tropo_products)))
+            gacos_products = glob.glob(os.path.expanduser( \
+                                       os.path.expandvars(gacos_products)))
         # Convert relative paths to absolute paths
-        tropo_products = [os.path.abspath(i) for i in tropo_products]
-    if len(tropo_products) == 0:
+        gacos_products = [os.path.abspath(i) for i in gacos_products]
+    if len(gacos_products) == 0:
         raise Exception('No file match found')
 
     ###Extract tarfiles
@@ -875,7 +888,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
     for i in date_list:
         tropo_date_dict[i] = []
         tropo_date_dict[i+"_UTC"] = []
-    for i in enumerate(tropo_products):
+    for i in enumerate(gacos_products):
         if not os.path.isdir(i[1]) and not i[1].endswith('.ztd') \
             and not i[1].endswith('.tif'):
             untar_dir = os.path.join(os.path.abspath(os.path.join(i[1], \
@@ -888,13 +901,13 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             log.info('Extracting GACOS tarfile %s to %s.',
                 os.path.basename(i[1]), untar_dir)
             tarfile.open(i[1]).extractall(path = untar_dir)
-            tropo_products[i[0]] = untar_dir
+            gacos_products[i[0]] = untar_dir
         # Loop through each GACOS product file, differentiating between direct input list of GACOS products vs parent directory
         if i[1].endswith('.ztd') or i[1].endswith('.tif'):
             ztd_list = [i[1]]
         else:
-            ztd_list = glob.glob(os.path.join(tropo_products[i[0]], '*.ztd')) \
-                + glob.glob(os.path.join(tropo_products[i[0]], '*.tif'))
+            ztd_list = glob.glob(os.path.join(gacos_products[i[0]], '*.ztd')) \
+                + glob.glob(os.path.join(gacos_products[i[0]], '*.tif'))
             # prioritize older .ztd over .tif duplicates if the former exists
             # older .ztd files contain UTC time info
             ztd_list = [i for i in ztd_list if not (i.endswith('.tif') and i.split('.tif')[0] in ztd_list)]
@@ -951,12 +964,12 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                              tropo_date_dict)
 
     # If multiple GACOS directories, merge products.
-    tropo_products = list(set([os.path.dirname(i) \
+    gacos_products = list(set([os.path.dirname(i) \
                           if (i.endswith('.ztd') or i.endswith('.tif')) \
-                          else i for i in tropo_products]))
-    if len(tropo_products)>1:
-        tropo_products=os.path.join(outDir,'merged_GACOS')
-        log.info('Stitching/storing GACOS products in %s.', tropo_products)
+                          else i for i in gacos_products]))
+    if len(gacos_products)>1:
+        gacos_products=os.path.join(outDir,'merged_GACOS')
+        log.info('Stitching/storing GACOS products in %s.', gacos_products)
         # If specified merged directory doesn't exist, create it
         if not os.path.exists(os.path.join(outDir,'merged_GACOS')):
             os.mkdir(os.path.join(outDir,'merged_GACOS'))
@@ -971,10 +984,10 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                 # Create merged rsc file
                 rscGacos(outname, merged_rsc, tropo_date_dict)
     else:
-        tropo_products = tropo_products[0]
+        gacos_products = gacos_products[0]
 
     # Estimate percentage of overlap with tropospheric product
-    for i in glob.glob(os.path.join(tropo_products,'*.vrt')):
+    for i in glob.glob(os.path.join(gacos_products,'*.vrt')):
         # create shapefile
         geotrans = gdal.Open(i).GetGeoTransform()
         bbox = [geotrans[3] \
@@ -1004,16 +1017,16 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
     for i in range(len(product_dict[0])):
         outname = os.path.join(workdir,product_dict[2][i][0])
         unwname = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
-        tropo_reference = os.path.join(tropo_products,
+        tropo_reference = os.path.join(gacos_products,
                           product_dict[2][i][0][:8] + '.ztd.vrt')
-        tropo_secondary = os.path.join(tropo_products,
+        tropo_secondary = os.path.join(gacos_products,
                           product_dict[2][i][0][9:] + '.ztd.vrt')
         # if .ztd products don't exist, check if .tif exists
         if not os.path.exists(tropo_reference):
-            tropo_reference = os.path.join(tropo_products,
+            tropo_reference = os.path.join(gacos_products,
                               product_dict[2][i][0][:8] + '.ztd.tif.vrt')
         if not os.path.exists(tropo_secondary):
-            tropo_secondary = os.path.join(tropo_products,
+            tropo_secondary = os.path.join(gacos_products,
                               product_dict[2][i][0][9:] + '.ztd.tif.vrt')
         # skip if corrected already generated and does not need to be updated
         if os.path.exists(outname):
@@ -1148,7 +1161,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                         'products corresponding to the reference and/or ' \
                         'secondary products are not found in the ' \
                         'specified folder %s',
-                        product_dict[2][i][0], tropo_products)
+                        product_dict[2][i][0], gacos_products)
             for j in [tropo_reference, tropo_secondary]:
                 if not os.path.exists(j) and j not in missing_products:
                     missing_products.append(j)
@@ -1173,29 +1186,15 @@ def main(inps=None):
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
+                                                nc_version=inps.nc_version,
                                                 verbose=inps.verbose)
 
-    if not inps.layers and not inps.tropo_products:
-        log.info('No layers specified; only creating bounding box shapes')
-
-    elif inps.tropo_products:
-        log.info('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
-        # If no input layers specified, initialize list
-        if not inps.layers: inps.layers=[]
-        # If valid argument for input layers passed, parse to list
-        if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
-        if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
-        if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
-
-    elif inps.layers.lower()=='all':
-        log.info('All layers are to be extracted, pass all keys.')
-        inps.layers=list(standardproduct_info.products[1][0].keys())
-        # Must remove productBoundingBoxes & pair-names because they are not raster layers
-        inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
-
-    else:
-        inps.layers=list(inps.layers.split(','))
-        inps.layers=[i.replace(' ','') for i in inps.layers]
+    # Perform initial layer, product, and correction sanity checks
+    inps.layers = layerCheck(standardproduct_info.products[1],
+                             inps.layers,
+                             inps.nc_version,
+                             inps.gacos_products,
+                             extract_or_ts = 'extract')
 
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower()=='all':
@@ -1234,8 +1233,6 @@ def main(inps=None):
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
-        # Import functions
-        from ARIAtools.vrtmanager import resampleRaster
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
@@ -1247,7 +1244,7 @@ def main(inps=None):
                             prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
-    if inps.tropo_products:
-        tropo_correction(standardproduct_info.products, inps.tropo_products,
+    if inps.gacos_products:
+        tropo_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir,
                          outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
