@@ -1006,7 +1006,7 @@ def tropo_correction(full_product_dict, gacos_products, bbox_file,
                       / (user_bbox.area))*100
         if per_overlap != 100. and per_overlap != 0.:
             log.warning('Common track extent only has %d overlap with' \
-                        'tropospheric product %d\n', per_overlap, i[0])
+                        'tropospheric product %s\n', per_overlap, i[0])
         if per_overlap == 0.:
             raise Exception('No spatial overlap between tropospheric ' \
                             'product %s and defined bounding box. ' \
