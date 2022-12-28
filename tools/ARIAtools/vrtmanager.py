@@ -333,7 +333,7 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                 layers = list(layers.split(','))
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
-    
+
 
     # Check to see if internal conflict between tropo correction methods
     raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic', \
@@ -342,7 +342,7 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                              [layers, raider_tropo_layers])))
     if gacos_products and user_tropo_layers != []:
         raise Exception('User specified extraction of raider-derived '
-                        'tropo layers %s AND gacos products with "-tp %s". ' 
+                        'tropo layers %s AND gacos products with "-tp %s". '
                         'Proceed with only one.'%(user_tropo_layers,
                          gacos_products))
 
