@@ -7,7 +7,7 @@ name: ARIA-tools
 channels:
   - conda-forge
 dependencies:
-  - python>=3.6
+  - python>=3.8
   - asf_search
   - cartopy
   - gdal>=3.4.2
