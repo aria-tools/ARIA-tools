@@ -32,7 +32,7 @@ jobs:
             conda install mamba -n base -c conda-forge --yes
             # mamba update -y conda
             # mamba update -y mamba
-            mamba env create -f environment.yml -c conda-forge
+            mamba env create -f environment.yml
 
             conda activate ARIA-tools
 
