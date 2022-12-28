@@ -8,7 +8,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.8
+  - python>=3.6
   - asf_search
   - cartopy
   - gdal>=3.4.1
@@ -19,9 +19,10 @@ dependencies:
   - pandas
   - pyproj
   - requests
-  - rise
   - scipy
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
   - jupyter_contrib_nbextensions
+  - pip:
+    - rise
