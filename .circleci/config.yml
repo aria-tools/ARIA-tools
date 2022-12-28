@@ -29,10 +29,10 @@ jobs:
           command: |
             export PATH="$HOME/miniconda/bin:$PATH"
             source $HOME/miniconda/etc/profile.d/conda.sh
-            conda install mamba -n base -c conda-forge --yes
+            conda install mamba -n base -c conda-forge -c free --yes
             # mamba update -y conda
             # mamba update -y mamba
-            mamba env create -f environment.yml -c free
+            mamba env create -f environment.yml
 
             conda activate ARIA-tools
 
