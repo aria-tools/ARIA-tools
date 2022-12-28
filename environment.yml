@@ -12,6 +12,7 @@ dependencies:
   - asf_search
   - cartopy
   - gdal>=3.4.2
+  - glibc>=2.17
   - h5py
   - joblib
   - matplotlib
