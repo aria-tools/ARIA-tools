@@ -183,7 +183,10 @@ class Downloader(object):
         self.inps.output     = self.inps.output.title()
         self.inps.wd         = op.abspath(self.inps.wd)
         os.makedirs(self.inps.wd, exist_ok=True)
-        log.setLevel('DEBUG') if self.inps.verbose else log.setLevel('INFO')
+        if self.inps.verbose:
+            log.setLevel('DEBUG')
+        else:
+            log.setLevel('INFO')
 
 
     def __call__(self):
