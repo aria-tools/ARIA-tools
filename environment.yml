@@ -6,13 +6,11 @@
 name: ARIA-tools
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - python>=3.6
   - asf_search
   - cartopy
   - gdal>=3.4.2
-  - glibc>=2.17
   - h5py
   - joblib
   - matplotlib
