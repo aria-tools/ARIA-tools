@@ -20,11 +20,9 @@ dependencies:
   - pandas
   - pyproj
   - requests
+  - rise
   - scipy
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
   - jupyter_contrib_nbextensions
-
-  - pip:
-    - rise
