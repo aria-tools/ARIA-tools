@@ -351,6 +351,9 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                         [all_valid_layers, layers])))
     layer_reject = list(set.intersection(*map(set, \
                         [layer_reject, raider_tropo_layers])))
+    # only report layers which user requested
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, layers])))
     layers = list(set.intersection(*map(set, [layers, all_valid_layers])))
     if layer_reject != []:
         log.warning('User-requested layers %s cannot be extracted as they '

@@ -742,9 +742,10 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
             outname, \
             verbose).data_array
 
-    # flip height levels vertically
+    # if necessary, flip height levels vertically
     data_array_ext = data_array.ReadAsArray()
-    data_array_ext = np.flipud(data_array_ext)
+    if metadatalyr_name in avoid_lyrs:
+        data_array_ext = np.flipud(data_array_ext)
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
