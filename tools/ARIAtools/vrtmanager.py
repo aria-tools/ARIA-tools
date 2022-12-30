@@ -297,9 +297,10 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
     all_valid_layers = list(set.intersection(*map(set, products)))
 
     # If specified, extract all layers
-    if layers.lower()=='all':
-        log.info('All layers are to be extracted, pass all keys.')
-        layers = all_valid_layers
+    if layers:
+        if layers.lower()=='all':
+            log.info('All layers are to be extracted, pass all keys.')
+            layers = all_valid_layers
 
     # differentiate between extract and TS pipeline
     # extract pipeline
