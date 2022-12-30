@@ -125,9 +125,9 @@ class setGUNW(object):
             fname_key, \
             fname_tmp, \
             verbose).data_array
-    
+
         # remove tmp directory
-        #shutil.rmtree(os.path.join(self.out_dir, 'tmp'))
+        shutil.rmtree(os.path.join(self.out_dir, 'tmp'))
 
         return data_arr.ReadAsArray()
 
@@ -235,7 +235,7 @@ class setGUNW(object):
             minimumOverlap = minimumOverlap, verbose = verbose)
 
         # get DEM and lat/lon arrays
-        demfilename, dem, lat, lon = prep_dem('download',
+        _, dem, lat, lon = prep_dem('download',
                     standardproduct_info.bbox_file, prods_TOTbbox,
                     prods_TOTbbox_metadatalyr, proj, arrshape = arrshape,
                     workdir = self.out_dir, outputFormat = outputFormat,
