@@ -49,8 +49,12 @@ jobs:
           command: |
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda activate ARIA-tools
-            export PYTHONPATH="$HOME/miniconda/MintPy/src:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
-            export PATH="$HOME/miniconda/MintPy/src/mintpy:$PATH"
+            export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
+            export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            export MINTPY_HOME="$HOME/miniconda/MintPy"
+            # install mintpy
+            mamba install --verbose --yes gdal">=3" --file ${MINTPY_HOME}/requirements.txt
+            python -m pip install ${MINTPY_HOME}
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
             export VSI_CACHE=YES
@@ -66,8 +70,12 @@ jobs:
           command: |
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda activate ARIA-tools
-            export PYTHONPATH="$HOME/miniconda/MintPy/src:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
-            export PATH="$HOME/miniconda/MintPy/src/mintpy:$PATH"
+            export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
+            export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            export MINTPY_HOME="$HOME/miniconda/MintPy"
+            # install mintpy
+            mamba install --verbose --yes gdal">=3" --file ${MINTPY_HOME}/requirements.txt
+            python -m pip install ${MINTPY_HOME}
             mkdir test
             cd test
             #product count
