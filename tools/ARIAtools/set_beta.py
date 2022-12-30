@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# Author: Simran Sangha, Brett Buzzanga, David Bekaert,
+#         Marin Govorcin, Zhang Yunjun
+# Copyright 2022, by the California Institute of Technology. ALL RIGHTS
+# RESERVED. United States Government Sponsorship acknowledged.
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import datetime as dt
 import numpy as np
 import os
