@@ -733,7 +733,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     #metadata layer quality check, correction applied if necessary
     #do not apply to correction layers
-    avoid_lyrs = ['ionosphere', 'troposphereWet', 'troposphereHydrostatic']
+    tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+    avoid_lyrs = ['ionosphere', 'solidEarthTide'] + tropo_lyrs
     metadatalyr_name = outname.split('/')[-2]
     if metadatalyr_name not in avoid_lyrs:
         data_array = metadata_qualitycheck( \
@@ -744,7 +745,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     # if necessary, flip height levels vertically
     data_array_ext = data_array.ReadAsArray()
-    if metadatalyr_name in avoid_lyrs:
+    if metadatalyr_name in tropo_lyrs:
         data_array_ext = np.flipud(data_array_ext)
 
     # Define lat/lon/height arrays for metadata layers
