@@ -50,8 +50,7 @@ jobs:
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
-            export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
-            chmod 600 $HOME/miniconda/MintPy/mintpy/prep_aria.py
+            export PATH="$HOME/miniconda/MintPy/src/mintpy:$PATH"
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
             export VSI_CACHE=YES
@@ -68,7 +67,7 @@ jobs:
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
-            export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            export PATH="$HOME/miniconda/MintPy/src/mintpy:$PATH"
             mkdir test
             cd test
             #product count
