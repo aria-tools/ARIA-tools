@@ -72,7 +72,7 @@ class Stitching:
     def setInpFile(self, input):
         """ Set the input Filename for stitching/unwrapping """
         # Convert a string (i.e. user gave single file) to a list
-        if isinstance(input, np.str):
+        if isinstance(input, str):
             input = [input]
         self.inpFile = input
 
@@ -86,14 +86,14 @@ class Stitching:
     def setConnCompFile(self, connCompFile):
         """ Set the connected Component file """
         # Convert a string (i.e. user gave single file) to a list
-        if isinstance(connCompFile, np.str):
+        if isinstance(connCompFile, str):
             connCompFile = [connCompFile]
         self.ccFile = connCompFile
 
     def setProdBBoxFile(self, ProdBBoxFile):
         """ Set the product bounding box file(s) """
         # Convert a string (i.e. user gave single file) to a list
-        if isinstance(ProdBBoxFile, np.str):
+        if isinstance(ProdBBoxFile, str):
             ProdBBoxFile = [ProdBBoxFile]
         self.prodbboxFile = ProdBBoxFile
 
@@ -429,7 +429,7 @@ class UnwrapOverlap(Stitching):
                 connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
                 connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
                 connCompData2_temp = (connCompData2*100)
-                temp = connCompData2_temp.astype(np.int)-connCompData1.astype(np.int)
+                temp = connCompData2_temp.astype(int)-connCompData1.astype(int)
                 temp[(temp<0) | (temp>2000)]=0
                 temp_count = collections.Counter(temp.flatten())
                 maxKey = 0
@@ -875,8 +875,8 @@ class UnwrapComponents(Stitching):
         geoTrans_global = list(geoTrans1)
         geoTrans_global[0] = np.min(self.tablePoints[:,4].astype(np.float64))
         geoTrans_global[3] = np.max(self.tablePoints[:,5].astype(np.float64))
-        X_coordinate = ((self.tablePoints[:,4].astype(np.float64) - geoTrans_global[0])/geoTrans_global[1]).astype(np.int)
-        Y_coordinate = ((self.tablePoints[:,5].astype(np.float64) - geoTrans_global[3])/geoTrans_global[5]).astype(np.int)
+        X_coordinate = ((self.tablePoints[:,4].astype(np.float64) - geoTrans_global[0])/geoTrans_global[1]).astype(int)
+        Y_coordinate = ((self.tablePoints[:,5].astype(np.float64) - geoTrans_global[3])/geoTrans_global[5]).astype(int)
         X_coordinate = X_coordinate.reshape((X_coordinate.shape[0],1))
         Y_coordinate = Y_coordinate.reshape((Y_coordinate.shape[0],1))
 
@@ -942,10 +942,10 @@ class UnwrapComponents(Stitching):
         from ARIAtools.phaseMinimization import PhaseUnwrap
 
         # generating a list to be parsed in the two-stager, not that table originally was a mixture of string and floats, so all were temporaly mapped to a string for easy parsing. Will need to undo that now when calling two stager
-        x = list(self.tablePoints[:,10].astype(np.int)+1)
-        y = list(self.tablePoints[:,11].astype(np.int)+1)
+        x = list(self.tablePoints[:,10].astype(int)+1)
+        y = list(self.tablePoints[:,11].astype(int)+1)
         phase = (self.tablePoints[:,9].astype(np.float32))
-        compNum = list(self.tablePoints[:,7].astype(np.int))
+        compNum = list(self.tablePoints[:,7].astype(int))
         phaseunwrap = PhaseUnwrap(x=x, y=y, phase=phase, compNum=compNum, redArcs=redarcsTypes[self.redArcs])
         phaseunwrap.solve(self.solver)
         cycles = phaseunwrap.unwrapLP()
