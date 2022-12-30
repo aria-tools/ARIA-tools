@@ -307,6 +307,7 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
     if extract_or_ts == 'extract':
         if not layers and not gacos_products:
             log.info('No layers specified; only creating bounding box shapes')
+            return []
         elif gacos_products:
             log.info('Tropospheric corrections will be applied, making sure '
                      'at least unwrappedPhase and lookAngle are extracted.')
@@ -334,6 +335,8 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                 layers = list(layers.split(','))
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
+        else:
+            return []
 
 
     # Check to see if internal conflict between tropo correction methods
