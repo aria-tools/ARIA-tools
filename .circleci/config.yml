@@ -53,7 +53,7 @@ jobs:
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
             export MINTPY_HOME="$HOME/miniconda/MintPy"
             # install mintpy
-            mamba install --verbose --yes gdal">=3" --file ${MINTPY_HOME}/requirements.txt
+            mamba install --verbose --yes gdal">=3.4.1" --file ${MINTPY_HOME}/requirements.txt
             python -m pip install ${MINTPY_HOME}
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
@@ -73,9 +73,6 @@ jobs:
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
             export MINTPY_HOME="$HOME/miniconda/MintPy"
-            # install mintpy
-            mamba install --verbose --yes gdal">=3" --file ${MINTPY_HOME}/requirements.txt
-            python -m pip install ${MINTPY_HOME}
             mkdir test
             cd test
             #product count
