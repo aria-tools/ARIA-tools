@@ -49,7 +49,7 @@ jobs:
           command: |
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda activate ARIA-tools
-            export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
+            export PYTHONPATH="$HOME/miniconda/MintPy/src:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/src/mintpy:$PATH"
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
@@ -66,7 +66,7 @@ jobs:
           command: |
             source $HOME/miniconda/etc/profile.d/conda.sh
             conda activate ARIA-tools
-            export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
+            export PYTHONPATH="$HOME/miniconda/MintPy/src:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/src/mintpy:$PATH"
             mkdir test
             cd test
