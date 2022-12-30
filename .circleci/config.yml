@@ -52,9 +52,6 @@ jobs:
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
             export MINTPY_HOME="$HOME/miniconda/MintPy"
-            # install mintpy
-            mamba install --verbose --yes gdal">=3.4.1" --file ${MINTPY_HOME}/requirements.txt
-            python -m pip install ${MINTPY_HOME}
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
             export VSI_CACHE=YES
@@ -64,7 +61,13 @@ jobs:
             python setup.py build
             python setup.py install
             ariaDownload.py -h
+            # install mintpy
+            conda deactivate
+            mamba env create -f ${MINTPY_HOME}/docs/conda_env.yml
+            conda activate mintpy
+            python -m pip install ${MINTPY_HOME}
             prep_aria.py -h
+            conda deactivate
       - run:
           name: Run unit tests
           command: |
@@ -94,9 +97,13 @@ jobs:
             #time-series prep
             ariaTSsetup.py -d download -m download -f "products/*.nc"
             #run loading of aria products in mintpy
+            conda deactivate
+            conda activate mintpy
             prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180502_20180408.vrt -a azimuthAngle/20180502_20180408.vrt
             #download and test NLCD mask
             cd products
+            conda deactivate
+            conda activate ARIA-tools
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             cd ../
