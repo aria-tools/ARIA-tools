@@ -338,7 +338,6 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
         else:
             return []
 
-
     # Check to see if internal conflict between tropo correction methods
     raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic', \
                            'troposphere']
