@@ -41,6 +41,10 @@ jobs:
             echo "machine urs.earthdata.nasa.gov login $URSname password $URSkey" > ~/.netrc
             chmod 600 ~/.netrc
             
+            #clone mintpy
+            export MINTPY_HOME="$HOME/miniconda/MintPy"
+            git clone https://github.com/insarlab/MintPy.git ${MINTPY_HOME}
+            
             python --version
             python -c "import numpy; print(numpy.__version__)"
             python -c "import pyproj; print(pyproj.__version__)"
@@ -64,7 +68,6 @@ jobs:
             
             # install mintpy
             conda deactivate
-            git clone https://github.com/insarlab/MintPy.git ${MINTPY_HOME}
             mamba env create -f ${MINTPY_HOME}/docs/environment.yml
             conda activate mintpy
             python -m pip install ${MINTPY_HOME}
