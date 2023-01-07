@@ -23,7 +23,7 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import resampleRaster, layerCheck
 from ARIAtools.extractProduct import (merged_productbbox, prep_dem,
-                                      export_products, tropo_correction)
+                                      export_products, gacos_correction)
 
 gdal.UseExceptions()
 # Suppress warnings
@@ -44,6 +44,9 @@ def create_parser():
     parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
                         type=str, default=None, help='Path to director(ies) '
                         'or tar file(s) containing GACOS products.')
+    parser.add_argument('-tc', '--tropo_corrections', dest='tropo_corrections',
+                        action='store_true', help='Estimate total tropo delay '
+                        'from raider-derived wet + hydro components.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
                         help='Specify layers to extract as a comma '
                         'deliminated list bounded by single quotes. '
@@ -51,7 +54,7 @@ def create_parser():
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic", "troposphere". '
+                        '"troposphereHydrostatic". '
                         'If "all" is specified, then all layers are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -463,7 +466,8 @@ def main(inps=None):
                     outDir=inps.workdir, outputFormat=inps.outputFormat,
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
+                    multilooking=inps.multilooking,
+                    tropo_corrections=False)
 
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
@@ -480,7 +484,8 @@ def main(inps=None):
                     outDir=inps.workdir, outputFormat=inps.outputFormat,
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
+                    multilooking=inps.multilooking,
+                    tropo_corrections=False)
 
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
@@ -492,14 +497,17 @@ def main(inps=None):
                     outputFormat=inps.outputFormat,
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
+                    multilooking=inps.multilooking,
+                    tropo_corrections=False)
 
     # Extracting other layers, if specified
-    layers = layerCheck(standardproduct_info.products[1],
-                        inps.layers,
-                        inps.nc_version,
-                        inps.gacos_products,
-                        extract_or_ts = 'tssetup')
+    layers, all_valid_layers , \
+        inps.tropo_corrections = layerCheck(standardproduct_info.products[1],
+                                            inps.layers,
+                                            inps.nc_version,
+                                            inps.gacos_products,
+                                            inps.tropo_corrections,
+                                            extract_or_ts = 'tssetup')
     if layers != []:
         print('\nExtracting optional, user-specified layers %s for each '
               'interferogram pair' % (layers))
@@ -510,7 +518,8 @@ def main(inps=None):
                         outputFormat=inps.outputFormat,
                         stitchMethodType='overlap', verbose=inps.verbose,
                         num_threads=inps.num_threads,
-                        multilooking=inps.multilooking)
+                        multilooking=inps.multilooking,
+                        tropo_corrections=inps.tropo_corrections)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # metadata layers and mask output layers, respectively
@@ -532,7 +541,7 @@ def main(inps=None):
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.gacos_products:
-        tropo_correction(standardproduct_info.products, inps.gacos_products,
+        gacos_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_tot_bbox,
                          outDir=inps.workdir, outputFormat=inps.outputFormat,
                          verbose=inps.verbose, num_threads=inps.num_threads)

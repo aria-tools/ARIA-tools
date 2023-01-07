@@ -286,7 +286,8 @@ def tifGacos(intif):
 
 
 ###Perform initial layer, product, and correction sanity checks
-def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
+def layerCheck(products, layers, nc_version, gacos_products,
+               tropo_corrections, extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
 
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
@@ -339,15 +340,18 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
             return []
 
     # Check to see if internal conflict between tropo correction methods
-    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic', \
-                           'troposphere']
+    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic']
     user_tropo_layers = list(set.intersection(*map(set, \
                              [layers, raider_tropo_layers])))
     if gacos_products and user_tropo_layers != []:
         raise Exception('User specified extraction of raider-derived '
-                        'tropo layers %s AND gacos products with "-tp %s". '
+                        'tropo layers %s AND gacos products with "-gp %s". '
                         'Proceed with only one.'%(user_tropo_layers,
                          gacos_products))
+    if gacos_products and tropo_corrections != []:
+        raise Exception('User-requested estimation of raider-derived total '
+                        'troposphere "-tc " AND gacos products with '
+                        '"-gp %s". Proceed with only one.'%(gacos_products))
 
     # pass intersection of valid layers and track invalid requests
     layer_reject = list(set.symmetric_difference(*map(set, \
@@ -364,4 +368,13 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                     '"-nc_version %s" constraint to filter older product '
                     'variants \n', layer_reject, nc_version)
 
-    return layers
+    # if specified, determine if computation of
+    # total tropospheric is possible
+    if tropo_corrections:
+        if not set(raider_tropo_layers).issubset(all_valid_layers):
+            log.warning('User-requested estimation of raider-derived total '
+                        'troposphere "-tc " is not possible as tropo '
+                        'component layers are not common to all products.')
+            tropo_corrections = False
+
+    return layers, all_valid_layers, tropo_corrections
