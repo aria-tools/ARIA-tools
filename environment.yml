@@ -11,8 +11,7 @@ dependencies:
   - python>=3.6
   - asf_search
   - cartopy
-  - gdal>=3.4.2
-  - libgdal>=3.4.2
+  - gdal>=3.4.1
   - h5py
   - joblib
   - matplotlib
@@ -25,6 +24,5 @@ dependencies:
   #for ARIA-tools-docs
   - jupyterlab
   - jupyter_contrib_nbextensions
-
   - pip:
     - rise

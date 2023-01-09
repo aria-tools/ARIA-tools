@@ -40,7 +40,11 @@ jobs:
 
             echo "machine urs.earthdata.nasa.gov login $URSname password $URSkey" > ~/.netrc
             chmod 600 ~/.netrc
-            git clone https://github.com/insarlab/MintPy.git $HOME/miniconda/MintPy
+            
+            #clone mintpy
+            export MINTPY_HOME="$HOME/miniconda/MintPy"
+            git clone https://github.com/insarlab/MintPy.git ${MINTPY_HOME}
+            
             python --version
             python -c "import numpy; print(numpy.__version__)"
             python -c "import pyproj; print(pyproj.__version__)"
@@ -51,6 +55,7 @@ jobs:
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            export MINTPY_HOME="$HOME/miniconda/MintPy"
             export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
             export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
             export VSI_CACHE=YES
@@ -60,7 +65,14 @@ jobs:
             python setup.py build
             python setup.py install
             ariaDownload.py -h
+            
+            # install mintpy
+            conda deactivate
+            mamba env create -f ${MINTPY_HOME}/docs/environment.yml
+            conda activate mintpy
+            python -m pip install ${MINTPY_HOME}
             prep_aria.py -h
+            conda deactivate
       - run:
           name: Run unit tests
           command: |
@@ -68,6 +80,7 @@ jobs:
             conda activate ARIA-tools
             export PYTHONPATH="$HOME/miniconda/MintPy:$HOME/miniconda/ARIA-tools/tools/ARIAtools"
             export PATH="$HOME/miniconda/MintPy/mintpy:$PATH"
+            export MINTPY_HOME="$HOME/miniconda/MintPy"
             mkdir test
             cd test
             #product count
@@ -80,18 +93,25 @@ jobs:
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180502_20180408-043106-21658N_19755N-PP-0dd0-v2_0_1.nc
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180502_20180408-043040-20161N_18088N-PP-6704-v2_0_1.nc
             cd ../
+            
             #extraction of 3D metadata layer
             ariaExtract.py -f "products/*.nc" -l azimuthAngle -d download
             #extraction and mosaicking of coherence data layer
             ariaExtract.py -f "products/*.nc" -l coherence
             #extraction and mosaicking of unwrappedPhase data layer
             ariaExtract.py -f "products/*.nc" -l unwrappedPhase
+            
             #time-series prep
             ariaTSsetup.py -d download -m download -f "products/*.nc"
             #run loading of aria products in mintpy
+            conda deactivate
+            conda activate mintpy
             prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180502_20180408.vrt -a azimuthAngle/20180502_20180408.vrt
+            
             #download and test NLCD mask
             cd products
+            conda deactivate
+            conda activate ARIA-tools
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-004-tops-20190325_20190301-230628-37654N_35777N-PP-13e7-v2_0_2.nc
             cd ../

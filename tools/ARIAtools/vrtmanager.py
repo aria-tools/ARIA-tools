@@ -286,7 +286,8 @@ def tifGacos(intif):
 
 
 ###Perform initial layer, product, and correction sanity checks
-def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
+def layerCheck(products, layers, nc_version, gacos_products,
+               tropo_corrections, extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
 
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
@@ -297,15 +298,17 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
     all_valid_layers = list(set.intersection(*map(set, products)))
 
     # If specified, extract all layers
-    if layers.lower()=='all':
-        log.info('All layers are to be extracted, pass all keys.')
-        layers = all_valid_layers
+    if layers:
+        if layers.lower()=='all':
+            log.info('All layers are to be extracted, pass all keys.')
+            layers = all_valid_layers
 
     # differentiate between extract and TS pipeline
     # extract pipeline
     if extract_or_ts == 'extract':
         if not layers and not gacos_products:
             log.info('No layers specified; only creating bounding box shapes')
+            return []
         elif gacos_products:
             log.info('Tropospheric corrections will be applied, making sure '
                      'at least unwrappedPhase and lookAngle are extracted.')
@@ -333,24 +336,31 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                 layers = list(layers.split(','))
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
-    
+        else:
+            return []
 
     # Check to see if internal conflict between tropo correction methods
-    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic', \
-                           'troposphere']
+    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic']
     user_tropo_layers = list(set.intersection(*map(set, \
                              [layers, raider_tropo_layers])))
     if gacos_products and user_tropo_layers != []:
         raise Exception('User specified extraction of raider-derived '
-                        'tropo layers %s AND gacos products with "-tp %s". ' 
+                        'tropo layers %s AND gacos products with "-gp %s". '
                         'Proceed with only one.'%(user_tropo_layers,
                          gacos_products))
+    if gacos_products and tropo_corrections != []:
+        raise Exception('User-requested estimation of raider-derived total '
+                        'troposphere "-tc " AND gacos products with '
+                        '"-gp %s". Proceed with only one.'%(gacos_products))
 
     # pass intersection of valid layers and track invalid requests
     layer_reject = list(set.symmetric_difference(*map(set, \
                         [all_valid_layers, layers])))
     layer_reject = list(set.intersection(*map(set, \
                         [layer_reject, raider_tropo_layers])))
+    # only report layers which user requested
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, layers])))
     layers = list(set.intersection(*map(set, [layers, all_valid_layers])))
     if layer_reject != []:
         log.warning('User-requested layers %s cannot be extracted as they '
@@ -358,4 +368,13 @@ def layerCheck(products, layers, nc_version, gacos_products, extract_or_ts):
                     '"-nc_version %s" constraint to filter older product '
                     'variants \n', layer_reject, nc_version)
 
-    return layers
+    # if specified, determine if computation of
+    # total tropospheric is possible
+    if tropo_corrections:
+        if not set(raider_tropo_layers).issubset(all_valid_layers):
+            log.warning('User-requested estimation of raider-derived total '
+                        'troposphere "-tc " is not possible as tropo '
+                        'component layers are not common to all products.')
+            tropo_corrections = False
+
+    return layers, all_valid_layers, tropo_corrections
