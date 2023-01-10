@@ -13,8 +13,6 @@ import logging
 import os
 import shutil
 
-import h5py
-
 from netCDF4 import Dataset
 
 import numpy as np
@@ -28,9 +26,11 @@ import xarray as xr
 log = logging.getLogger(__name__)
 
 # hardcode correction layer variables for GUNW
-LYR_GROUP = 'science/grids/corrections/external/tides'
-LYR_NAMES = ['solidEarthTide']
+LYR_GROUP = '/science/grids/corrections/external/tides'
+LYR_NAME = 'solidEarthTide'
 DIM_NAMES = ['heightsMeta', 'latitudeMeta', 'longitudeMeta']
+GEOM_LYRS = ['perpendicularBaseline', 'parallelBaseline', 'incidenceAngle',
+             'lookAngle', 'azimuthAngle']
 
 
 def create_parser(iargs=None):
@@ -71,51 +71,6 @@ def create_gdalrast(inname, outname, output_format):
     return
 
 
-def update_gunw(path_gunw: str, ds_ifg):
-    """ Update the path_gunw file using input correction layers """
-    # first need to delete the variable; only can seem to with h5
-    with h5py.File(path_gunw, 'a') as h5:
-        for k in LYR_GROUP.split():
-            h5 = h5[k]
-        for i in LYR_NAMES:
-            del h5[i]
-        for k in 'crs'.split():
-            if k in h5.keys():
-                del h5[k]
-
-    with Dataset(path_gunw, mode='a') as ds:
-        ds_grp = ds[LYR_GROUP]
-        for dim in DIM_NAMES:
-            # dimension may already exist if updating
-            try:
-                ds_grp.createDimension(dim, len(ds_ifg.coords[dim]))
-                # necessary for transform
-                v = ds_grp.createVariable(dim, np.float32, dim)
-                v[:] = ds_ifg[dim]
-                v.setncatts(ds_ifg[dim].attrs)
-            except:
-                pass
-
-        for name in LYR_NAMES:
-            da = ds_ifg[name]
-            nodata = da.encoding['_FillValue']
-            chunksize = da.encoding['chunksizes']
-            v = ds_grp.createVariable(name, np.float32, DIM_NAMES,
-                                      chunksizes=chunksize,
-                                      fill_value=nodata)
-            v[:] = da.data
-            v.setncatts(da.attrs)
-
-        # add the projection
-        v_proj = ds_grp.createVariable('crs', 'i')
-        v_proj.setncatts(ds_ifg['crs'].attrs)
-
-    log.info('Updated %s group in: %s',
-             os.path.basename(LYR_GROUP), path_gunw)
-
-    return
-
-
 class setGUNW(object):
     def __init__(self, f: str, out_name: str, out_dir: str,
                  output_format: str, gunw_version: str, interp_result: bool,
@@ -133,10 +88,11 @@ class setGUNW(object):
         self.interp_result = interp_result
         self.keep_tmp = keep_tmp
         # get geom filenames
+        self.geom_group = '/science/grids/imagingGeometry'
         self.inc_angle_fn = self.gunw_prefix + \
-            ':/science/grids/imagingGeometry/incidenceAngle'
+            ':' + self.geom_group + '/incidenceAngle'
         self.az_angle_fn = self.gunw_prefix + \
-            ':/science/grids/imagingGeometry/azimuthAngle'
+            ':' + self.geom_group + '/azimuthAngle'
         # hardcode
         self.gdal_fmt = 'float32'
         self.nodata = 0.
@@ -170,6 +126,9 @@ class setGUNW(object):
         for i in range(len(self.zMeta)):
             self.tide_los[i] = self.get_setLOS(self.inc_angle[i],
                                                self.az_angle[i])
+
+        # update GUNW
+        self.update_gunw()
 
         # Save file
         self.outname = os.path.join(self.out_dir, self.name)
@@ -300,6 +259,57 @@ class setGUNW(object):
 
         return tide_los
 
+    def update_gunw(self):
+        """ Update the path_gunw file using input correction layers """
+        # initialize cube from existing geometry field
+        with xr.open_dataset(self.path_gunw, group=self.geom_group) as ds_ifg:
+            ds_ifg[LYR_NAME] = ds_ifg.incidenceAngle
+            # drop geometry layers
+            ds_ifg = ds_ifg.drop(GEOM_LYRS)
+            # update variable + attributes
+            ds_ifg[LYR_NAME].values = self.tide_los
+            attrs = {
+                 'description': 'Solid Earth tide',
+                 'units': 'ray radians',
+                 'grid_mapping': 'crsMeta',
+                 'long_name': LYR_NAME,
+                 'standard_name': LYR_NAME
+                 }
+            ds_ifg[LYR_NAME] = ds_ifg[LYR_NAME].assign_attrs(attrs)
+        ds_ifg.close()
+        #ds_ifg.to_netcdf(self.path_gunw, mode='a', group=LYR_GROUP)
+
+        with Dataset(self.path_gunw, mode='a') as ds:
+            ds_grp = ds[LYR_GROUP]
+
+            for dim in DIM_NAMES:
+                ds_grp.createDimension(dim, len(ds_ifg.coords[dim]))
+                ## necessary for transform
+                v  = ds_grp.createVariable(dim, np.float32, dim)
+                v[:] = ds_ifg[dim]
+                v.setncatts(ds_ifg[dim].attrs)
+
+            da = ds_ifg[LYR_NAME]
+            nodata = da.encoding['_FillValue']
+            chunksize = da.encoding['chunksizes']
+            v = ds_grp.createVariable(LYR_NAME, np.float32, DIM_NAMES,
+                                      chunksizes=chunksize,
+                                      fill_value=nodata)
+            v[:] = da.data
+            v.setncatts(da.attrs)
+
+            # add the projection
+            v_proj = ds_grp.createVariable('crs', 'i')
+            v_proj.setncatts(ds_ifg['crs'].attrs)
+
+            # set gunw version
+            ds_grp.version = self.gunw_version
+
+        log.info('Updated %s group in: %s',
+                 os.path.basename(LYR_GROUP), self.path_gunw)
+
+        return
+
     def interpolate_set(self):
         """ Interpolate SET and intersect with DEM """
         from ARIAtools.ARIAProduct import ARIA_standardproduct
@@ -362,8 +372,7 @@ class setGUNW(object):
 
 if __name__ == '__main__':
     args = create_parser()
-    for out_name in LYR_NAMES:
-        set_gunwobj = setGUNW(args.file, out_name, args.out_dir,
-                              args.output_format, args.gunw_version,
-                              args.interp_result, args.keep_tmp)
+    set_gunwobj = setGUNW(args.file, LYR_NAME, args.out_dir,
+                          args.output_format, args.gunw_version,
+                          args.interp_result, args.keep_tmp)
     set_gunwobj()
