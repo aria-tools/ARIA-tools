@@ -44,9 +44,6 @@ def create_parser():
     parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
                         type=str, default=None, help='Path to director(ies) '
                         'or tar file(s) containing GACOS products.')
-    parser.add_argument('-tc', '--tropo_corrections', dest='tropo_corrections',
-                        action='store_true', help='Estimate total tropo delay '
-                        'from raider-derived wet + hydro components.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
                         help='Specify layers to extract as a comma '
                         'deliminated list bounded by single quotes. '
@@ -54,8 +51,8 @@ def create_parser():
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic". '
-                        'If "all" is specified, then all layers are extracted.'
+                        '"troposphereHydrostatic", "troposphereTotal". '
+                        'If "all" specified, then all layers are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '
@@ -220,12 +217,12 @@ def generate_stack(aria_prod, input_files, output_file_name,
         data_type = "Float32"
         print('Number of unwrapped interferograms discovered: ', len(int_list))
         dlist = sorted(int_list)
-    elif input_files in ['tropocorrected_products', 'tropocorrected', 'tropo']:
-        domain_name = 'unwrappedPhase'
-        int_list = glob.glob(os.path.join(workdir, 'tropocorrected_products',
+    elif input_files in ['gacos_corrections', 'gacos']:
+        domain_name = 'gacos'
+        int_list = glob.glob(os.path.join(workdir, 'gacos_corrections',
                              '[0-9]*[0-9].vrt'))
         data_type = "Float32"
-        print('Number of tropocorrected unwrapped interferograms discovered: ',
+        print('Number of tropocorrected unw interferograms discovered: ',
               len(int_list))
         dlist = sorted(int_list)
     elif input_files in ['coherence', 'Coherence', 'coh']:
@@ -262,12 +259,12 @@ def generate_stack(aria_prod, input_files, output_file_name,
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
     if ref_dlist and new_dlist != ref_dlist:
         tropo_dlist = glob.glob(os.path.join(workdir,
-                                'tropocorrected_products', '[0-9]*[0-9].vrt'))
+                                'gacos_corrections', '[0-9]*[0-9].vrt'))
         tropo_dlist = sorted([os.path.basename(i).split(
                             '.vrt')[0] for i in tropo_dlist])
-        tropo_path = os.path.join(workdir, 'tropocorrected_products')
+        tropo_path = os.path.join(workdir, 'gacos_corrections')
         if os.path.exists(tropo_path) and tropo_dlist == ref_dlist:
-            log.warning('Discrepancy between "tropocorrected_products" '
+            log.warning('Discrepancy between "gacos_corrections" '
                         'products (%s files) and %s products (%s files),'
                         'rejecting scenes not common between both',
                         len(ref_dlist), domain_name, len(new_dlist))
@@ -467,7 +464,7 @@ def main(inps=None):
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
                     multilooking=inps.multilooking,
-                    tropo_corrections=False)
+                    tropo_total=False)
 
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
@@ -485,7 +482,7 @@ def main(inps=None):
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
                     multilooking=inps.multilooking,
-                    tropo_corrections=False)
+                    tropo_total=False)
 
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
@@ -498,16 +495,15 @@ def main(inps=None):
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
                     multilooking=inps.multilooking,
-                    tropo_corrections=False)
+                    tropo_total=False)
 
     # Extracting other layers, if specified
     layers, all_valid_layers , \
-        inps.tropo_corrections = layerCheck(standardproduct_info.products[1],
-                                            inps.layers,
-                                            inps.nc_version,
-                                            inps.gacos_products,
-                                            inps.tropo_corrections,
-                                            extract_or_ts = 'tssetup')
+        inps.tropo_total = layerCheck(standardproduct_info.products[1],
+                                      inps.layers,
+                                      inps.nc_version,
+                                      inps.gacos_products,
+                                      extract_or_ts = 'tssetup')
     if layers != []:
         print('\nExtracting optional, user-specified layers %s for each '
               'interferogram pair' % (layers))
@@ -519,7 +515,7 @@ def main(inps=None):
                         stitchMethodType='overlap', verbose=inps.verbose,
                         num_threads=inps.num_threads,
                         multilooking=inps.multilooking,
-                        tropo_corrections=inps.tropo_corrections)
+                        tropo_total=inps.tropo_total)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # metadata layers and mask output layers, respectively
@@ -547,18 +543,17 @@ def main(inps=None):
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    if inps.gacos_products:
-        ref_dlist = generate_stack(standardproduct_info,
-                                   'tropocorrected_products', 'unwrapStack',
-                                   workdir=inps.workdir)
-    else:
-        ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
-                                   'unwrapStack', workdir=inps.workdir)
+    ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
+                               'unwrapStack', workdir=inps.workdir)
     ref_dlist = generate_stack(standardproduct_info, 'coherence', 'cohStack',
                                workdir=inps.workdir, ref_dlist=ref_dlist)
     ref_dlist = generate_stack(standardproduct_info, 'connectedComponents',
                                'connCompStack', workdir=inps.workdir,
                                ref_dlist=ref_dlist)
+    if inps.gacos_products:
+        ref_dlist = generate_stack(standardproduct_info,
+                                   'gacos_corrections', 'gacosStack',
+                                   workdir=inps.workdir)
     # If amplitude files extracted
     if 'amplitude' in layers:
         ref_dlist = generate_stack(standardproduct_info, 'amplitude',
