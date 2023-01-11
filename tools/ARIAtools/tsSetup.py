@@ -21,9 +21,9 @@ from ARIAtools import progBar
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import resampleRaster, layerCheck
+from ARIAtools.vrtmanager import resampleRaster
 from ARIAtools.extractProduct import (merged_productbbox, prep_dem,
-                                      export_products, gacos_correction)
+                                      export_products, tropo_correction)
 
 gdal.UseExceptions()
 # Suppress warnings
@@ -31,6 +31,35 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
+# MG: create a list of all aria layers
+ARIA_LAYERS = ['unwrappedPhase',
+               'tropocorrected_products',
+               'coherence',
+               'connectedComponents',
+               'amplitude',
+               'troposphereHydrostatic',
+               'troposphereWet',
+               'troposphereTotal',
+               'ionosphere',
+               'set']
+
+ARIA_STACK_DEFAULTS = ['unwrappedPhase',
+                       'coherence',
+                       'connectedComponents',
+                       'troposphereTotal']
+
+ARIA_STACK_OUTFILES = {
+    'unwrappedPhase': 'unwrapStack',
+    'tropocorrected_products': 'unwrapStack',
+    'coherence': 'cohStack',
+    'connectedComponents': 'connCompStack',
+    'amplitude': 'ampStack',
+    'troposphereHydrostatic': 'tropoHydrostaticStack',
+    'troposphereWet': 'tropoWetStack',
+    'troposphereTotal': 'tropoStack',
+    'ionosphere': 'ionoStack',
+    'set': 'setStack'
+}
 
 def create_parser():
     """Parser to read command line arguments."""
@@ -41,7 +70,7 @@ def create_parser():
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
                         help='Specify directory to deposit all outputs. '
                         'Default is local directory where script is launched.')
-    parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
+    parser.add_argument('-tp', '--tropo_products', dest='tropo_products',
                         type=str, default=None, help='Path to director(ies) '
                         'or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
@@ -50,9 +79,8 @@ def create_parser():
                         'Allowed keys are: "unwrappedPhase", "coherence", '
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
-                        '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic", "troposphereTotal". '
-                        'If "all" specified, then all layers are extracted.'
+                        '"ionosphere". If "all" is specified, then all layers'
+                        'are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '
@@ -118,12 +146,8 @@ def create_parser():
                         ' Default 0.0081 = 0.0081km\u00b2 = area of single'
                         ' pixel at standard 90m resolution')
     parser.add_argument('--version', dest='version',  default=None,
-                        help='Specify version as str, e.g. 2_0_4 or all prods; '
-                        'default: all')
-    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
-                        help='Specify netcdf version as str, '
-                        'e.g. 1c or all prods;'
-                        'default: 1b')
+                        help='Specify version as str, e.g. 2_0_4 or all prods;'
+                        'default: newest')
     parser.add_argument('-verbose', '--verbose', action='store_true',
                         dest='verbose', help="Toggle verbose mode on.")
 
@@ -192,9 +216,80 @@ def extract_utc_time(aria_prod):
         utc_dict[pair_name[0]] = utc_time.strftime("%H:%M:%S.%f")
     return utc_dict
 
+# MG: added function to write tropoTotal vrt
+def get_tropo_total(workdir='./'):
+    # Create total tropo dir
+    tropo_dir = os.path.join(workdir, 'troposphereTotal')
+
+    if not os.path.exists(tropo_dir):
+        os.makedirs(tropo_dir)
+
+    # Find files
+    dry_list = sorted(glob.glob(os.path.join(workdir,
+                                'troposphereHydrostatic',
+                                '[0-9]*[0-9].vrt')))
+    wet_list = sorted(glob.glob(os.path.join(workdir,
+                                'troposphereWet',
+                                '[0-9]*[0-9].vrt')))
+
+    d_pairs = [os.path.basename(i).split('.vrt')[0] for i in dry_list]
+    w_pairs = [os.path.basename(i).split('.vrt')[0] for i in wet_list]
+
+    prog_bar = progBar.progressBar(maxValue=len(d_pairs),
+                            print_msg='Generating: troposphereTotal: ')
+
+    # Create tropoTotal vrt for each file
+    tropo_vrt = '''<VRTDataset rasterXSize="{width}" rasterYSize="{height}">
+    <VRTRasterBand dataType="{data_type}" band="{index}" subClass="VRTDerivedRasterBand">
+        <Description>Total tropospheric delay: Hydrostatic + Wet </Description>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="1">{hydrostatic_path}</SourceFilename>
+            <SourceBand>1</SourceBand>
+            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{data_type}"/>
+            <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
+            <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
+        </SimpleSource>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="1">{wet_path}</SourceFilename>
+            <SourceBand>1</SourceBand>
+            <SourceProperties RasterXSize="{width}" RasterYSize="{height}" DataType="{data_type}"/>
+            <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}" ySize="{ysize}"/>
+            <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
+        </SimpleSource>
+        <PixelFunctionType>sum</PixelFunctionType>
+        <SourceTransferType>{data_type}</SourceTransferType>
+    </VRTRasterBand>
+    </VRTDataset>'''
+
+    for i, (dry_pair, d_file, w_file) in enumerate(zip(d_pairs, dry_list, wet_list)):
+        # Ensure that we have both hydrostatic and wet delay
+        if dry_pair in w_pairs:
+            prog_bar.update(i+1, suffix=dry_pair)
+            # Get file metadata
+            ds = gdal.Open(d_file, gdal.GA_ReadOnly)
+            with open(os.path.join(tropo_dir, dry_pair + '.vrt'), 'w') as fid:
+                fid.write(tropo_vrt.format(width=ds.RasterXSize,
+                                           height=ds.RasterYSize,
+                                           index=1,
+                                           xmin=0,
+                                           ymin=0,
+                                           xmax=ds.RasterXSize,
+                                           ymax=ds.RasterYSize,
+                                           xsize=ds.RasterXSize,
+                                           ysize=ds.RasterYSize,
+                                           data_type='Float32',
+                                           hydrostatic_path=os.path.abspath(d_file),
+                                           wet_path=os.path.abspath(w_file)))
+            ds = None
+        prog_bar.close()
+
+        return None
+
 
 def generate_stack(aria_prod, input_files, output_file_name,
                    workdir='./', ref_dlist=None):
+    import re
+
     """Generate time series stack."""
     utc_time = extract_utc_time(aria_prod)
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
@@ -210,47 +305,43 @@ def generate_stack(aria_prod, input_files, output_file_name,
     else:
         print(f'Directory {os.path.join(workdir, "stack")} already exists.')
 
-    if input_files in ['unwrappedPhase', 'unwrapped', 'unw']:
+    # MG; did a little clean up below
+
+    # MG: find pattern in string, with special case for tropo
+    # take into account variation in input name
+    # e.g. [unwrappedPhase, unwrapPhase, unwrap]
+    # NOTE is it necessary to have the option for different names
+    # as they are hardcoreded, maybe because of different nc version, double-check?
+    _find_match = lambda x: re.findall('[A-Z][^A-Z]*', x)[0] \
+                            if re.search('tropo', x) \
+                            else re.findall('[a-z][^A-Z]*', x)[0]
+
+    # Special case - tropocorrected files
+    if input_files in ['tropocorrected_products', 'tropocorrected', 'tropo']:
+        stack_layer = 'tropocorrected_products'
         domain_name = 'unwrappedPhase'
-        int_list = glob.glob(os.path.join(workdir, 'unwrappedPhase',
-                             '[0-9]*[0-9].vrt'))
-        data_type = "Float32"
-        print('Number of unwrapped interferograms discovered: ', len(int_list))
-        dlist = sorted(int_list)
-    elif input_files in ['gacos_corrections', 'gacos']:
-        domain_name = 'gacos'
-        int_list = glob.glob(os.path.join(workdir, 'gacos_corrections',
-                             '[0-9]*[0-9].vrt'))
-        data_type = "Float32"
-        print('Number of tropocorrected unw interferograms discovered: ',
-              len(int_list))
-        dlist = sorted(int_list)
-    elif input_files in ['coherence', 'Coherence', 'coh']:
-        domain_name = 'Coherence'
-        coh_list = glob.glob(os.path.join(workdir, 'coherence',
-                             '[0-9]*[0-9].vrt'))
-        data_type = "Float32"
-        print('Number of coherence files discovered: ', len(coh_list))
-        dlist = sorted(coh_list)
-    elif input_files in ['connectedComponents', 'connectedComponent',
-                         'connComp']:
-        domain_name = 'connectedComponents'
-        conn_comp_list = glob.glob(os.path.join(workdir,
-                                   'connectedComponents', '[0-9]*[0-9].vrt'))
-        data_type = "Int16"
-        print('Number of connectedComponents discovered: ',
-              len(conn_comp_list))
-        dlist = sorted(conn_comp_list)
-    elif input_files in ['amplitude', 'Amplitude', 'amp']:
-        domain_name = 'Amplitude'
-        amp_list = glob.glob(os.path.join(workdir, 'amplitude',
-                             '[0-9]*[0-9].vrt'))
-        data_type = "Float32"
-        print('Number of amplitude files discovered: ', len(amp_list))
-        dlist = sorted(amp_list)
     else:
-        print('Stacks can be created for unwrapped interferogram, '
-              'coherence and connectedComponent VRT files')
+        stack_layer = list(filter(lambda x: _find_match(input_files) in x,
+                                  ARIA_LAYERS))[0]
+        domain_name = stack_layer
+
+    # Sanity check
+    print(input_files, '-', stack_layer)
+
+    # Datatypes -- all layers are Float32 except ConnComponents
+    if stack_layer == 'connectedComponents':
+        data_type = "Int16"
+    else:
+        data_type = "Float32"
+
+    # Find files
+    int_list = glob.glob(
+        os.path.join(workdir, stack_layer, '[0-9]*[0-9].vrt'))
+
+    print(f'Number of {stack_layer} files discovered: ', len(int_list))
+    dlist = sorted(int_list)
+
+    # MG; end clean-up
 
     # get bperp value
     b_perp = extract_bperp_dict(domain_name, dlist)
@@ -259,12 +350,12 @@ def generate_stack(aria_prod, input_files, output_file_name,
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
     if ref_dlist and new_dlist != ref_dlist:
         tropo_dlist = glob.glob(os.path.join(workdir,
-                                'gacos_corrections', '[0-9]*[0-9].vrt'))
+                                'tropocorrected_products', '[0-9]*[0-9].vrt'))
         tropo_dlist = sorted([os.path.basename(i).split(
                             '.vrt')[0] for i in tropo_dlist])
-        tropo_path = os.path.join(workdir, 'gacos_corrections')
+        tropo_path = os.path.join(workdir, 'tropocorrected_products')
         if os.path.exists(tropo_path) and tropo_dlist == ref_dlist:
-            log.warning('Discrepancy between "gacos_corrections" '
+            log.warning('Discrepancy between "tropocorrected_products" '
                         'products (%s files) and %s products (%s files),'
                         'rejecting scenes not common between both',
                         len(ref_dlist), domain_name, len(new_dlist))
@@ -277,6 +368,10 @@ def generate_stack(aria_prod, input_files, output_file_name,
         subset_ind = [i[0] for i in enumerate(new_dlist) if i[1] in ref_dlist]
         new_dlist = [new_dlist[i] for i in subset_ind]
         dlist = [dlist[i] for i in subset_ind]
+
+    # MG; do we need to iterate here
+    # this will give width, height, projections
+    # of the last pair, anyways they should give the same?
 
     for data in dlist:
         width = None
@@ -399,7 +494,6 @@ def main(inps=None):
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
-                                                nc_version=inps.nc_version,
                                                 verbose=inps.verbose)
 
     # pass number of threads for gdal multiprocessing computation
@@ -463,8 +557,7 @@ def main(inps=None):
                     outDir=inps.workdir, outputFormat=inps.outputFormat,
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
-                    multilooking=inps.multilooking,
-                    tropo_total=False)
+                    multilooking=inps.multilooking)
 
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
@@ -481,8 +574,7 @@ def main(inps=None):
                     outDir=inps.workdir, outputFormat=inps.outputFormat,
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
-                    multilooking=inps.multilooking,
-                    tropo_total=False)
+                    multilooking=inps.multilooking)
 
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
@@ -494,28 +586,56 @@ def main(inps=None):
                     outputFormat=inps.outputFormat,
                     stitchMethodType='overlap', verbose=inps.verbose,
                     num_threads=inps.num_threads,
-                    multilooking=inps.multilooking,
-                    tropo_total=False)
+                    multilooking=inps.multilooking)
+    
+    # MG: add tropo
+    layers = ['troposphereWet', 'troposphereHydrostatic']
+    print('\nExtracting tropospheric delay for each '
+          'interferogram pair')
+    export_products(standardproduct_info.products[1],
+                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
+                    dem=demfile, lat=Latitude, lon=Longitude,
+                    mask=inps.mask, outDir=inps.workdir,
+                    outputFormat=inps.outputFormat,
+                    stitchMethodType='overlap', verbose=inps.verbose,
+                    num_threads=inps.num_threads,
+                    multilooking=inps.multilooking)
+
+    # Create Total tropospheric delay
+    get_tropo_total(inps.workdir)
 
     # Extracting other layers, if specified
-    layers, all_valid_layers , \
-        inps.tropo_total = layerCheck(standardproduct_info.products[1],
-                                      inps.layers,
-                                      inps.nc_version,
-                                      inps.gacos_products,
-                                      extract_or_ts = 'tssetup')
-    if layers != []:
-        print('\nExtracting optional, user-specified layers %s for each '
-              'interferogram pair' % (layers))
-        export_products(standardproduct_info.products[1],
-                        standardproduct_info.bbox_file, prods_tot_bbox,
-                        layers, dem=demfile, lat=Latitude, lon=Longitude,
-                        mask=inps.mask, outDir=inps.workdir,
-                        outputFormat=inps.outputFormat,
-                        stitchMethodType='overlap', verbose=inps.verbose,
-                        num_threads=inps.num_threads,
-                        multilooking=inps.multilooking,
-                        tropo_total=inps.tropo_total)
+    if inps.layers:
+        if inps.layers.lower() == 'all':
+            inps.layers = list(standardproduct_info.products[1][0].keys())
+            # Must also remove productBoundingBoxes &
+            # pair-names because they are not raster layers
+
+            layers_list = ['unwrappedPhase', 'coherence', 'incidenceAngle',
+                           'lookAngle', 'azimuthAngle', 'bPerpendicular',
+                           'productBoundingBox', 'productBoundingBoxFrames',
+                           'pair_name']
+            layers = [i for i in inps.layers if i not in layers_list]
+        else:
+            inps.layers = list(inps.layers.split(','))
+            layers_list = ['unwrappedPhase', 'coherence', 'incidenceAngle',
+                           'lookAngle', 'azimuthAngle', 'bPerpendicular']
+            layers = [i for i in inps.layers if i not in layers_list]
+            layers = [i.replace(' ', '') for i in layers]
+
+        if layers != []:
+            print('\nExtracting optional, user-specified layers %s for each '
+                  'interferogram pair' % (layers))
+            export_products(standardproduct_info.products[1],
+                            standardproduct_info.bbox_file, prods_tot_bbox,
+                            layers, dem=demfile, lat=Latitude, lon=Longitude,
+                            mask=inps.mask, outDir=inps.workdir,
+                            outputFormat=inps.outputFormat,
+                            stitchMethodType='overlap', verbose=inps.verbose,
+                            num_threads=inps.num_threads,
+                            multilooking=inps.multilooking)
+    else:
+        inps.layers = []
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # metadata layers and mask output layers, respectively
@@ -536,26 +656,30 @@ def main(inps=None):
                            num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
-    if inps.gacos_products:
-        gacos_correction(standardproduct_info.products, inps.gacos_products,
+    if inps.tropo_products:
+        tropo_correction(standardproduct_info.products, inps.tropo_products,
                          standardproduct_info.bbox_file, prods_tot_bbox,
                          outDir=inps.workdir, outputFormat=inps.outputFormat,
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
-                               'unwrapStack', workdir=inps.workdir)
-    ref_dlist = generate_stack(standardproduct_info, 'coherence', 'cohStack',
-                               workdir=inps.workdir, ref_dlist=ref_dlist)
-    ref_dlist = generate_stack(standardproduct_info, 'connectedComponents',
-                               'connCompStack', workdir=inps.workdir,
-                               ref_dlist=ref_dlist)
-    if inps.gacos_products:
+    if inps.tropo_products:
         ref_dlist = generate_stack(standardproduct_info,
-                                   'gacos_corrections', 'gacosStack',
+                                   'tropocorrected_products', 'unwrapStack',
                                    workdir=inps.workdir)
-    # If amplitude files extracted
-    if 'amplitude' in layers:
-        ref_dlist = generate_stack(standardproduct_info, 'amplitude',
-                                   'ampStack', workdir=inps.workdir,
-                                   ref_dlist=ref_dlist)
+    else:
+        ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
+                                   'unwrapStack', workdir=inps.workdir)
+
+    # MG: we can add  default layers at the begining
+    # Need to check this due to new changes by Sim
+    print(layers)
+    layers += ARIA_STACK_DEFAULTS
+
+    # generate other stack layers
+    for layer in layers:
+        ref_dlist = generate_stack(standardproduct_info,
+                                layer,
+                                ARIA_STACK_OUTFILES[layer],
+                                workdir=inps.workdir,
+                                ref_dlist=ref_dlist)
