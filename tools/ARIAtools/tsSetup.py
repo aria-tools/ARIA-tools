@@ -61,6 +61,7 @@ ARIA_STACK_OUTFILES = {
     'set': 'setStack'
 }
 
+
 def create_parser():
     """Parser to read command line arguments."""
     parser = argparse.ArgumentParser(description='Prepare ARIA products for '
@@ -176,13 +177,14 @@ def extract_bperp_dict(domain_name, aria_prod):
             b_perp = '/'.join(b_perp)
             if os.path.exists(b_perp):
                 data_set = gdal.Open(b_perp)
+                band = data_set.GetRasterBand(1)
                 # returns [min, max, mean, std]
                 try:
                     # gdal~3.5
-                    stat = data_set.GetRasterBand(1).GetStatistics(True, True)[2]
+                    stat = band.GetStatistics(True, True)[2]
                 except Exception as E:
                     # gdal~3.4
-                    stat = data_set.GetRasterBand(1).GetStatistics(False, True)[2]
+                    stat = band.GetStatistics(False, True)[2]
                 data_set = None
         meta[pair_name] = stat
 
@@ -216,8 +218,10 @@ def extract_utc_time(aria_prod):
         utc_dict[pair_name[0]] = utc_time.strftime("%H:%M:%S.%f")
     return utc_dict
 
+
 # MG: added function to write tropoTotal vrt
 def get_tropo_total(workdir='./'):
+    print('Generating: troposphereTotal: ')
     # Create total tropo dir
     tropo_dir = os.path.join(workdir, 'troposphereTotal')
 
@@ -235,8 +239,9 @@ def get_tropo_total(workdir='./'):
     d_pairs = [os.path.basename(i).split('.vrt')[0] for i in dry_list]
     w_pairs = [os.path.basename(i).split('.vrt')[0] for i in wet_list]
 
+    # Check why progress bar is not printing title/print_msg like elsewhere
     prog_bar = progBar.progressBar(maxValue=len(d_pairs),
-                            print_msg='Generating: troposphereTotal: ')
+                                   print_msg='Generating: troposphereTotal: ')
 
     # Create tropoTotal vrt for each file
     tropo_vrt = '''<VRTDataset rasterXSize="{width}" rasterYSize="{height}">
@@ -302,8 +307,6 @@ def generate_stack(aria_prod, input_files, output_file_name,
     if not os.path.exists(os.path.join(workdir, 'stack')):
         print('Creating directory: {os.path.join(workdir, "stack")}')
         os.makedirs(os.path.join(workdir, 'stack'))
-    else:
-        print(f'Directory {os.path.join(workdir, "stack")} already exists.')
 
     # MG; did a little clean up below
 
@@ -479,9 +482,9 @@ def generate_stack(aria_prod, input_files, output_file_name,
 def main(inps=None):
     """Run time series prepation."""
     inps = cmd_line_parse()
-    print ('*****************************************************************')
-    print ('*** Time-series Preparation Function ***')
-    print ('*****************************************************************')
+    print('*****************************************************************')
+    print('*** Time-series Preparation Function ***')
+    print('*****************************************************************')
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
@@ -548,69 +551,72 @@ def main(inps=None):
                               num_threads=inps.num_threads)
 
     # Extract
+    # aria_extract default parms
+    export_dict = {
+        'bbox_file': standardproduct_info.bbox_file, 
+        'prods_TOTbbox': prods_tot_bbox,
+        'dem': demfile,
+        'lat': Latitude,
+        'lon': Longitude,
+        'mask': inps.mask,
+        'outDir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'stitchMethodType': 'overlap',
+        'verbose': inps.verbose,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking
+    }
+
+    # export unwrappedPhase
     layers = ['unwrappedPhase', 'coherence']
     print('\nExtracting unwrapped phase, coherence, '
           'and connected components for each interferogram pair')
     export_products(standardproduct_info.products[1],
-                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
-                    dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask,
-                    outDir=inps.workdir, outputFormat=inps.outputFormat,
-                    stitchMethodType='overlap', verbose=inps.verbose,
-                    num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
+                    layers=layers,
+                    **export_dict)
 
-    layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
-    print('\nExtracting single incidence angle, look angle and azimuth angle '
-          'files valid over common interferometric grid')
     # Remove pairing and pass combined dictionary of all layers
+    # Use to extract geometry layers
     extract_dict = defaultdict(list)
     for d in standardproduct_info.products[1]:
         for key in standardproduct_info.products[1][0].keys():
             for item in list(set(d[key])):
                 extract_dict[key].append(item)
-    export_products([extract_dict],
-                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
-                    dem=demfile, lat=Latitude, lon=Longitude, mask=inps.mask,
-                    outDir=inps.workdir, outputFormat=inps.outputFormat,
-                    stitchMethodType='overlap', verbose=inps.verbose,
-                    num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
 
+    # Export geometry
+    layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
+    print('\nExtracting single incidence angle, look angle and azimuth angle '
+          'files valid over common interferometric grid')
+    export_products([extract_dict], layers=layers, **export_dict)
+
+    # Export bperp
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
     export_products(standardproduct_info.products[1],
-                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
-                    dem=demfile, lat=Latitude, lon=Longitude,
-                    mask=inps.mask, outDir=inps.workdir,
-                    outputFormat=inps.outputFormat,
-                    stitchMethodType='overlap', verbose=inps.verbose,
-                    num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
-    
-    # MG: add tropo
+                    layers=layers,
+                    **export_dict)
+
+    # MG: export tropo delay
     layers = ['troposphereWet', 'troposphereHydrostatic']
     print('\nExtracting tropospheric delay for each '
           'interferogram pair')
     export_products(standardproduct_info.products[1],
-                    standardproduct_info.bbox_file, prods_tot_bbox, layers,
-                    dem=demfile, lat=Latitude, lon=Longitude,
-                    mask=inps.mask, outDir=inps.workdir,
-                    outputFormat=inps.outputFormat,
-                    stitchMethodType='overlap', verbose=inps.verbose,
-                    num_threads=inps.num_threads,
-                    multilooking=inps.multilooking)
+                    layers=layers,
+                    **export_dict)
+                    # MG: Here we add tropo_total: True
 
     # Create Total tropospheric delay
     get_tropo_total(inps.workdir)
 
     # Extracting other layers, if specified
+    print(inps.layers)
     if inps.layers:
         if inps.layers.lower() == 'all':
             inps.layers = list(standardproduct_info.products[1][0].keys())
             # Must also remove productBoundingBoxes &
             # pair-names because they are not raster layers
-
+            # MG: also is it necessary to have bPerpendicular  
             layers_list = ['unwrappedPhase', 'coherence', 'incidenceAngle',
                            'lookAngle', 'azimuthAngle', 'bPerpendicular',
                            'productBoundingBox', 'productBoundingBoxFrames',
@@ -627,15 +633,10 @@ def main(inps=None):
             print('\nExtracting optional, user-specified layers %s for each '
                   'interferogram pair' % (layers))
             export_products(standardproduct_info.products[1],
-                            standardproduct_info.bbox_file, prods_tot_bbox,
-                            layers, dem=demfile, lat=Latitude, lon=Longitude,
-                            mask=inps.mask, outDir=inps.workdir,
-                            outputFormat=inps.outputFormat,
-                            stitchMethodType='overlap', verbose=inps.verbose,
-                            num_threads=inps.num_threads,
-                            multilooking=inps.multilooking)
+                            layers=layers,
+                             **export_dict)
     else:
-        inps.layers = []
+        layers = []
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # metadata layers and mask output layers, respectively
@@ -663,6 +664,7 @@ def main(inps=None):
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
+    print('\n###### Create Stacks VRT ######')
     if inps.tropo_products:
         ref_dlist = generate_stack(standardproduct_info,
                                    'tropocorrected_products', 'unwrapStack',
@@ -675,11 +677,18 @@ def main(inps=None):
     # Need to check this due to new changes by Sim
     print(layers)
     layers += ARIA_STACK_DEFAULTS
-
+    layers.remove('unwrappedPhase')
+    
     # generate other stack layers
     for layer in layers:
-        ref_dlist = generate_stack(standardproduct_info,
-                                layer,
-                                ARIA_STACK_OUTFILES[layer],
-                                workdir=inps.workdir,
-                                ref_dlist=ref_dlist)
+        print('')
+        if layer in ARIA_STACK_OUTFILES.keys(): 
+            ref_dlist = generate_stack(standardproduct_info,
+                                    layer,
+                                    ARIA_STACK_OUTFILES[layer],
+                                    workdir=inps.workdir,
+                                    ref_dlist=ref_dlist)
+        else:
+            msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
+            raise Exception(f'Selected {layer} not supported in tsSetup' + msg)
+ 

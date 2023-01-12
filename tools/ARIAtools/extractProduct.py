@@ -917,7 +917,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     del out_interpolated, interpolator, interp_2d, data_array
 
-def gacos_correction(full_product_dict, gacos_products, bbox_file,
+def tropo_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
     """Perform tropospheric corrections.
