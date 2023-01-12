@@ -15,6 +15,8 @@ import shutil
 
 from netCDF4 import Dataset
 
+import h5py
+
 import numpy as np
 
 from osgeo import gdal
@@ -76,6 +78,7 @@ class setGUNW(object):
                  output_format: str, gunw_version: str, interp_result: bool,
                  keep_tmp: bool):
         self.path_gunw = f
+        self.path_gunw_cpy = os.path.dirname(f) + '/OG_' + os.path.basename(f)
         self.gunw_prefix = 'NETCDF:"' + self.path_gunw + '"'
         self.out_name = out_name
         self.out_dir = os.path.join(out_dir, self.out_name)
@@ -262,7 +265,32 @@ class setGUNW(object):
     def update_gunw(self):
         """ Update the path_gunw file using input correction layers """
         # initialize cube from existing geometry field
-        with xr.open_dataset(self.path_gunw, group=self.geom_group) as ds_ifg:
+        with h5py.File(self.path_gunw, 'a') as h5:
+            del h5[LYR_GROUP]
+            full_lyr_path = LYR_GROUP + '/' + LYR_NAME
+            h5[full_lyr_path] = h5[self.geom_group + '/incidenceAngle']
+            # update variable + attributes
+            #h5[:] = self.tide_los
+            attrs = {
+                 'description': 'Solid Earth tide',
+                 'units': 'radians',
+                 'grid_mapping': 'crsMeta',
+                 'long_name': LYR_NAME,
+                 'standard_name': LYR_NAME
+                 }
+            h5.attrs.create(LYR_NAME, self.tide_los)
+            #h5.attrs.create(attrs)
+
+        log.info('Updated %s group in: %s',
+                 os.path.basename(LYR_GROUP), self.path_gunw)
+
+        return
+
+    def OG_update_gunw(self):
+        """ Update the path_gunw file using input correction layers """
+        # initialize cube from existing geometry field
+        shutil.copyfile(self.path_gunw, self.path_gunw_cpy)
+        with xr.open_dataset(self.path_gunw_cpy, group=self.geom_group) as ds_ifg:
             ds_ifg[LYR_NAME] = ds_ifg.incidenceAngle
             # drop geometry layers
             ds_ifg = ds_ifg.drop(GEOM_LYRS)
@@ -277,9 +305,9 @@ class setGUNW(object):
                  }
             ds_ifg[LYR_NAME] = ds_ifg[LYR_NAME].assign_attrs(attrs)
         ds_ifg.close()
-        #ds_ifg.to_netcdf(self.path_gunw, mode='a', group=LYR_GROUP)
+        ds_ifg.to_netcdf('test.nc', mode='a', group=LYR_GROUP)
 
-        with Dataset(self.path_gunw, mode='a') as ds:
+        with Dataset(self.path_gunw, mode='r+') as ds:
             ds_grp = ds[LYR_GROUP]
 
             for dim in DIM_NAMES:

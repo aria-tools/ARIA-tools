@@ -629,7 +629,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     ##Progress bar
     from ARIAtools import progBar
 
-    if not layers: return # only bbox
+    if not layers and not tropo_total: return # only bbox
 
     bounds=open_shapefile(bbox_file, 0, 0).bounds
     if dem is not None:
@@ -849,10 +849,10 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         if len(os.listdir(plots_subdir)) == 0:
             shutil.rmtree(plots_subdir)
 
-    # if necessary, flip height levels vertically
+    # if necessary, flip S/N
     data_array_ext = data_array.ReadAsArray()
     if metadatalyr_name in tropo_lyrs:
-        data_array_ext = np.flipud(data_array_ext)
+        data_array_ext = np.flip(data_array_ext)
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \

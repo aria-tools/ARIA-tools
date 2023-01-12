@@ -567,13 +567,17 @@ class ARIA_standardproduct:
         for i in enumerate(self.products[:-1]):
             scene = i[1]
             new_scene = self.products[i[0]+1]
+            scene_t_ref = datetime.strptime(scene[0]['pair_name'][:8],
+                "%Y%m%d")
+            new_scene_t_ref = datetime.strptime(new_scene[0]['pair_name'][:8],
+                "%Y%m%d")
             scene_t = datetime.strptime(scene[0]['pair_name'][9:],
+                "%Y%m%d")
+            new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
                 "%Y%m%d")
             scene_area = open_shapefile( \
                                        scene[1]['productBoundingBox'],  \
                                        'productBoundingBox', 1)
-            new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
-                "%Y%m%d")
             new_scene_area = open_shapefile( \
                                                new_scene[1]['productBoundingBox'], \
                                                'productBoundingBox', 1)
@@ -581,7 +585,8 @@ class ARIA_standardproduct:
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
             if scene_area.intersection(new_scene_area).area > 0. and \
-                 abs(new_scene_t-scene_t) <= timedelta(days=1):
+                 abs(new_scene_t-scene_t) <= timedelta(days=1) and \
+                 abs(new_scene_t_ref-scene_t_ref) <= timedelta(days=1):
                 # Do not export prod if already tracked as a rejected pair
                 if scene[0]['pair_name'] in track_rejected_pairs or \
                      new_scene[0]['pair_name'] in track_rejected_pairs:
@@ -612,7 +617,8 @@ class ARIA_standardproduct:
             # but do not intersect this means there is a gap
             # Reject date from prod list, and keep track of all failed dates
             elif scene_area.intersection(new_scene_area).area == 0. and \
-                 abs(new_scene_t-scene_t) <= timedelta(days=1):
+                 abs(new_scene_t-scene_t) <= timedelta(days=1) and \
+                 abs(new_scene_t_ref-scene_t_ref) <= timedelta(days=1):
                 track_rejected_pairs.extend((scene[0]['pair_name'], \
                     new_scene[0]['pair_name']))
                 log.debug("Gap for interferogram %s \n", scene[0]['pair_name'])
