@@ -3,7 +3,7 @@
 #
 # Author: Simran Sangha, Brett Buzzanga, David Bekaert,
 #         Marin Govorcin, Zhang Yunjun
-# Copyright 2022, by the California Institute of Technology. ALL RIGHTS
+# Copyright 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -13,9 +13,9 @@ import logging
 import os
 import shutil
 
-from netCDF4 import Dataset
-
 import h5py
+
+from netCDF4 import Dataset
 
 import numpy as np
 
@@ -31,8 +31,6 @@ log = logging.getLogger(__name__)
 LYR_GROUP = '/science/grids/corrections/external/tides'
 LYR_NAME = 'solidEarthTide'
 DIM_NAMES = ['heightsMeta', 'latitudeMeta', 'longitudeMeta']
-GEOM_LYRS = ['perpendicularBaseline', 'parallelBaseline', 'incidenceAngle',
-             'lookAngle', 'azimuthAngle']
 
 
 def create_parser(iargs=None):
@@ -264,13 +262,42 @@ class setGUNW(object):
 
     def update_gunw(self):
         """ Update the path_gunw file using input correction layers """
+        # get metadata cube for reference
+        with xr.open_dataset(self.path_gunw,
+                             group=self.geom_group) as ds:
+            ds_ifg = ds.incidenceAngle
+
         # initialize cube from existing geometry field
         with h5py.File(self.path_gunw, 'a') as h5:
-            del h5[LYR_GROUP]
             full_lyr_path = LYR_GROUP + '/' + LYR_NAME
-            h5[full_lyr_path] = h5[self.geom_group + '/incidenceAngle']
+            del h5[full_lyr_path]
+
+            for k in 'crs'.split():
+                if k in h5.keys():
+                    del h5[k]
+
+        with Dataset(self.path_gunw, mode='a') as ds:
+            ds_grp = ds[LYR_GROUP]
+
+            for dim in DIM_NAMES:
+                # dimension may already exist if updating
+                try:
+                    ds_grp.createDimension(dim, len(ds_ifg.coords[dim]))
+                    # necessary for transform
+                    v = ds_grp.createVariable(dim, np.float32, dim)
+                    v[:] = ds_ifg[dim]
+                    v.setncatts(ds_ifg[dim].attrs)
+                except RuntimeError:
+                    pass
+
+            da = self.tide_los
+            nodata = ds_ifg.encoding['_FillValue']
+            chunksize = ds_ifg.encoding['chunksizes']
+
             # update variable + attributes
-            #h5[:] = self.tide_los
+            v = ds_grp.createVariable(LYR_NAME, np.float32, DIM_NAMES,
+                                      chunksizes=chunksize, fill_value=nodata)
+            v[:] = da.data
             attrs = {
                  'description': 'Solid Earth tide',
                  'units': 'radians',
@@ -278,60 +305,7 @@ class setGUNW(object):
                  'long_name': LYR_NAME,
                  'standard_name': LYR_NAME
                  }
-            h5.attrs.create(LYR_NAME, self.tide_los)
-            #h5.attrs.create(attrs)
-
-        log.info('Updated %s group in: %s',
-                 os.path.basename(LYR_GROUP), self.path_gunw)
-
-        return
-
-    def OG_update_gunw(self):
-        """ Update the path_gunw file using input correction layers """
-        # initialize cube from existing geometry field
-        shutil.copyfile(self.path_gunw, self.path_gunw_cpy)
-        with xr.open_dataset(self.path_gunw_cpy, group=self.geom_group) as ds_ifg:
-            ds_ifg[LYR_NAME] = ds_ifg.incidenceAngle
-            # drop geometry layers
-            ds_ifg = ds_ifg.drop(GEOM_LYRS)
-            # update variable + attributes
-            ds_ifg[LYR_NAME].values = self.tide_los
-            attrs = {
-                 'description': 'Solid Earth tide',
-                 'units': 'ray radians',
-                 'grid_mapping': 'crsMeta',
-                 'long_name': LYR_NAME,
-                 'standard_name': LYR_NAME
-                 }
-            ds_ifg[LYR_NAME] = ds_ifg[LYR_NAME].assign_attrs(attrs)
-        ds_ifg.close()
-        ds_ifg.to_netcdf('test.nc', mode='a', group=LYR_GROUP)
-
-        with Dataset(self.path_gunw, mode='r+') as ds:
-            ds_grp = ds[LYR_GROUP]
-
-            for dim in DIM_NAMES:
-                ds_grp.createDimension(dim, len(ds_ifg.coords[dim]))
-                ## necessary for transform
-                v  = ds_grp.createVariable(dim, np.float32, dim)
-                v[:] = ds_ifg[dim]
-                v.setncatts(ds_ifg[dim].attrs)
-
-            da = ds_ifg[LYR_NAME]
-            nodata = da.encoding['_FillValue']
-            chunksize = da.encoding['chunksizes']
-            v = ds_grp.createVariable(LYR_NAME, np.float32, DIM_NAMES,
-                                      chunksizes=chunksize,
-                                      fill_value=nodata)
-            v[:] = da.data
-            v.setncatts(da.attrs)
-
-            # add the projection
-            v_proj = ds_grp.createVariable('crs', 'i')
-            v_proj.setncatts(ds_ifg['crs'].attrs)
-
-            # set gunw version
-            ds_grp.version = self.gunw_version
+            v.setncatts(attrs)
 
         log.info('Updated %s group in: %s',
                  os.path.basename(LYR_GROUP), self.path_gunw)
