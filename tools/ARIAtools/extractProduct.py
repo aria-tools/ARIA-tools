@@ -19,6 +19,8 @@ from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 from ARIAtools.vrtmanager import resampleRaster, layerCheck
+import pyproj
+from pyproj import CRS, Transformer
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -715,7 +717,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             for i in glob.glob(workdir + '/troposphere*'): os.remove(i)
 
         prog_bar.close()
- 
+
     # Loop through other user expected layers
     for key in layers:
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
@@ -877,6 +879,32 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     out_interpolated=np.flip(out_interpolated, axis=0)
     # interpolate to interferometric grid
     interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue(), bounds_error=False)
+
+    if metadatalyr_name == 'troposphereHydrostatic':
+        ## load the cube
+        import xarray as xr
+        import rioxarray as xrr
+        ds = xr.open_dataset('~/data/VLM/Sentinel1/LA_ARIA/products_4/S1-GUNW-D-R-071-tops-20200130_20200112-135156-34956N_32979N-PP-dd0c-v2_0_4.nc', group='science/grids/corrections/external/troposphere')
+        da = ds[metadatalyr_name]
+
+        ## first interpolate the DEM in X/Y to the cube points
+        da_dem = xrr.open_rasterio('/Users/buzzanga/data/VLM/Sentinel1/LA_ARIA/DEM/SRTM_3arcsec_uncropped.tif', band_as_variable=True)['band_1']
+        da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0])
+        da_dem1 = da_dem1.fillna(-32768)
+
+        ## hack to get an stack of coordinates for the interpolator to interpolate
+        pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
+
+        ## create interpolator based on cube... make sure heightsMeta is LAST coordinate and transpose ... seems to be all nans otherwise
+        interper = scipy.interpolate.RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array_ext.transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
+        ## interpolate the dem
+        res = interper(pnts.transpose(2, 1, 0))
+
+        import matplotlib.pyplot as plt
+        plt.imshow(res, cmap='coolwarm')
+        plt.show()
+        os.sys.exit()
+
 
     try:
         out_interpolated = interpolator(np.stack((np.flip(dem, axis=0), lat, lon), axis=-1))
@@ -1348,3 +1376,40 @@ def main(inps=None):
         gacos_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir,
                          outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+
+
+def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray, old_proj: CRS, new_proj: CRS) -> np.ndarray:
+    '''
+    Transform lat/lon/hgt data to an array of points in a new
+    projection
+
+    Args:
+        lats: ndarray   - WGS-84 latitude (EPSG: 4326)
+        lons: ndarray   - ditto for longitude
+        hgts: ndarray   - Ellipsoidal height in meters
+        old_proj: CRS   - the original projection of the points
+        new_proj: CRS   - the new projection in which to return the points
+
+    Returns:
+        ndarray: the array of query points in the weather model coordinate system (YX)
+    '''
+    t = Transformer.from_crs(old_proj, new_proj)
+
+    # Flags for flipping inputs or outputs
+    if not isinstance(new_proj, pyproj.CRS):
+        new_proj = CRS.from_epsg(new_proj.lstrip('EPSG:'))
+    if not isinstance(old_proj, pyproj.CRS):
+        old_proj = CRS.from_epsg(old_proj.lstrip('EPSG:'))
+
+    in_flip = old_proj.axis_info[0].direction
+    out_flip = new_proj.axis_info[0].direction
+
+    if in_flip == 'east':
+        res = t.transform(lons, lats, hgts)
+    else:
+        res = t.transform(lats, lons, hgts)
+
+    if out_flip == 'east':
+        return np.stack((res[1], res[0], res[2]), axis=-1).T
+    else:
+        return np.stack(res, axis=-1).T
