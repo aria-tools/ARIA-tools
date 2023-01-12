@@ -616,7 +616,7 @@ def main(inps=None):
             inps.layers = list(standardproduct_info.products[1][0].keys())
             # Must also remove productBoundingBoxes &
             # pair-names because they are not raster layers
-            # MG: also is it necessary to have bPerpendicular  
+
             layers_list = ['unwrappedPhase', 'coherence', 'incidenceAngle',
                            'lookAngle', 'azimuthAngle', 'bPerpendicular',
                            'productBoundingBox', 'productBoundingBoxFrames',
@@ -675,7 +675,6 @@ def main(inps=None):
 
     # MG: we can add  default layers at the begining
     # Need to check this due to new changes by Sim
-    print(layers)
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
     
