@@ -906,6 +906,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         os.sys.exit()
 
 
+    lon0 = lon
+    lat0 = lat
     try:
         out_interpolated = interpolator(np.stack((np.flip(dem, axis=0), lat, lon), axis=-1))
     except:
@@ -921,6 +923,38 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
             out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
         out_interpolated=np.concatenate(out_interpolated, axis=0)
         del dem_array
+
+    ## overwrite the incidene Angle for comparison
+    if metadatalyr_name == 'incidenceAngle':
+        ## load the cube
+        import xarray as xr
+        import rioxarray as xrr
+        lat = lat0
+        lon = lon0
+        ds = xr.open_dataset('~/data/VLM/Sentinel1/LA_ARIA/products_4/S1-GUNW-D-R-071-tops-20200130_20200112-135156-34956N_32979N-PP-dd0c-v2_0_4.nc', group='science/grids/imagingGeometry')
+        da = ds[metadatalyr_name]
+
+        ## first interpolate the DEM in X/Y to the cube points
+        da_dem = xrr.open_rasterio('/Users/buzzanga/data/VLM/Sentinel1/LA_ARIA/DEM/SRTM_3arcsec_uncropped.tif', band_as_variable=True)['band_1']
+        da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0])
+        da_dem1 = da_dem1.fillna(-32768)
+
+        ## hack to get an stack of coordinates for the interpolator to interpolate
+        pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
+
+        ## create interpolator based on cube... make sure heightsMeta is LAST coordinate and transpose ... seems to be all nans otherwise
+        interper = scipy.interpolate.RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array_ext.transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
+        ## interpolate the dem
+        res = interper(pnts.transpose(2, 1, 0))
+        out_interpolated=res
+
+        # import matplotlib.pyplot as plt
+        # plt.imshow(res)
+        # plt.show()
+        # os.sys.exit()
+        # breakpoint()
+
+
 
     # Save file
     renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
