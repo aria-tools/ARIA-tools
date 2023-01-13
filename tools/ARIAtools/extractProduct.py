@@ -818,6 +818,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     """
     # import dependencies
     import scipy
+    import xarray as xr
+    import rioxarray as xrr
 
     # Import functions
     from ARIAtools.vrtmanager import renderVRT
@@ -853,108 +855,28 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     # if necessary, flip S/N
     data_array_ext = data_array.ReadAsArray()
-    if metadatalyr_name in tropo_lyrs:
-        data_array_ext = np.flip(data_array_ext)
 
     # Define lat/lon/height arrays for metadata layers
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
          hgt_field)[1:-1].split(','), dtype='float32')
-    ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
+
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
 
-    # First, using the height/latitude/longitude arrays corresponding to the metadata layer, set-up spatial 2D interpolator. Using this, perform vertical 1D interpolation on cube, and then use result to set-up a regular-grid-interpolator. Using this, pass DEM and full-res lat/lon arrays in order to get intersection with DEM.
+    da = xrr.open_rasterio(outname + '.vrt') # open the cube
+    da_dem = xrr.open_rasterio(dem.GetDescription(), band_as_variable=True)['band_1']
 
-    # 2D interpolation
-    #mask by nodata value
-    interp_2d = InterpCube(np.ma.masked_where(data_array_ext == data_array.GetRasterBand(1).GetNoDataValue(), \
-        data_array_ext),heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta)
-    out_interpolated=np.zeros((heightsMeta.shape[0],latitudeMeta.shape[0],longitudeMeta.shape[0]))
+    ## interpolate the DEM to the GUNW lat/lon
+    da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0]).fillna(dem.GetRasterBand(1).GetNoDataValue())
 
-    # 3D interpolation
-    for hgt in enumerate(heightsMeta):
-        for line in enumerate(latitudeMeta):
-            for pixel in enumerate(longitudeMeta):
-                out_interpolated[hgt[0], line[0], pixel[0]] = interp_2d(line[1], pixel[1], hgt[1])
-    out_interpolated=np.flip(out_interpolated, axis=0)
-    # interpolate to interferometric grid
-    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue(), bounds_error=False)
+    ## hack to get an stack of coordinates for the interpolator to interpolate in the right shape
+    pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
-    if metadatalyr_name == 'troposphereHydrostatic':
-        ## load the cube
-        import xarray as xr
-        import rioxarray as xrr
-        ds = xr.open_dataset('~/data/VLM/Sentinel1/LA_ARIA/products_4/S1-GUNW-D-R-071-tops-20200130_20200112-135156-34956N_32979N-PP-dd0c-v2_0_4.nc', group='science/grids/corrections/external/troposphere')
-        da = ds[metadatalyr_name]
+    ## set up the interpolator with the GUNW cube
+    interper = scipy.interpolate.RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array_ext.transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
 
-        ## first interpolate the DEM in X/Y to the cube points
-        da_dem = xrr.open_rasterio('/Users/buzzanga/data/VLM/Sentinel1/LA_ARIA/DEM/SRTM_3arcsec_uncropped.tif', band_as_variable=True)['band_1']
-        da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0])
-        da_dem1 = da_dem1.fillna(-32768)
-
-        ## hack to get an stack of coordinates for the interpolator to interpolate
-        pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
-
-        ## create interpolator based on cube... make sure heightsMeta is LAST coordinate and transpose ... seems to be all nans otherwise
-        interper = scipy.interpolate.RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array_ext.transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
-        ## interpolate the dem
-        res = interper(pnts.transpose(2, 1, 0))
-
-        import matplotlib.pyplot as plt
-        plt.imshow(res, cmap='coolwarm')
-        plt.show()
-        os.sys.exit()
-
-
-    lon0 = lon
-    lat0 = lat
-    try:
-        out_interpolated = interpolator(np.stack((np.flip(dem, axis=0), lat, lon), axis=-1))
-    except:
-        #chunk data to conserve memory
-        out_interpolated = []
-        # need to mask nodata
-        dem_array = dem.ReadAsArray()
-        dem_array = np.ma.masked_where(dem_array == dem.GetRasterBand(1).GetNoDataValue(), dem_array)
-        dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
-        lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
-        lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
-        for i in enumerate(dem_array):
-            out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
-        out_interpolated=np.concatenate(out_interpolated, axis=0)
-        del dem_array
-
-    ## overwrite the incidene Angle for comparison
-    if metadatalyr_name == 'incidenceAngle':
-        ## load the cube
-        import xarray as xr
-        import rioxarray as xrr
-        lat = lat0
-        lon = lon0
-        ds = xr.open_dataset('~/data/VLM/Sentinel1/LA_ARIA/products_4/S1-GUNW-D-R-071-tops-20200130_20200112-135156-34956N_32979N-PP-dd0c-v2_0_4.nc', group='science/grids/imagingGeometry')
-        da = ds[metadatalyr_name]
-
-        ## first interpolate the DEM in X/Y to the cube points
-        da_dem = xrr.open_rasterio('/Users/buzzanga/data/VLM/Sentinel1/LA_ARIA/DEM/SRTM_3arcsec_uncropped.tif', band_as_variable=True)['band_1']
-        da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0])
-        da_dem1 = da_dem1.fillna(-32768)
-
-        ## hack to get an stack of coordinates for the interpolator to interpolate
-        pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
-
-        ## create interpolator based on cube... make sure heightsMeta is LAST coordinate and transpose ... seems to be all nans otherwise
-        interper = scipy.interpolate.RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array_ext.transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
-        ## interpolate the dem
-        res = interper(pnts.transpose(2, 1, 0))
-        out_interpolated=res
-
-        # import matplotlib.pyplot as plt
-        # plt.imshow(res)
-        # plt.show()
-        # os.sys.exit()
-        # breakpoint()
-
-
+    ## interpolate cube to DEM points
+    out_interpolated = interper(pnts.transpose(2, 1, 0))
 
     # Save file
     renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
@@ -977,7 +899,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
         del update_file
 
-    del out_interpolated, interpolator, interp_2d, data_array
+    del out_interpolated, data_array
 
 def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
