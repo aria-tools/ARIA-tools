@@ -135,7 +135,6 @@ class InterpCube(object):
 
 class metadata_qualitycheck:
     """Metadata quality control function.
-
     Artifacts recognized based off of covariance of cross-profiles.
     Bug-fix varies based off of layer of interest.
     Verbose mode generates a series of quality control plots with
@@ -349,7 +348,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         proj, arrshape=None, workdir='./',
                         outputFormat='ENVI', num_threads='2'):
     """Function to load and export DEM, lat, lon arrays.
-
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
     # If specified DEM subdirectory exists, delete contents
@@ -454,7 +452,6 @@ def dl_dem(path_dem, path_prod_union, num_threads):
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
-
     Also update dict, report common track bbox
     (default is to take common intersection, but user may specify union),
     report common track union to accurately interpolate metadata fields,
@@ -620,7 +617,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     stitchMethodType='overlap', verbose=None, num_threads='2',
                     multilooking=None, tropo_total=False):
     """Export layer and 2D meta-data layers (at the product resolution).
-
     The function finalize_metadata is called to derive the 2D metadata layer.
     Dem/lat/lon arrays must be passed for this process.
     The keys specify which layer to extract from the dictionary.
@@ -811,13 +807,12 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                       lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
                       verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
-
     2D metadata layer is derived by interpolating and then intersecting
     3Dlayers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
     # import dependencies
-    import scipy
+    from scipy.interpolate import RegularGridInterpolator
     import xarray as xr
     import rioxarray as xrr
 
@@ -853,9 +848,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         if len(os.listdir(plots_subdir)) == 0:
             shutil.rmtree(plots_subdir)
 
-    # if necessary, flip S/N
-    data_array_ext = data_array.ReadAsArray()
-
     # Define lat/lon/height arrays for metadata layers
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
          hgt_field)[1:-1].split(','), dtype='float32')
@@ -873,7 +865,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
     ## set up the interpolator with the GUNW cube
-    interper = scipy.interpolate.RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array_ext.transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
+    interper = RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
 
     ## interpolate cube to DEM points
     out_interpolated = interper(pnts.transpose(2, 1, 0))
@@ -905,7 +897,6 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
     """Perform tropospheric corrections.
-
     Must provide valid path to GACOS products.
     All products are cropped by the bounds from the input bbox_file,
     and clipped to the track extent denoted by the input prods_TOTbbox.
@@ -1338,14 +1329,12 @@ def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray, old_pr
     '''
     Transform lat/lon/hgt data to an array of points in a new
     projection
-
     Args:
         lats: ndarray   - WGS-84 latitude (EPSG: 4326)
         lons: ndarray   - ditto for longitude
         hgts: ndarray   - Ellipsoidal height in meters
         old_proj: CRS   - the original projection of the points
         new_proj: CRS   - the new projection in which to return the points
-
     Returns:
         ndarray: the array of query points in the weather model coordinate system (YX)
     '''
