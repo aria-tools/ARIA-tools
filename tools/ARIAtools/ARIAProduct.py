@@ -433,6 +433,7 @@ class ARIA_standardproduct:
                 lyr_pref = '/science/grids/corrections'
                 sdskeys_addlyrs = [
                     lyr_pref + '/derived/ionosphere/ionosphere',
+                    lyr_pref + '/external/tides/solidEarthTide',
                     lyr_pref + '/external/troposphere/troposphereWet',
                     lyr_pref + '/external/troposphere/troposphereHydrostatic'
                 ]
@@ -459,8 +460,8 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.extend(['ionosphere', 'troposphereWet', \
-                             'troposphereHydrostatic'])
+            layerkeys.extend(['ionosphere', 'solidEarthTide', \
+                             'troposphereWet', 'troposphereHydrostatic'])
 
         # Setup datalyr_dict
         datalyr_dict={}
