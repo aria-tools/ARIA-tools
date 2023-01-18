@@ -41,6 +41,7 @@ else:  # your .topoapi does not exist
     raise ValueError('Add your Open Topo API key to `~/.topoapi`.'
                      'Refer to ARIAtools installation instructions.')
 
+
 def createParser():
     """Extract specified product layers. The default will export all layers."""
     import argparse
@@ -100,9 +101,11 @@ def createParser():
 
     return parser
 
+
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
+
 
 class InterpCube(object):
     """Class to interpolate intersection of cube with DEM."""
@@ -132,6 +135,7 @@ class InterpCube(object):
         vals  = np.array( [x(line,pix)[0,0] for x in self.interp])
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
+
 
 class metadata_qualitycheck:
     """Metadata quality control function.
@@ -406,6 +410,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     return aria_dem, ds_aria, Latitude, Longitude
 
+
 def dl_dem(path_dem, path_prod_union, num_threads):
     """Download the DEM over product bbox union."""
     # Import functions
@@ -449,6 +454,7 @@ def dl_dem(path_dem, path_prod_union, num_threads):
             fh.write(r.content)
     del r
     return dst
+
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
@@ -803,6 +809,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     return
 
+
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                       lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
                       verbose=None, num_threads='2'):
@@ -893,6 +900,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     del out_interpolated, data_array
 
+
 def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
@@ -927,6 +935,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
 
     # Get list of all dates for which standard products exist
     date_list = []
+
     for i in product_dict[2]:
         date_list.append(i[0][:8]); date_list.append(i[0][9:])
     date_list = list(set(date_list)) # trim to unique dates only
@@ -1099,7 +1108,13 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     missing_products = []
     for i in range(len(product_dict[0])):
         outname = os.path.join(workdir,product_dict[2][i][0])
-        unwname = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
+        unwname  = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
+        if i == 0:
+            meta = gdal.Info(unwname, format='json')
+            # geoT = meta['geoTransform'] # unclear if necessary; slightly diff than 'geotrans'
+            proj = meta['coordinateSystem']['wkt']
+            arrshape = list(reversed(meta['size']))
+
         tropo_reference = os.path.join(gacos_products,
                           product_dict[2][i][0][:8] + '.ztd.vrt')
         tropo_secondary = os.path.join(gacos_products,
@@ -1239,6 +1254,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         missing_products = [os.path.basename(i)[:8] for i in missing_products]
         log.debug("Tropo products for the following dates are missing:")
         log.debug(missing_products)
+
 
 def main(inps=None):
     """Main workflow for extracting layers from ARIA products."""
