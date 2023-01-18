@@ -19,6 +19,8 @@ from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
 from ARIAtools.vrtmanager import resampleRaster, layerCheck
+import pyproj
+from pyproj import CRS, Transformer
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -133,7 +135,6 @@ class InterpCube(object):
 
 class metadata_qualitycheck:
     """Metadata quality control function.
-
     Artifacts recognized based off of covariance of cross-profiles.
     Bug-fix varies based off of layer of interest.
     Verbose mode generates a series of quality control plots with
@@ -347,7 +348,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         proj, arrshape=None, workdir='./',
                         outputFormat='ENVI', num_threads='2'):
     """Function to load and export DEM, lat, lon arrays.
-
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
     # If specified DEM subdirectory exists, delete contents
@@ -452,7 +452,6 @@ def dl_dem(path_dem, path_prod_union, num_threads):
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
-
     Also update dict, report common track bbox
     (default is to take common intersection, but user may specify union),
     report common track union to accurately interpolate metadata fields,
@@ -618,7 +617,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     stitchMethodType='overlap', verbose=None, num_threads='2',
                     multilooking=None, tropo_total=False):
     """Export layer and 2D meta-data layers (at the product resolution).
-
     The function finalize_metadata is called to derive the 2D metadata layer.
     Dem/lat/lon arrays must be passed for this process.
     The keys specify which layer to extract from the dictionary.
@@ -715,7 +713,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             for i in glob.glob(workdir + '/troposphere*'): os.remove(i)
 
         prog_bar.close()
- 
+
     # Loop through other user expected layers
     for key in layers:
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
@@ -809,13 +807,14 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                       lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
                       verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
-
     2D metadata layer is derived by interpolating and then intersecting
     3Dlayers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
     # import dependencies
-    import scipy
+    from scipy.interpolate import RegularGridInterpolator
+    import xarray as xr
+    import rioxarray as xrr
 
     # Import functions
     from ARIAtools.vrtmanager import renderVRT
@@ -849,50 +848,27 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         if len(os.listdir(plots_subdir)) == 0:
             shutil.rmtree(plots_subdir)
 
-    # if necessary, flip S/N
-    data_array_ext = data_array.ReadAsArray()
-    if metadatalyr_name in tropo_lyrs:
-        data_array_ext = np.flip(data_array_ext)
-
     # Define lat/lon/height arrays for metadata layers
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
          hgt_field)[1:-1].split(','), dtype='float32')
-    ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
+
     latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
     longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
 
-    # First, using the height/latitude/longitude arrays corresponding to the metadata layer, set-up spatial 2D interpolator. Using this, perform vertical 1D interpolation on cube, and then use result to set-up a regular-grid-interpolator. Using this, pass DEM and full-res lat/lon arrays in order to get intersection with DEM.
+    da = xrr.open_rasterio(outname + '.vrt') # open the cube
+    da_dem = xrr.open_rasterio(dem.GetDescription(), band_as_variable=True)['band_1']
 
-    # 2D interpolation
-    #mask by nodata value
-    interp_2d = InterpCube(np.ma.masked_where(data_array_ext == data_array.GetRasterBand(1).GetNoDataValue(), \
-        data_array_ext),heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta)
-    out_interpolated=np.zeros((heightsMeta.shape[0],latitudeMeta.shape[0],longitudeMeta.shape[0]))
+    ## interpolate the DEM to the GUNW lat/lon
+    da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0]).fillna(dem.GetRasterBand(1).GetNoDataValue())
 
-    # 3D interpolation
-    for hgt in enumerate(heightsMeta):
-        for line in enumerate(latitudeMeta):
-            for pixel in enumerate(longitudeMeta):
-                out_interpolated[hgt[0], line[0], pixel[0]] = interp_2d(line[1], pixel[1], hgt[1])
-    out_interpolated=np.flip(out_interpolated, axis=0)
-    # interpolate to interferometric grid
-    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue(), bounds_error=False)
+    ## hack to get an stack of coordinates for the interpolator to interpolate in the right shape
+    pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
-    try:
-        out_interpolated = interpolator(np.stack((np.flip(dem, axis=0), lat, lon), axis=-1))
-    except:
-        #chunk data to conserve memory
-        out_interpolated = []
-        # need to mask nodata
-        dem_array = dem.ReadAsArray()
-        dem_array = np.ma.masked_where(dem_array == dem.GetRasterBand(1).GetNoDataValue(), dem_array)
-        dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
-        lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
-        lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
-        for i in enumerate(dem_array):
-            out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
-        out_interpolated=np.concatenate(out_interpolated, axis=0)
-        del dem_array
+    ## set up the interpolator with the GUNW cube
+    interper = RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
+
+    ## interpolate cube to DEM points
+    out_interpolated = interper(pnts.transpose(2, 1, 0))
 
     # Save file
     renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
@@ -915,13 +891,12 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
         del update_file
 
-    del out_interpolated, interpolator, interp_2d, data_array
+    del out_interpolated, data_array
 
 def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
     """Perform tropospheric corrections.
-
     Must provide valid path to GACOS products.
     All products are cropped by the bounds from the input bbox_file,
     and clipped to the track extent denoted by the input prods_TOTbbox.
@@ -1114,7 +1089,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                       / (user_bbox.area))*100
         if per_overlap != 100. and per_overlap != 0.:
             log.warning('Common track extent only has %d overlap with' \
-                        'tropospheric product %d\n', per_overlap, i[0])
+                        'tropospheric product %s\n', per_overlap, i[0])
         if per_overlap == 0.:
             raise Exception('No spatial overlap between tropospheric ' \
                             'product %s and defined bounding box. ' \
@@ -1348,3 +1323,38 @@ def main(inps=None):
         gacos_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir,
                          outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+
+
+def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray, old_proj: CRS, new_proj: CRS) -> np.ndarray:
+    '''
+    Transform lat/lon/hgt data to an array of points in a new
+    projection
+    Args:
+        lats: ndarray   - WGS-84 latitude (EPSG: 4326)
+        lons: ndarray   - ditto for longitude
+        hgts: ndarray   - Ellipsoidal height in meters
+        old_proj: CRS   - the original projection of the points
+        new_proj: CRS   - the new projection in which to return the points
+    Returns:
+        ndarray: the array of query points in the weather model coordinate system (YX)
+    '''
+    t = Transformer.from_crs(old_proj, new_proj)
+
+    # Flags for flipping inputs or outputs
+    if not isinstance(new_proj, pyproj.CRS):
+        new_proj = CRS.from_epsg(new_proj.lstrip('EPSG:'))
+    if not isinstance(old_proj, pyproj.CRS):
+        old_proj = CRS.from_epsg(old_proj.lstrip('EPSG:'))
+
+    in_flip = old_proj.axis_info[0].direction
+    out_flip = new_proj.axis_info[0].direction
+
+    if in_flip == 'east':
+        res = t.transform(lons, lats, hgts)
+    else:
+        res = t.transform(lats, lons, hgts)
+
+    if out_flip == 'east':
+        return np.stack((res[1], res[0], res[2]), axis=-1).T
+    else:
+        return np.stack(res, axis=-1).T

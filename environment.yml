@@ -17,6 +17,9 @@ dependencies:
   - matplotlib
   - netcdf4
   - pandas
+  - xarray
+  - rasterio
+  - rioxarray
   - pyproj
   - requests
   - scipy
