@@ -680,32 +680,34 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             hgt_field = prep_metadatalayers(hy_outname, hydro_comp, dem)
 
 
-            # initiate raster
-            outname = os.path.abspath(os.path.join(workdir,
-                                      product_dict[1][i[0]][0]))
-            # building the VRT
-            gdal.BuildVRT(outname + '.vrt', wt_outname + '.vrt')
-            gdal.Open(outname + '.vrt').SetMetadataItem(
-                      hgt_field, gdal.Open(wt_outname + '.vrt'
-                                            ).GetMetadataItem(hgt_field))
-            gdal.Warp(outname, outname + '.vrt',
-                      options=gdal.WarpOptions(format=outputFormat))
-            # Update VRT
-            gdal.Translate(outname + '.vrt', outname,
-                           options=gdal.TranslateOptions(format="VRT"))
-            # Update VRT with new raster
-            update_file = gdal.Open(outname, gdal.GA_Update)
-            heightsMeta = np.array(gdal.Open(wt_outname + '.vrt' \
-                          ).GetMetadataItem(hgt_field)[1:-1].split(','), \
-                          dtype='float32')
-            wet_arr = gdal.Open(wt_outname + '.vrt').ReadAsArray()
-            hy_arr = gdal.Open(hy_outname + '.vrt').ReadAsArray()
-            for i in range(len(heightsMeta)):
-                tot_arr = wet_arr[i] + hy_arr[i]
-                update_file.GetRasterBand(i+1).WriteArray(tot_arr)
-            del update_file
+            # # initiate raster
+            # outname = os.path.abspath(os.path.join(workdir,
+            #                           product_dict[1][i[0]][0]))
+            # # building the VRT
+            # gdal.BuildVRT(outname + '.vrt', wt_outname + '.vrt')
+            # gdal.Open(outname + '.vrt').SetMetadataItem(
+            #           hgt_field, gdal.Open(wt_outname + '.vrt'
+            #                                 ).GetMetadataItem(hgt_field))
+            # gdal.Warp(outname, outname + '.vrt',
+            #           options=gdal.WarpOptions(format=outputFormat))
+            # # Update VRT
+            # gdal.Translate(outname + '.vrt', outname,
+            #                options=gdal.TranslateOptions(format="VRT"))
+            # # Update VRT with new raster
+            # update_file = gdal.Open(outname, gdal.GA_Update)
+            # heightsMeta = np.array(gdal.Open(wt_outname + '.vrt' \
+            #               ).GetMetadataItem(hgt_field)[1:-1].split(','), \
+            #               dtype='float32')
+            # wet_arr = gdal.Open(wt_outname + '.vrt').ReadAsArray()
+            # hy_arr = gdal.Open(hy_outname + '.vrt').ReadAsArray()
+            # for i in range(len(heightsMeta)):
+            #     tot_arr = wet_arr[i] + hy_arr[i]
+            #     update_file.GetRasterBand(i+1).WriteArray(tot_arr)
+            # del update_file
+
+            # hgt_field = prep_metadatalayers(outname, [i[1]][0], dem)
             # Interpolate/intersect with DEM before cropping
-            finalize_metadata(outname, bounds, dem_bounds, \
+            finalize_metadata(hy_outname, bounds, dem_bounds, \
                               prods_TOTbbox, dem, lat, lon, hgt_field, \
                               mask, outputFormat, verbose=verbose)
 
