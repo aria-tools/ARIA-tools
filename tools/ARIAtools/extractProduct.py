@@ -21,6 +21,8 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2st
 from ARIAtools.vrtmanager import resampleRaster, layerCheck
 import pyproj
 from pyproj import CRS, Transformer
+import rioxarray as xrr
+import rasterio as rio
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -649,7 +651,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     # If specified, through tropo layers
     if tropo_total:
         start_key = 'troposphereWet'
-        end_key = 'troposphereHydrostatic'
+        end_key   = 'troposphereHydrostatic'
         product_dict=[[j[start_key] for j in full_product_dict], \
                       [j["pair_name"] for j in full_product_dict]]
 
@@ -664,61 +666,57 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
         # Iterate through all IFGs
         for i in enumerate(product_dict[0]):
+            ifg         = product_dict[1][i[0]][0]
+            path_nc_wet = i[1][0]
             wt_outname = os.path.abspath(os.path.join(workdir, start_key
                                          + product_dict[1][i[0]][0]))
             ##Update progress bar
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
 
             # make VRTs for wet and then dry components
-            hgt_field = prep_metadatalayers(wt_outname, [i[1]][0], dem)
-            hy_outname = os.path.abspath(os.path.join(workdir, end_key
-                                         + product_dict[1][i[0]][0]))
             tropo_prefix = '/science/grids/corrections/external/troposphere/'
-            hydro_comp = [i.replace(tropo_prefix+start_key, \
-                          tropo_prefix+end_key) \
-                          for i in [i[1]][0]]
-            hgt_field = prep_metadatalayers(hy_outname, hydro_comp, dem)
+            hgt_field = prep_metadatalayers(wt_outname, [i[1]][0], dem)
+            for key in [start_key, end_key]:
+                t_outname  = os.path.abspath(os.path.join(workdir, key + ifg))
 
+                t_comp     = [path_nc_wet.replace(tropo_prefix+start_key, tropo_prefix+key)]
 
-            # # initiate raster
-            # outname = os.path.abspath(os.path.join(workdir,
-            #                           product_dict[1][i[0]][0]))
-            # # building the VRT
-            # gdal.BuildVRT(outname + '.vrt', wt_outname + '.vrt')
-            # gdal.Open(outname + '.vrt').SetMetadataItem(
-            #           hgt_field, gdal.Open(wt_outname + '.vrt'
-            #                                 ).GetMetadataItem(hgt_field))
-            # gdal.Warp(outname, outname + '.vrt',
-            #           options=gdal.WarpOptions(format=outputFormat))
-            # # Update VRT
-            # gdal.Translate(outname + '.vrt', outname,
-            #                options=gdal.TranslateOptions(format="VRT"))
-            # # Update VRT with new raster
-            # update_file = gdal.Open(outname, gdal.GA_Update)
-            # heightsMeta = np.array(gdal.Open(wt_outname + '.vrt' \
-            #               ).GetMetadataItem(hgt_field)[1:-1].split(','), \
-            #               dtype='float32')
-            # wet_arr = gdal.Open(wt_outname + '.vrt').ReadAsArray()
-            # hy_arr = gdal.Open(hy_outname + '.vrt').ReadAsArray()
-            # for i in range(len(heightsMeta)):
-            #     tot_arr = wet_arr[i] + hy_arr[i]
-            #     update_file.GetRasterBand(i+1).WriteArray(tot_arr)
-            # del update_file
+                hgt_field = prep_metadatalayers(t_outname, t_comp, dem)
 
-            # hgt_field = prep_metadatalayers(outname, [i[1]][0], dem)
-            # Interpolate/intersect with DEM before cropping
-            finalize_metadata(hy_outname, bounds, dem_bounds, \
-                              prods_TOTbbox, dem, lat, lon, hgt_field, \
-                              mask, outputFormat, verbose=verbose)
+                finalize_metadata(t_outname, bounds, dem_bounds, \
+                                prods_TOTbbox, dem, lat, lon, hgt_field, \
+                                mask, outputFormat, verbose=verbose)
 
-            #If necessary, resample raster
-            if multilooking is not None:
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                               rankedResampling, outputFormat=outputFormat,
-                               num_threads=num_threads)
+                #If necessary, resample raster
+                if multilooking is not None:
+                    resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
+                                rankedResampling, outputFormat=outputFormat,
+                                num_threads=num_threads)
+            ##
+            with xrr.open_rasterio(t_outname) as da_hydro:
+                arr_hyd = da_hydro.data
+
+            with xrr.open_rasterio(t_outname.replace(end_key, start_key)) as da_wet:
+                arr_wet = da_wet.data
+
+            ## make the total arr
+            arr_total = arr_hyd + arr_wet
+            da_total = da_hydro.copy()
+            da_total.data = arr_total
+
+            ## cant write VRT
+            driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
+            outname_total = t_outname.replace('troposphereHydrostatic', '')
+            da.attrs['description'] = outname_total
+
+            da_total.rio.to_raster(outname_total, driver=driver)
+
+            ds = gdal.BuildVRT(f'{outname_total}.vrt', outname_total)
+            del ds
 
             #remove temp files
-            for i in glob.glob(workdir + '/troposphere*'): os.remove(i)
+            for i in glob.glob(workdir + '/troposphere*'):
+                os.remove(i)
 
         prog_bar.close()
 
@@ -1113,7 +1111,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         unwname  = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
         if i == 0:
             meta = gdal.Info(unwname, format='json')
-            # geoT = meta['geoTransform'] # unclear if necessary; slightly diff than 'geotrans'
+            geoT = meta['geoTransform'] # unclear if necessary; slightly diff than 'geotrans'
             proj = meta['coordinateSystem']['wkt']
             arrshape = list(reversed(meta['size']))
 
@@ -1236,7 +1234,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             # Save differential field to file
             np.ma.set_fill_value(tropo_product, 0.)
             renderVRT(outname, tropo_product.filled(),
-                      geotrans=geotrans, drivername=outputFormat,
+                      geotrans=geoT, drivername=outputFormat,
                       gdal_fmt='float32', proj=proj, nodata=0.)
 
             del tropo_product, tropo_reference, \
