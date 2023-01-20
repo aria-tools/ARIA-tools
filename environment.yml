@@ -22,7 +22,7 @@ dependencies:
   - rioxarray
   - pyproj
   - requests
-  - scipy
+  - scipy>=1.10.0
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
