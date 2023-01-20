@@ -21,6 +21,7 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2st
 from ARIAtools.vrtmanager import resampleRaster, layerCheck
 import pyproj
 from pyproj import CRS, Transformer
+import xarray as xr
 import rioxarray as xrr
 import rasterio as rio
 
@@ -592,7 +593,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
 def prep_metadatalayers(outname, metadata_arr, dem):
     """ Wrapper to prep metadata layer for extraction """
-    gdal.BuildVRT(outname +'.vrt', metadata_arr)
+    if not os.path.exists(outname +'.vrt'):
+        gdal.BuildVRT(outname +'.vrt', metadata_arr)
 
     if dem is None:
         raise Exception('No DEM input specified. '
@@ -650,14 +652,15 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     # If specified, through tropo layers
     if tropo_total:
-        start_key = 'troposphereWet'
-        end_key   = 'troposphereHydrostatic'
-        product_dict=[[j[start_key] for j in full_product_dict], \
+        tropo_prefix = '/science/grids/corrections/external/troposphere/'
+        wet_key = 'troposphereWet'
+        dry_key   = 'troposphereHydrostatic'
+        product_dict = [[j[wet_key] for j in full_product_dict], \
                       [j["pair_name"] for j in full_product_dict]]
 
         key = 'troposphereTotal'
-        workdir=os.path.join(outDir,key)
-        prog_bar = progBar.progressBar(maxValue=len(product_dict[0])*2,
+        workdir = os.path.join(outDir, key)
+        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix='Generating: '+key+' - ')
 
         # If specified workdir doesn't exist, create it
@@ -667,56 +670,67 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         # Iterate through all IFGs
         for i in enumerate(product_dict[0]):
             ifg         = product_dict[1][i[0]][0]
-            path_nc_wet = i[1][0]
-            wt_outname = os.path.abspath(os.path.join(workdir, start_key
-                                         + product_dict[1][i[0]][0]))
-            ##Update progress bar
-            prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
+            outname = os.path.abspath(os.path.join(workdir, ifg))
 
-            # make VRTs for wet and then dry components
-            tropo_prefix = '/science/grids/corrections/external/troposphere/'
-            hgt_field = prep_metadatalayers(wt_outname, [i[1]][0], dem)
-            for key in [start_key, end_key]:
-                t_outname  = os.path.abspath(os.path.join(workdir, key + ifg))
+            # Update progress bar
+            prog_bar.update(i[0]+1,suffix=ifg)
+                
+            # create temp files for wet and dry components
+            wt_outname = os.path.abspath(os.path.join(workdir, wet_key
+                                                              + ifg))
+            hgt_field = prep_metadatalayers(wt_outname, i[1], dem)
+            hy_outname = os.path.abspath(os.path.join(workdir, dry_key
+                                                              + ifg))
+            hydro_comp = [i.replace(tropo_prefix + wet_key, \
+                                     tropo_prefix + dry_key) \
+                                     for i in [i[1]][0]]
+            hgt_field = prep_metadatalayers(hy_outname, hydro_comp, dem)
 
-                t_comp     = [path_nc_wet.replace(tropo_prefix+start_key, tropo_prefix+key)]
-
-                hgt_field = prep_metadatalayers(t_outname, t_comp, dem)
-
-                finalize_metadata(t_outname, bounds, dem_bounds, \
-                                prods_TOTbbox, dem, lat, lon, hgt_field, \
-                                mask, outputFormat, verbose=verbose)
-
-                #If necessary, resample raster
-                if multilooking is not None:
-                    resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                                rankedResampling, outputFormat=outputFormat,
-                                num_threads=num_threads)
-            ##
-            with xrr.open_rasterio(t_outname) as da_hydro:
+            with xrr.open_rasterio(hy_outname + '.vrt') as da_hydro:
                 arr_hyd = da_hydro.data
 
-            with xrr.open_rasterio(t_outname.replace(end_key, start_key)) as da_wet:
+            with xrr.open_rasterio(wt_outname + '.vrt') as da_wet:
                 arr_wet = da_wet.data
 
-            ## make the total arr
+            # make the total arr
             arr_total = arr_hyd + arr_wet
             da_total = da_hydro.copy()
             da_total.data = arr_total
+            
+            # update attributes
+            da_total.name = key
+            og_da_attrs = da_total.attrs
+            da_attrs = {}
+            for key in og_da_attrs:
+                new_key = key.replace(dry_key, key)
+                new_val = og_da_attrs[key]
+                if isinstance(new_val, str):
+                    new_val = new_val.replace(dry_key, key)
+                da_attrs[new_key] = new_val
+            da_total = da_total.assign_attrs(da_attrs)
 
-            ## cant write VRT
+            # write initial array to file
             driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
-            outname_total = t_outname.replace('troposphereHydrostatic', '')
-            da.attrs['description'] = outname_total
-
-            da_total.rio.to_raster(outname_total, driver=driver)
-
-            ds = gdal.BuildVRT(f'{outname_total}.vrt', outname_total)
+            da_total.rio.to_raster(outname, driver=driver)
+            ds = gdal.BuildVRT(f'{outname}.vrt', outname)
+            da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
+            ds.SetMetadata(da_attrs)
             del ds
 
-            #remove temp files
+            # remove temp files
             for i in glob.glob(workdir + '/troposphere*'):
                 os.remove(i)
+
+            # Interpolate/intersect with DEM before cropping
+            finalize_metadata(outname, bounds, dem_bounds,
+                                prods_TOTbbox, dem, lat, lon, hgt_field,
+                                mask, outputFormat, verbose=verbose)
+
+            # If necessary, resample raster
+            if multilooking is not None:
+                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
+                                rankedResampling, outputFormat=outputFormat,
+                                num_threads=num_threads)
 
         prog_bar.close()
 
@@ -820,8 +834,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     """
     # import dependencies
     from scipy.interpolate import RegularGridInterpolator
-    import xarray as xr
-    import rioxarray as xrr
 
     # Import functions
     from ARIAtools.vrtmanager import renderVRT
