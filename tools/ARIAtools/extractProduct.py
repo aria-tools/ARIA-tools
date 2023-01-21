@@ -674,7 +674,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Update progress bar
             prog_bar.update(i[0]+1,suffix=ifg)
-                
+
             # create temp files for wet and dry components
             wt_outname = os.path.abspath(os.path.join(workdir, wet_key
                                                               + ifg))
@@ -696,7 +696,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             arr_total = arr_hyd + arr_wet
             da_total = da_hydro.copy()
             da_total.data = arr_total
-            
+
             # update attributes
             da_total.name = key
             og_da_attrs = da_total.attrs
@@ -1123,7 +1123,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         unwname  = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
         if i == 0:
             meta = gdal.Info(unwname, format='json')
-            geoT = meta['geoTransform'] # unclear if necessary; slightly diff than 'geotrans'
+            geoT = meta['geoTransform']
             proj = meta['coordinateSystem']['wkt']
             arrshape = list(reversed(meta['size']))
 
@@ -1227,21 +1227,22 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             tropo_product   = np.subtract(tropo_secondary, tropo_product)
 
             # Convert troposphere to rad
-            tropo_product = np.divide(tropo_product,
-                                      float(metadata_dict[1][i][0]) \
-                                      / (4*np.pi))
+            scale = float(metadata_dict[1][i][0]) / (4*np.pi)
+            tropo_product = tropo_product / scale
+
             # Account for lookAngle
-            # if in TS mode, only 1 lookfile would be generated, so check for this
-            if os.path.exists(os.path.join(outDir, 'lookAngle',
-                              product_dict[2][i][0])):
-                lookfile = gdal.Open(os.path.join(outDir, 'lookAngle',
-                                   product_dict[2][i][0])).ReadAsArray()
+            # if in TS mode, only 1 incfile would be generated, so check for this
+            if os.path.exists(os.path.join(outDir, 'incidenceAngle',
+                                           product_dict[2][i][0])):
+
+                incfile = gdal.Open(os.path.join(outDir, 'incidenceAngle',
+                                            product_dict[2][i][0])).ReadAsArray()
+
             else:
-                lookfile = gdal.Open(os.path.join(outDir, 'lookAngle',
+                incfile = gdal.Open(os.path.join(outDir, 'incidenceAngle',
                                      product_dict[2][0][0])).ReadAsArray()
-            lookfile = np.sin(np.deg2rad(np.ma.masked_where(lookfile == 0.,
-                              lookfile)))
-            tropo_product = np.divide(tropo_product, lookfile)
+
+            tropo_product = np.divide(tropo_product, incfile)
 
             # Save differential field to file
             np.ma.set_fill_value(tropo_product, 0.)
@@ -1250,7 +1251,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                       gdal_fmt='float32', proj=proj, nodata=0.)
 
             del tropo_product, tropo_reference, \
-                tropo_secondary, lookfile
+                tropo_secondary, incfile
 
         else:
             log.warning('Must skip IFG %s, because the tropospheric ' \
