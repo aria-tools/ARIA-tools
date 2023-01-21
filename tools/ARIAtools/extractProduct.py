@@ -674,7 +674,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Update progress bar
             prog_bar.update(i[0]+1,suffix=ifg)
-
+                
             # create temp files for wet and dry components
             wt_outname = os.path.abspath(os.path.join(workdir, wet_key
                                                               + ifg))
@@ -696,7 +696,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             arr_total = arr_hyd + arr_wet
             da_total = da_hydro.copy()
             da_total.data = arr_total
-
+            
             # update attributes
             da_total.name = key
             og_da_attrs = da_total.attrs
@@ -913,7 +913,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     del out_interpolated, data_array
 
 
-def gacos_correction(full_product_dict, gacos_products, bbox_file,
+ef gacos_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
     """Perform tropospheric corrections.
