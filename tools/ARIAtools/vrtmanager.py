@@ -343,7 +343,9 @@ def layerCheck(products, layers, nc_version, gacos_products,
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
         else:
-            return []
+            layers = []
+        # check if troposphere can be extracted downstream
+        tropo_total = True
 
     # Check to see if internal conflict between tropo correction methods
     user_tropo_layers = list(set.intersection(*map(set, \
