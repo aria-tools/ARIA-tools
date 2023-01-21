@@ -23,7 +23,7 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import resampleRaster
 from ARIAtools.extractProduct import (merged_productbbox, prep_dem,
-                                      export_products, tropo_correction)
+                                      export_products, gacos_correction)
 
 gdal.UseExceptions()
 # Suppress warnings
@@ -71,7 +71,7 @@ def create_parser():
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
                         help='Specify directory to deposit all outputs. '
                         'Default is local directory where script is launched.')
-    parser.add_argument('-tp', '--tropo_products', dest='tropo_products',
+    parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
                         type=str, default=None, help='Path to director(ies) '
                         'or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
@@ -657,15 +657,15 @@ def main(inps=None):
                            num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
-    if inps.tropo_products:
-        tropo_correction(standardproduct_info.products, inps.tropo_products,
+    if inps.gacos_products:
+        gacos_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_tot_bbox,
                          outDir=inps.workdir, outputFormat=inps.outputFormat,
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
     print('\n###### Create Stacks VRT ######')
-    if inps.tropo_products:
+    if inps.gacos_products:
         ref_dlist = generate_stack(standardproduct_info,
                                    'tropocorrected_products', 'unwrapStack',
                                    workdir=inps.workdir)
