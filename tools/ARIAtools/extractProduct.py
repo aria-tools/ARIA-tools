@@ -1242,6 +1242,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                 incfile = gdal.Open(os.path.join(outDir, 'incidenceAngle',
                                      product_dict[2][0][0])).ReadAsArray()
 
+            infile        = np.cos(np.deg2rad(incfile))
             tropo_product = np.divide(tropo_product, incfile)
 
             # Save differential field to file
