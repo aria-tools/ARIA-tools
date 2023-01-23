@@ -80,7 +80,7 @@ class ARIA_standardproduct:
     import glob
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
-                 url_version='None', nc_version='1c', verbose=False):
+                 url_version='None', nc_version='None', verbose=False):
         """
 
         Parse products and input bounding box (if specified)
