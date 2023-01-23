@@ -210,6 +210,7 @@ class metadata_qualitycheck:
 
             #chunk array to better isolate artifacts
             chunk_size= 4
+
             for j in range(0, len(mid_line.tolist()), chunk_size):
                 chunk = mid_line.tolist()[j:j+chunk_size]
                 xarr_chunk = xarr[j:j+chunk_size]
@@ -1119,25 +1120,25 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     # Iterate through all IFGs and apply corrections
     missing_products = []
     for i in range(len(product_dict[0])):
-        outname = os.path.join(workdir,product_dict[2][i][0])
-        unwname  = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
+        ifg     = product_dict[2][i][0]
+        outname = os.path.join(workdir, ifg)
+        unwname = os.path.join(outDir,'unwrappedPhase', ifg)
         if i == 0:
             meta = gdal.Info(unwname, format='json')
             geoT = meta['geoTransform']
             proj = meta['coordinateSystem']['wkt']
             arrshape = list(reversed(meta['size']))
 
-        tropo_reference = os.path.join(gacos_products,
-                          product_dict[2][i][0][:8] + '.ztd.vrt')
-        tropo_secondary = os.path.join(gacos_products,
-                          product_dict[2][i][0][9:] + '.ztd.vrt')
+        tropo_reference = os.path.join(gacos_products, f'{ifg[:8]}.ztd.vrt')
+        tropo_secondary = os.path.join(gacos_products, f'{ifg[9:]}.ztd.vrt')
+
         # if .ztd products don't exist, check if .tif exists
         if not os.path.exists(tropo_reference):
-            tropo_reference = os.path.join(gacos_products,
-                              product_dict[2][i][0][:8] + '.ztd.tif.vrt')
+            tropo_reference = os.path.join(gacos_products, f'{ifg[:8]}.ztd.tif.vrt')
         if not os.path.exists(tropo_secondary):
-            tropo_secondary = os.path.join(gacos_products,
-                              product_dict[2][i][0][9:] + '.ztd.tif.vrt')
+            tropo_secondary = os.path.join(gacos_products, f'{ifg[9:]}.ztd.tif.vrt')
+
+
         # skip if corrected already generated and does not need to be updated
         if os.path.exists(outname):
             # get unwrappedPhase geotrans and productbounding box
@@ -1151,6 +1152,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                unw_prodcheck, tropo_prodcheck):
                 continue
             del unw_prodcheck, tropo_prodcheck
+
         if os.path.exists(tropo_reference) and os.path.exists(tropo_secondary):
             # Check if tropo products are temporally consistent with IFG
             for j in [tropo_reference, tropo_secondary]:
@@ -1204,62 +1206,47 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
 
             # Open corresponding tropo products and pass the difference
             tropo_product = gdal.Warp('', tropo_reference, format="MEM",
-                                      cutlineDSName=prods_TOTbbox,
                                       outputBounds=bounds, width=arrshape[1],
-                                      height=arrshape[0], resampleAlg='lanczos',
-                                      dstNodata=0., multithread=True,
-                                      options=['NUM_THREADS=%s' \
-                                       %(num_threads)]).ReadAsArray()
+                                      height=arrshape[0]).ReadAsArray()
 
-            tropo_product = np.ma.masked_where(tropo_product == 0.,
-                                               tropo_product)
             tropo_secondary = gdal.Warp('', tropo_secondary, format="MEM",
-                                        cutlineDSName=prods_TOTbbox,
                                         outputBounds=bounds, width=arrshape[1],
-                                        height=arrshape[0],
-                                        resampleAlg='lanczos', dstNodata=0.,
-                                        multithread=True,
-                                        options=['NUM_THREADS=%s' \
-                                         %(num_threads)]).ReadAsArray()
+                                        height=arrshape[0]).ReadAsArray()
 
-            tropo_secondary = np.ma.masked_where(tropo_secondary == 0.,
-                                                 tropo_secondary)
-            tropo_product   = np.subtract(tropo_secondary, tropo_product)
+            tropo_product  = np.subtract(tropo_secondary, tropo_product)
 
-            # Convert troposphere to rad
-            scale = float(metadata_dict[1][i][0]) / (4*np.pi)
-            tropo_product = tropo_product / scale
+            # Convert troposphere from m to rad
+            scale         = float(metadata_dict[1][i][0]) / (4*np.pi)
+            tropo_product /= scale
 
-            # Account for lookAngle
+            # Account for incAngle
             # if in TS mode, only 1 incfile would be generated, so check for this
-            if os.path.exists(os.path.join(outDir, 'incidenceAngle',
-                                           product_dict[2][i][0])):
-
-                incfile = gdal.Open(os.path.join(outDir, 'incidenceAngle',
-                                            product_dict[2][i][0])).ReadAsArray()
-
+            path_inc = os.path.join(outDir, 'incidenceAngle', ifg)
+            if os.path.exists(path_inc):
+                da = rio.open(path_inc)
             else:
-                incfile = gdal.Open(os.path.join(outDir, 'incidenceAngle',
-                                     product_dict[2][0][0])).ReadAsArray()
+                da = rio.open(path_inc.replace(ifg, product_dict[2][0][0]))
+            inc_arr = da.read().squeeze()
+            inc_arr = np.where(np.isclose(inc_arr, da.nodata), np.nan, inc_arr)
+            cos_inc = np.cos(np.deg2rad(inc_arr))
 
-            infile        = np.cos(np.deg2rad(incfile))
-            tropo_product = np.divide(tropo_product, incfile)
+            tropo_product /= cos_inc
 
             # Save differential field to file
-            np.ma.set_fill_value(tropo_product, 0.)
-            renderVRT(outname, tropo_product.filled(),
+            tropo_product = np.where(np.isnan(tropo_product), 0., tropo_product)
+            renderVRT(outname, tropo_product,
                       geotrans=geoT, drivername=outputFormat,
                       gdal_fmt='float32', proj=proj, nodata=0.)
 
             del tropo_product, tropo_reference, \
-                tropo_secondary, incfile
+                tropo_secondary, da, inc_arr, cos_inc
 
         else:
             log.warning('Must skip IFG %s, because the tropospheric ' \
                         'products corresponding to the reference and/or ' \
                         'secondary products are not found in the ' \
                         'specified folder %s',
-                        product_dict[2][i][0], gacos_products)
+                        ifg, gacos_products)
             for j in [tropo_reference, tropo_secondary]:
                 if not os.path.exists(j) and j not in missing_products:
                     missing_products.append(j)
