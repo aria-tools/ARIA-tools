@@ -1219,7 +1219,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             scale         = float(metadata_dict[1][i][0]) / (4*np.pi)
             tropo_product /= scale
 
-            # Account for lookAngle
+            # Account for incAngle
             # if in TS mode, only 1 incfile would be generated, so check for this
             path_inc = os.path.join(outDir, 'incidenceAngle', ifg)
             if os.path.exists(path_inc):
