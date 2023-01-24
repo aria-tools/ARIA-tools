@@ -50,7 +50,7 @@ ARIA_STACK_DEFAULTS = ['unwrappedPhase',
 
 ARIA_STACK_OUTFILES = {
     'unwrappedPhase': 'unwrapStack',
-    'gacos_corrections': 'unwrapStack',
+    'gacos_corrections': 'gacosStack',
     'coherence': 'cohStack',
     'connectedComponents': 'connCompStack',
     'amplitude': 'ampStack',
@@ -252,14 +252,9 @@ def generate_stack(aria_prod, input_files, output_file_name,
                             if re.search('tropo', x) \
                             else re.findall('[a-z][^A-Z]*', x)[0]
 
-    # Special case - gacos correction files
-    if input_files in ['gacos_corrections', 'gacos']:
-        stack_layer = 'gacos_corrections'
-        domain_name = 'unwrappedPhase'
-    else:
-        stack_layer = list(filter(lambda x: _find_match(input_files) in x,
-                                  ARIA_LAYERS))[0]
-        domain_name = stack_layer
+    stack_layer = list(filter(lambda x: _find_match(input_files) in x,
+                              ARIA_LAYERS))[0]
+    domain_name = stack_layer
 
     # Sanity check
     print(input_files, '-', stack_layer)
@@ -572,14 +567,8 @@ def main(inps=None):
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
     # Generate Stack
-    print('\n###### Create Stacks VRT ######')
-    if inps.gacos_products:
-        ref_dlist = generate_stack(standardproduct_info,
-                                   'gacos_corrections', 'unwrapStack',
-                                   workdir=inps.workdir)
-    else:
-        ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
-                                   'unwrapStack', workdir=inps.workdir)
+    ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
+                               'unwrapStack', workdir=inps.workdir)
 
     # MG: we can add  default layers at the begining
     # Need to check this due to new changes by Sim
@@ -587,6 +576,8 @@ def main(inps=None):
     layers.remove('unwrappedPhase')
     if inps.tropo_total is False:
         layers.remove('troposphereTotal')
+    if inps.gacos_products:
+        layers += ['gacos_corrections']
     
     # generate other stack layers
     for layer in layers:
