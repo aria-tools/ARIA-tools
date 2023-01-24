@@ -20,6 +20,7 @@ dependencies:
   - xarray
   - rasterio
   - rioxarray
+  - pip
   - pyproj
   - requests
   - scipy>=1.10.0
