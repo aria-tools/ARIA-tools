@@ -6,6 +6,11 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+Extract and organize specified layer(s).
+If no layer is specified, extract product bounding box shapefile(s)
+"""
+
 import os
 import numpy as np
 import glob
@@ -1312,16 +1317,29 @@ def main(inps=None):
     else:
         demfile, Latitude, Longitude = None, None, None
 
+    # Extract
+    # aria_extract default parms
+    export_dict = {
+        'full_product_dict': standardproduct_info.products[1],
+        'bbox_file': standardproduct_info.bbox_file, 
+        'prods_TOTbbox': prods_tot_bbox,
+        'layers': inps.layers,
+        'rankedResampling': inps.rankedResampling,
+        'dem': demfile,
+        'lat': Latitude,
+        'lon': Longitude,
+        'mask': inps.mask,
+        'outDir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'stitchMethodType': 'overlap',
+        'verbose': inps.verbose,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'tropo_total': inps.tropo_total
+    }
+
     # Extract user expected layers
-    export_products(standardproduct_info.products[1],
-                    standardproduct_info.bbox_file, prods_TOTbbox,
-                    inps.layers, inps.rankedResampling, dem=demfile,
-                    lat=Latitude, lon=Longitude, mask=inps.mask,
-                    outDir=inps.workdir, outputFormat=inps.outputFormat,
-                    stitchMethodType='overlap', verbose=inps.verbose,
-                    num_threads=inps.num_threads,
-                    multilooking=inps.multilooking,
-                    tropo_total=inps.tropo_total)
+    export_products(**export_dict)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
