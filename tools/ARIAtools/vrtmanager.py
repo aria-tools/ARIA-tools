@@ -317,7 +317,8 @@ def layerCheck(products, layers, nc_version, gacos_products,
             return []
         elif gacos_products:
             log.info('Tropospheric corrections will be applied, making sure '
-                     'at least unwrappedPhase and lookAngle are extracted.')
+                     'at least unwrappedPhase and incidenceAngle '
+                     'are extracted.')
             # If no input layers specified, initialize list
             if not layers:
                 layers = []
@@ -325,8 +326,8 @@ def layerCheck(products, layers, nc_version, gacos_products,
             if isinstance(layers, str):
                 layers = list(layers.split(','))
                 layers = [i.replace(' ','') for i in layers]
-            if 'lookAngle' not in layers:
-                layers.append('lookAngle')
+            if 'incidenceAngle' not in layers:
+                layers.append('incidenceAngle')
             if 'unwrappedPhase' not in layers:
                 layers.append('unwrappedPhase')
         else:
@@ -346,20 +347,6 @@ def layerCheck(products, layers, nc_version, gacos_products,
             layers = []
         # check if troposphere can be extracted downstream
         tropo_total = True
-
-    # Check to see if internal conflict between tropo correction methods
-    user_tropo_layers = list(set.intersection(*map(set, \
-                             [layers, raider_tropo_layers])))
-    if gacos_products is not None and user_tropo_layers != []:
-        raise Exception('User specified extraction of raider-derived '
-                        'tropo layers %s AND gacos products with "-gp %s". '
-                        'Proceed with only one.'%(user_tropo_layers,
-                         gacos_products))
-    if gacos_products is not None and tropo_total is True:
-        raise Exception('User-requested computation of raider-derived '
-                        'total troposphere "-l %s" AND gacos products '
-                        'with "-gp %s". Proceed with only '
-                        'one.'%('troposphereTotal', gacos_products))
 
     # pass intersection of valid layers and track invalid requests
     layer_reject = list(set.symmetric_difference(*map(set, \
