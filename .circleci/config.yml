@@ -7,8 +7,8 @@ workflows:
       
 jobs:
   build:
-    machine: # executor type
-      - image: ubuntu-2004:202010-01 #
+    machine:
+      - image: ubuntu-2004:202010-01
     environment:
       PYTHON_VERSION: 3.6.7
     steps:
