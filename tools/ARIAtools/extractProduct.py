@@ -1210,6 +1210,9 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                 product_dict[2][i][0])
 
             # Open corresponding tropo products and pass the difference
+            print ('IFG:', ifg)
+            print ('REF:', tropo_reference)
+            print ('SEC:', tropo_secondary)
             tropo_product = gdal.Warp('', tropo_reference, format="MEM",
                                       outputBounds=bounds, width=arrshape[1],
                                       height=arrshape[0]).ReadAsArray()
@@ -1218,11 +1221,13 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                         outputBounds=bounds, width=arrshape[1],
                                         height=arrshape[0]).ReadAsArray()
 
-            tropo_product  = np.subtract(tropo_secondary, tropo_product)
+            ## subtract the secondary from reference
+            tropo_product -= tropo_secondary
 
             # Convert troposphere from m to rad
-            scale         = float(metadata_dict[1][i][0]) / (4*np.pi)
+            scale         = -float(metadata_dict[1][i][0]) / (4*np.pi)
             tropo_product /= scale
+
 
             # Account for incAngle
             # if in TS mode, only 1 incfile would be generated, so check for this
