@@ -624,7 +624,13 @@ def prep_metadatalayers(outname, metadata_arr, dem):
              hgt_field) \
              for i in metadata_arr])
 
-    return hgt_field
+    # capture model if tropo product
+    model_name = None
+    if 'tropo' in metadata_arr[0].split('/')[-1]:
+        model_name = gdal.Open(metadata_arr[0])
+        model_name = model_name.GetRasterBand(1).GetMetadataItem('model')
+
+    return hgt_field, model_name
 
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
@@ -684,13 +690,13 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             # create temp files for wet and dry components
             wt_outname = os.path.abspath(os.path.join(workdir, wet_key
                                                               + ifg))
-            hgt_field = prep_metadatalayers(wt_outname, i[1], dem)
+            hgt_field, _ = prep_metadatalayers(wt_outname, i[1], dem)
             hy_outname = os.path.abspath(os.path.join(workdir, dry_key
                                                               + ifg))
             hydro_comp = [i.replace(tropo_prefix + wet_key, \
                                      tropo_prefix + dry_key) \
                                      for i in [i[1]][0]]
-            hgt_field = prep_metadatalayers(hy_outname, hydro_comp, dem)
+            hgt_field, model_name = prep_metadatalayers(hy_outname, hydro_comp, dem)
 
             with xrr.open_rasterio(hy_outname + '.vrt') as da_hydro:
                 arr_hyd = da_hydro.data
@@ -716,6 +722,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             da_total = da_total.assign_attrs(da_attrs)
 
             # write initial array to file
+            # If specified workdir doesn't exist, create it
+            model_dir = os.path.abspath(os.path.join(workdir, model_name))
+            if not os.path.exists(model_dir):
+                os.mkdir(model_dir)
+            outname = os.path.join(model_dir, ifg)
             driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
             da_total.rio.to_raster(outname, driver=driver)
             ds = gdal.BuildVRT(f'{outname}.vrt', outname)
@@ -763,7 +774,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  any(":/science/grids/corrections" \
                  in s for s in [i[1]][0]):
                 # make VRT pointing to metadata layers in standard product
-                hgt_field = prep_metadatalayers(outname, [i[1]][0], dem)
+                hgt_field, _ = prep_metadatalayers(outname, [i[1]][0], dem)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds, \
@@ -854,11 +865,11 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
     #metadata layer quality check, correction applied if necessary
-    #do not apply to correction layers
-    tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic', 'troposphereTotal']
-    avoid_lyrs = ['ionosphere', 'solidEarthTide'] + tropo_lyrs
+    #only apply to geometry layers
+    geom_lyrs = ['bPerpendicular', 'bParallel', 'incidenceAngle',
+                 'lookAngle', 'azimuthAngle']
     metadatalyr_name = outname.split('/')[-2]
-    if metadatalyr_name not in avoid_lyrs:
+    if metadatalyr_name in geom_lyrs:
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))
@@ -1322,7 +1333,7 @@ def main(inps=None):
     export_dict = {
         'full_product_dict': standardproduct_info.products[1],
         'bbox_file': standardproduct_info.bbox_file, 
-        'prods_TOTbbox': prods_tot_bbox,
+        'prods_TOTbbox': prods_TOTbbox,
         'layers': inps.layers,
         'rankedResampling': inps.rankedResampling,
         'dem': demfile,

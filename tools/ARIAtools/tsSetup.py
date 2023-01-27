@@ -37,6 +37,11 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 log = logging.getLogger(__name__)
 
 # MG: create a list of all aria layers
+ARIA_TROPO_MODELS = ['HRES',
+               'ERA5',
+               'GMAO',
+               'HRRR']
+
 ARIA_LAYERS = ['unwrappedPhase',
                'gacos_corrections',
                'coherence',
@@ -47,6 +52,7 @@ ARIA_LAYERS = ['unwrappedPhase',
                'troposphereTotal',
                'ionosphere',
                'set']
+ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STACK_DEFAULTS = ['unwrappedPhase',
                        'coherence',
@@ -65,6 +71,7 @@ ARIA_STACK_OUTFILES = {
     'ionosphere': 'ionoStack',
     'set': 'setStack'
 }
+ARIA_STACK_OUTFILES.update({i:i+'Stack' for i in ARIA_TROPO_MODELS})
 
 
 def create_parser():
@@ -229,7 +236,7 @@ def extract_utc_time(aria_prod):
     return utc_dict
 
 
-def generate_stack(aria_prod, input_files, output_file_name,
+def generate_stack(aria_prod, stack_layer, output_file_name,
                    workdir='./', ref_dlist=None):
     import re
 
@@ -247,28 +254,17 @@ def generate_stack(aria_prod, input_files, output_file_name,
         os.makedirs(os.path.join(workdir, 'stack'))
 
     # MG; did a little clean up below
-
-    # MG: find pattern in string, with special case for tropo
-    # take into account variation in input name
-    # e.g. [unwrappedPhase, unwrapPhase, unwrap]
-    # NOTE is it necessary to have the option for different names
-    # as they are hardcoreded, maybe because of different nc version, double-check?
-    _find_match = lambda x: re.findall('[A-Z][^A-Z]*', x)[0] \
-                            if re.search('tropo', x) \
-                            else re.findall('[a-z][^A-Z]*', x)[0]
-
-    stack_layer = list(filter(lambda x: _find_match(input_files) in x,
-                              ARIA_LAYERS))[0]
     domain_name = stack_layer
-
-    # Sanity check
-    print(input_files, '-', stack_layer)
 
     # Datatypes -- all layers are Float32 except ConnComponents
     if stack_layer == 'connectedComponents':
         data_type = "Int16"
     else:
         data_type = "Float32"
+
+    # make sure to search subdirectory for specific tropo models if necessary
+    if stack_layer in ARIA_TROPO_MODELS:
+        stack_layer = 'troposphereTotal/' + stack_layer
 
     # Find files
     int_list = glob.glob(
@@ -588,8 +584,20 @@ def main(inps=None):
     # generate other stack layers
     for layer in layers:
         print('')
-        if layer in ARIA_STACK_OUTFILES.keys(): 
-            ref_dlist = generate_stack(standardproduct_info,
+        if layer in ARIA_STACK_OUTFILES.keys():
+            # iterate through model dirs if necessary
+            if layer == 'troposphereTotal':
+                model_dirs = glob.glob(inps.workdir + '/troposphereTotal/*',
+                                       recursive = True)
+                model_dirs = [os.path.basename(i) for i in model_dirs]
+                for sublyr in model_dirs:
+                    ref_dlist = generate_stack(standardproduct_info,
+                                    sublyr,
+                                    ARIA_STACK_OUTFILES[sublyr],
+                                    workdir=inps.workdir,
+                                    ref_dlist=ref_dlist)
+            else:
+                ref_dlist = generate_stack(standardproduct_info,
                                     layer,
                                     ARIA_STACK_OUTFILES[layer],
                                     workdir=inps.workdir,
