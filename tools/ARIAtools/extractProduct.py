@@ -13,6 +13,7 @@ If no layer is specified, extract product bounding box shapefile(s)
 
 import os
 import numpy as np
+from copy import deepcopy
 import glob
 from osgeo import gdal, osr
 import logging
@@ -764,9 +765,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
         # Iterate through all IFGs
         for i in enumerate(product_dict[0]):
-            outname=os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
+            ifg = product_dict[1][i[0]][0]
+            outname=os.path.abspath(os.path.join(workdir, ifg))
             ##Update progress bar
-            prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
+            prog_bar.update(i[0]+1,suffix=ifg)
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" \
@@ -774,7 +776,17 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  any(":/science/grids/corrections" \
                  in s for s in [i[1]][0]):
                 # make VRT pointing to metadata layers in standard product
-                hgt_field, _ = prep_metadatalayers(outname, [i[1]][0], dem)
+                hgt_field, model_name = prep_metadatalayers(outname, [i[1]][0], dem)
+
+                # track if tropo file, organize accordingly
+                if model_name is not None:
+                    model_dir = os.path.abspath(os.path.join(workdir,
+                                                model_name))
+                    if not os.path.exists(model_dir):
+                        os.mkdir(model_dir)
+                    og_outname = deepcopy(outname)
+                    outname = os.path.join(model_dir, ifg)
+                    shutil.move(og_outname+'.vrt', outname+'.vrt')
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds, \
@@ -805,14 +817,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
                 # Check if unw phase and connected components are already generated
-                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])):
+                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',ifg)) or not os.path.exists(os.path.join(outDir,'connectedComponents',ifg)):
                     # extract the inputs required for stitching of unwrapped and connected component files
                     unw_files = full_product_dict[i[0]]['unwrappedPhase']
                     conn_files = full_product_dict[i[0]]['connectedComponents']
                     prod_bbox_files = full_product_dict[i[0]]['productBoundingBoxFrames']
                     # based on the key define the output directories
-                    outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])
-                    outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])
+                    outFileUnw=os.path.join(outDir,'unwrappedPhase',ifg)
+                    outFileConnComp=os.path.join(outDir,'connectedComponents',ifg)
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':

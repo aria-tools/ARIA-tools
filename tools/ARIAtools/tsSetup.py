@@ -237,7 +237,7 @@ def extract_utc_time(aria_prod):
 
 
 def generate_stack(aria_prod, stack_layer, output_file_name,
-                   workdir='./', ref_dlist=None):
+                   workdir='./', ref_tropokey=None, ref_dlist=None):
     import re
 
     """Generate time series stack."""
@@ -249,13 +249,12 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
                                    print_msg='Creating stack: ')
 
     # Set up single stack file
-    if not os.path.exists(os.path.join(workdir, 'stack')):
-        print('Creating directory: ', os.path.join(workdir, "stack"))
-        os.makedirs(os.path.join(workdir, 'stack'))
+    stack_dir = os.path.join(workdir, 'stack')
+    if not os.path.exists(stack_dir):
+        print('Creating directory: ', stack_dir)
+        os.makedirs(stack_dir)
 
-    # MG; did a little clean up below
     domain_name = stack_layer
-
     # Datatypes -- all layers are Float32 except ConnComponents
     if stack_layer == 'connectedComponents':
         data_type = "Int16"
@@ -264,7 +263,11 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # make sure to search subdirectory for specific tropo models if necessary
     if stack_layer in ARIA_TROPO_MODELS:
-        stack_layer = 'troposphereTotal/' + stack_layer
+        stack_layer = f'{ref_tropokey}/' + stack_layer
+        stack_dir = os.path.join(stack_dir, ref_tropokey)
+        if not os.path.exists(stack_dir):
+            print('Creating directory: ', stack_dir)
+            os.makedirs(stack_dir)
 
     # Find files
     int_list = glob.glob(
@@ -272,8 +275,6 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     print(f'Number of {stack_layer} files discovered: ', len(int_list))
     dlist = sorted(int_list)
-
-    # MG; end clean-up
 
     # get bperp value
     b_perp = extract_bperp_dict(domain_name, dlist)
@@ -323,7 +324,6 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
 
-    stack_dir = os.path.join(workdir, 'stack')
     with open(os.path.join(stack_dir, output_file_name+'.vrt'), 'w') as fid:
         fid.write('''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
         <SRS>{proj}</SRS>
@@ -586,8 +586,8 @@ def main(inps=None):
         print('')
         if layer in ARIA_STACK_OUTFILES.keys():
             # iterate through model dirs if necessary
-            if layer == 'troposphereTotal':
-                model_dirs = glob.glob(inps.workdir + '/troposphereTotal/*',
+            if 'tropo' in layer:
+                model_dirs = glob.glob(inps.workdir + f'/{layer}/*',
                                        recursive = True)
                 model_dirs = [os.path.basename(i) for i in model_dirs]
                 for sublyr in model_dirs:
@@ -595,6 +595,7 @@ def main(inps=None):
                                     sublyr,
                                     ARIA_STACK_OUTFILES[sublyr],
                                     workdir=inps.workdir,
+                                    ref_tropokey=layer,
                                     ref_dlist=ref_dlist)
             else:
                 ref_dlist = generate_stack(standardproduct_info,
