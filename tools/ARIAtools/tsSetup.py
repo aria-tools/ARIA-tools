@@ -582,6 +582,11 @@ def main(inps=None):
         layers += ['gacos_corrections']
     
     # generate other stack layers
+    # generate stack default parms
+    stack_dict = {
+        'workdir': inps.workdir,
+        'ref_dlist': ref_dlist
+    }
     for layer in layers:
         print('')
         if layer in ARIA_STACK_OUTFILES.keys():
@@ -591,18 +596,16 @@ def main(inps=None):
                                        recursive = True)
                 model_dirs = [os.path.basename(i) for i in model_dirs]
                 for sublyr in model_dirs:
-                    ref_dlist = generate_stack(standardproduct_info,
-                                    sublyr,
-                                    ARIA_STACK_OUTFILES[sublyr],
-                                    workdir=inps.workdir,
-                                    ref_tropokey=layer,
-                                    ref_dlist=ref_dlist)
+                    addtnl_ref_dlist = generate_stack(standardproduct_info,
+                                                  sublyr,
+                                                  ARIA_STACK_OUTFILES[sublyr],
+                                                  ref_tropokey=layer,
+                                                  **stack_dict)
             else:
-                ref_dlist = generate_stack(standardproduct_info,
-                                    layer,
-                                    ARIA_STACK_OUTFILES[layer],
-                                    workdir=inps.workdir,
-                                    ref_dlist=ref_dlist)
+                addtnl_ref_dlist = generate_stack(standardproduct_info,
+                                                  layer,
+                                                  ARIA_STACK_OUTFILES[layer],
+                                                  **stack_dict)
         else:
             msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
             raise Exception(f'Selected {layer} not supported in tsSetup' + msg)
