@@ -27,7 +27,6 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2st
 from ARIAtools.vrtmanager import resampleRaster, layerCheck
 import pyproj
 from pyproj import CRS, Transformer
-import xarray as xr
 import rioxarray as xrr
 import rasterio as rio
 
@@ -688,7 +687,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Update progress bar
             prog_bar.update(i[0]+1,suffix=ifg)
-                
+
             # create temp files for wet and dry components
             wt_outname = os.path.abspath(os.path.join(workdir, wet_key
                                                               + ifg))
@@ -901,10 +900,15 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
          hgt_field)[1:-1].split(','), dtype='float32')
 
-    latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
-    longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
+    latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
+                       data_array.GetGeoTransform()[3] + \
+                       (data_array.GetGeoTransform()[5] * \
+                       data_array.RasterYSize), data_array.RasterYSize)
+    longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
+                       data_array.GetGeoTransform()[0] + \
+                       (data_array.GetGeoTransform()[1] * \
+                       data_array.RasterXSize), data_array.RasterXSize)
 
-    da = xrr.open_rasterio(outname + '.vrt') # open the cube
     da_dem = xrr.open_rasterio(dem.GetDescription(), band_as_variable=True)['band_1']
 
     ## interpolate the DEM to the GUNW lat/lon
@@ -914,7 +918,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
     ## set up the interpolator with the GUNW cube
-    interper = RegularGridInterpolator((latitudeMeta, longitudeMeta, heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0), fill_value=np.nan, bounds_error=False)
+    interper = RegularGridInterpolator((latitudeMeta, longitudeMeta,
+                   heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0),
+                   fill_value=np.nan, bounds_error=False)
 
     ## interpolate cube to DEM points
     out_interpolated = interper(pnts.transpose(2, 1, 0))
@@ -986,7 +992,6 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     # If list of files
     if len([str(val) for val in gacos_products.split(',')]) > 1:
         gacos_products = [str(i) for i in gacos_products.split(',')]
-        #gacos_products=[os.path.abspath(item) for sublist in [glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in gacos_products] for item in sublist]
         # Sort and parse tropo products
         tropo_sublist = []
         for i in gacos_products:
@@ -1305,7 +1310,7 @@ def main(inps=None):
                                                 verbose=inps.verbose)
 
     # Perform initial layer, product, and correction sanity checks
-    inps.layers, all_valid_layers, \
+    inps.layers, \
         inps.tropo_total = layerCheck(standardproduct_info.products[1],
                                       inps.layers,
                                       inps.nc_version,
@@ -1345,7 +1350,7 @@ def main(inps=None):
     # aria_extract default parms
     export_dict = {
         'full_product_dict': standardproduct_info.products[1],
-        'bbox_file': standardproduct_info.bbox_file, 
+        'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'layers': inps.layers,
         'rankedResampling': inps.rankedResampling,

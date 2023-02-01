@@ -241,8 +241,6 @@ def extract_utc_time(aria_prod):
 
 def generate_stack(aria_prod, stack_layer, output_file_name,
                    workdir='./', ref_tropokey=None, ref_dlist=None):
-    import re
-
     """Generate time series stack."""
     utc_time = extract_utc_time(aria_prod)
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
@@ -513,7 +511,7 @@ def main(inps=None):
         for key in standardproduct_info.products[1][0].keys():
             for item in list(set(d[key])):
                 extract_dict[key].append(item)
-                
+
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
           'files valid over common interferometric grid')
@@ -531,7 +529,7 @@ def main(inps=None):
                     **export_dict)
 
     # Extracting other layers, if specified
-    layers, all_valid_layers , \
+    layers, \
         inps.tropo_total = layerCheck(standardproduct_info.products[1],
                                       inps.layers,
                                       inps.nc_version,
@@ -612,16 +610,16 @@ def main(inps=None):
                                        recursive = True)
                 model_dirs = [os.path.basename(i) for i in model_dirs]
                 for sublyr in model_dirs:
-                    addtnl_ref_dlist = generate_stack(standardproduct_info,
-                                                  sublyr,
-                                                  ARIA_STACK_OUTFILES[sublyr],
-                                                  ref_tropokey=layer,
-                                                  **stack_dict)
+                    generate_stack(standardproduct_info,
+                                   sublyr,
+                                   ARIA_STACK_OUTFILES[sublyr],
+                                   ref_tropokey=layer,
+                                   **stack_dict)
             else:
-                addtnl_ref_dlist = generate_stack(standardproduct_info,
-                                                  layer,
-                                                  ARIA_STACK_OUTFILES[layer],
-                                                  **stack_dict)
+                generate_stack(standardproduct_info,
+                               layer,
+                               ARIA_STACK_OUTFILES[layer],
+                               **stack_dict)
         else:
             msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
             raise Exception(f'Selected {layer} not supported in tsSetup' + msg)

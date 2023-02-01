@@ -373,4 +373,4 @@ def layerCheck(products, layers, nc_version, gacos_products,
                         'to all products.'%('troposphereTotal'))
             tropo_total = False
 
-    return layers, all_valid_layers, tropo_total
+    return layers, tropo_total
