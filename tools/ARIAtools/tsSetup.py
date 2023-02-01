@@ -344,6 +344,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             data_set = gdal.Open(data[1], gdal.GA_ReadOnly)
             width = data_set.RasterXSize
             height = data_set.RasterYSize
+            no_data = data_set.GetRasterBand(1).GetNoDataValue()
             data_set = None
 
             metadata['wavelength'] = wavelength
@@ -365,6 +366,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
             path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
             outstr = '''  <VRTRasterBand dataType="{data_type}" band="{index}">
+        <NoDataValue>{no_data}</NoDataValue>
         <SimpleSource>
             <SourceFilename relativeToVRT="1">{path}</SourceFilename>
             <SourceBand>1</SourceBand>
@@ -393,7 +395,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
                                  b_perp=metadata['bPerp'],
                                  start_range=start_range, end_range=end_range,
                                  range_spacing=range_spacing,
-                                 orbDir=metadata['orbit_direction'])
+                                 orbDir=metadata['orbit_direction'],
+                                 no_data=no_data)
             fid.write(outstr)
         fid.write('</VRTDataset>')
         prog_bar.close()
