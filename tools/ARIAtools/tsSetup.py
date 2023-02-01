@@ -51,13 +51,15 @@ ARIA_LAYERS = ['unwrappedPhase',
                'troposphereWet',
                'troposphereTotal',
                'ionosphere',
-               'set']
+               'solidEarthTide']
 ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STACK_DEFAULTS = ['unwrappedPhase',
                        'coherence',
                        'connectedComponents',
-                       'troposphereTotal']
+                       'troposphereTotal',
+                       'ionosphere',
+                       'solidEarthTide']
 
 ARIA_STACK_OUTFILES = {
     'unwrappedPhase': 'unwrapStack',
@@ -69,7 +71,7 @@ ARIA_STACK_OUTFILES = {
     'troposphereWet': 'tropoWetStack',
     'troposphereTotal': 'tropoStack',
     'ionosphere': 'ionoStack',
-    'set': 'setStack'
+    'solidEarthTide': 'setStack'
 }
 ARIA_STACK_OUTFILES.update({i:i+'Stack' for i in ARIA_TROPO_MODELS})
 
@@ -93,7 +95,8 @@ def create_parser():
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic", "troposphereTotal". '
+                        '"troposphereHydrostatic", "troposphereTotal", '
+                        '"solidEarthTide".'
                         'If "all" specified, then all layers are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -571,16 +574,26 @@ def main(inps=None):
                          outDir=inps.workdir, outputFormat=inps.outputFormat,
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
-    # Generate Stack
+    # Generate UNW stack
     ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
                                'unwrapStack', workdir=inps.workdir)
 
-    # MG: we can add  default layers at the begining
-    # Need to check this due to new changes by Sim
+    # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
+    remove_lyrs = []
+    for i in layers:
+        lyr_dir = os.path.join(inps.workdir, i)
+        if not os.path.exists(lyr_dir):
+            log.warning(f'Stack for default ARIA TS layer {i} cannot be '
+                    'generated as it does not exist in any of the input '
+                    'products')
+            if i in layers:
+                remove_lyrs.append(i)
+    layers = [i for i in layers if i not in remove_lyrs]
     if inps.tropo_total is False:
-        layers.remove('troposphereTotal')
+        if 'troposphereTotal' in layers:
+            layers.remove('troposphereTotal')
     if inps.gacos_products:
         layers += ['gacos_corrections']
     

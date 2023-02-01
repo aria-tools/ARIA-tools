@@ -72,7 +72,8 @@ def createParser():
                         '"amplitude", "bPerpendicular", "bParallel", '
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic", "troposphereTotal". '
+                        '"troposphereHydrostatic", "troposphereTotal", '
+                        '"solidEarthTide".'
                         'If "all" specified, then all layers are extracted.'
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
