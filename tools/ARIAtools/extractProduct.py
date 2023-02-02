@@ -6,17 +6,29 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+Extract and organize specified layer(s).
+If no layer is specified, extract product bounding box shapefile(s)
+"""
+
 import os
 import numpy as np
+from copy import deepcopy
 import glob
 from osgeo import gdal, osr
 import logging
 import requests
+import shutil
 from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
+from ARIAtools.vrtmanager import resampleRaster, layerCheck
+import pyproj
+from pyproj import CRS, Transformer
+import rioxarray as xrr
+import rasterio as rio
 
 gdal.UseExceptions()
 #Suppress warnings
@@ -37,6 +49,7 @@ else:  # your .topoapi does not exist
     raise ValueError('Add your Open Topo API key to `~/.topoapi`.'
                      'Refer to ARIAtools installation instructions.')
 
+
 def createParser():
     """Extract specified product layers. The default will export all layers."""
     import argparse
@@ -48,11 +61,20 @@ def createParser():
             required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
         help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-tp', '--tropo_products', dest='tropo_products', type=str, default=None,
-        help='Path to director(ies) or tar file(s) containing GACOS products. Will use new version of products (.tif) if they exist.'\
-             'Further information on GACOS available at: http://www.gacos.net.')
+    parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
+                        type=str, default=None, help='Path to director(ies) '
+                        'or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
-        help='Specify layers to extract as a comma deliminated list bounded by single quotes. Allowed keys are: "unwrappedPhase", "coherence", "amplitude", "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere". If "all" is specified, then all layers are extracted. If blank, will only extract bounding box.')
+                        help='Specify layers to extract as a comma '
+                        'deliminated list bounded by single quotes. '
+                        'Allowed keys are: "unwrappedPhase", "coherence", '
+                        '"amplitude", "bPerpendicular", "bParallel", '
+                        '"incidenceAngle", "lookAngle", "azimuthAngle", '
+                        '"ionosphere", "troposphereWet", '
+                        '"troposphereHydrostatic", "troposphereTotal", '
+                        '"solidEarthTide".'
+                        'If "all" specified, then all layers are extracted.'
+                        'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
@@ -77,16 +99,22 @@ def createParser():
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081,
         help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
     parser.add_argument('--version', dest='version',  default=None,
-        help='Specify version as str, e.g. 2_0_4 or all prods; default: '
-             'newest')
+                        help='Specify version as str, e.g. 2_0_4 or all prods; '
+                        'default: all')
+    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
+                        help='Specify netcdf version as str, '
+                        'e.g. 1c or all prods;'
+                        'default: 1b')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
 
     return parser
 
+
 def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
+
 
 class InterpCube(object):
     """Class to interpolate intersection of cube with DEM."""
@@ -117,9 +145,9 @@ class InterpCube(object):
         est = interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
 
+
 class metadata_qualitycheck:
     """Metadata quality control function.
-
     Artifacts recognized based off of covariance of cross-profiles.
     Bug-fix varies based off of layer of interest.
     Verbose mode generates a series of quality control plots with
@@ -188,6 +216,7 @@ class metadata_qualitycheck:
 
             #chunk array to better isolate artifacts
             chunk_size= 4
+
             for j in range(0, len(mid_line.tolist()), chunk_size):
                 chunk = mid_line.tolist()[j:j+chunk_size]
                 xarr_chunk = xarr[j:j+chunk_size]
@@ -333,7 +362,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         proj, arrshape=None, workdir='./',
                         outputFormat='ENVI', num_threads='2'):
     """Function to load and export DEM, lat, lon arrays.
-
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
     # If specified DEM subdirectory exists, delete contents
@@ -392,6 +420,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     return aria_dem, ds_aria, Latitude, Longitude
 
+
 def dl_dem(path_dem, path_prod_union, num_threads):
     """Download the DEM over product bbox union."""
     # Import functions
@@ -436,9 +465,9 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     del r
     return dst
 
+
 def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
-
     Also update dict, report common track bbox
     (default is to take common intersection, but user may specify union),
     report common track union to accurately interpolate metadata fields,
@@ -568,9 +597,49 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedResampling=False, dem=None, lat=None, lon=None, mask=None, outDir='./',outputFormat='VRT', stitchMethodType='overlap', verbose=None, num_threads='2', multilooking=None):
-    """Export layer and 2D meta-data layers (at the product resolution).
 
+def prep_metadatalayers(outname, metadata_arr, dem):
+    """ Wrapper to prep metadata layer for extraction """
+    if not os.path.exists(outname +'.vrt'):
+        gdal.BuildVRT(outname +'.vrt', metadata_arr)
+
+    if dem is None:
+        raise Exception('No DEM input specified. '
+                        'Cannot extract 3D imaging geometry '
+                        'layers without DEM to intersect with.')
+
+    # Check if height layers are consistent
+    zdim = gdal.Open(metadata_arr[0]).GetMetadataItem( \
+                              'NETCDF_DIM_EXTRA')[1:-1]
+    hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
+
+    if len(set([gdal.Open(i).GetMetadataItem(hgt_field) \
+         for i in metadata_arr]))==1:
+        gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field, \
+             gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
+    else:
+        raise Exception('Inconsistent heights for '
+             'metadata layer(s) ', metadata_arr, \
+             ' corresponding heights: ', \
+             [gdal.Open(i).GetMetadataItem( \
+             hgt_field) \
+             for i in metadata_arr])
+
+    # capture model if tropo product
+    model_name = None
+    if 'tropo' in metadata_arr[0].split('/')[-1]:
+        model_name = gdal.Open(metadata_arr[0])
+        model_name = model_name.GetRasterBand(1).GetMetadataItem('model')
+
+    return hgt_field, model_name
+
+
+def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
+                    rankedResampling=False, dem=None, lat=None, lon=None,
+                    mask=None, outDir='./',outputFormat='VRT',
+                    stitchMethodType='overlap', verbose=None, num_threads='2',
+                    multilooking=None, tropo_total=False):
+    """Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
     Dem/lat/lon arrays must be passed for this process.
     The keys specify which layer to extract from the dictionary.
@@ -578,58 +647,151 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
     and clipped to the track extent denoted by the input prods_TOTbbox.
     Optionally, a user may pass a mask-file.
     """
-    ##Import functions
-    from ARIAtools.vrtmanager import resampleRaster
+    ##Progress bar
+    from ARIAtools import progBar
 
-    if not layers: return # only bbox
+    if not layers and not tropo_total: return # only bbox
 
     bounds=open_shapefile(bbox_file, 0, 0).bounds
     if dem is not None:
         dem_bounds=[dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+ \
         (dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+ \
         (dem.GetGeoTransform()[1]*dem.RasterXSize),dem.GetGeoTransform()[3]]
-    # Loop through user expected layers
+
+    # Mask specified, so file must be physically extracted,
+    # cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT' and mask is not None:
+        outputFormat='ENVI'
+
+    # If specified, through tropo layers
+    if tropo_total:
+        tropo_prefix = '/science/grids/corrections/external/troposphere/'
+        wet_key = 'troposphereWet'
+        dry_key   = 'troposphereHydrostatic'
+        product_dict = [[j[wet_key] for j in full_product_dict], \
+                      [j["pair_name"] for j in full_product_dict]]
+
+        key = 'troposphereTotal'
+        workdir = os.path.join(outDir, key)
+        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
+                                       prefix='Generating: '+key+' - ')
+
+        # If specified workdir doesn't exist, create it
+        if not os.path.exists(workdir):
+            os.mkdir(workdir)
+
+        # Iterate through all IFGs
+        for i in enumerate(product_dict[0]):
+            ifg         = product_dict[1][i[0]][0]
+            outname = os.path.abspath(os.path.join(workdir, ifg))
+
+            # Update progress bar
+            prog_bar.update(i[0]+1,suffix=ifg)
+
+            # create temp files for wet and dry components
+            wt_outname = os.path.abspath(os.path.join(workdir, wet_key
+                                                              + ifg))
+            hgt_field, _ = prep_metadatalayers(wt_outname, i[1], dem)
+            hy_outname = os.path.abspath(os.path.join(workdir, dry_key
+                                                              + ifg))
+            hydro_comp = [i.replace(tropo_prefix + wet_key, \
+                                     tropo_prefix + dry_key) \
+                                     for i in [i[1]][0]]
+            hgt_field, model_name = prep_metadatalayers(hy_outname, hydro_comp, dem)
+
+            with xrr.open_rasterio(hy_outname + '.vrt') as da_hydro:
+                arr_hyd = da_hydro.data
+
+            with xrr.open_rasterio(wt_outname + '.vrt') as da_wet:
+                arr_wet = da_wet.data
+
+            # make the total arr
+            arr_total = arr_hyd + arr_wet
+            da_total = da_hydro.copy()
+            da_total.data = arr_total
+            
+            # update attributes
+            da_total.name = key
+            og_da_attrs = da_total.attrs
+            da_attrs = {}
+            for key in og_da_attrs:
+                new_key = key.replace(dry_key, key)
+                new_val = og_da_attrs[key]
+                if isinstance(new_val, str):
+                    new_val = new_val.replace(dry_key, key)
+                da_attrs[new_key] = new_val
+            da_total = da_total.assign_attrs(da_attrs)
+
+            # write initial array to file
+            # If specified workdir doesn't exist, create it
+            model_dir = os.path.abspath(os.path.join(workdir, model_name))
+            if not os.path.exists(model_dir):
+                os.mkdir(model_dir)
+            outname = os.path.join(model_dir, ifg)
+            driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
+            da_total.rio.to_raster(outname, driver=driver)
+            ds = gdal.BuildVRT(f'{outname}.vrt', outname)
+            da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
+            ds.SetMetadata(da_attrs)
+            del ds
+
+            # remove temp files
+            for i in glob.glob(workdir + '/troposphere*'):
+                os.remove(i)
+
+            # Interpolate/intersect with DEM before cropping
+            finalize_metadata(outname, bounds, dem_bounds,
+                                prods_TOTbbox, dem, lat, lon, hgt_field,
+                                mask, outputFormat, verbose=verbose)
+
+            # If necessary, resample raster
+            if multilooking is not None:
+                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
+                                rankedResampling, outputFormat=outputFormat,
+                                num_threads=num_threads)
+
+        prog_bar.close()
+
+    # Loop through other user expected layers
     for key in layers:
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
         workdir=os.path.join(outDir,key)
 
-        ##Progress bar
-        from ARIAtools import progBar
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),prefix='Generating: '+key+' - ')
 
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
-        # Mask specified, so file must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
-        if outputFormat=='VRT' and mask is not None:
-           outputFormat='ENVI'
 
         # Iterate through all IFGs
         for i in enumerate(product_dict[0]):
-            outname=os.path.abspath(os.path.join(workdir, product_dict[1][i[0]][0]))
+            ifg = product_dict[1][i[0]][0]
+            outname=os.path.abspath(os.path.join(workdir, ifg))
             ##Update progress bar
-            prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
+            prog_bar.update(i[0]+1,suffix=ifg)
 
             # Extract/crop metadata layers
-            if any(":/science/grids/imagingGeometry" in s for s in [i[1]][0]):
-                #create directory for quality control plots
-                if verbose and not os.path.exists(os.path.join(outDir,'metadatalyr_plots',key)):
-                    os.makedirs(os.path.join(outDir,'metadatalyr_plots',key))
+            if any(":/science/grids/imagingGeometry" \
+                 in s for s in [i[1]][0]) or \
+                 any(":/science/grids/corrections" \
+                 in s for s in [i[1]][0]):
+                # make VRT pointing to metadata layers in standard product
+                hgt_field, model_name = prep_metadatalayers(outname, [i[1]][0], dem)
 
-                #make VRT pointing to metadata layers in standard product
-                gdal.BuildVRT(outname +'.vrt', [i[1]][0])
+                # track if tropo file, organize accordingly
+                if model_name is not None:
+                    model_dir = os.path.abspath(os.path.join(workdir,
+                                                model_name))
+                    if not os.path.exists(model_dir):
+                        os.mkdir(model_dir)
+                    og_outname = deepcopy(outname)
+                    outname = os.path.join(model_dir, ifg)
+                    shutil.move(og_outname+'.vrt', outname+'.vrt')
 
-                if dem is None:
-                    raise Exception('No DEM input specified. Cannot extract 3D imaging geometry layers without DEM to intersect with.')
-
-                # Check if height layers are consistent, and if not exit with error
-                if len(set([gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]]))==1:
-                    gdal.Open(outname+'.vrt').SetMetadataItem('NETCDF_DIM_heightsMeta_VALUES',gdal.Open([i[1]][0][0]).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES'))
-                else:
-                    raise Exception('Inconsistent heights for metadata layer(s) ', [i[1]][0], ' corresponding heights: ', [gdal.Open(i).GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES') for i in [i[1]][0]])
-
-                # Pass metadata layer VRT, with DEM filename and output name to interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose=verbose)
+                # Interpolate/intersect with DEM before cropping
+                finalize_metadata(outname, bounds, dem_bounds, \
+                                  prods_TOTbbox, dem, lat, lon, hgt_field, \
+                                  mask, outputFormat, verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
             elif key!='unwrappedPhase' and key!='connectedComponents':
@@ -655,14 +817,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
             # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
             else:
                 # Check if unw phase and connected components are already generated
-                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])) or not os.path.exists(os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])):
+                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',ifg)) or not os.path.exists(os.path.join(outDir,'connectedComponents',ifg)):
                     # extract the inputs required for stitching of unwrapped and connected component files
                     unw_files = full_product_dict[i[0]]['unwrappedPhase']
                     conn_files = full_product_dict[i[0]]['connectedComponents']
                     prod_bbox_files = full_product_dict[i[0]]['productBoundingBoxFrames']
                     # based on the key define the output directories
-                    outFileUnw=os.path.join(outDir,'unwrappedPhase',product_dict[1][i[0]][0])
-                    outFileConnComp=os.path.join(outDir,'connectedComponents',product_dict[1][i[0]][0])
+                    outFileUnw=os.path.join(outDir,'unwrappedPhase',ifg)
+                    outFileConnComp=os.path.join(outDir,'connectedComponents',ifg)
 
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
@@ -679,17 +841,28 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers, rankedR
                 resampleRaster(outname, multilooking, bounds, prods_TOTbbox, rankedResampling, outputFormat=outputFormat, num_threads=num_threads)
 
         prog_bar.close()
+
+        # check directory for quality control plots
+        plots_subdir = os.path.abspath(os.path.join(outDir,
+                                       'metadatalyr_plots'))
+        # delete directory if empty
+        if os.path.exists(plots_subdir):
+            if len(os.listdir(plots_subdir)) == 0:
+                shutil.rmtree(plots_subdir)
+
     return
 
-def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat, lon, mask=None, outputFormat='ENVI', verbose=None, num_threads='2'):
-    """Interpolate and extract 2D metadata layer.
 
+def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
+                      lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
+                      verbose=None, num_threads='2'):
+    """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
     3Dlayers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
     # import dependencies
-    import scipy
+    from scipy.interpolate import RegularGridInterpolator
 
     # Import functions
     from ARIAtools.vrtmanager import renderVRT
@@ -704,46 +877,53 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
     data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
     #metadata layer quality check, correction applied if necessary
-    data_array = metadata_qualitycheck(data_array, os.path.basename(os.path.dirname(outname)), outname, verbose).data_array
+    #only apply to geometry layers
+    geom_lyrs = ['bPerpendicular', 'bParallel', 'incidenceAngle',
+                 'lookAngle', 'azimuthAngle']
+    metadatalyr_name = outname.split('/')[-2]
+    if metadatalyr_name in geom_lyrs:
+        # create directory for quality control plots
+        plots_subdir = os.path.abspath(os.path.join(outname, '../..',
+                                       'metadatalyr_plots', metadatalyr_name))
+        if not os.path.exists(plots_subdir):
+            os.makedirs(plots_subdir)
+        data_array = metadata_qualitycheck( \
+            data_array, \
+            os.path.basename(os.path.dirname(outname)), \
+            outname, \
+            verbose).data_array
+        # delete directory if empty
+        if len(os.listdir(plots_subdir)) == 0:
+            shutil.rmtree(plots_subdir)
 
     # Define lat/lon/height arrays for metadata layers
-    heightsMeta=np.array(gdal.Open(outname+'.vrt').GetMetadataItem('NETCDF_DIM_heightsMeta_VALUES')[1:-1].split(','), dtype='float32')
-    ##SS Do we need lon lat if we would be doing gdal reproject using projection and transformation? See our earlier discussions.
-    latitudeMeta=np.linspace(data_array.GetGeoTransform()[3],data_array.GetGeoTransform()[3]+(data_array.GetGeoTransform()[5]*data_array.RasterYSize),data_array.RasterYSize)
-    longitudeMeta=np.linspace(data_array.GetGeoTransform()[0],data_array.GetGeoTransform()[0]+(data_array.GetGeoTransform()[1]*data_array.RasterXSize),data_array.RasterXSize)
+    heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
+         hgt_field)[1:-1].split(','), dtype='float32')
 
-    # First, using the height/latitude/longitude arrays corresponding to the metadata layer, set-up spatial 2D interpolator. Using this, perform vertical 1D interpolation on cube, and then use result to set-up a regular-grid-interpolator. Using this, pass DEM and full-res lat/lon arrays in order to get intersection with DEM.
+    latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
+                       data_array.GetGeoTransform()[3] + \
+                       (data_array.GetGeoTransform()[5] * \
+                       data_array.RasterYSize), data_array.RasterYSize)
+    longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
+                       data_array.GetGeoTransform()[0] + \
+                       (data_array.GetGeoTransform()[1] * \
+                       data_array.RasterXSize), data_array.RasterXSize)
 
-    # 2D interpolation
-    #mask by nodata value
-    interp_2d = InterpCube(np.ma.masked_where(data_array.ReadAsArray() == data_array.GetRasterBand(1).GetNoDataValue(), \
-        data_array.ReadAsArray()),heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta)
-    out_interpolated=np.zeros((heightsMeta.shape[0],latitudeMeta.shape[0],longitudeMeta.shape[0]))
+    da_dem = xrr.open_rasterio(dem.GetDescription(), band_as_variable=True)['band_1']
 
-    # 3D interpolation
-    for hgt in enumerate(heightsMeta):
-        for line in enumerate(latitudeMeta):
-            for pixel in enumerate(longitudeMeta):
-                out_interpolated[hgt[0], line[0], pixel[0]] = interp_2d(line[1], pixel[1], hgt[1])
-    out_interpolated=np.flip(out_interpolated, axis=0)
-    # interpolate to interferometric grid
-    interpolator = scipy.interpolate.RegularGridInterpolator((heightsMeta,np.flip(latitudeMeta, axis=0),longitudeMeta), out_interpolated, method='linear', fill_value=data_array.GetRasterBand(1).GetNoDataValue(), bounds_error=False)
+    ## interpolate the DEM to the GUNW lat/lon
+    da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0]).fillna(dem.GetRasterBand(1).GetNoDataValue())
 
-    try:
-        out_interpolated = interpolator(np.stack((np.flip(dem, axis=0), lat, lon), axis=-1))
-    except:
-        #chunk data to conserve memory
-        out_interpolated = []
-        # need to mask nodata
-        dem_array = dem.ReadAsArray()
-        dem_array = np.ma.masked_where(dem_array == dem.GetRasterBand(1).GetNoDataValue(), dem_array)
-        dem_array=np.array_split(dem.ReadAsArray(), 100) ; dem_array=[x for x in dem_array if x.size > 0]
-        lat=np.array_split(lat, 100) ; dem_array=[x for x in lat if x.size > 0]
-        lon=np.array_split(lon, 100) ; dem_array=[x for x in lon if x.size > 0]
-        for i in enumerate(dem_array):
-            out_interpolated.append(interpolator(np.stack((np.flip(i[1], axis=0), lat[i[0]], lon[i[0]]), axis=-1)))
-        out_interpolated=np.concatenate(out_interpolated, axis=0)
-        del dem_array
+    ## hack to get an stack of coordinates for the interpolator to interpolate in the right shape
+    pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
+
+    ## set up the interpolator with the GUNW cube
+    interper = RegularGridInterpolator((latitudeMeta, longitudeMeta,
+                   heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0),
+                   fill_value=np.nan, bounds_error=False)
+
+    ## interpolate cube to DEM points
+    out_interpolated = interper(pnts.transpose(2, 1, 0))
 
     # Save file
     renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
@@ -766,13 +946,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, lat,
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
         del update_file
 
-    del out_interpolated, interpolator, interp_2d, data_array
+    del out_interpolated, data_array
 
-def tropo_correction(full_product_dict, tropo_products, bbox_file,
+
+def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      prods_TOTbbox, outDir='./', outputFormat='VRT',
                      verbose=None, num_threads='2'):
     """Perform tropospheric corrections.
-
     Must provide valid path to GACOS products.
     All products are cropped by the bounds from the input bbox_file,
     and clipped to the track extent denoted by the input prods_TOTbbox.
@@ -796,25 +976,25 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
     metadata_dict = [[j['azimuthZeroDopplerMidTime'] for j in \
                     full_product_dict[0]],
                    [j['wavelength'] for j in full_product_dict[0]]]
-    workdir = os.path.join(outDir,'tropocorrected_products')
+    workdir = os.path.join(outDir,'gacos_corrections')
 
     # If specified workdir doesn't exist, create it
     os.makedirs(workdir, exist_ok=True)
 
     # Get list of all dates for which standard products exist
     date_list = []
+
     for i in product_dict[2]:
         date_list.append(i[0][:8]); date_list.append(i[0][9:])
     date_list = list(set(date_list)) # trim to unique dates only
 
     ### Determine if file input is single file, a list, or wildcard.
     # If list of files
-    if len([str(val) for val in tropo_products.split(',')]) > 1:
-        tropo_products = [str(i) for i in tropo_products.split(',')]
-        #tropo_products=[os.path.abspath(item) for sublist in [glob.glob(os.path.expanduser(os.path.expandvars(i))) if '*' in i else [i] for i in tropo_products] for item in sublist]
+    if len([str(val) for val in gacos_products.split(',')]) > 1:
+        gacos_products = [str(i) for i in gacos_products.split(',')]
         # Sort and parse tropo products
         tropo_sublist = []
-        for i in tropo_products:
+        for i in gacos_products:
             # If wildcard
             if '*' in i:
                 tropo_sublist.append( \
@@ -822,23 +1002,23 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             else:
                 tropo_sublist.append([i])
         # Finalize list of tropo products
-        tropo_products = []
+        gacos_products = []
         for sublist in tropo_sublist:
             for item in sublist:
-                tropo_products.append(os.path.abspath(item))
+                gacos_products.append(os.path.abspath(item))
 
     # If single file or wildcard
     else:
         # If single file
-        if os.path.isfile(tropo_products):
-            tropo_products = [tropo_products]
+        if os.path.isfile(gacos_products):
+            gacos_products = [gacos_products]
         # If wildcard
         else:
-            tropo_products = glob.glob(os.path.expanduser( \
-                                       os.path.expandvars(tropo_products)))
+            gacos_products = glob.glob(os.path.expanduser( \
+                                       os.path.expandvars(gacos_products)))
         # Convert relative paths to absolute paths
-        tropo_products = [os.path.abspath(i) for i in tropo_products]
-    if len(tropo_products) == 0:
+        gacos_products = [os.path.abspath(i) for i in gacos_products]
+    if len(gacos_products) == 0:
         raise Exception('No file match found')
 
     ###Extract tarfiles
@@ -847,7 +1027,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
     for i in date_list:
         tropo_date_dict[i] = []
         tropo_date_dict[i+"_UTC"] = []
-    for i in enumerate(tropo_products):
+    for i in enumerate(gacos_products):
         if not os.path.isdir(i[1]) and not i[1].endswith('.ztd') \
             and not i[1].endswith('.tif'):
             untar_dir = os.path.join(os.path.abspath(os.path.join(i[1], \
@@ -860,13 +1040,13 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             log.info('Extracting GACOS tarfile %s to %s.',
                 os.path.basename(i[1]), untar_dir)
             tarfile.open(i[1]).extractall(path = untar_dir)
-            tropo_products[i[0]] = untar_dir
+            gacos_products[i[0]] = untar_dir
         # Loop through each GACOS product file, differentiating between direct input list of GACOS products vs parent directory
         if i[1].endswith('.ztd') or i[1].endswith('.tif'):
             ztd_list = [i[1]]
         else:
-            ztd_list = glob.glob(os.path.join(tropo_products[i[0]], '*.ztd')) \
-                + glob.glob(os.path.join(tropo_products[i[0]], '*.tif'))
+            ztd_list = glob.glob(os.path.join(gacos_products[i[0]], '*.ztd')) \
+                + glob.glob(os.path.join(gacos_products[i[0]], '*.tif'))
             # prioritize older .ztd over .tif duplicates if the former exists
             # older .ztd files contain UTC time info
             ztd_list = [i for i in ztd_list if not (i.endswith('.tif') and i.split('.tif')[0] in ztd_list)]
@@ -874,8 +1054,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
             # Only check files corresponding to standard product dates
             ztd_basename = os.path.basename(k)
             ztd_basename = ztd_basename.split('.tif')[0].split('.ztd')[0]
-            print('date_list',date_list)
-            print('ztd_basename',ztd_basename)
             if ztd_basename in date_list:
                 tropo_date_dict[ztd_basename].append(k)
                 if os.path.exists(k+'.rsc'):
@@ -903,7 +1081,6 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                     else:
                         tropo_rsc_dict = tifGacos(k)
                         gacos_prod = gdal.Open(k).ReadAsArray()
-                        print("tropo_rsc_dict",tropo_rsc_dict)
                     # Save as GDAL file, using proj from first unwrappedPhase file
                     renderVRT(k, gacos_prod,
                         geotrans=(float(tropo_rsc_dict['X_FIRST']),
@@ -926,12 +1103,12 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                              tropo_date_dict)
 
     # If multiple GACOS directories, merge products.
-    tropo_products = list(set([os.path.dirname(i) \
+    gacos_products = list(set([os.path.dirname(i) \
                           if (i.endswith('.ztd') or i.endswith('.tif')) \
-                          else i for i in tropo_products]))
-    if len(tropo_products)>1:
-        tropo_products=os.path.join(outDir,'merged_GACOS')
-        log.info('Stitching/storing GACOS products in %s.', tropo_products)
+                          else i for i in gacos_products]))
+    if len(gacos_products)>1:
+        gacos_products=os.path.join(outDir,'merged_GACOS')
+        log.info('Stitching/storing GACOS products in %s.', gacos_products)
         # If specified merged directory doesn't exist, create it
         if not os.path.exists(os.path.join(outDir,'merged_GACOS')):
             os.mkdir(os.path.join(outDir,'merged_GACOS'))
@@ -946,10 +1123,10 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                 # Create merged rsc file
                 rscGacos(outname, merged_rsc, tropo_date_dict)
     else:
-        tropo_products = tropo_products[0]
+        gacos_products = gacos_products[0]
 
     # Estimate percentage of overlap with tropospheric product
-    for i in glob.glob(os.path.join(tropo_products,'*.vrt')):
+    for i in glob.glob(os.path.join(gacos_products,'*.vrt')):
         # create shapefile
         geotrans = gdal.Open(i).GetGeoTransform()
         bbox = [geotrans[3] \
@@ -968,7 +1145,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                       / (user_bbox.area))*100
         if per_overlap != 100. and per_overlap != 0.:
             log.warning('Common track extent only has %d overlap with' \
-                        'tropospheric product %d\n', per_overlap, i[0])
+                        'tropospheric product %s\n', per_overlap, i[0])
         if per_overlap == 0.:
             raise Exception('No spatial overlap between tropospheric ' \
                             'product %s and defined bounding box. ' \
@@ -977,19 +1154,25 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
     # Iterate through all IFGs and apply corrections
     missing_products = []
     for i in range(len(product_dict[0])):
-        outname = os.path.join(workdir,product_dict[2][i][0])
-        unwname = os.path.join(outDir,'unwrappedPhase', product_dict[2][i][0])
-        tropo_reference = os.path.join(tropo_products,
-                          product_dict[2][i][0][:8] + '.ztd.vrt')
-        tropo_secondary = os.path.join(tropo_products,
-                          product_dict[2][i][0][9:] + '.ztd.vrt')
+        ifg     = product_dict[2][i][0]
+        outname = os.path.join(workdir, ifg)
+        unwname = os.path.join(outDir,'unwrappedPhase', ifg)
+        if i == 0:
+            meta = gdal.Info(unwname, format='json')
+            geoT = meta['geoTransform']
+            proj = meta['coordinateSystem']['wkt']
+            arrshape = list(reversed(meta['size']))
+
+        tropo_reference = os.path.join(gacos_products, f'{ifg[:8]}.ztd.vrt')
+        tropo_secondary = os.path.join(gacos_products, f'{ifg[9:]}.ztd.vrt')
+
         # if .ztd products don't exist, check if .tif exists
         if not os.path.exists(tropo_reference):
-            tropo_reference = os.path.join(tropo_products,
-                              product_dict[2][i][0][:8] + '.ztd.tif.vrt')
+            tropo_reference = os.path.join(gacos_products, f'{ifg[:8]}.ztd.tif.vrt')
         if not os.path.exists(tropo_secondary):
-            tropo_secondary = os.path.join(tropo_products,
-                              product_dict[2][i][0][9:] + '.ztd.tif.vrt')
+            tropo_secondary = os.path.join(gacos_products, f'{ifg[9:]}.ztd.tif.vrt')
+
+
         # skip if corrected already generated and does not need to be updated
         if os.path.exists(outname):
             # get unwrappedPhase geotrans and productbounding box
@@ -1003,6 +1186,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                                unw_prodcheck, tropo_prodcheck):
                 continue
             del unw_prodcheck, tropo_prodcheck
+
         if os.path.exists(tropo_reference) and os.path.exists(tropo_secondary):
             # Check if tropo products are temporally consistent with IFG
             for j in [tropo_reference, tropo_secondary]:
@@ -1054,76 +1238,49 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
                                 abs(delta), os.path.basename(j)[:8],
                                 product_dict[2][i][0])
 
-            # Open unwrappedPhase and mask nodata
-            unwphase = gdal.Open(unwname)
-            geotrans = unwphase.GetGeoTransform()
-            proj = unwphase.GetProjection()
-            unwnodata = unwphase.GetRasterBand(1).GetNoDataValue()
-            unwphase = unwphase.ReadAsArray()
-            arrshape = unwphase.shape # shape of output array to match ifgs
-            unwphase = np.ma.masked_where(unwphase == unwnodata, unwphase)
-
             # Open corresponding tropo products and pass the difference
             tropo_product = gdal.Warp('', tropo_reference, format="MEM",
-                                      cutlineDSName=prods_TOTbbox,
                                       outputBounds=bounds, width=arrshape[1],
-                                      height=arrshape[0], resampleAlg='lanczos',
-                                      dstNodata=0., multithread=True,
-                                      options=['NUM_THREADS=%s' \
-                                       %(num_threads)]).ReadAsArray()
+                                      height=arrshape[0]).ReadAsArray()
 
-            tropo_product = np.ma.masked_where(tropo_product == 0.,
-                                               tropo_product)
             tropo_secondary = gdal.Warp('', tropo_secondary, format="MEM",
-                                        cutlineDSName=prods_TOTbbox,
                                         outputBounds=bounds, width=arrshape[1],
-                                        height=arrshape[0],
-                                        resampleAlg='lanczos', dstNodata=0.,
-                                        multithread=True,
-                                        options=['NUM_THREADS=%s' \
-                                         %(num_threads)]).ReadAsArray()
+                                        height=arrshape[0]).ReadAsArray()
 
-            tropo_secondary = np.ma.masked_where(tropo_secondary == 0.,
-                                                 tropo_secondary)
-            tropo_product   = np.subtract(tropo_secondary, tropo_product)
+            tropo_product  = np.subtract(tropo_secondary, tropo_product)
 
-            # Convert troposphere to rad
-            tropo_product = np.divide(tropo_product,
-                                      float(metadata_dict[1][i][0]) \
-                                      / (4*np.pi))
-            # Account for lookAngle
-            # if in TS mode, only 1 lookfile would be generated, so check for this
-            if os.path.exists(os.path.join(outDir, 'lookAngle',
-                              product_dict[2][i][0])):
-                lookfile = gdal.Open(os.path.join(outDir, 'lookAngle',
-                                   product_dict[2][i][0])).ReadAsArray()
+            # Convert troposphere from m to rad
+            scale         = float(metadata_dict[1][i][0]) / (4*np.pi)
+            tropo_product /= scale
+
+            # Account for incAngle
+            # if in TS mode, only 1 incfile would be generated, so check for this
+            path_inc = os.path.join(outDir, 'incidenceAngle', ifg)
+            if os.path.exists(path_inc):
+                da = rio.open(path_inc)
             else:
-                lookfile = gdal.Open(os.path.join(outDir, 'lookAngle',
-                                     product_dict[2][0][0])).ReadAsArray()
-            lookfile = np.sin(np.deg2rad(np.ma.masked_where(lookfile == 0.,
-                              lookfile)))
-            tropo_product = np.divide(tropo_product, lookfile)
+                da = rio.open(path_inc.replace(ifg, product_dict[2][0][0]))
+            inc_arr = da.read().squeeze()
+            inc_arr = np.where(np.isclose(inc_arr, da.nodata), np.nan, inc_arr)
+            cos_inc = np.cos(np.deg2rad(inc_arr))
 
-            #Correct phase and save to file
-            unwphase = np.subtract(unwphase, tropo_product)
-            np.ma.set_fill_value(unwphase, unwnodata)
-            np.ma.set_fill_value(tropo_product, 0.)
-            renderVRT(outname+'_tropodiff', tropo_product.filled(),
-                      geotrans=geotrans, drivername=outputFormat,
+            tropo_product /= cos_inc
+
+            # Save differential field to file
+            tropo_product = np.where(np.isnan(tropo_product), 0., tropo_product)
+            renderVRT(outname, tropo_product,
+                      geotrans=geoT, drivername=outputFormat,
                       gdal_fmt='float32', proj=proj, nodata=0.)
-            renderVRT(outname, unwphase.filled(),
-                      geotrans=geotrans, drivername=outputFormat,
-                      gdal_fmt='float32', proj=proj, nodata=unwnodata)
 
-            del unwphase, tropo_product, tropo_reference, \
-                tropo_secondary, lookfile
+            del tropo_product, tropo_reference, \
+                tropo_secondary, da, inc_arr, cos_inc
 
         else:
             log.warning('Must skip IFG %s, because the tropospheric ' \
                         'products corresponding to the reference and/or ' \
                         'secondary products are not found in the ' \
                         'specified folder %s',
-                        product_dict[2][i][0], tropo_products)
+                        ifg, gacos_products)
             for j in [tropo_reference, tropo_secondary]:
                 if not os.path.exists(j) and j not in missing_products:
                     missing_products.append(j)
@@ -1132,6 +1289,7 @@ def tropo_correction(full_product_dict, tropo_products, bbox_file,
         missing_products = [os.path.basename(i)[:8] for i in missing_products]
         log.debug("Tropo products for the following dates are missing:")
         log.debug(missing_products)
+
 
 def main(inps=None):
     """Main workflow for extracting layers from ARIA products."""
@@ -1148,29 +1306,16 @@ def main(inps=None):
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
+                                                nc_version=inps.nc_version,
                                                 verbose=inps.verbose)
 
-    if not inps.layers and not inps.tropo_products:
-        log.info('No layers specified; only creating bounding box shapes')
-
-    elif inps.tropo_products:
-        log.info('Tropospheric corrections will be applied, making sure at least unwrappedPhase and lookAngle are extracted.')
-        # If no input layers specified, initialize list
-        if not inps.layers: inps.layers=[]
-        # If valid argument for input layers passed, parse to list
-        if isinstance(inps.layers,str): inps.layers=list(inps.layers.split(',')) ; inps.layers=[i.replace(' ','') for i in inps.layers]
-        if 'lookAngle' not in inps.layers: inps.layers.append('lookAngle')
-        if 'unwrappedPhase' not in inps.layers: inps.layers.append('unwrappedPhase')
-
-    elif inps.layers.lower()=='all':
-        log.info('All layers are to be extracted, pass all keys.')
-        inps.layers=list(standardproduct_info.products[1][0].keys())
-        # Must remove productBoundingBoxes & pair-names because they are not raster layers
-        inps.layers=[i for i in inps.layers if i not in ['productBoundingBox','productBoundingBoxFrames','pair_name']]
-
-    else:
-        inps.layers=list(inps.layers.split(','))
-        inps.layers=[i.replace(' ','') for i in inps.layers]
+    # Perform initial layer, product, and correction sanity checks
+    inps.layers, \
+        inps.tropo_total = layerCheck(standardproduct_info.products[1],
+                                      inps.layers,
+                                      inps.nc_version,
+                                      inps.gacos_products,
+                                      extract_or_ts = 'extract')
 
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower()=='all':
@@ -1201,16 +1346,32 @@ def main(inps=None):
     else:
         demfile, Latitude, Longitude = None, None, None
 
+    # Extract
+    # aria_extract default parms
+    export_dict = {
+        'full_product_dict': standardproduct_info.products[1],
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'layers': inps.layers,
+        'rankedResampling': inps.rankedResampling,
+        'dem': demfile,
+        'lat': Latitude,
+        'lon': Longitude,
+        'mask': inps.mask,
+        'outDir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'stitchMethodType': 'overlap',
+        'verbose': inps.verbose,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'tropo_total': inps.tropo_total
+    }
+
     # Extract user expected layers
-    export_products(standardproduct_info.products[1], standardproduct_info.bbox_file,
-            prods_TOTbbox, inps.layers, inps.rankedResampling, dem=demfile, lat=Latitude,
-            lon=Longitude, mask=inps.mask, outDir=inps.workdir, outputFormat=inps.outputFormat,
-            stitchMethodType='overlap', verbose=inps.verbose, num_threads=inps.num_threads, multilooking=inps.multilooking)
+    export_products(**export_dict)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
     if inps.multilooking is not None:
-        # Import functions
-        from ARIAtools.vrtmanager import resampleRaster
         bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if inps.mask is not None:
@@ -1222,7 +1383,42 @@ def main(inps=None):
                             prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Perform GACOS-based tropospheric corrections (if specified).
-    if inps.tropo_products:
-        tropo_correction(standardproduct_info.products, inps.tropo_products,
+    if inps.gacos_products:
+        gacos_correction(standardproduct_info.products, inps.gacos_products,
                          standardproduct_info.bbox_file, prods_TOTbbox, outDir=inps.workdir,
                          outputFormat=inps.outputFormat, verbose=inps.verbose, num_threads=inps.num_threads)
+
+
+def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray, old_proj: CRS, new_proj: CRS) -> np.ndarray:
+    '''
+    Transform lat/lon/hgt data to an array of points in a new
+    projection
+    Args:
+        lats: ndarray   - WGS-84 latitude (EPSG: 4326)
+        lons: ndarray   - ditto for longitude
+        hgts: ndarray   - Ellipsoidal height in meters
+        old_proj: CRS   - the original projection of the points
+        new_proj: CRS   - the new projection in which to return the points
+    Returns:
+        ndarray: the array of query points in the weather model coordinate system (YX)
+    '''
+    t = Transformer.from_crs(old_proj, new_proj)
+
+    # Flags for flipping inputs or outputs
+    if not isinstance(new_proj, pyproj.CRS):
+        new_proj = CRS.from_epsg(new_proj.lstrip('EPSG:'))
+    if not isinstance(old_proj, pyproj.CRS):
+        old_proj = CRS.from_epsg(old_proj.lstrip('EPSG:'))
+
+    in_flip = old_proj.axis_info[0].direction
+    out_flip = new_proj.axis_info[0].direction
+
+    if in_flip == 'east':
+        res = t.transform(lons, lats, hgts)
+    else:
+        res = t.transform(lats, lons, hgts)
+
+    if out_flip == 'east':
+        return np.stack((res[1], res[0], res[2]), axis=-1).T
+    else:
+        return np.stack(res, axis=-1).T

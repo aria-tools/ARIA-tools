@@ -67,7 +67,7 @@ def shapefile_area(file_bbox, bounds = False):
     # loop through polygons
     shape_area = 0
     # pass single polygon as list
-    if file_bbox.type == 'Polygon': file_bbox = [file_bbox]
+    if file_bbox.geom_type == 'Polygon': file_bbox = [file_bbox]
     for polyobj in file_bbox:
         # get coords
         if bounds:

@@ -10,9 +10,13 @@ import os
 import glob
 import numpy as np
 from osgeo import gdal
+import logging
 gdal.UseExceptions()
+
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+log = logging.getLogger(__name__)
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
@@ -279,3 +283,94 @@ def tifGacos(intif):
     tropo_rsc_dict['TIME_OF_DAY'] = 'NoneUTC'
 
     return tropo_rsc_dict
+
+
+###Perform initial layer, product, and correction sanity checks
+def layerCheck(products, layers, nc_version, gacos_products,
+               extract_or_ts):
+    """Check if any conflicts between netcdf versions and expected layers."""
+
+    # Ignore productBoundingBoxes & pair-names, they are not raster layers
+    ignore_lyr = ['productBoundingBox','productBoundingBoxFrames','pair_name']
+    # Check all available layers in stack
+    products = [list(i.keys()) for i in products]
+    products = [[sub for sub in i if sub not in ignore_lyr] for i in products]
+    all_valid_layers = list(set.intersection(*map(set, products)))
+    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic']
+    tropo_total = False
+
+    # If specified, extract all layers
+    if layers:
+        if layers.lower()=='all':
+            log.info('All layers are to be extracted, pass all keys.')
+            if set(raider_tropo_layers).issubset(all_valid_layers):
+                tropo_total = True
+        if 'troposphereTotal' in layers and \
+             set(raider_tropo_layers).issubset(all_valid_layers):
+            tropo_total = True
+
+    # differentiate between extract and TS pipeline
+    # extract pipeline
+    if extract_or_ts == 'extract':
+        if not layers and not gacos_products:
+            log.info('No layers specified; only creating bounding box shapes')
+            return []
+        elif gacos_products:
+            log.info('Tropospheric corrections will be applied, making sure '
+                     'at least unwrappedPhase and incidenceAngle '
+                     'are extracted.')
+            # If no input layers specified, initialize list
+            if not layers:
+                layers = []
+            # If valid argument for input layers passed, parse to list
+            if isinstance(layers, str):
+                layers = list(layers.split(','))
+                layers = [i.replace(' ','') for i in layers]
+            if 'incidenceAngle' not in layers:
+                layers.append('incidenceAngle')
+            if 'unwrappedPhase' not in layers:
+                layers.append('unwrappedPhase')
+        else:
+            layers = list(layers.split(','))
+            layers = [i.replace(' ','') for i in layers]
+
+    # TS pipeline
+    ts_layers_dup = ['unwrappedPhase', 'coherence', 'incidenceAngle',
+                     'lookAngle', 'azimuthAngle', 'bPerpendicular']
+    if extract_or_ts == 'tssetup':
+        if layers:
+            if isinstance(layers, str):
+                layers = list(layers.split(','))
+            # remove layers already generated in default TS workflow
+            layers = [i for i in layers if i not in ts_layers_dup]
+        else:
+            layers = []
+        # check if troposphere can be extracted downstream
+        tropo_total = True
+
+    # pass intersection of valid layers and track invalid requests
+    layer_reject = list(set.symmetric_difference(*map(set, \
+                        [all_valid_layers, layers])))
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, raider_tropo_layers])))
+    # only report layers which user requested
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, layers])))
+    layers = list(set.intersection(*map(set, [layers, all_valid_layers])))
+    if layer_reject != []:
+        log.warning('User-requested layers %s cannot be extracted as they '
+                    'are not common to all products. Consider fixing input '
+                    '"-nc_version %s" constraint to filter older product '
+                    'variants \n', layer_reject, nc_version)
+
+    # if specified, determine if computation of
+    # total tropospheric is possible
+    if tropo_total:
+        if not set(raider_tropo_layers).issubset(all_valid_layers):
+            log.warning('User-requested computation of raider-derived total '
+                        'troposphere "-l %s" is not possible as tropo '
+                        'component layers are not common '
+                        'to all products.'%('troposphereTotal'))
+            tropo_total = False
+
+    return layers, tropo_total
