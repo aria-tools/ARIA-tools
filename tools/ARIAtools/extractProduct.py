@@ -550,6 +550,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                 log.debug(f'Rejected scene {scene_obj} is type MultiPolygon')
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene_obj)
+                continue
             if prods_bbox.bounds==():
                 log.debug(f'Rejected scene {scene_obj} '
                           f'has no common overlap with bbox')
