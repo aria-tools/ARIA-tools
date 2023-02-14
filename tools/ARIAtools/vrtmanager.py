@@ -314,7 +314,7 @@ def layerCheck(products, layers, nc_version, gacos_products,
     if extract_or_ts == 'extract':
         if not layers and not gacos_products:
             log.info('No layers specified; only creating bounding box shapes')
-            return []
+            return [], []
         elif gacos_products:
             log.info('Tropospheric corrections will be applied, making sure '
                      'at least unwrappedPhase and incidenceAngle '
