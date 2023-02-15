@@ -551,7 +551,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene_obj)
                 continue
-            if prods_bbox.bounds==():
+            if prods_bbox.bounds==() or prods_bbox.is_empty:
                 log.debug(f'Rejected scene {scene_obj} '
                           f'has no common overlap with bbox')
                 rejected_scenes.append(product_dict.index(scene))
