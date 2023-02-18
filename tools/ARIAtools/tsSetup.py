@@ -96,8 +96,8 @@ def create_parser():
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
                         '"troposphereHydrostatic", "troposphereTotal", '
-                        '"solidEarthTide".'
-                        'If "all" specified, then all layers are extracted.'
+                        '"solidEarthTide". '
+                        'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '
