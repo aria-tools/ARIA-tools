@@ -942,9 +942,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
             shutil.rmtree(plots_subdir)
 
     # only perform DEM intersection for rasters with valid height levels
-    intersect_lyrs = ['troposphereWet', 'troposphereHydrostatic',
-                      'troposphereTotal' , 'solidEarthTide'] + geom_lyrs
-    if metadatalyr_name in intersect_lyrs:
+    nohgt_lyrs = ['ionosphere']
+    if metadatalyr_name not in nohgt_lyrs:
         tmp_name = outname+'_temp'
         # Define lat/lon/height arrays for metadata layers
         heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
@@ -991,7 +990,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     # outside of the expected track bounds,
     # it must be cut to conform with these bounds.
     # Crop to track extents
-    print('arrshape', arrshape)
     gdal.Warp(outname,
               tmp_name,
               options=gdal.WarpOptions(format=outputFormat,
