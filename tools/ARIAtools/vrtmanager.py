@@ -341,6 +341,7 @@ def layerCheck(products, layers, nc_version, gacos_products,
         if layers:
             if isinstance(layers, str):
                 layers = list(layers.split(','))
+                layers = [i.replace(' ','') for i in layers]
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
         else:
