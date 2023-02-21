@@ -466,7 +466,9 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     return dst
 
 
-def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
+def merged_productbbox(metadata_dict, product_dict, workdir='./',
+                       bbox_file=None, croptounion=False, num_threads='2',
+                       minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
     Also update dict, report common track bbox
     (default is to take common intersection, but user may specify union),
@@ -485,7 +487,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
         user_bbox=open_shapefile(bbox_file, 0, 0)
         overlap_area=shapefile_area(user_bbox)
         if overlap_area<minimumOverlap:
-            raise Exception("User bound box '%s' has an area of only %fkm\u00b2, below specified minimum threshold area %fkm\u00b2"%(bbox_file,overlap_area,minimumOverlap))
+            raise Exception(f'User bound box {bbox_file} has an area of only '
+                            f'{overlap_area}km\u00b2, below specified '
+                            f'minimum threshold area '
+                            f'{minimumOverlap}km\u00b2')
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
@@ -499,19 +504,23 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             if os.path.exists(outname):
                 union_bbox=open_shapefile(outname, 0, 0)
                 prods_bbox=prods_bbox.union(union_bbox)
-            save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
+            save_shapefile(outname, prods_bbox, 'GeoJSON')
         scene["productBoundingBox"]=[outname]
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.json')
-    # Need to track bounds of max extent to avoid metadata interpolation issues
-    prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
-    sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
+    # Need to track bounds of max extent
+    # to avoid metadata interpolation issues
+    prods_TOTbbox_metadatalyr = os.path.join(workdir,
+        'productBoundingBox_croptounion_formetadatalyr.json')
+    sceneareas = [open_shapefile(i['productBoundingBox'][0], 0, 0).area \
+                  for i in product_dict]
     save_shapefile(prods_TOTbbox_metadatalyr,
         open_shapefile(product_dict[sceneareas.index(max(
                 sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
-        save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0), 'GeoJSON')
+        save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0),
+                       'GeoJSON')
     # Intiate intersection with largest scene, if bbox NOT specified
     else:
         save_shapefile(prods_TOTbbox, open_shapefile(
@@ -519,7 +528,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
                     sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     rejected_scenes=[]
     for scene in product_dict:
-        prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
+        scene_obj = scene['productBoundingBox'][0]
+        prods_bbox=open_shapefile(scene_obj, 0, 0)
         total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
         total_bbox_metadatalyr=open_shapefile(prods_TOTbbox_metadatalyr, 0, 0)
         # Generate footprint for the union of all products
@@ -529,28 +539,40 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             total_bbox_metadatalyr=total_bbox_metadatalyr.union(prods_bbox)
             # Save to file
             save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON')
-            save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
+            save_shapefile(prods_TOTbbox_metadatalyr,
+                           total_bbox_metadatalyr, 'GeoJSON')
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
             prods_bbox=prods_bbox.intersection(total_bbox)
             # Estimate percentage of overlap with bbox
-            if prods_bbox.bounds==():
-                log.debug('Rejected scene %s has no common overlap with bbox'%(scene['productBoundingBox'][0]))
+            if prods_bbox.geom_type == 'MultiPolygon':
+                log.debug(f'Rejected scene {scene_obj} is type MultiPolygon')
                 rejected_scenes.append(product_dict.index(scene))
-                os.remove(scene['productBoundingBox'][0])
+                os.remove(scene_obj)
+                continue
+            if prods_bbox.bounds==() or prods_bbox.is_empty:
+                log.debug(f'Rejected scene {scene_obj} '
+                          f'has no common overlap with bbox')
+                rejected_scenes.append(product_dict.index(scene))
+                os.remove(scene_obj)
             else:
                 overlap_area=shapefile_area(prods_bbox)
                 # Kick out scenes below specified overlap threshold
-                if overlap_area<minimumOverlap:
-                    log.debug("Rejected scene %s has only %fkm\u00b2 overlap with bbox"%(scene['productBoundingBox'][0],overlap_area))
+                if overlap_area < minimumOverlap:
+                    log.debug(f'Rejected scene {scene_obj} has only '
+                              f'{overlap_area}km\u00b2 overlap with bbox')
                     rejected_scenes.append(product_dict.index(scene))
-                    os.remove(scene['productBoundingBox'][0])
+                    os.remove(scene_obj)
                 else:
                     save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
-                    # Need to track bounds of max extent to avoid metadata interpolation issues
-                    total_bbox_metadatalyr=total_bbox_metadatalyr.union(open_shapefile(scene['productBoundingBox'][0], 0, 0))
-                    save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
+                    # Need to track bounds of max extent
+                    # to avoid metadata interpolation issues
+                    total_bbox_metadatalyr = total_bbox_metadatalyr.union( \
+                        open_shapefile(scene['productBoundingBox'][0], 
+                        0, 0))
+                    save_shapefile(prods_TOTbbox_metadatalyr,
+                                   total_bbox_metadatalyr, 'GeoJSON')
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes!=[]:
