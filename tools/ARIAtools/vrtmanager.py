@@ -289,6 +289,7 @@ def tifGacos(intif):
 def layerCheck(products, layers, nc_version, gacos_products,
                extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
+    from copy import deepcopy
 
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
     ignore_lyr = ['productBoundingBox','productBoundingBoxFrames','pair_name']
@@ -303,6 +304,7 @@ def layerCheck(products, layers, nc_version, gacos_products,
     if layers:
         if layers.lower()=='all':
             log.info('All layers are to be extracted, pass all keys.')
+            layers = deepcopy(all_valid_layers)
             if set(raider_tropo_layers).issubset(all_valid_layers):
                 tropo_total = True
         if 'troposphereTotal' in layers and \
@@ -331,7 +333,6 @@ def layerCheck(products, layers, nc_version, gacos_products,
             if 'unwrappedPhase' not in layers:
                 layers.append('unwrappedPhase')
         else:
-            layers = list(layers.split(','))
             layers = [i.replace(' ','') for i in layers]
 
     # TS pipeline
