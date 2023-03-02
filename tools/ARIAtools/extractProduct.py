@@ -831,6 +831,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                         product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
                     elif stitchMethodType == '2stage':
                         product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                    elif stitchMethodType == 'sequential':
+                        from sequential_stitching import product_stitch_sequential
+                        product_stitch_sequential(unw_files, conn_files, output_unw=outFileUnw,
+                                                  bounds=bounds, clip_json=prods_TOTbbox,
+                                                  output_conn=outFileConnComp, mask_file=mask, output_format=outputFormat, 
+                                                  verbose=verbose)
 
                     #If necessary, resample both unw/conn_comp files
                     if multilooking is not None:
