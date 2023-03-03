@@ -24,6 +24,7 @@ dependencies:
   - pyproj
   - requests
   - scipy<1.10
+  - mintpy
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
