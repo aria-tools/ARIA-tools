@@ -436,7 +436,7 @@ class ARIA_standardproduct:
                 lyr_pref = '/science/grids/corrections'
                 sdskeys_addlyrs = [
                     lyr_pref + '/derived/ionosphere/ionosphere',
-                    lyr_pref + '/external/tides/solidEarthTide',
+                    lyr_pref + '/external/tides/solidEarth',
                     lyr_pref + '/external/troposphere/troposphereWet',
                     lyr_pref + '/external/troposphere/troposphereHydrostatic'
                 ]
@@ -463,7 +463,7 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.extend(['ionosphere', 'solidEarthTide', \
+            layerkeys.extend(['ionosphere', 'solidEarth', \
                              'troposphereWet', 'troposphereHydrostatic'])
 
         # Setup datalyr_dict
@@ -663,10 +663,10 @@ class ARIA_standardproduct:
             log.debug('Specifically, gaps were found between the '
                         'following interferograms:')
             record_rejected_scenes = []
-            for item in sorted_products:
-                if item[1]['pair_name'][0] in track_rejected_pairs:
-                    record_rejected_scenes.extend([rejects.split('"')[1] \
-                         for rejects in item[1]['productBoundingBox']])
+            for item in self.products:
+                if item[0]['pair_name'] in track_rejected_pairs:
+                    record_rejected_scenes.append( \
+                         item[1]['productBoundingBox'].split('"')[1])
             record_rejected_scenes = list(set(record_rejected_scenes))
             record_rejected_scenes = [os.path.basename(i) \
                  for i in record_rejected_scenes]

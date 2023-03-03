@@ -72,8 +72,8 @@ def createParser():
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
                         '"troposphereHydrostatic", "troposphereTotal", '
-                        '"solidEarthTide".'
-                        'If "all" specified, then all layers are extracted.'
+                        '"solidEarth". '
+                        'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
@@ -466,7 +466,9 @@ def dl_dem(path_dem, path_prod_union, num_threads):
     return dst
 
 
-def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None, croptounion=False, num_threads='2', minimumOverlap=0.0081, verbose=None):
+def merged_productbbox(metadata_dict, product_dict, workdir='./',
+                       bbox_file=None, croptounion=False, num_threads='2',
+                       minimumOverlap=0.0081, verbose=None):
     """Extract/merge productBoundingBox layers for each pair.
     Also update dict, report common track bbox
     (default is to take common intersection, but user may specify union),
@@ -485,7 +487,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
         user_bbox=open_shapefile(bbox_file, 0, 0)
         overlap_area=shapefile_area(user_bbox)
         if overlap_area<minimumOverlap:
-            raise Exception("User bound box '%s' has an area of only %fkm\u00b2, below specified minimum threshold area %fkm\u00b2"%(bbox_file,overlap_area,minimumOverlap))
+            raise Exception(f'User bound box {bbox_file} has an area of only '
+                            f'{overlap_area}km\u00b2, below specified '
+                            f'minimum threshold area '
+                            f'{minimumOverlap}km\u00b2')
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
@@ -499,19 +504,23 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             if os.path.exists(outname):
                 union_bbox=open_shapefile(outname, 0, 0)
                 prods_bbox=prods_bbox.union(union_bbox)
-            save_shapefile(outname, prods_bbox, 'GeoJSON')              ##SS can we track and provide the proj information of the geojson?
+            save_shapefile(outname, prods_bbox, 'GeoJSON')
         scene["productBoundingBox"]=[outname]
 
     prods_TOTbbox=os.path.join(workdir, 'productBoundingBox.json')
-    # Need to track bounds of max extent to avoid metadata interpolation issues
-    prods_TOTbbox_metadatalyr=os.path.join(workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
-    sceneareas=[open_shapefile(i['productBoundingBox'][0], 0, 0).area for i in product_dict]
+    # Need to track bounds of max extent
+    # to avoid metadata interpolation issues
+    prods_TOTbbox_metadatalyr = os.path.join(workdir,
+        'productBoundingBox_croptounion_formetadatalyr.json')
+    sceneareas = [open_shapefile(i['productBoundingBox'][0], 0, 0).area \
+                  for i in product_dict]
     save_shapefile(prods_TOTbbox_metadatalyr,
         open_shapefile(product_dict[sceneareas.index(max(
                 sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
-        save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0), 'GeoJSON')
+        save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0),
+                       'GeoJSON')
     # Intiate intersection with largest scene, if bbox NOT specified
     else:
         save_shapefile(prods_TOTbbox, open_shapefile(
@@ -519,7 +528,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
                     sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
     rejected_scenes=[]
     for scene in product_dict:
-        prods_bbox=open_shapefile(scene['productBoundingBox'][0], 0, 0)
+        scene_obj = scene['productBoundingBox'][0]
+        prods_bbox=open_shapefile(scene_obj, 0, 0)
         total_bbox=open_shapefile(prods_TOTbbox, 0, 0)
         total_bbox_metadatalyr=open_shapefile(prods_TOTbbox_metadatalyr, 0, 0)
         # Generate footprint for the union of all products
@@ -529,28 +539,40 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./', bbox_file=None
             total_bbox_metadatalyr=total_bbox_metadatalyr.union(prods_bbox)
             # Save to file
             save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON')
-            save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
+            save_shapefile(prods_TOTbbox_metadatalyr,
+                           total_bbox_metadatalyr, 'GeoJSON')
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
             prods_bbox=prods_bbox.intersection(total_bbox)
             # Estimate percentage of overlap with bbox
-            if prods_bbox.bounds==():
-                log.debug('Rejected scene %s has no common overlap with bbox'%(scene['productBoundingBox'][0]))
+            if prods_bbox.geom_type == 'MultiPolygon':
+                log.debug(f'Rejected scene {scene_obj} is type MultiPolygon')
                 rejected_scenes.append(product_dict.index(scene))
-                os.remove(scene['productBoundingBox'][0])
+                os.remove(scene_obj)
+                continue
+            if prods_bbox.bounds==() or prods_bbox.is_empty:
+                log.debug(f'Rejected scene {scene_obj} '
+                          f'has no common overlap with bbox')
+                rejected_scenes.append(product_dict.index(scene))
+                os.remove(scene_obj)
             else:
                 overlap_area=shapefile_area(prods_bbox)
                 # Kick out scenes below specified overlap threshold
-                if overlap_area<minimumOverlap:
-                    log.debug("Rejected scene %s has only %fkm\u00b2 overlap with bbox"%(scene['productBoundingBox'][0],overlap_area))
+                if overlap_area < minimumOverlap:
+                    log.debug(f'Rejected scene {scene_obj} has only '
+                              f'{overlap_area}km\u00b2 overlap with bbox')
                     rejected_scenes.append(product_dict.index(scene))
-                    os.remove(scene['productBoundingBox'][0])
+                    os.remove(scene_obj)
                 else:
                     save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
-                    # Need to track bounds of max extent to avoid metadata interpolation issues
-                    total_bbox_metadatalyr=total_bbox_metadatalyr.union(open_shapefile(scene['productBoundingBox'][0], 0, 0))
-                    save_shapefile(prods_TOTbbox_metadatalyr, total_bbox_metadatalyr, 'GeoJSON')
+                    # Need to track bounds of max extent
+                    # to avoid metadata interpolation issues
+                    total_bbox_metadatalyr = total_bbox_metadatalyr.union( \
+                        open_shapefile(scene['productBoundingBox'][0], 
+                        0, 0))
+                    save_shapefile(prods_TOTbbox_metadatalyr,
+                                   total_bbox_metadatalyr, 'GeoJSON')
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes!=[]:
@@ -602,6 +624,12 @@ def prep_metadatalayers(outname, metadata_arr, dem):
     """ Wrapper to prep metadata layer for extraction """
     if not os.path.exists(outname +'.vrt'):
         gdal.BuildVRT(outname +'.vrt', metadata_arr)
+        # if gdal fails to write, this means the variable does not exist
+        if not os.path.exists(outname +'.vrt'):
+            return None, None
+        # ionosphere layer, heights do not exist to exit
+        if metadata_arr[0].split('/')[-1] == 'ionosphere':
+            return [0], None
 
     if dem is None:
         raise Exception('No DEM input specified. '
@@ -636,7 +664,7 @@ def prep_metadatalayers(outname, metadata_arr, dem):
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     rankedResampling=False, dem=None, lat=None, lon=None,
-                    mask=None, outDir='./',outputFormat='VRT',
+                    mask=None, outDir='./', outputFormat='VRT',
                     stitchMethodType='overlap', verbose=None, num_threads='2',
                     multilooking=None, tropo_total=False):
     """Export layer and 2D meta-data layers (at the product resolution).
@@ -685,13 +713,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             ifg         = product_dict[1][i[0]][0]
             outname = os.path.abspath(os.path.join(workdir, ifg))
 
-            # Update progress bar
-            prog_bar.update(i[0]+1,suffix=ifg)
-
             # create temp files for wet and dry components
             wt_outname = os.path.abspath(os.path.join(workdir, wet_key
                                                               + ifg))
             hgt_field, _ = prep_metadatalayers(wt_outname, i[1], dem)
+            # layer does not exist for this product, move to next one
+            if hgt_field is None:
+                continue
+
+            # Update progress bar
+            prog_bar.update(i[0]+1,suffix=ifg)
             hy_outname = os.path.abspath(os.path.join(workdir, dry_key
                                                               + ifg))
             hydro_comp = [i.replace(tropo_prefix + wet_key, \
@@ -741,8 +772,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Interpolate/intersect with DEM before cropping
             finalize_metadata(outname, bounds, dem_bounds,
-                                prods_TOTbbox, dem, lat, lon, hgt_field,
-                                mask, outputFormat, verbose=verbose)
+                              prods_TOTbbox, dem, lat, lon, hgt_field,
+                              [i[1]][0], mask, outputFormat,
+                              verbose=verbose)
 
             # If necessary, resample raster
             if multilooking is not None:
@@ -776,7 +808,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  any(":/science/grids/corrections" \
                  in s for s in [i[1]][0]):
                 # make VRT pointing to metadata layers in standard product
+                print('[i[1]][0]', [i[1]][0])
                 hgt_field, model_name = prep_metadatalayers(outname, [i[1]][0], dem)
+                # layer does not exist for this product, move to next one
+                if hgt_field is None:
+                    continue
 
                 # track if tropo file, organize accordingly
                 if model_name is not None:
@@ -789,12 +825,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     shutil.move(og_outname+'.vrt', outname+'.vrt')
 
                 # Interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bounds, dem_bounds, \
-                                  prods_TOTbbox, dem, lat, lon, hgt_field, \
-                                  mask, outputFormat, verbose=verbose)
+                finalize_metadata(outname, bounds, dem_bounds,
+                                  prods_TOTbbox, dem, lat, lon, hgt_field,
+                                  [i[1]][0], mask, outputFormat,
+                                  verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
-            elif key!='unwrappedPhase' and key!='connectedComponents':
+            elif key!='unwrappedPhase' and \
+                 key!='connectedComponents':
                 if outputFormat=='VRT' and mask is None:
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', [i[1]][0])
@@ -814,31 +852,59 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                         update_file.GetRasterBand(1).WriteArray(mask.ReadAsArray()*gdal.Open(outname+'.vrt').ReadAsArray())
                         del update_file
 
-            # Extract/crop "unw" and "conn_comp" layers leveraging the two stage unwrapper
+            # Extract/crop phs and conn_comp layers
             else:
-                # Check if unw phase and connected components are already generated
-                if not os.path.exists(os.path.join(outDir,'unwrappedPhase',ifg)) or not os.path.exists(os.path.join(outDir,'connectedComponents',ifg)):
-                    # extract the inputs required for stitching of unwrapped and connected component files
-                    unw_files = full_product_dict[i[0]]['unwrappedPhase']
-                    conn_files = full_product_dict[i[0]]['connectedComponents']
-                    prod_bbox_files = full_product_dict[i[0]]['productBoundingBoxFrames']
-                    # based on the key define the output directories
-                    outFileUnw=os.path.join(outDir,'unwrappedPhase',ifg)
-                    outFileConnComp=os.path.join(outDir,'connectedComponents',ifg)
+                # get connected component input files
+                conn_files = full_product_dict[i[0]]['connectedComponents']
+                prod_bbox_files = \
+                    full_product_dict[i[0]]['productBoundingBoxFrames']
+                outFileConnComp = \
+                    os.path.join(outDir, 'connectedComponents', ifg)
 
+                # Check if phs phase and conn_comp files are already generated
+                outFilePhs = os.path.join(outDir, 'unwrappedPhase', ifg)
+                if not os.path.exists(outFilePhs) or not \
+                     os.path.exists(outFileConnComp):
+                    phs_files = full_product_dict[i[0]]['unwrappedPhase']
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
-                        product_stitch_overlap(unw_files,conn_files,prod_bbox_files,bounds,prods_TOTbbox, outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_overlap(phs_files, conn_files,
+                                              prod_bbox_files, bounds,
+                                              prods_TOTbbox,
+                                              outFileUnw=outFilePhs,
+                                              outFileConnComp=outFileConnComp,
+                                              mask=mask,
+                                              outputFormat=outputFormat,
+                                              verbose=verbose)
                     elif stitchMethodType == '2stage':
-                        product_stitch_2stage(unw_files,conn_files,bounds,prods_TOTbbox,outFileUnw=outFileUnw,outFileConnComp= outFileConnComp, mask=mask,outputFormat = outputFormat,verbose=verbose)
+                        product_stitch_2stage(phs_files,
+                                              conn_files,
+                                              bounds,
+                                              prods_TOTbbox,
+                                              outFileUnw=outFilePhs,
+                                              outFileConnComp=outFileConnComp,
+                                              mask=mask,
+                                              outputFormat=outputFormat,
+                                              verbose=verbose)
 
-                    #If necessary, resample both unw/conn_comp files
+                    # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
-                        resampleRaster(outFileConnComp, multilooking, bounds, prods_TOTbbox, rankedResampling, outputFormat=outputFormat, num_threads=num_threads)
+                        resampleRaster(outFilePhs, multilooking, bounds,
+                                       prods_TOTbbox, rankedResampling,
+                                       outputFormat=outputFormat,
+                                       num_threads=num_threads)
+                        resampleRaster(outFileConnComp, multilooking, bounds,
+                                       prods_TOTbbox, rankedResampling,
+                                       outputFormat=outputFormat,
+                                       num_threads=num_threads)
 
             #If necessary, resample raster
-            if multilooking is not None and key!='unwrappedPhase' and key!='connectedComponents':
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox, rankedResampling, outputFormat=outputFormat, num_threads=num_threads)
+            if multilooking is not None and \
+                 key!='unwrappedPhase' and \
+                 key!='connectedComponents':
+                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
+                               rankedResampling, outputFormat=outputFormat,
+                               num_threads=num_threads)
 
         prog_bar.close()
 
@@ -854,11 +920,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
-                      lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
-                      verbose=None, num_threads='2'):
+                      lat, lon, hgt_field, prod_list, mask=None, \
+                      outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
-    3Dlayers with a DEM.
+    3D layers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
     # import dependencies
@@ -874,14 +940,26 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     # get final shape
     arrshape=gdal.Open(dem.GetDescription()).ReadAsArray().shape
     # load layered metadata array
-    data_array=gdal.Warp('', outname+'.vrt', options=gdal.WarpOptions(format="MEM", multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+    tmp_name = outname+'.vrt'
+    data_array = gdal.Warp('', tmp_name,
+                     options=gdal.WarpOptions(format="MEM",
+                         multithread=True,
+                         options=['NUM_THREADS=%s'%(num_threads)]))
 
-    #metadata layer quality check, correction applied if necessary
-    #only apply to geometry layers
+    # get minimum version
+    version_check = []
+    for i in prod_list:
+        v_num = i.split(':')[-2].split('/')[-1]
+        v_num = v_num.split('.nc')[0][-5:]
+        version_check.append(v_num)
+    version_check = min(version_check)
+
+    # metadata layer quality check, correction applied if necessary
+    # only apply to geometry layers and prods derived from older ISCE versions
     geom_lyrs = ['bPerpendicular', 'bParallel', 'incidenceAngle',
                  'lookAngle', 'azimuthAngle']
     metadatalyr_name = outname.split('/')[-2]
-    if metadatalyr_name in geom_lyrs:
+    if metadatalyr_name in geom_lyrs and version_check < '2_0_4':
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))
@@ -896,41 +974,65 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         if len(os.listdir(plots_subdir)) == 0:
             shutil.rmtree(plots_subdir)
 
-    # Define lat/lon/height arrays for metadata layers
-    heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
-         hgt_field)[1:-1].split(','), dtype='float32')
+    # only perform DEM intersection for rasters with valid height levels
+    nohgt_lyrs = ['ionosphere']
+    if metadatalyr_name not in nohgt_lyrs:
+        tmp_name = outname+'_temp'
+        # Define lat/lon/height arrays for metadata layers
+        heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
+             hgt_field)[1:-1].split(','), dtype='float32')
 
-    latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
-                       data_array.GetGeoTransform()[3] + \
-                       (data_array.GetGeoTransform()[5] * \
-                       data_array.RasterYSize), data_array.RasterYSize)
-    longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
-                       data_array.GetGeoTransform()[0] + \
-                       (data_array.GetGeoTransform()[1] * \
-                       data_array.RasterXSize), data_array.RasterXSize)
+        latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
+                           data_array.GetGeoTransform()[3] + \
+                           (data_array.GetGeoTransform()[5] * \
+                           data_array.RasterYSize), data_array.RasterYSize)
+        longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
+                           data_array.GetGeoTransform()[0] + \
+                           (data_array.GetGeoTransform()[1] * \
+                           data_array.RasterXSize), data_array.RasterXSize)
 
-    da_dem = xrr.open_rasterio(dem.GetDescription(), band_as_variable=True)['band_1']
+        da_dem = xrr.open_rasterio(dem.GetDescription(), 
+                     band_as_variable=True)['band_1']
 
-    ## interpolate the DEM to the GUNW lat/lon
-    da_dem1 = da_dem.interp(x=lon[0, :], y=lat[:, 0]).fillna(dem.GetRasterBand(1).GetNoDataValue())
+        # interpolate the DEM to the GUNW lat/lon
+        da_dem1 = da_dem.interp(x=lon[0, :], 
+            y=lat[:, 0]).fillna(dem.GetRasterBand(1).GetNoDataValue())
 
-    ## hack to get an stack of coordinates for the interpolator to interpolate in the right shape
-    pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
+        # hack to get an stack of coordinates for the interpolator
+        # to interpolate in the right shape
+        pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
-    ## set up the interpolator with the GUNW cube
-    interper = RegularGridInterpolator((latitudeMeta, longitudeMeta,
+        # set up the interpolator with the GUNW cube
+        interper = RegularGridInterpolator((latitudeMeta, longitudeMeta,
                    heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0),
                    fill_value=np.nan, bounds_error=False)
 
-    ## interpolate cube to DEM points
-    out_interpolated = interper(pnts.transpose(2, 1, 0))
+        # interpolate cube to DEM points
+        out_interpolated = interper(pnts.transpose(2, 1, 0))
 
-    # Save file
-    renderVRT(outname+'_temp', out_interpolated, geotrans=dem.GetGeoTransform(), drivername=outputFormat, gdal_fmt=data_array.ReadAsArray().dtype.name, proj=dem.GetProjection(), nodata=data_array.GetRasterBand(1).GetNoDataValue())
+        # Save file
+        renderVRT(tmp_name, out_interpolated,
+                  geotrans=dem.GetGeoTransform(),
+                  drivername=outputFormat,
+                  gdal_fmt=data_array.ReadAsArray().dtype.name,
+                  proj=dem.GetProjection(),
+                  nodata=data_array.GetRasterBand(1).GetNoDataValue())
+        del out_interpolated
 
-    # Since metadata layer extends at least one grid node outside of the expected track bounds, it must be cut to conform with these bounds.
+    # Since metadata layer extends at least one grid node
+    # outside of the expected track bounds,
+    # it must be cut to conform with these bounds.
     # Crop to track extents
-    gdal.Warp(outname, outname+'_temp', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bbox_bounds, dstNodata=data_array.GetRasterBand(1).GetNoDataValue(), width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+    gdal.Warp(outname,
+              tmp_name,
+              options=gdal.WarpOptions(format=outputFormat,
+                  cutlineDSName=prods_TOTbbox,
+                  outputBounds=bbox_bounds,
+                  dstNodata=data_array.GetRasterBand(1).GetNoDataValue(),
+                  width=arrshape[1],
+                  height=arrshape[0],
+                  multithread=True,
+                  options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
     #remove temp files
     for i in glob.glob(outname+'_temp*'): os.remove(i)
 
@@ -944,9 +1046,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         # Update VRT with new raster
         update_file=gdal.Open(outname,gdal.GA_Update)
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
-        del update_file
+        del update_file, out_interpolated
 
-    del out_interpolated, data_array
+    del data_array
 
 
 def gacos_correction(full_product_dict, gacos_products, bbox_file,

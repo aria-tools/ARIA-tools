@@ -289,6 +289,7 @@ def tifGacos(intif):
 def layerCheck(products, layers, nc_version, gacos_products,
                extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
+    from copy import deepcopy
 
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
     ignore_lyr = ['productBoundingBox','productBoundingBoxFrames','pair_name']
@@ -303,8 +304,13 @@ def layerCheck(products, layers, nc_version, gacos_products,
     if layers:
         if layers.lower()=='all':
             log.info('All layers are to be extracted, pass all keys.')
+            layers = deepcopy(all_valid_layers)
             if set(raider_tropo_layers).issubset(all_valid_layers):
                 tropo_total = True
+        # If valid argument for input layers passed, parse to list
+        if isinstance(layers, str):
+            layers = list(layers.split(','))
+            layers = [i.replace(' ','') for i in layers]
         if 'troposphereTotal' in layers and \
              set(raider_tropo_layers).issubset(all_valid_layers):
             tropo_total = True
@@ -314,7 +320,7 @@ def layerCheck(products, layers, nc_version, gacos_products,
     if extract_or_ts == 'extract':
         if not layers and not gacos_products:
             log.info('No layers specified; only creating bounding box shapes')
-            return []
+            return [], []
         elif gacos_products:
             log.info('Tropospheric corrections will be applied, making sure '
                      'at least unwrappedPhase and incidenceAngle '
@@ -322,16 +328,11 @@ def layerCheck(products, layers, nc_version, gacos_products,
             # If no input layers specified, initialize list
             if not layers:
                 layers = []
-            # If valid argument for input layers passed, parse to list
-            if isinstance(layers, str):
-                layers = list(layers.split(','))
-                layers = [i.replace(' ','') for i in layers]
             if 'incidenceAngle' not in layers:
                 layers.append('incidenceAngle')
             if 'unwrappedPhase' not in layers:
                 layers.append('unwrappedPhase')
         else:
-            layers = list(layers.split(','))
             layers = [i.replace(' ','') for i in layers]
 
     # TS pipeline
@@ -339,8 +340,6 @@ def layerCheck(products, layers, nc_version, gacos_products,
                      'lookAngle', 'azimuthAngle', 'bPerpendicular']
     if extract_or_ts == 'tssetup':
         if layers:
-            if isinstance(layers, str):
-                layers = list(layers.split(','))
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
         else:

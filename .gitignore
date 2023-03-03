@@ -254,3 +254,12 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
+
+# Ignore testing directory
+**/test_tmp/
+
+# Mac specific
+**.DS_Store
+
+# Data GUNW files
+*.nc
