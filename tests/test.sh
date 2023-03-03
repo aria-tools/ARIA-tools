@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 export GDAL_HTTP_COOKIEFILE=/tmp//cookies.txt
 export GDAL_HTTP_COOKIEJAR=/tmp//cookies.txt
 export VSI_CACHE=YES
