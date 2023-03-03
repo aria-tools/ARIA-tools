@@ -72,7 +72,7 @@ def createParser():
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
                         '"troposphereHydrostatic", "troposphereTotal", '
-                        '"solidEarthTide". '
+                        '"solidEarth". '
                         'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -772,8 +772,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Interpolate/intersect with DEM before cropping
             finalize_metadata(outname, bounds, dem_bounds,
-                                prods_TOTbbox, dem, lat, lon, hgt_field,
-                                mask, outputFormat, verbose=verbose)
+                              prods_TOTbbox, dem, lat, lon, hgt_field,
+                              [i[1]][0], mask, outputFormat,
+                              verbose=verbose)
 
             # If necessary, resample raster
             if multilooking is not None:
@@ -807,6 +808,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  any(":/science/grids/corrections" \
                  in s for s in [i[1]][0]):
                 # make VRT pointing to metadata layers in standard product
+                print('[i[1]][0]', [i[1]][0])
                 hgt_field, model_name = prep_metadatalayers(outname, [i[1]][0], dem)
                 # layer does not exist for this product, move to next one
                 if hgt_field is None:
@@ -823,9 +825,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     shutil.move(og_outname+'.vrt', outname+'.vrt')
 
                 # Interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bounds, dem_bounds, \
-                                  prods_TOTbbox, dem, lat, lon, hgt_field, \
-                                  mask, outputFormat, verbose=verbose)
+                finalize_metadata(outname, bounds, dem_bounds,
+                                  prods_TOTbbox, dem, lat, lon, hgt_field,
+                                  [i[1]][0], mask, outputFormat,
+                                  verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
             elif key!='unwrappedPhase' and \
@@ -917,11 +920,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
-                      lat, lon, hgt_field, mask=None, outputFormat='ENVI', \
-                      verbose=None, num_threads='2'):
+                      lat, lon, hgt_field, prod_list, mask=None, \
+                      outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
-    3Dlayers with a DEM.
+    3D layers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
     # import dependencies
@@ -943,12 +946,20 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                          multithread=True,
                          options=['NUM_THREADS=%s'%(num_threads)]))
 
-    #metadata layer quality check, correction applied if necessary
-    #only apply to geometry layers
+    # get minimum version
+    version_check = []
+    for i in prod_list:
+        v_num = i.split(':')[-2].split('/')[-1]
+        v_num = v_num.split('.nc')[0][-5:]
+        version_check.append(v_num)
+    version_check = min(version_check)
+
+    # metadata layer quality check, correction applied if necessary
+    # only apply to geometry layers and prods derived from older ISCE versions
     geom_lyrs = ['bPerpendicular', 'bParallel', 'incidenceAngle',
                  'lookAngle', 'azimuthAngle']
     metadatalyr_name = outname.split('/')[-2]
-    if metadatalyr_name in geom_lyrs:
+    if metadatalyr_name in geom_lyrs and version_check < '2_0_4':
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))

@@ -307,6 +307,10 @@ def layerCheck(products, layers, nc_version, gacos_products,
             layers = deepcopy(all_valid_layers)
             if set(raider_tropo_layers).issubset(all_valid_layers):
                 tropo_total = True
+        # If valid argument for input layers passed, parse to list
+        if isinstance(layers, str):
+            layers = list(layers.split(','))
+            layers = [i.replace(' ','') for i in layers]
         if 'troposphereTotal' in layers and \
              set(raider_tropo_layers).issubset(all_valid_layers):
             tropo_total = True
@@ -324,10 +328,6 @@ def layerCheck(products, layers, nc_version, gacos_products,
             # If no input layers specified, initialize list
             if not layers:
                 layers = []
-            # If valid argument for input layers passed, parse to list
-            if isinstance(layers, str):
-                layers = list(layers.split(','))
-                layers = [i.replace(' ','') for i in layers]
             if 'incidenceAngle' not in layers:
                 layers.append('incidenceAngle')
             if 'unwrappedPhase' not in layers:
@@ -340,9 +340,6 @@ def layerCheck(products, layers, nc_version, gacos_products,
                      'lookAngle', 'azimuthAngle', 'bPerpendicular']
     if extract_or_ts == 'tssetup':
         if layers:
-            if isinstance(layers, str):
-                layers = list(layers.split(','))
-                layers = [i.replace(' ','') for i in layers]
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
         else:
