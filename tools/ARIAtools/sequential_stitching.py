@@ -19,24 +19,22 @@ from matplotlib import pyplot as plt
 import matplotlib as mpl
 
 '''
-NOTES: Sequnetial stitcher relies on connected components with assumption that each component is unwrapped correctly by snaphu
-        This might not always be the case, if there are unwrapping errors withing the connected component that is in the overlap
-        stitcher will not be able to compensate for this shift. Potential appraoch to correct this, would be to manually create
-        connect component around the unwrapping error and re-run stitching.
+NOTE:
+Sequential stitcher relies on connected components [region of pixels] in the overlap between two frames with 
+assumption that each component is unwrapped correctly by SNAPHU. This might not always be the case. If there 
+are unwrapping errors within the overlapping component, they will propage to the stitched image.
+Potential fix could be to manually create connected component around the unwrapping error and try to
+re-run stitching.
 
-        0 Component tyipcally should be masked out. Stitcher merges 0 components between two frame, if there is a lot of water 
-        label with 0 component, this will affect the offset correction between 0 to 0 components, which will result that that 
-        unwrapped phase within 0 components is displaced compared to other components. TODO: estimate the mean offset between
-        stitched 0 component and other components and shift 0 to be close to the other compoenents, to deflate the potential
-        large values related to 0 component. Or to shift 0 component with the same offset with biggest overalaping component
-        offset
+Connected Component 0 represents masked pixels by SNAPHU. Stitcher merges 0 overlapping components by default 
+for the sake of vizualization. However, these unwrapped phase pixels are unreliable and will often be 
+misaligned as 2-pi integer cycles shift does not apply here. User is advised to mask these pixes for further processing.
 
-GENERAL TODO: implement re-enumeration of connected components of stiched output, at the moment merged connected componnets
-    will create gaps in labeling components. Should the re-enumeration be done to fill those gaps or should we re-enumerate
-    connected components based on the size, e.g. 1 will be the biggest component (with most pixels), whereas greater labels 
-    will be smaller in size.
+TODO: Re-enumeration of connected components in the stitched image. Due the merging of overlapping components, there
+are gaps in enumeration of connected component labels. This should not affect the futher processing, but for the sake
+of consistency, add function to re-enumerate components.
 
-DISCLAIMER : This is devolpment script. Requires some additional clean-up and restructuring
+DISCLAIMER : This is development script. Requires some additional clean-up and restructuring
 '''
 
 ################### STITCHING SUBRUTINES ##################################
@@ -90,13 +88,13 @@ def stitch_2frames(unw_data1 : NDArray, conncomp_data1 : NDArray, rdict1 : dict,
     conncomp_data2 = conncomp_data2 + np.nanmax(conncomp_data1)
     conncomp_data2[conncomp_data2==np.nanmax(conncomp_data1)] = 0.0
 
-    ###### GET OVERLAPS ##########
+    ###### GET FRAME OVERLAP ##########
     box_1, box_2  = frame_overlap(rdict1['SNWE'], 
                                   rdict2['SNWE'],
                                   [rdict1['LAT_SPACING'], rdict1['LON_SPACING']],
                                   [rdict2['LAT_SPACING'], rdict2['LON_SPACING']])
 
-    ###### LOOP THORUGH CONNCOMPs WITHIN OVERLAP ########## 
+    ###### LOOP OVER COMPONENTS WITHIN THE OVERLAP ########## 
     # Get connected component pairs
     if verbose:
         print('\nGetting overlapping components')
@@ -157,7 +155,8 @@ def stitch_2frames(unw_data1 : NDArray, conncomp_data1 : NDArray, rdict1 : dict,
 def get_overlaping_conncomp(conn_comp1 : NDArray, 
                             conn_comp2 : NDArray) -> Tuple[NDArray, NDArray]:
     """
-    Get forward and backward pairs of overlapping connected components with the number of overlaping pixels
+    Get forward and backward pairs of overlapping connected components with the 
+    number of overlaping pixels.
     Return [connectComponent-Fram2, connectComponent-Frame1, number of pixels]
 
     Parameters
@@ -360,10 +359,10 @@ def product_stitch_sequential(input_unw_files : List[str],
                               save_fig : Optional[bool] = False,
                               overwrite : Optional[bool] = True) -> None:
     """
-    Sequntial stitcher of frames along the track. Starts from Southern frame and goes to North.
-    Stitching is perform with forward and backward corrections of overlapping connectedComponents
-    between two neighboring frames. Stitched track is stored locally, and then cropped to meet 
-    defined ARIAtools bounding box and masked with water-mask if selected.
+    Sequential stitcher of frames along the track. Starts from the Southern frame and goes towards 
+    he North. Stitching is perform with forward and backward corrections of overlapping components
+    between two neighboring frames. The stitched track is stored locally, and then cropped to meet 
+    the defined ARIAtools bounding box and masked with a water-mask if selected.
 
     Parameters
     ----------
@@ -428,12 +427,12 @@ def product_stitch_sequential(input_unw_files : List[str],
                                         unw_attr_dicts[-1]['LON_SPACING']])
 
     # get sorted indices for frame bounds, from South to North
-    # Sequential stitching starts from the southest frame and moves 
-    # forward to next one in North direction
+    # Sequential stitching starts from the most south frame and moves 
+    # forward to next one in the North direction
     # TODO: add option to reverse direction of stitching
     sorted_ix = np.argsort(np.array(temp_snwe_list)[:,0], axis=0)
 
-    # Loop through attr
+    # Loop through attributes
     snwe_list = [temp_snwe_list[ii] for ii in sorted_ix]
     latlon_spacing_list = [temp_latlon_spacing_list[ii] for ii in sorted_ix]
     
@@ -472,7 +471,7 @@ def product_stitch_sequential(input_unw_files : List[str],
                                                       verbose=verbose)
 
             # Overwrite the last element in corrected arrays
-            # TODO: check how to do this withouth using del
+            # TODO: check how to do this without using del
             del corrected_unw_arrays[-1], corrected_conn_arrays[-1] 
             corrected_unw_arrays.extend([corr_uw1, corr_unw2])
             corrected_conn_arrays.extend([corr_conn1, corr_conn2])      
@@ -510,7 +509,7 @@ def product_stitch_sequential(input_unw_files : List[str],
 
     # NOTE: Run gdal.Warp on temp file, if input and output are the same
     #       warp creates empty raster, investigate why
-    #       Also, it looks it is important to close gdal.Warp
+    #       Also, it looks like it is important to close gdal.Warp
     #       gdal.Warp/Translate add 6 seconds to runtime
 
     for output, input in zip([output_unw, output_conn], [temp_unw_out, temp_conn_out]):
@@ -619,7 +618,7 @@ def get_GUNW_array(filename : Union[str, Path],
         path to raster
     subset : slice
         subset created with np.s_ TODO: insert tuple of (x1,x2, y1,y2)
-        and then converted to slice with np.s_
+        and then convert to slice with np.s_
 
     Returns
     -------
@@ -754,7 +753,7 @@ def frame_overlap(snwe1 : list,
     overlap_snwe = [np.max(snwe[:,0]), np.min(snwe[:,1]), 
                     np.max(snwe[:,2]), np.min(snwe[:,3])]
     
-    # Georeferenced space 2 image coordinate space
+    # Georeferenced space to image coordinate space
     x1, y1 = lalo2xy(overlap_snwe[1], overlap_snwe[2], snwe1, latlon_step1) # Frame-1 
     x2, y2 = lalo2xy(overlap_snwe[1], overlap_snwe[2], snwe2, latlon_step2) # Frame-2
 
@@ -776,8 +775,7 @@ def lalo2xy(lat : np.float32,
             rounding_method : Optional[str] = 'floor') -> Tuple[np.int16, np.int16]:
     """
     Georeferenced coordinates to image space coordinates. GDAL raster starting point
-    is the upper left corner. Takes latitude and longitude and get raster coodinate 
-    in x (width) and y (length) axis
+    is the upper left corner.
 
     Parameters
     ----------
@@ -803,13 +801,13 @@ def lalo2xy(lat : np.float32,
     """
 
     # np.floor works better with points and raster - Need to check why
-    # but with two raster sometimes one pixel is missing or is redundad
+    # but with two rasters sometimes one pixel is missing or is redundant
     if rounding_method == 'floor':
         x = int(np.floor((lon - data_snwe[2]) / latlon_step[1] + 0.01))
         y = int(np.floor((lat - data_snwe[1]) / latlon_step[0] + 0.01))
     
     # np.around works better with two rasters
-    # test it out, I think it has it something how numpy floor is rounding negative values
+    # test it out, I think it has something to how numpy floor is rounding negative values
     # example np.around(-125.2) = -125 np.floor(-125.2) = -126
     # np.around(125.6) = 126, np.floor(125.6) = 125
     elif rounding_method == 'around': 
@@ -858,7 +856,7 @@ def combine_data_to_single(data_list : list,
     length = abs(int(np.around((SNWE[1] - SNWE[0]) / latlon_step[0] + 0.01)))
     width = abs(int(np.around((SNWE[2] - SNWE[3]) / latlon_step[1] + 0.01)))
     
-    #create combined data array
+    # create combined data array
     comb_data = np.empty((n, length, width), dtype=np.float64) * np.nan
     for i, data in enumerate(data_list):
         x, y = np.abs(lalo2xy(SNWE[1], SNWE[2], snwe_list[i], latlon_step_list[i], 'around'))
@@ -932,7 +930,7 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
     # Figure
     fig, axs = plt.subplots(1,3, dpi=300, sharey=True)
     im1=axs[0].imshow(np.mod(stitched_unw, 4*np.pi), cmap='jet', **plot_kwargs) # Re-wrapped
-    im2=axs[1].imshow(stitched_unw * (0.0556 / (4*np.pi)), cmap='jet', 
+    im2=axs[1].imshow(stitched_unw * (0.0556 / (6*np.pi)), cmap='jet', 
                       clim=[-0.2, 0.2], **plot_kwargs) # Unwrapped
     im3=axs[2].imshow(stitched_conn, cmap=cmap, norm=norm, **plot_kwargs) # Connected Components
 
