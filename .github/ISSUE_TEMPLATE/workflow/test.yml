@@ -31,8 +31,11 @@ jobs:
           extra-specs: |
             python=${{ matrix.python-version }}
 
-      - name: Pytest in conda environment
+      - name: test in conda environment
         shell: bash -l {0}
+        env:
+          TOPO_API_KEY: ${{ secrets.TOPOAPI }}
         run: |
+          echo $TOPO_API_KEY > ~/.topoapi
           python -m pip install .
           source tests/test.sh
