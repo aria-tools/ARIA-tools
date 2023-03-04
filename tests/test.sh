@@ -24,9 +24,9 @@ ariaExtract.py -f "products/*.nc" -l coherence
 ariaExtract.py -f "products/*.nc" -l unwrappedPhase
 
 #time-series prep
-ariaTSsetup.py -d download -m download -f "products/*.nc"
+ariaTSsetup.py -d download -m download -f "products/*.nc" -w 'ts_stack'
 #run loading of aria products in mintpy
-prep_aria.py -s stack/ -d DEM/SRTM_3arcsec.dem -i incidenceAngle/20180420_20180315.vrt -a azimuthAngle/20180420_20180315.vrt
+prep_aria.py -s ts_stack/stack/ -d ts_stack/DEM/SRTM_3arcsec.dem -i ts_stack/incidenceAngle/20180420_20180315.vrt -a ts_stack/azimuthAngle/20180420_20180315.vrt
 
 #download and test NLCD mask
 ariaExtract.py -f "products/*.nc" -m 'NLCD'
