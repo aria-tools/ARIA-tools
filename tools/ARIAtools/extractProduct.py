@@ -869,23 +869,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     if not layers and not tropo_total: return # only bbox
 
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
-    if dem is not None:
-        dem_bounds=[dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+ \
-        (dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+ \
-        (dem.GetGeoTransform()[1]*dem.RasterXSize),dem.GetGeoTransform()[3]]
-
-    # Mask specified, so file must be physically extracted,
-    # cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT' and mask is not None:
-        outputFormat='ENVI'
-
-    # If specified, extract tropo layers
-    tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+    # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
             'layers': layers,
             'bounds': bounds,
-            'dem_bounds': dem_bounds,
             'prods_TOTbbox': prods_TOTbbox,
             'dem': dem,
             'lat': lat,
@@ -897,6 +884,22 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             'rankedResampling': rankedResampling,
             'num_threads': num_threads
     }
+
+    # get bounds
+    bounds=open_shapefile(bbox_file, 0, 0).bounds
+    if dem is not None:
+        dem_bounds = [dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+ \
+        (dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+ \
+        (dem.GetGeoTransform()[1]*dem.RasterXSize),dem.GetGeoTransform()[3]]
+        lyr_input_dict['dem_bounds'] = dem_bounds
+
+    # Mask specified, so file must be physically extracted,
+    # cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT' and mask is not None:
+        outputFormat='ENVI'
+
+    # If specified, extract tropo layers
+    tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
     if tropo_total or list(set.intersection(*map(set, \
                         [layers, tropo_lyrs]))) != []:
         lyr_prefix = '/science/grids/corrections/external/troposphere/'
