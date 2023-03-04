@@ -872,7 +872,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
             'layers': layers,
-            'bounds': bounds,
             'prods_TOTbbox': prods_TOTbbox,
             'dem': dem,
             'lat': lat,
