@@ -630,6 +630,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
     ifg = os.path.basename(outname)
     out_dir = os.path.dirname(outname)
+    ref_outname = deepcopy(outname)
     # ionosphere layer, heights do not exist to exit
     if metadata_arr[0].split('/')[-1] == 'ionosphere':
         gdal.BuildVRT(outname +'.vrt', metadata_arr)
@@ -637,7 +638,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
     # capture model if tropo product
     model_name = None
-    if 'tropo' in metadata_arr[0].split('/')[-1]:
+    if 'tropo' in key:
         model_name = metadata_arr[0].split('/')[-3]
         out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
@@ -659,39 +660,46 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
              hgt_field) \
              for i in metadata_arr])
 
-    # get ref and sec paths
-    date_dir = os.path.join(out_dir, 'dates')
-    if not os.path.exists(date_dir):
-        os.mkdir(date_dir)
-    ref_outname = os.path.join(date_dir, ifg.split('_')[1])
-    sec_outname = os.path.join(date_dir, ifg.split('_')[0])
-    ref_str = 'reference/' + key
-    sec_str = 'secondary/' + key
-    sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
-    tup_outputs = [
-        (ref_outname, metadata_arr),
-        (sec_outname, sec_metadata_arr)
-    ]
+    if 'tropo' in key or 'solidEarthTide' in key:
+        # get ref and sec paths
+        date_dir = os.path.join(out_dir, 'dates')
+        if not os.path.exists(date_dir):
+            os.mkdir(date_dir)
+        ref_outname = os.path.join(date_dir, ifg.split('_')[1])
+        sec_outname = os.path.join(date_dir, ifg.split('_')[0])
+        ref_str = 'reference/' + key
+        sec_str = 'secondary/' + key
+        sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
+        tup_outputs = [
+            (ref_outname, metadata_arr),
+            (sec_outname, sec_metadata_arr)
+        ]
 
-    # write ref and sec files
-    for i in tup_outputs:
-        if not os.path.exists(i[0]+'.vrt'):
-            gdal.BuildVRT(i[0]+'.vrt', i[1])
+        # write ref and sec files
+        for i in tup_outputs:
+            if not os.path.exists(i[0]+'.vrt'):
+                gdal.BuildVRT(i[0]+'.vrt', i[1])
+                # write height layers
+                gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
+                     gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
+
+        # compute differential
+        generate_diff(ref_outname, sec_outname, outname, key, key, False,
+                      hgt_field, driver)
+
+        if key in layers:
+            for i in [ref_outname, sec_outname]:
+                if not os.path.exists(i):
+                    # write to file
+                    da = xrr.open_rasterio(i + '.vrt')
+                    da.rio.to_raster(i, driver=driver)
+                    da.close()
+    else:
+        if not os.path.exists(outname+'.vrt'):
+            gdal.BuildVRT(outname+'.vrt', metadata_arr)
             # write height layers
-            gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
-                 gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
-
-    # compute differential
-    generate_diff(ref_outname, sec_outname, outname, key, key, False,
-                  hgt_field, driver)
-
-    if key in layers:
-        for i in [ref_outname, sec_outname]:
-            if not os.path.exists(i):
-                # write to file
-                da = xrr.open_rasterio(i + '.vrt')
-                da.rio.to_raster(i, driver=driver)
-                da.close()
+            gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field, \
+                 gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
 
     return hgt_field, model_name, ref_outname
 
