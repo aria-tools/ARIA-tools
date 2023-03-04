@@ -72,7 +72,7 @@ def createParser():
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
                         '"troposphereHydrostatic", "troposphereTotal", '
-                        '"solidEarth". '
+                        '"solidEarthTide". '
                         'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -620,32 +620,38 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
 
 
-def prep_metadatalayers(outname, metadata_arr, dem):
+def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
     """ Wrapper to prep metadata layer for extraction """
-    if not os.path.exists(outname +'.vrt'):
-        gdal.BuildVRT(outname +'.vrt', metadata_arr)
-        # if gdal fails to write, this means the variable does not exist
-        if not os.path.exists(outname +'.vrt'):
-            return None, None
-        # ionosphere layer, heights do not exist to exit
-        if metadata_arr[0].split('/')[-1] == 'ionosphere':
-            return [0], None
 
     if dem is None:
         raise Exception('No DEM input specified. '
                         'Cannot extract 3D imaging geometry '
                         'layers without DEM to intersect with.')
 
-    # Check if height layers are consistent
+    ifg = os.path.basename(outname)
+    out_dir = os.path.dirname(outname)
+    # ionosphere layer, heights do not exist to exit
+    if metadata_arr[0].split('/')[-1] == 'ionosphere':
+        gdal.BuildVRT(outname +'.vrt', metadata_arr)
+        return [0], None, outname
+
+    # capture model if tropo product
+    model_name = None
+    if 'tropo' in metadata_arr[0].split('/')[-1]:
+        model_name = metadata_arr[0].split('/')[-3]
+        out_dir = os.path.join(out_dir, model_name)
+        outname = os.path.join(out_dir, ifg)
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+
+    # Get height values
     zdim = gdal.Open(metadata_arr[0]).GetMetadataItem( \
                               'NETCDF_DIM_EXTRA')[1:-1]
     hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
-
-    if len(set([gdal.Open(i).GetMetadataItem(hgt_field) \
+    # Check if height layers are consistent
+    if not os.path.exists(outname +'.vrt') and \
+         not len(set([gdal.Open(i).GetMetadataItem(hgt_field) \
          for i in metadata_arr]))==1:
-        gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field, \
-             gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
-    else:
         raise Exception('Inconsistent heights for '
              'metadata layer(s) ', metadata_arr, \
              ' corresponding heights: ', \
@@ -653,13 +659,188 @@ def prep_metadatalayers(outname, metadata_arr, dem):
              hgt_field) \
              for i in metadata_arr])
 
-    # capture model if tropo product
-    model_name = None
-    if 'tropo' in metadata_arr[0].split('/')[-1]:
-        model_name = gdal.Open(metadata_arr[0])
-        model_name = model_name.GetRasterBand(1).GetMetadataItem('model')
+    # get ref and sec paths
+    date_dir = os.path.join(out_dir, 'dates')
+    if not os.path.exists(date_dir):
+        os.mkdir(date_dir)
+    ref_outname = os.path.join(date_dir, ifg.split('_')[1])
+    sec_outname = os.path.join(date_dir, ifg.split('_')[0])
+    ref_str = 'reference/' + key
+    sec_str = 'secondary/' + key
+    sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
+    tup_outputs = [
+        (ref_outname, metadata_arr),
+        (sec_outname, sec_metadata_arr)
+    ]
 
-    return hgt_field, model_name
+    # write ref and sec files
+    for i in tup_outputs:
+        if not os.path.exists(i[0]+'.vrt'):
+            gdal.BuildVRT(i[0]+'.vrt', i[1])
+            # write height layers
+            gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
+                 gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
+
+    # compute differential
+    generate_diff(ref_outname, sec_outname, outname, key, key, False,
+                  hgt_field, driver)
+
+    if key in layers:
+        for i in [ref_outname, sec_outname]:
+            if not os.path.exists(i):
+                # write to file
+                da = xrr.open_rasterio(i + '.vrt')
+                da.rio.to_raster(i, driver=driver)
+                da.close()
+
+    return hgt_field, model_name, ref_outname
+
+
+def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
+                  hgt_field, driver):
+
+    # if specified workdir doesn't exist, create it
+    output_dir = os.path.dirname(outname)
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+
+    # open intermediate files
+    with xrr.open_rasterio(sec_outname + '.vrt') as da_sec:
+        arr_sec = da_sec.data
+    with xrr.open_rasterio(ref_outname + '.vrt') as da_ref:
+        arr_ref = da_ref.data
+
+    # make the total arr
+    # if computing total delay, must add dry and wet
+    if tropo_total:
+        arr_total = arr_sec + arr_ref
+    else:
+        arr_total = arr_sec - arr_ref
+    da_total = da_sec.copy()
+    da_total.data = arr_total
+    
+    # update attributes
+    da_total.name = key
+    og_da_attrs = da_total.attrs
+    da_attrs = {}
+    for key in og_da_attrs:
+        new_key = key.replace(OG_key, key)
+        new_val = og_da_attrs[key]
+        if isinstance(new_val, str):
+            new_val = new_val.replace(OG_key, key)
+        da_attrs[new_key] = new_val
+    da_total = da_total.assign_attrs(da_attrs)
+
+    # write initial array to file
+    da_total.rio.to_raster(outname, driver=driver)
+    ds = gdal.BuildVRT(f'{outname}.vrt', outname)
+    da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
+    ds.SetMetadata(da_attrs)
+    del ds
+    return
+
+
+def handle_epoch_layers(layers,
+            product_dict,
+            lyr_path,
+            key,
+            sec_key,
+            ref_key,
+            tropo_total,
+            workdir,
+            prog_bar,
+            bounds,
+            dem_bounds,
+            prods_TOTbbox,
+            dem,
+            lat,
+            lon,
+            mask,
+            outputFormat,
+            verbose,
+            multilooking,
+            rankedResampling,
+            num_threads):
+
+    # Depending on type, set sec/ref output dirs
+    if key == 'troposphereTotal':
+        sec_workdir = os.path.join(os.path.dirname(workdir),
+                                   sec_key)
+        ref_workdir = os.path.join(os.path.dirname(workdir),
+                                   ref_key)
+    else:
+        sec_workdir = deepcopy(workdir)
+        ref_workdir = deepcopy(workdir)
+    # If specified workdir doesn't exist, create it
+    all_workdirs = [workdir, sec_workdir, ref_workdir]
+    for i in all_workdirs:
+        if not os.path.exists(i):
+            os.mkdir(i)
+
+    # set driver
+    driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
+
+    # Iterate through all IFGs
+    for i in enumerate(product_dict[0]):
+        ifg         = product_dict[1][i[0]][0]
+        outname = os.path.abspath(os.path.join(workdir, ifg))
+
+        # create temp files for wet and dry components
+        ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
+        hgt_field, _, ref_outname = prep_metadatalayers(ref_outname,
+                                      i[1], dem,
+                                      ref_key, layers, driver)
+
+        # Update progress bar
+        prog_bar.update(i[0]+1,suffix=ifg)
+        sec_outname = os.path.dirname(ref_outname)
+        sec_outname = os.path.abspath(os.path.join(sec_outname,
+                                      ifg.split('_')[0]))
+        # capture if tropo and separate distinct wet and hydro layers
+        if ref_workdir != sec_workdir:
+            sec_comp = [j.replace(lyr_path + ref_key, \
+                                lyr_path + sec_key) \
+                                for j in i[1]]
+            hgt_field, model_name, sec_outname = prep_metadatalayers(
+                                               sec_outname,
+                                               sec_comp, dem,
+                                               sec_key, layers, driver)
+
+            # if specified, compute total delay
+            model_dir = os.path.abspath(os.path.join(workdir, model_name))
+            outname = os.path.join(model_dir, ifg)
+            if tropo_total:
+                generate_diff(ref_outname, sec_outname, outname, key,
+                      sec_key, tropo_total, hgt_field, driver)
+
+        # finalize each requested layer
+        # if not requested, remove intermediate layer directories
+        for j in [ref_outname, sec_outname, outname]:
+            if os.path.exists(j):
+                # Interpolate/intersect with DEM before cropping
+                finalize_metadata(j, bounds, dem_bounds,
+                          prods_TOTbbox, dem, lat, lon, hgt_field,
+                          i[1], mask, outputFormat,
+                          verbose=verbose)
+
+                # If necessary, resample raster
+                if multilooking is not None:
+                    resampleRaster(j, multilooking, bounds, prods_TOTbbox,
+                           rankedResampling, outputFormat=outputFormat,
+                           num_threads=num_threads)
+            else:
+                del_dir = os.path.dirname(j)
+                if os.path.exists(del_dir):
+                    shutil.rmtree(del_dir)
+
+    prog_bar.close()
+
+    # delete empty directories
+    for i in all_workdirs:
+        if len(os.listdir(i)) == 0:
+            shutil.rmtree(i)
+
+    return
 
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
@@ -691,9 +872,26 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     if outputFormat=='VRT' and mask is not None:
         outputFormat='ENVI'
 
-    # If specified, through tropo layers
-    if tropo_total:
-        tropo_prefix = '/science/grids/corrections/external/troposphere/'
+    # If specified, extract tropo layers
+    tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+    lyr_input_dict = {
+            'layers': layers,
+            'bounds': bounds,
+            'dem_bounds': dem_bounds,
+            'prods_TOTbbox': prods_TOTbbox,
+            'dem': dem,
+            'lat': lat,
+            'lon': lon,
+            'mask': mask,
+            'outputFormat': outputFormat,
+            'verbose': verbose,
+            'multilooking': multilooking,
+            'rankedResampling': rankedResampling,
+            'num_threads': num_threads
+    }
+    if tropo_total or list(set.intersection(*map(set, \
+                        [layers, tropo_lyrs]))) != []:
+        lyr_prefix = '/science/grids/corrections/external/troposphere/'
         wet_key = 'troposphereWet'
         dry_key   = 'troposphereHydrostatic'
         product_dict = [[j[wet_key] for j in full_product_dict], \
@@ -704,87 +902,49 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix='Generating: '+key+' - ')
 
-        # If specified workdir doesn't exist, create it
-        if not os.path.exists(workdir):
-            os.mkdir(workdir)
+        # set input keys
+        lyr_input_dict['prog_bar'] = prog_bar
+        lyr_input_dict['product_dict'] = product_dict
+        lyr_input_dict['lyr_path'] = lyr_prefix
+        lyr_input_dict['key'] = key
+        lyr_input_dict['sec_key'] = dry_key
+        lyr_input_dict['ref_key'] = wet_key
+        lyr_input_dict['tropo_total'] = tropo_total
+        lyr_input_dict['workdir'] = workdir
 
-        # Iterate through all IFGs
-        for i in enumerate(product_dict[0]):
-            ifg         = product_dict[1][i[0]][0]
-            outname = os.path.abspath(os.path.join(workdir, ifg))
+        # extract layers
+        handle_epoch_layers(**lyr_input_dict)
 
-            # create temp files for wet and dry components
-            wt_outname = os.path.abspath(os.path.join(workdir, wet_key
-                                                              + ifg))
-            hgt_field, _ = prep_metadatalayers(wt_outname, i[1], dem)
-            # layer does not exist for this product, move to next one
-            if hgt_field is None:
-                continue
+    # If specified, extract solid earth tides
+    ext_corr_lyrs = tropo_lyrs + ['solidEarthTide']
+    if list(set.intersection(*map(set, \
+                        [layers, ['solidEarthTide']]))) != []:
+        lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
+        key = 'solidEarthTide'
+        ref_key = key
+        sec_key = key
+        product_dict = [[j[key] for j in full_product_dict], \
+                      [j["pair_name"] for j in full_product_dict]]
 
-            # Update progress bar
-            prog_bar.update(i[0]+1,suffix=ifg)
-            hy_outname = os.path.abspath(os.path.join(workdir, dry_key
-                                                              + ifg))
-            hydro_comp = [i.replace(tropo_prefix + wet_key, \
-                                     tropo_prefix + dry_key) \
-                                     for i in [i[1]][0]]
-            hgt_field, model_name = prep_metadatalayers(hy_outname, hydro_comp, dem)
+        workdir = os.path.join(outDir, key)
+        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
+                                       prefix='Generating: '+key+' - ')
 
-            with xrr.open_rasterio(hy_outname + '.vrt') as da_hydro:
-                arr_hyd = da_hydro.data
+        # set input keys
+        lyr_input_dict['prog_bar'] = prog_bar
+        lyr_input_dict['product_dict'] = product_dict
+        lyr_input_dict['lyr_path'] = lyr_prefix
+        lyr_input_dict['key'] = key
+        lyr_input_dict['sec_key'] = sec_key
+        lyr_input_dict['ref_key'] = ref_key
+        lyr_input_dict['tropo_total'] = False
+        lyr_input_dict['workdir'] = workdir
 
-            with xrr.open_rasterio(wt_outname + '.vrt') as da_wet:
-                arr_wet = da_wet.data
-
-            # make the total arr
-            arr_total = arr_hyd + arr_wet
-            da_total = da_hydro.copy()
-            da_total.data = arr_total
-            
-            # update attributes
-            da_total.name = key
-            og_da_attrs = da_total.attrs
-            da_attrs = {}
-            for key in og_da_attrs:
-                new_key = key.replace(dry_key, key)
-                new_val = og_da_attrs[key]
-                if isinstance(new_val, str):
-                    new_val = new_val.replace(dry_key, key)
-                da_attrs[new_key] = new_val
-            da_total = da_total.assign_attrs(da_attrs)
-
-            # write initial array to file
-            # If specified workdir doesn't exist, create it
-            model_dir = os.path.abspath(os.path.join(workdir, model_name))
-            if not os.path.exists(model_dir):
-                os.mkdir(model_dir)
-            outname = os.path.join(model_dir, ifg)
-            driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
-            da_total.rio.to_raster(outname, driver=driver)
-            ds = gdal.BuildVRT(f'{outname}.vrt', outname)
-            da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
-            ds.SetMetadata(da_attrs)
-            del ds
-
-            # remove temp files
-            for i in glob.glob(workdir + '/troposphere*'):
-                os.remove(i)
-
-            # Interpolate/intersect with DEM before cropping
-            finalize_metadata(outname, bounds, dem_bounds,
-                              prods_TOTbbox, dem, lat, lon, hgt_field,
-                              [i[1]][0], mask, outputFormat,
-                              verbose=verbose)
-
-            # If necessary, resample raster
-            if multilooking is not None:
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                                rankedResampling, outputFormat=outputFormat,
-                                num_threads=num_threads)
-
-        prog_bar.close()
+        # extract layers
+        handle_epoch_layers(**lyr_input_dict)
 
     # Loop through other user expected layers
+    layers = [i for i in layers if i not in ext_corr_lyrs]
     for key in layers:
         product_dict=[[j[key] for j in full_product_dict], [j["pair_name"] for j in full_product_dict]]
         workdir=os.path.join(outDir,key)
@@ -804,30 +964,18 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry" \
-                 in s for s in [i[1]][0]) or \
+                 in s for s in i[1]) or \
                  any(":/science/grids/corrections" \
-                 in s for s in [i[1]][0]):
+                 in s for s in i[1]):
                 # make VRT pointing to metadata layers in standard product
-                print('[i[1]][0]', [i[1]][0])
-                hgt_field, model_name = prep_metadatalayers(outname, [i[1]][0], dem)
-                # layer does not exist for this product, move to next one
-                if hgt_field is None:
-                    continue
-
-                # track if tropo file, organize accordingly
-                if model_name is not None:
-                    model_dir = os.path.abspath(os.path.join(workdir,
-                                                model_name))
-                    if not os.path.exists(model_dir):
-                        os.mkdir(model_dir)
-                    og_outname = deepcopy(outname)
-                    outname = os.path.join(model_dir, ifg)
-                    shutil.move(og_outname+'.vrt', outname+'.vrt')
+                hgt_field, model_name, outname = prep_metadatalayers(outname,
+                                                     i[1], dem, key, layers,
+                                                     outputFormat)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  [i[1]][0], mask, outputFormat,
+                                  i[1], mask, outputFormat,
                                   verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
@@ -835,12 +983,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  key!='connectedComponents':
                 if outputFormat=='VRT' and mask is None:
                     # building the virtual vrt
-                    gdal.BuildVRT(outname+ "_uncropped" +'.vrt', [i[1]][0])
+                    gdal.BuildVRT(outname+ "_uncropped" +'.vrt', i[1])
                     # building the cropped vrt
                     gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
                 else:
                     # building the VRT
-                    gdal.BuildVRT(outname +'.vrt', [i[1]][0])
+                    gdal.BuildVRT(outname +'.vrt', i[1])
                     gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
 
                     # Update VRT

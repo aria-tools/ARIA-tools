@@ -51,7 +51,7 @@ ARIA_LAYERS = ['unwrappedPhase',
                'troposphereWet',
                'troposphereTotal',
                'ionosphere',
-               'solidEarth']
+               'solidEarthTide']
 ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STACK_DEFAULTS = ['unwrappedPhase',
@@ -59,7 +59,7 @@ ARIA_STACK_DEFAULTS = ['unwrappedPhase',
                        'connectedComponents',
                        'troposphereTotal',
                        'ionosphere',
-                       'solidEarth']
+                       'solidEarthTide']
 
 ARIA_STACK_OUTFILES = {
     'unwrappedPhase': 'unwrapStack',
@@ -71,7 +71,7 @@ ARIA_STACK_OUTFILES = {
     'troposphereWet': 'tropoWetStack',
     'troposphereTotal': 'tropoStack',
     'ionosphere': 'ionoStack',
-    'solidEarth': 'setStack'
+    'solidEarthTide': 'setStack'
 }
 ARIA_STACK_OUTFILES.update({i:i+'Stack' for i in ARIA_TROPO_MODELS})
 
@@ -96,7 +96,7 @@ def create_parser():
                         '"incidenceAngle", "lookAngle", "azimuthAngle", '
                         '"ionosphere", "troposphereWet", '
                         '"troposphereHydrostatic", "troposphereTotal", '
-                        '"solidEarth". '
+                        '"solidEarthTide". '
                         'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,

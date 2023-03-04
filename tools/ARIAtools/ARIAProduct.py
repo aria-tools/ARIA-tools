@@ -433,12 +433,21 @@ class ARIA_standardproduct:
                 '/science/grids/imagingGeometry/azimuthAngle'
             ]
             if version.lower()=='1c':
+                # get weather model name
+                meta = gdal.Info(fname)
+                for i in meta.split():
+                    if '/science/grids/corrections/external/troposphere/' in i:
+                        model_name = i.split('/')[-3]
+                        break
                 lyr_pref = '/science/grids/corrections'
                 sdskeys_addlyrs = [
                     lyr_pref + '/derived/ionosphere/ionosphere',
-                    lyr_pref + '/external/tides/solidEarth',
-                    lyr_pref + '/external/troposphere/troposphereWet',
-                    lyr_pref + '/external/troposphere/troposphereHydrostatic'
+                    lyr_pref + '/external/tides/solidEarth'
+                        '/reference/solidEarthTide',
+                    lyr_pref + f'/external/troposphere/{model_name}'
+                        '/reference/troposphereWet',
+                    lyr_pref + f'/external/troposphere/{model_name}'
+                        '/reference/troposphereHydrostatic'
                 ]
                 sdskeys.extend(sdskeys_addlyrs)
 
@@ -463,7 +472,7 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.extend(['ionosphere', 'solidEarth', \
+            layerkeys.extend(['ionosphere', 'solidEarthTide', \
                              'troposphereWet', 'troposphereHydrostatic'])
 
         # Setup datalyr_dict
