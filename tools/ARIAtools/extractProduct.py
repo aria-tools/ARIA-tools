@@ -878,7 +878,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             'lat': lat,
             'lon': lon,
             'mask': mask,
-            'outputFormat': outputFormat,
             'verbose': verbose,
             'multilooking': multilooking,
             'rankedResampling': rankedResampling,
@@ -886,7 +885,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     }
 
     # get bounds
-    bounds=open_shapefile(bbox_file, 0, 0).bounds
+    bounds = open_shapefile(bbox_file, 0, 0).bounds
+    lyr_input_dict['bounds'] = bounds
     if dem is not None:
         dem_bounds = [dem.GetGeoTransform()[0],dem.GetGeoTransform()[3]+ \
         (dem.GetGeoTransform()[-1]*dem.RasterYSize),dem.GetGeoTransform()[0]+ \
@@ -897,6 +897,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     # cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT' and mask is not None:
         outputFormat='ENVI'
+    lyr_input_dict['outputFormat'] = outputFormat
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
