@@ -886,6 +886,18 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               mask=mask,
                                               outputFormat=outputFormat,
                                               verbose=verbose)
+                
+                    elif stitchMethodType == 'sequential':
+                        from sequential_stitching import product_stitch_sequential
+                        product_stitch_2stage(phs_files,
+                                              conn_files,
+                                              bounds,
+                                              prods_TOTbbox,
+                                              outFileUnw=outFilePhs,
+                                              outFileConnComp=outFileConnComp,
+                                              mask=mask,
+                                              outputFormat=outputFormat,
+                                              verbose=verbose))
 
                     # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
