@@ -68,7 +68,7 @@ jobs:
             
             # install mintpy
             conda deactivate
-            mamba env create -f ${MINTPY_HOME}/docs/environment.yml
+            mamba env create --name mintpy -f ${MINTPY_HOME}/requirements.txt
             conda activate mintpy
             python -m pip install ${MINTPY_HOME}
             prep_aria.py -h
