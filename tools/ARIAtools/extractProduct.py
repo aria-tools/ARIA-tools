@@ -897,7 +897,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               outFileConnComp=outFileConnComp,
                                               mask=mask,
                                               outputFormat=outputFormat,
-                                              verbose=verbose))
+                                              verbose=verbose)
 
                     # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
