@@ -583,7 +583,6 @@ def main(inps=None):
     # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
-    layers.remove('connectedComponents')
     remove_lyrs = []
     for i in layers:
         lyr_dir = os.path.join(inps.workdir, i)
