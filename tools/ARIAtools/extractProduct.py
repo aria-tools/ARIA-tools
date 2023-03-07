@@ -1109,9 +1109,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Track consistency of dimensions
             if i[0] == 0:
-                ref_wid, ref_height, _, _, _ = get_basic_attrs(outname)
+                ref_wid, ref_height, _, _, _ = get_basic_attrs(outname +
+                                                               '.vrt')
             else:
-                prod_wid, prod_height, _, _, _ = get_basic_attrs(outname)
+                prod_wid, prod_height, _, _, _ = get_basic_attrs(outname +
+                                                                 '.vrt')
                 if (ref_wid != prod_wid) or (ref_height != prod_height):
                      raise Exception(f'Inconsistent product dims between'
                          'products {outname} and {prev_outname}:'
