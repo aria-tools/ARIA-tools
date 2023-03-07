@@ -23,8 +23,10 @@ from ARIAtools.logger import logger
 
 from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
-from ARIAtools.unwrapStitching import product_stitch_overlap, product_stitch_2stage
-from ARIAtools.vrtmanager import resampleRaster, layerCheck
+from ARIAtools.unwrapStitching import product_stitch_overlap, \
+                                      product_stitch_2stage
+from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
+                                 get_basic_attrs
 import pyproj
 from pyproj import CRS, Transformer
 import rioxarray as xrr
@@ -687,6 +689,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
         generate_diff(ref_outname, sec_outname, outname, key, key, False,
                       hgt_field, driver)
 
+        # write raster to file if it does not exist
         if key in layers:
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
@@ -706,6 +709,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                   hgt_field, driver):
+    """ Compute differential from referene and secondary scenes """
 
     # if specified workdir doesn't exist, create it
     output_dir = os.path.dirname(outname)
@@ -769,6 +773,10 @@ def handle_epoch_layers(layers,
             multilooking,
             rankedResampling,
             num_threads):
+    """Manage reference/secondary components for correction layers.
+    Specifically record reference/secondary components within a `dates` subdir
+    and deposit the differential fields in the level above.
+    """
 
     # Depending on type, set sec/ref output dirs
     if key == 'troposphereTotal':
@@ -789,21 +797,22 @@ def handle_epoch_layers(layers,
     driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     # Iterate through all IFGs
+    record_epochs = []
     for i in enumerate(product_dict[0]):
         ifg         = product_dict[1][i[0]][0]
         outname = os.path.abspath(os.path.join(workdir, ifg))
 
-        # create temp files for wet and dry components
+        # create temp files for ref/sec components
         ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
         hgt_field, _, ref_outname = prep_metadatalayers(ref_outname,
                                       i[1], dem,
                                       ref_key, layers, driver)
-
         # Update progress bar
         prog_bar.update(i[0]+1,suffix=ifg)
         sec_outname = os.path.dirname(ref_outname)
         sec_outname = os.path.abspath(os.path.join(sec_outname,
                                       ifg.split('_')[0]))
+
         # capture if tropo and separate distinct wet and hydro layers
         if ref_workdir != sec_workdir:
             sec_comp = [j.replace(lyr_path + ref_key, \
@@ -813,7 +822,6 @@ def handle_epoch_layers(layers,
                                                sec_outname,
                                                sec_comp, dem,
                                                sec_key, layers, driver)
-
             # if specified, compute total delay
             model_dir = os.path.abspath(os.path.join(workdir, model_name))
             outname = os.path.join(model_dir, ifg)
@@ -821,25 +829,59 @@ def handle_epoch_layers(layers,
                 generate_diff(ref_outname, sec_outname, outname, key,
                       sec_key, tropo_total, hgt_field, driver)
 
-        # finalize each requested layer
-        # if not requested, remove intermediate layer directories
-        for j in [ref_outname, sec_outname, outname]:
-            if os.path.exists(j):
-                # Interpolate/intersect with DEM before cropping
-                finalize_metadata(j, bounds, dem_bounds,
-                          prods_TOTbbox, dem, lat, lon, hgt_field,
-                          i[1], mask, outputFormat,
-                          verbose=verbose)
+        # track sec/ref scenes to interpolate later
+        record_epochs.extend([ref_outname, sec_outname])
 
-                # If necessary, resample raster
-                if multilooking is not None:
-                    resampleRaster(j, multilooking, bounds, prods_TOTbbox,
-                           rankedResampling, outputFormat=outputFormat,
-                           num_threads=num_threads)
+        # finalize requested layer
+        # remove intermediate layer directories
+        if os.path.exists(outname):
+            # Interpolate/intersect with DEM before cropping
+            finalize_metadata(outname, bounds, dem_bounds,
+                      prods_TOTbbox, dem, lat, lon, hgt_field,
+                      i[1], mask, outputFormat,
+                      verbose=verbose)
+
+            # If necessary, resample raster
+            if multilooking is not None:
+                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
+                       rankedResampling, outputFormat=outputFormat,
+                       num_threads=num_threads)
+
+            # Track consistency of dimensions
+            if i[0] == 0:
+                ref_wid, ref_height, _, _, _ = get_basic_attrs(outname)
             else:
-                del_dir = os.path.dirname(j)
-                if os.path.exists(del_dir):
-                    shutil.rmtree(del_dir)
+                prod_wid, prod_height, _, _, _ = get_basic_attrs(outname)
+                if (ref_wid != prod_wid) or (ref_height != prod_height):
+                     raise Exception(f'Inconsistent product dims between'
+                         'products {outname} and {prev_outname}:'
+                         'check respective width ({ref_wid}, {ref_height})'
+                         'and height ({prod_wid}, {prod_height})')
+            prev_outname = deepcopy(outname)
+        else:
+            del_dir = os.path.dirname(outname)
+            if os.path.exists(del_dir):
+                shutil.rmtree(del_dir)
+
+    # interpolate and intersect epochs
+    record_epochs = list(set(record_epochs))
+    for j in record_epochs:
+        if os.path.exists(j):
+            # Interpolate/intersect with DEM before cropping
+            finalize_metadata(j, bounds, dem_bounds,
+                      prods_TOTbbox, dem, lat, lon, hgt_field,
+                      i[1], mask, outputFormat,
+                      verbose=verbose)
+
+            # If necessary, resample raster
+            if multilooking is not None:
+                resampleRaster(j, multilooking, bounds, prods_TOTbbox,
+                       rankedResampling, outputFormat=outputFormat,
+                       num_threads=num_threads)
+        else:
+            del_dir = os.path.dirname(j)
+            if os.path.exists(del_dir):
+                shutil.rmtree(del_dir)
 
     prog_bar.close()
 
@@ -1057,13 +1099,25 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                        outputFormat=outputFormat,
                                        num_threads=num_threads)
 
-            #If necessary, resample raster
+            # If necessary, resample raster
             if multilooking is not None and \
                  key!='unwrappedPhase' and \
                  key!='connectedComponents':
                 resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
                                rankedResampling, outputFormat=outputFormat,
                                num_threads=num_threads)
+
+            # Track consistency of dimensions
+            if i[0] == 0:
+                ref_wid, ref_height, _, _, _ = get_basic_attrs(outname)
+            else:
+                prod_wid, prod_height, _, _, _ = get_basic_attrs(outname)
+                if (ref_wid != prod_wid) or (ref_height != prod_height):
+                     raise Exception(f'Inconsistent product dims between'
+                         'products {outname} and {prev_outname}:'
+                         'check respective width ({ref_wid}, {ref_height})'
+                         'and height ({prod_wid}, {prod_height})')
+            prev_outname = os.path.abspath(os.path.join(workdir, ifg))
 
         prog_bar.close()
 
@@ -1088,9 +1142,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     """
     # import dependencies
     from scipy.interpolate import RegularGridInterpolator
-
-    # Import functions
-    from ARIAtools.vrtmanager import renderVRT
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     if outputFormat=='VRT':
@@ -1221,7 +1272,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     # Import functions
     import tarfile
     from datetime import datetime
-    from ARIAtools.vrtmanager import renderVRT, rscGacos, tifGacos
+    from ARIAtools.vrtmanager import rscGacos, tifGacos
     from ARIAtools.shapefile_util import save_shapefile
     from shapely.geometry import Polygon
 
@@ -1417,6 +1468,10 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     for i in range(len(product_dict[0])):
         ifg     = product_dict[2][i][0]
         outname = os.path.join(workdir, ifg)
+        gacos_epochs_dir = os.path.join(workdir, 'dates')
+        ref_outname = os.path.join(gacos_epochs_dir, f'{ifg[:8]}')
+        sec_outname = os.path.join(gacos_epochs_dir, f'{ifg[9:]}')
+        outname = os.path.join(workdir, ifg)
         unwname = os.path.join(outDir,'unwrappedPhase', ifg)
         if i == 0:
             meta = gdal.Info(unwname, format='json')
@@ -1500,15 +1555,13 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                 product_dict[2][i][0])
 
             # Open corresponding tropo products and pass the difference
-            tropo_product = gdal.Warp('', tropo_reference, format="MEM",
+            tropo_reference = gdal.Warp('', tropo_reference, format="MEM",
                                       outputBounds=bounds, width=arrshape[1],
                                       height=arrshape[0]).ReadAsArray()
-
             tropo_secondary = gdal.Warp('', tropo_secondary, format="MEM",
                                         outputBounds=bounds, width=arrshape[1],
                                         height=arrshape[0]).ReadAsArray()
-
-            tropo_product  = np.subtract(tropo_secondary, tropo_product)
+            tropo_product  = np.subtract(tropo_secondary, tropo_reference)
 
             # Convert troposphere from m to rad
             scale         = float(metadata_dict[1][i][0]) / (4*np.pi)
@@ -1533,8 +1586,37 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                       geotrans=geoT, drivername=outputFormat,
                       gdal_fmt='float32', proj=proj, nodata=0.)
 
+            # check if reference and secondary scenes are written to file
+            if not os.path.exists(ref_outname):
+                tropo_reference /= scale
+                tropo_reference /= cos_inc
+                tropo_reference = np.where(np.isnan(tropo_reference), 0., tropo_reference)
+                renderVRT(ref_outname, tropo_reference,
+                      geotrans=geoT, drivername=outputFormat,
+                      gdal_fmt='float32', proj=proj, nodata=0.)
+            if not os.path.exists(sec_outname):
+                tropo_secondary /= scale
+                tropo_secondary /= cos_inc
+                tropo_secondary = np.where(np.isnan(tropo_secondary), 0., tropo_secondary)
+                renderVRT(sec_outname, tropo_secondary,
+                      geotrans=geoT, drivername=outputFormat,
+                      gdal_fmt='float32', proj=proj, nodata=0.)
+
+
             del tropo_product, tropo_reference, \
                 tropo_secondary, da, inc_arr, cos_inc
+
+            # Track consistency of dimensions
+            if i[0] == 0:
+                ref_wid, ref_height, _ = get_basic_attrs(outname)
+            else:
+                prod_wid, prod_height, _ = get_basic_attrs(outname)
+                if (ref_wid != prod_wid) or (ref_height != prod_height):
+                     raise Exception(f'Inconsistent product dims between'
+                         'products {outname} and {prev_outname}:'
+                         'check respective width ({ref_wid}, {ref_height})'
+                         'and height ({prod_wid}, {prod_height})')
+            prev_outname = os.path.join(workdir, ifg)
 
         else:
             log.warning('Must skip IFG %s, because the tropospheric ' \

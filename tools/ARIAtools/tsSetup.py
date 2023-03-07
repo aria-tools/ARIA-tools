@@ -26,9 +26,9 @@ from ARIAtools import progBar
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import resampleRaster, layerCheck
-from ARIAtools.extractProduct import (merged_productbbox, prep_dem,
-                                      export_products, gacos_correction)
+from ARIAtools.vrtmanager import resampleRaster, layerCheck, get_basic_attrs
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, \
+                                      export_products, gacos_correction
 
 gdal.UseExceptions()
 # Suppress warnings
@@ -36,22 +36,27 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
-# MG: create a list of all aria layers
-ARIA_TROPO_MODELS = ['HRES',
-               'ERA5',
-               'GMAO',
-               'HRRR']
-
-ARIA_LAYERS = ['unwrappedPhase',
-               'gacos_corrections',
-               'coherence',
-               'connectedComponents',
-               'amplitude',
-               'troposphereHydrostatic',
+# Create lists of all supported models and all aria layers
+ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
                'troposphereWet',
                'troposphereTotal',
-               'ionosphere',
-               'solidEarthTide']
+               'solidEarthTide',
+               'gacos_corrections']
+
+ARIA_INTERNAL_CORRECTIONS = ['ionosphere']
+
+ARIA_TROPO_MODELS = ['HRES',
+                     'ERA5',
+                     'GMAO',
+                     'HRRR',
+                     'GACOS']
+
+ARIA_LAYERS = ['unwrappedPhase',
+               'coherence',
+               'connectedComponents',
+               'amplitude']
+ARIA_LAYERS += ARIA_EXTERNAL_CORRECTIONS
+ARIA_LAYERS += ARIA_INTERNAL_CORRECTIONS
 ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STACK_DEFAULTS = ['unwrappedPhase',
@@ -66,6 +71,7 @@ ARIA_STACK_OUTFILES = {
     'gacos_corrections': 'gacosStack',
     'coherence': 'cohStack',
     'connectedComponents': 'connCompStack',
+    'bParallel': 'bParStack',
     'amplitude': 'ampStack',
     'troposphereHydrostatic': 'tropoHydrostaticStack',
     'troposphereWet': 'tropoWetStack',
@@ -211,38 +217,42 @@ def extract_bperp_dict(domain_name, aria_prod):
     return meta
 
 
-def extract_utc_time(aria_prod):
+def extract_utc_time(aria_dates, aztime_list):
     """Extract UTC time from products."""
-    f = aria_prod.products[1]
     utc_dict = {}
-
-    for i in range(0, len(f)):
+    utc_time = None
+    for i in range(0, len(aria_dates)):
         # Grab pair name of the product
-        pair_name = aria_prod.products[1][i]['pair_name']
+        pair_name = aria_dates[i]
 
-        # Grab mid-times, append to a list and find minimum and
-        # maximum mid-times
-        mid_time_list = aria_prod.products[0][i]['azimuthZeroDopplerMidTime']
-        mid_time = []
-        for j in mid_time_list:
-            mid_time.append(datetime.strptime(j, '%Y-%m-%dT%H:%M:%S.%f'))
-        min_mid_time = min(mid_time)
-        max_mid_time = max(mid_time)
+        # Only iterate on utc_calculation if values in list are different
+        if ([aztime_list[0]]*len(aztime_list) != aztime_list) or \
+                 utc_time is None:
+            # Grab mid-times, append to a list and find minimum and
+            # maximum mid-times
+            mid_time_list = aztime_list[i]
+            mid_time = []
+            for j in mid_time_list:
+                mid_time.append(datetime.strptime(j, '%Y-%m-%dT%H:%M:%S.%f'))
+            min_mid_time = min(mid_time)
+            max_mid_time = max(mid_time)
 
-        # Calculate time difference between minimum start and maximum end time,
-        # and add it to mean start time.
+            # Calculate time difference between minimum start and maximum end time,
+            # and add it to mean start time.
+            time_delta = (max_mid_time - min_mid_time)/2
+            utc_time = (min_mid_time+time_delta).time()
+
         # Write calculated UTC time into a dictionary
         # with associated pair names as keys
-        time_delta = (max_mid_time - min_mid_time)/2
-        utc_time = (min_mid_time+time_delta).time()
-        utc_dict[pair_name[0]] = utc_time.strftime("%H:%M:%S.%f")
+        utc_dict[pair_name] = utc_time.strftime("%H:%M:%S.%f")
     return utc_dict
 
 
 def generate_stack(aria_prod, stack_layer, output_file_name,
                    workdir='./', ref_tropokey=None, ref_dlist=None):
     """Generate time series stack."""
-    utc_time = extract_utc_time(aria_prod)
+    from copy import deepcopy
+
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
@@ -255,20 +265,24 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         print('Creating directory: ', stack_dir)
         os.makedirs(stack_dir)
 
-    domain_name = stack_layer
+    domain_name = deepcopy(stack_layer)
     # Datatypes -- all layers are Float32 except ConnComponents
-    if stack_layer == 'connectedComponents':
+    if domain_name == 'connectedComponents':
         data_type = "Int16"
     else:
         data_type = "Float32"
 
     # make sure to search subdirectory for specific tropo models if necessary
-    if stack_layer in ARIA_TROPO_MODELS:
+    if domain_name in ARIA_TROPO_MODELS:
         stack_layer = f'{ref_tropokey}/' + stack_layer
         stack_dir = os.path.join(stack_dir, ref_tropokey)
         if not os.path.exists(stack_dir):
             print('Creating directory: ', stack_dir)
             os.makedirs(stack_dir)
+
+    # handle individual epochs if external correction layer
+    if domain_name in ARIA_EXTERNAL_CORRECTIONS:
+        stack_layer = f'{stack_layer}/' + 'dates'
 
     # Find files
     int_list = glob.glob(
@@ -276,41 +290,44 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     print(f'Number of {stack_layer} files discovered: ', len(int_list))
     dlist = sorted(int_list)
+    # get dates
+    aria_dates = [os.path.basename(i).split('.vrt')[0] for i in \
+                  int_list]
 
-    # get bperp value
-    b_perp = extract_bperp_dict(domain_name, dlist)
-
-    # Confirm 1-to-1 match between UNW and other derived products
+    # only perform following checks if a differential layer
+    b_perp = []
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
-    if ref_dlist and new_dlist != ref_dlist:
-        tropo_dlist = glob.glob(os.path.join(workdir,
-                                'gacos_corrections', '[0-9]*[0-9].vrt'))
-        tropo_dlist = sorted([os.path.basename(i).split(
-                            '.vrt')[0] for i in tropo_dlist])
-        tropo_path = os.path.join(workdir, 'gacos_corrections')
-        if os.path.exists(tropo_path) and tropo_dlist == ref_dlist:
-            log.warning('Discrepancy between "gacos_corrections" '
-                        'products (%s files) and %s products (%s files),'
-                        'rejecting scenes not common between both',
-                        len(ref_dlist), domain_name, len(new_dlist))
-        else:
+    if domain_name not in ARIA_EXTERNAL_CORRECTIONS:
+        # get az times for each date
+        aztime_list = []
+        for i in aria_prod.products[0]:
+            aztime_list.append(i['azimuthZeroDopplerMidTime'])
+        # get bperp value
+        b_perp = extract_bperp_dict(domain_name, dlist)
+
+        # Confirm 1-to-1 match between UNW and other derived products
+        if ref_dlist and new_dlist != ref_dlist:
             log.warning('Discrepancy between "unwrappedPhase" products '
                         '(%s files) and %s products (%s files), '
                         'rejecting scenes not common between both',
                         len(ref_dlist), domain_name, len(new_dlist))
-        # subset to match other datasets
-        subset_ind = [i[0] for i in enumerate(new_dlist) if i[1] in ref_dlist]
-        new_dlist = [new_dlist[i] for i in subset_ind]
-        dlist = [dlist[i] for i in subset_ind]
+            # subset to match other datasets
+            subset_ind = []
+            for i in enumerate(new_dlist):
+                if i[1] in ref_dlist:
+                    subset_ind.append(i[0])
+            new_dlist = [new_dlist[i] for i in subset_ind]
+            dlist = [dlist[i] for i in subset_ind]
+    else:
+        # get az times for each date
+        aztime_list = len(aria_dates) * \
+                  [aria_prod.products[0][0]['azimuthZeroDopplerMidTime']]
+
+    # get UTC times
+    utc_time = extract_utc_time(aria_dates, aztime_list)
 
     # get attributes from first product
-    data = dlist[0]
-    data_set = gdal.Open(data, gdal.GA_ReadOnly)
-    width = data_set.RasterXSize
-    height = data_set.RasterYSize
-    geo_trans = data_set.GetGeoTransform()
-    projection = data_set.GetProjection()
-    data_set = None
+    width, height, no_data, geo_trans, projection = get_basic_attrs(dlist[0])
 
     # setting up a subset of the stack
     ymin, ymax, xmin, xmax = [0, height, 0, width]
@@ -319,7 +336,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     ysize = ymax - ymin
 
     # extraction of radar meta-data
-    wavelength = aria_prod.products[0][0]['wavelength'][0]
+    wvl = aria_prod.products[0][0]['wavelength'][0]
     start_range = aria_prod.products[0][0]['slantRangeStart'][0]
     end_range = aria_prod.products[0][0]['slantRangeEnd'][0]
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
@@ -334,39 +351,30 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
                    GT4=geo_trans[4], GT5=geo_trans[5]))
 
         for data in enumerate(dlist):
-            metadata = {}
+            didx = data[0] + 1
             dates = data[1].split('/')[-1][:-4]
-            width = None
-            height = None
             path = None
             # Update progress bar
-            prog_bar.update(data[0]+1, suffix=dates)
+            prog_bar.update(didx, suffix=dates)
 
-            data_set = gdal.Open(data[1], gdal.GA_ReadOnly)
-            width = data_set.RasterXSize
-            height = data_set.RasterYSize
-            no_data = data_set.GetRasterBand(1).GetNoDataValue()
-            data_set = None
-
-            metadata['wavelength'] = wavelength
             try:
-                metadata['utcTime'] = utc_time[dates]
+                acq = utc_time[dates]
             except:
                 log.debug('Skipping %s; it likely exists in the %s, '\
                           'but was not specified in the product list',
                           dates, os.path.dirname(data[1]))
                 continue
-            metadata['bPerp'] = b_perp[dates]
+
             if orbit_direction == 'D':
-                metadata['orbit_direction'] = 'DESCENDING'
+                orbDir = 'DESCENDING'
             elif orbit_direction == 'A':
-                metadata['orbit_direction'] = 'ASCENDING'
+                orbDir = 'ASCENDING'
             else:
                 print('Orbit direction not recognized')
-                metadata['orbit_direction'] = 'UNKNOWN'
+                orbDir = 'UNKNOWN'
 
             path = os.path.relpath(os.path.abspath(data[1]), start=stack_dir)
-            outstr = '''  <VRTRasterBand dataType="{data_type}" band="{index}">
+            outstr = f'''  <VRTRasterBand dataType="{data_type}" band="{didx}">
         <NoDataValue>{no_data}</NoDataValue>
         <SimpleSource>
             <SourceFilename relativeToVRT="1">{path}</SourceFilename>
@@ -381,25 +389,21 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             <MDI key="Dates">{dates}</MDI>
             <MDI key="Wavelength (m)">{wvl}</MDI>
             <MDI key="UTCTime (HH:MM:SS.ss)">{acq}</MDI>
-            <MDI key="perpendicularBaseline">{b_perp}</MDI>
             <MDI key="startRange">{start_range}</MDI>
             <MDI key="endRange">{end_range}</MDI>
             <MDI key="slantRangeSpacing">{range_spacing}</MDI>
-            <MDI key="orbitDirection">{orbDir}</MDI>
-        </Metadata>
-    </VRTRasterBand>\n'''.format(domain_name=domain_name, width=width,
-                                 height=height, xmin=xmin, ymin=ymin,
-                                 xsize=xsize, ysize=ysize, dates=dates,
-                                 acq=metadata['utcTime'],
-                                 wvl=metadata['wavelength'], index=data[0]+1,
-                                 path=path, data_type=data_type,
-                                 b_perp=metadata['bPerp'],
-                                 start_range=start_range, end_range=end_range,
-                                 range_spacing=range_spacing,
-                                 orbDir=metadata['orbit_direction'],
-                                 no_data=no_data)
+            <MDI key="orbitDirection">{orbDir}</MDI>'''
             fid.write(outstr)
-        fid.write('</VRTDataset>')
+            if b_perp != []:
+                bPerp = b_perp[dates]
+                outstr = f'''
+            <MDI key="perpendicularBaseline">{bPerp}</MDI>'''
+                fid.write(outstr)
+            outstr = f'''
+        </Metadata>
+    </VRTRasterBand>\n'''
+            fid.write(outstr)
+        fid.write('</VRTDataset>\n')
         prog_bar.close()
         print(output_file_name, ': stack generated')
 
@@ -579,6 +583,7 @@ def main(inps=None):
     # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
+    layers.remove('connectedComponents')
     remove_lyrs = []
     for i in layers:
         lyr_dir = os.path.join(inps.workdir, i)

@@ -338,12 +338,19 @@ def layerCheck(products, layers, nc_version, gacos_products,
     # TS pipeline
     ts_layers_dup = ['unwrappedPhase', 'coherence', 'incidenceAngle',
                      'lookAngle', 'azimuthAngle', 'bPerpendicular']
+    ts_defaults = ['ionosphere', 'solidEarthTide']
     if extract_or_ts == 'tssetup':
         if layers:
             # remove layers already generated in default TS workflow
             layers = [i for i in layers if i not in ts_layers_dup]
         else:
             layers = []
+        # add additional layers for default workflow
+        ts_defaults = list(set.intersection(*map(set, \
+                        [ts_defaults, all_valid_layers])))
+        for i in ts_defaults:
+            if i not in layers:
+                layers.append(i)
         # check if troposphere can be extracted downstream
         tropo_total = True
 
@@ -372,4 +379,25 @@ def layerCheck(products, layers, nc_version, gacos_products,
                         'to all products.'%('troposphereTotal'))
             tropo_total = False
 
+    #!#
+    tmp_ignore_lyrs = ['ionosphere', 'troposphereTotal'] + raider_tropo_layers
+    layers = [i for i in layers if i not in tmp_ignore_lyrs]
+    print('layers', layers)
+    tropo_total = False
+    #!#
+
     return layers, tropo_total
+
+
+def get_basic_attrs(fname):
+    """ Access product dimensions and nodata values """
+
+    data_set = gdal.Open(fname, gdal.GA_ReadOnly)
+    width = data_set.RasterXSize
+    height = data_set.RasterYSize
+    no_data = data_set.GetRasterBand(1).GetNoDataValue()
+    geo_trans = data_set.GetGeoTransform()
+    proj = data_set.GetProjection()
+    data_set = None
+
+    return width, height, no_data, geo_trans, proj
