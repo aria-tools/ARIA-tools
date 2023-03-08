@@ -886,19 +886,22 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               outFileConnComp=outFileConnComp,
                                               mask=mask,
                                               outputFormat=outputFormat,
-                                              verbose=verbose
+                                              verbose=verbose)
 
                     elif stitchMethodType == 'sequential':
                         from sequential_stitching import product_stitch_sequential
-                        product_stitch_2stage(phs_files,
-                                              conn_files,
-                                              bounds,
-                                              prods_TOTbbox,
-                                              outFileUnw=outFilePhs,
-                                              outFileConnComp=outFileConnComp,
-                                              mask=mask,
-                                              outputFormat=outputFormat,
-                                              verbose=verbose))
+                        product_stitch_sequential(phs_files,
+                                                 conn_files,
+                                                 bounds=bounds,
+                                                 clip_json=prods_TOTbbox,
+                                                 output_unw=outFilePhs,
+                                                 output_conn=outFileConnComp,
+                                                 mask_file=mask, # str filename
+                                                 outputFormat=outputFormat,
+                                                 range_correction=True,
+                                                 save_fig=True,
+                                                 overwrite=True,
+                                                 verbose=verbose)
 
                     # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
