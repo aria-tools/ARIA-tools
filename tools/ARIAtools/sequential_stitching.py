@@ -359,7 +359,7 @@ def product_stitch_sequential(input_unw_files : List[str],
                               save_fig : Optional[bool] = False,
                               overwrite : Optional[bool] = True) -> None:
     """
-    Sequential stitcher of frames along the track. Starts from the Southern frame and goes towards 
+    Sequential stitching of frames along the track. Starts from the Southern frame and goes towards 
     he North. Stitching is perform with forward and backward corrections of overlapping components
     between two neighboring frames. The stitched track is stored locally, and then cropped to meet 
     the defined ARIAtools bounding box and masked with a water-mask if selected.
