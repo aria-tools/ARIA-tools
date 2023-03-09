@@ -379,13 +379,6 @@ def layerCheck(products, layers, nc_version, gacos_products,
                         'to all products.'%('troposphereTotal'))
             tropo_total = False
 
-    #!#
-    tmp_ignore_lyrs = ['ionosphere']#, 'troposphereTotal'] + raider_tropo_layers
-    layers = [i for i in layers if i not in tmp_ignore_lyrs]
-    print('layers', layers)
-    # tropo_total = False
-    #!#
-
     return layers, tropo_total
 
 

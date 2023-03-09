@@ -449,6 +449,8 @@ class ARIA_standardproduct:
                     lyr_pref + f'/external/troposphere/{model_name}'
                         '/reference/troposphereHydrostatic'
                 ]
+                # remove keys not found in product
+                sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
                 sdskeys.extend(sdskeys_addlyrs)
 
         return rdrmetadata_dict, sdskeys
@@ -472,18 +474,21 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.extend(['ionosphere', 'solidEarthTide', \
-                             'troposphereWet', 'troposphereHydrostatic'])
+            # remove references to keys not found in product
+            extrakeys = ['ionosphere', 'solidEarthTide', \
+                             'troposphereWet', 'troposphereHydrostatic']
+            keys_reject = [i for i in extrakeys \
+                                    if i not in ''.join(sdskeys)]
+            for i in keys_reject:
+                log.warning(f'Expected data layer key {i} '
+                    f'not found in {fname}')
+            extrakeys = [i for i in extrakeys if i not in keys_reject]
+            layerkeys.extend(extrakeys)
 
         # Setup datalyr_dict
         datalyr_dict={}
         for i in enumerate(layerkeys):
-            #If layer expected
-            try:
-                datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
-            #If new, unaccounted layer not expected in layerkeys
-            except:
-                log.warning("Data layer key %s not expected in sdskeys", i[1])
+            datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
