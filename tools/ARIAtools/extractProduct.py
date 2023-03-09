@@ -662,13 +662,13 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
              hgt_field) \
              for i in metadata_arr])
 
-    if 'tropo' in key or 'solidEarthTide' in key:
+    if 'tropo' in key or key == 'solidEarthTide':
         # get ref and sec paths
         date_dir = os.path.join(out_dir, 'dates')
         if not os.path.exists(date_dir):
             os.mkdir(date_dir)
-        ref_outname = os.path.join(date_dir, ifg.split('_')[1])
-        sec_outname = os.path.join(date_dir, ifg.split('_')[0])
+        ref_outname = os.path.join(date_dir, ifg.split('_')[0])
+        sec_outname = os.path.join(date_dir, ifg.split('_')[1])
         ref_str = 'reference/' + key
         sec_str = 'secondary/' + key
         sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
@@ -714,7 +714,7 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     # if specified workdir doesn't exist, create it
     output_dir = os.path.dirname(outname)
     if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+        os.makedirs(output_dir)
 
     # open intermediate files
     with xrr.open_rasterio(sec_outname + '.vrt') as da_sec:
@@ -746,9 +746,13 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     # write initial array to file
     da_total.rio.to_raster(outname, driver=driver)
     ds = gdal.BuildVRT(f'{outname}.vrt', outname)
+    # fix if numpy array not set properly
+    if not isinstance(da_attrs[hgt_field], np.ndarray):
+        da_attrs[hgt_field] = np.array(da_attrs[hgt_field])
     da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
     ds.SetMetadata(da_attrs)
     del ds
+
     return
 
 
@@ -780,6 +784,7 @@ def handle_epoch_layers(layers,
 
     # Depending on type, set sec/ref output dirs
     if key == 'troposphereTotal':
+        layers.append(key)
         sec_workdir = os.path.join(os.path.dirname(workdir),
                                    sec_key)
         ref_workdir = os.path.join(os.path.dirname(workdir),
@@ -789,109 +794,141 @@ def handle_epoch_layers(layers,
         ref_workdir = deepcopy(workdir)
     # If specified workdir doesn't exist, create it
     all_workdirs = [workdir, sec_workdir, ref_workdir]
+    all_workdirs = list(set(all_workdirs))
+    existing_outputs = []
     for i in all_workdirs:
         if not os.path.exists(i):
             os.mkdir(i)
+        # for dedup, record previous outputs to avoid reprocessing
+        existing_outputs.extend(glob.glob(os.path.join( \
+                     i, '*/*[0-9].vrt')))
+        existing_outputs.extend(glob.glob(os.path.join( \
+                     i, '*/dates/*[0-9].vrt')))
+        existing_outputs.extend(glob.glob(os.path.join( \
+                     i, '*[0-9].vrt')))
+        existing_outputs.extend(glob.glob(os.path.join( \
+                     i, 'dates/*[0-9].vrt')))
+    existing_outputs = list(set(existing_outputs))
 
     # set driver
     driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     # Iterate through all IFGs
-    record_epochs = []
+    all_outputs = []
     for i in enumerate(product_dict[0]):
         ifg         = product_dict[1][i[0]][0]
         outname = os.path.abspath(os.path.join(workdir, ifg))
 
         # create temp files for ref/sec components
         ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
-        hgt_field, _, ref_outname = prep_metadatalayers(ref_outname,
+        hgt_field, model_name, ref_outname = prep_metadatalayers(ref_outname,
                                       i[1], dem,
                                       ref_key, layers, driver)
         # Update progress bar
         prog_bar.update(i[0]+1,suffix=ifg)
-        sec_outname = os.path.dirname(ref_outname)
-        sec_outname = os.path.abspath(os.path.join(sec_outname,
-                                      ifg.split('_')[0]))
+
+        # record output directories
+        if model_name is not None:
+            all_outputs.append(os.path.join(workdir, model_name))
+            all_outputs.append(os.path.join(ref_workdir, model_name))
+            all_outputs.append(os.path.join(sec_workdir, model_name))
+        else:
+            all_outputs.append(workdir)
+            all_outputs.append(ref_workdir)
+            all_outputs.append(sec_workdir)
 
         # capture if tropo and separate distinct wet and hydro layers
-        if ref_workdir != sec_workdir:
-            sec_comp = [j.replace(lyr_path + ref_key, \
-                                lyr_path + sec_key) \
+        if 'tropo' in key:
+            sec_outname = os.path.abspath(os.path.join(sec_workdir, ifg))
+            wet_path = os.path.join(lyr_path, model_name,
+                                    'reference', ref_key)
+            dry_path = os.path.join(lyr_path, model_name,
+                                    'reference', sec_key)
+            sec_comp = [j.replace(wet_path, dry_path) \
                                 for j in i[1]]
             hgt_field, model_name, sec_outname = prep_metadatalayers(
                                                sec_outname,
                                                sec_comp, dem,
                                                sec_key, layers, driver)
             # if specified, compute total delay
-            model_dir = os.path.abspath(os.path.join(workdir, model_name))
-            outname = os.path.join(model_dir, ifg)
             if tropo_total:
-                generate_diff(ref_outname, sec_outname, outname, key,
+                model_dir = os.path.abspath(os.path.join(workdir, model_name))
+                outname = os.path.join(model_dir, ifg)
+                # compute reference diff
+                ref_diff = ref_outname
+                sec_diff = sec_outname
+                outname_diff = os.path.join(model_dir, 'dates',
+                    os.path.basename(ref_diff))
+                if not os.path.exists(outname_diff):
+                    generate_diff(ref_diff, sec_diff, outname_diff, key,
                       sec_key, tropo_total, hgt_field, driver)
-
-        # track sec/ref scenes to interpolate later
-        record_epochs.extend([ref_outname, sec_outname])
-
-        # finalize requested layer
-        # remove intermediate layer directories
-        if os.path.exists(outname):
-            # Interpolate/intersect with DEM before cropping
-            finalize_metadata(outname, bounds, dem_bounds,
-                      prods_TOTbbox, dem, lat, lon, hgt_field,
-                      i[1], mask, outputFormat,
-                      verbose=verbose)
-
-            # If necessary, resample raster
-            if multilooking is not None:
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                       rankedResampling, outputFormat=outputFormat,
-                       num_threads=num_threads)
-
-            # Track consistency of dimensions
-            if i[0] == 0:
-                ref_wid, ref_height, _, _, _ = get_basic_attrs(outname)
-            else:
-                prod_wid, prod_height, _, _, _ = get_basic_attrs(outname)
-                if (ref_wid != prod_wid) or (ref_height != prod_height):
-                     raise Exception(f'Inconsistent product dims between'
-                         'products {outname} and {prev_outname}:'
-                         'check respective width ({ref_wid}, {ref_height})'
-                         'and height ({prod_wid}, {prod_height})')
-            prev_outname = deepcopy(outname)
+                # compute secondary diff
+                ref_diff = os.path.join(os.path.dirname(ref_outname),
+                                        ifg.split('_')[1])
+                sec_diff = os.path.join(os.path.dirname(sec_outname),
+                                        ifg.split('_')[1])
+                outname_diff = os.path.join(model_dir, 'dates',
+                    os.path.basename(ref_diff))
+                if not os.path.exists(outname_diff):
+                    generate_diff(ref_diff, sec_diff, outname_diff, key,
+                      sec_key, tropo_total, hgt_field, driver)
+                # compute total diff
+                ref_diff = os.path.join(ref_workdir, model_name, ifg)
+                sec_diff = os.path.join(sec_workdir, model_name, ifg)
+                generate_diff(ref_diff, sec_diff, outname, key,
+                      sec_key, tropo_total, hgt_field, driver)
         else:
-            del_dir = os.path.dirname(outname)
-            if os.path.exists(del_dir):
-                shutil.rmtree(del_dir)
+            sec_outname = os.path.dirname(ref_outname)
+            sec_outname = os.path.abspath(os.path.join(sec_outname,
+                                      ifg.split('_')[0]))
 
-    # interpolate and intersect epochs
-    record_epochs = list(set(record_epochs))
-    for j in record_epochs:
-        if os.path.exists(j):
-            # Interpolate/intersect with DEM before cropping
-            finalize_metadata(j, bounds, dem_bounds,
+    # delete temporary files if layers not requested
+    prod_ver_list = i[1]
+    for i in all_workdirs:
+        key_name = os.path.basename(i)
+        if os.path.exists(i):
+            if key_name not in layers or len(os.listdir(i)) == 0:
+                shutil.rmtree(i)
+
+    # interpolate and intersect epochs for user requested layers
+    all_outputs = list(set(all_outputs))
+    for i in all_outputs:
+        if os.path.exists(i):
+            record_epochs = []
+            record_epochs.extend(glob.glob(os.path.join( \
+                     i, '*[0-9].vrt')))
+            record_epochs.extend(glob.glob(os.path.join( \
+                     i, 'dates/*[0-9].vrt')))
+            # dedup check for interpolating only new files
+            record_epochs = [j for j in record_epochs \
+                                 if j not in existing_outputs]
+            for j in enumerate(record_epochs):
+                # Interpolate/intersect with DEM before cropping
+                finalize_metadata(j[1][:-4], bounds, dem_bounds,
                       prods_TOTbbox, dem, lat, lon, hgt_field,
-                      i[1], mask, outputFormat,
+                      prod_ver_list, mask, outputFormat,
                       verbose=verbose)
+                # If necessary, resample raster
+                if multilooking is not None:
+                    resampleRaster(j[1][:-4], multilooking, bounds,
+                          prods_TOTbbox, rankedResampling,
+                          outputFormat=outputFormat, num_threads=num_threads)
 
-            # If necessary, resample raster
-            if multilooking is not None:
-                resampleRaster(j, multilooking, bounds, prods_TOTbbox,
-                       rankedResampling, outputFormat=outputFormat,
-                       num_threads=num_threads)
-        else:
-            del_dir = os.path.dirname(j)
-            if os.path.exists(del_dir):
-                shutil.rmtree(del_dir)
-
+                # Track consistency of dimensions
+                if j[0] == 0:
+                    ref_wid, ref_hgt,_,_,_ = get_basic_attrs(j[1][:-4])
+                else:
+                    prod_wid, prod_hgt,_,_,_ = get_basic_attrs(j[1][:-4])
+                    if (ref_wid != prod_wid) or (ref_hgt != prod_hgt):
+                        raise Exception(f'Inconsistent product dims '
+                              'between products {outname} and {prev_outname}:'
+                              'check respective width ({ref_wid}, {ref_hgt})'
+                              'and height ({prod_wid}, {prod_hgt})')
+                prev_outname = j[1][:-4]
+        
     prog_bar.close()
 
-    # delete empty directories
-    for i in all_workdirs:
-        if len(os.listdir(i)) == 0:
-            shutil.rmtree(i)
-
     return
-
 
 def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     rankedResampling=False, dem=None, lat=None, lon=None,
@@ -969,7 +1006,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         handle_epoch_layers(**lyr_input_dict)
 
     # If specified, extract solid earth tides
-    ext_corr_lyrs = tropo_lyrs + ['solidEarthTide']
+    ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
     if list(set.intersection(*map(set, \
                         [layers, ['solidEarthTide']]))) != []:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
