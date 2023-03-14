@@ -11,12 +11,16 @@ import glob
 import numpy as np
 from osgeo import gdal
 import logging
-gdal.UseExceptions()
 
+# Import functions
+from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
+
+gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
+
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
@@ -286,7 +290,7 @@ def tifGacos(intif):
 
 
 ###Perform initial layer, product, and correction sanity checks
-def layerCheck(products, layers, nc_version, gacos_products,
+def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
                extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
     from copy import deepcopy
@@ -296,9 +300,30 @@ def layerCheck(products, layers, nc_version, gacos_products,
     # Check all available layers in stack
     products = [list(i.keys()) for i in products]
     products = [[sub for sub in i if sub not in ignore_lyr] for i in products]
-    all_valid_layers = list(set.intersection(*map(set, products)))
+    all_valid_layers = list(set.union(*map(set, products)))
+    all_valid_layers = list(set(all_valid_layers))
+
+    # track tropo model names
+    model_names = [i.split('_')[-1] for i in all_valid_layers if '_' in i]
+    model_names = list(set(model_names))
+    all_valid_layers = [i.split('_')[0] for i in all_valid_layers]
     raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic']
     tropo_total = False
+
+    if tropo_models.lower()=='all':
+        log.info('All available tropo models are to be extracted')
+        tropo_models = deepcopy(ARIA_TROPO_INTERNAL)
+    # If valid argument for tropo models passed, parse to list
+    if isinstance(tropo_models, str):
+        tropo_models = list(tropo_models.split(','))
+        tropo_models = [i.replace(' ','') for i in tropo_models]
+    model_names = list(set.intersection(*map(set, \
+                        [model_names, tropo_models])))
+    for i in tropo_models:
+        if i not in model_names:
+            log.warning(f'User-requested tropo model {i} will not be '
+                    'generated as it does not exist in any of the input '
+                    'products')
 
     # If specified, extract all layers
     if layers:
@@ -379,7 +404,7 @@ def layerCheck(products, layers, nc_version, gacos_products,
                         'to all products.'%('troposphereTotal'))
             tropo_total = False
 
-    return layers, tropo_total
+    return layers, tropo_total, model_names
 
 
 def get_basic_attrs(fname):

@@ -38,6 +38,7 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
+
 ## Set DEM path
 _world_dem = "https://portal.opentopography.org/API/globaldem?demtype="\
                "SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
@@ -77,6 +78,10 @@ def createParser():
                         '"solidEarthTide". '
                         'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
+    parser.add_argument('-tm', '--tropo_models', dest='tropo_models',
+                        type=str, default='all', help='Provide list of '
+                        'weather models you wish to extract. Refer to '
+                        'ARIA_TROPO_MODELS for list of supported models')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
             default=None, help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
@@ -836,6 +841,7 @@ def handle_epoch_layers(layers,
             all_outputs.append(workdir)
             all_outputs.append(ref_workdir)
             all_outputs.append(sec_workdir)
+        print('all_outputs', all_outputs)
 
         # capture if tropo and separate distinct wet and hydro layers
         if 'tropo' in key:
@@ -892,13 +898,16 @@ def handle_epoch_layers(layers,
 
     # interpolate and intersect epochs for user requested layers
     all_outputs = list(set(all_outputs))
-    for i in all_outputs:
-        if os.path.exists(i):
+    for i in enumerate(all_outputs):
+        if os.path.exists(i[1]):
+            # Update progress bar
+            prog_bar.update(i[0]+1,suffix=ifg)
+
             record_epochs = []
             record_epochs.extend(glob.glob(os.path.join( \
-                     i, '*[0-9].vrt')))
+                     i[1], '*[0-9].vrt')))
             record_epochs.extend(glob.glob(os.path.join( \
-                     i, 'dates/*[0-9].vrt')))
+                     i[1], 'dates/*[0-9].vrt')))
             # dedup check for interpolating only new files
             record_epochs = [j for j in record_epochs \
                                  if j not in existing_outputs]
@@ -934,7 +943,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     rankedResampling=False, dem=None, lat=None, lon=None,
                     mask=None, outDir='./', outputFormat='VRT',
                     stitchMethodType='overlap', verbose=None, num_threads='2',
-                    multilooking=None, tropo_total=False):
+                    multilooking=None, tropo_total=False, model_names=[]):
     """Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
     Dem/lat/lon arrays must be passed for this process.
@@ -981,20 +990,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
     if tropo_total or list(set.intersection(*map(set, \
                         [layers, tropo_lyrs]))) != []:
+        # set input keys
         lyr_prefix = '/science/grids/corrections/external/troposphere/'
+        key = 'troposphereTotal'
         wet_key = 'troposphereWet'
         dry_key   = 'troposphereHydrostatic'
-        product_dict = [[j[wet_key] for j in full_product_dict], \
-                      [j["pair_name"] for j in full_product_dict]]
-
-        key = 'troposphereTotal'
         workdir = os.path.join(outDir, key)
-        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
-                                       prefix='Generating: '+key+' - ')
-
-        # set input keys
-        lyr_input_dict['prog_bar'] = prog_bar
-        lyr_input_dict['product_dict'] = product_dict
         lyr_input_dict['lyr_path'] = lyr_prefix
         lyr_input_dict['key'] = key
         lyr_input_dict['sec_key'] = dry_key
@@ -1002,10 +1003,27 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         lyr_input_dict['tropo_total'] = tropo_total
         lyr_input_dict['workdir'] = workdir
 
-        # extract layers
-        handle_epoch_layers(**lyr_input_dict)
+        # loop through valid models
+        for i in model_names:
+            model = wet_key + f'_{i}'
+            tropo_lyrs.append(model)
+            tropo_lyrs.append(dry_key + f'_{i}')
+            product_dict = [
+              [j[model] for j in full_product_dict if model in j.keys()], \
+              [j["pair_name"] for j in full_product_dict if model in j.keys()]
+            ]
+
+            # set iterative keys
+            lyr_input_dict['prog_bar'] = prog_bar
+            lyr_input_dict['product_dict'] = product_dict
+            prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
+                                       prefix=f'Generating: {model} {key} - ')
+
+            # extract layers
+            handle_epoch_layers(**lyr_input_dict)
 
     # If specified, extract solid earth tides
+    tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
     if list(set.intersection(*map(set, \
                         [layers, ['solidEarthTide']]))) != []:
@@ -1692,11 +1710,12 @@ def main(inps=None):
                                                 verbose=inps.verbose)
 
     # Perform initial layer, product, and correction sanity checks
-    inps.layers, \
-        inps.tropo_total = layerCheck(standardproduct_info.products[1],
+    inps.layers, inps.tropo_total, \
+        model_names = layerCheck(standardproduct_info.products[1],
                                       inps.layers,
                                       inps.nc_version,
                                       inps.gacos_products,
+                                      inps.tropo_models,
                                       extract_or_ts = 'extract')
 
     # pass number of threads for gdal multiprocessing computation
@@ -1746,7 +1765,8 @@ def main(inps=None):
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking,
-        'tropo_total': inps.tropo_total
+        'tropo_total': inps.tropo_total,
+        'model_names': model_names
     }
 
     # Extract user expected layers

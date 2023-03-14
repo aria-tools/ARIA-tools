@@ -36,50 +36,10 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
-# Create lists of all supported models and all aria layers
-ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
-               'troposphereWet',
-               'troposphereTotal',
-               'solidEarthTide',
-               'gacos_corrections']
 
-ARIA_INTERNAL_CORRECTIONS = ['ionosphere']
-
-ARIA_TROPO_MODELS = ['HRES',
-                     'ERA5',
-                     'GMAO',
-                     'HRRR',
-                     'GACOS']
-
-ARIA_LAYERS = ['unwrappedPhase',
-               'coherence',
-               'connectedComponents',
-               'amplitude']
-ARIA_LAYERS += ARIA_EXTERNAL_CORRECTIONS
-ARIA_LAYERS += ARIA_INTERNAL_CORRECTIONS
-ARIA_LAYERS += ARIA_TROPO_MODELS
-
-ARIA_STACK_DEFAULTS = ['unwrappedPhase',
-                       'coherence',
-                       'connectedComponents',
-                       'troposphereTotal',
-                       'ionosphere',
-                       'solidEarthTide']
-
-ARIA_STACK_OUTFILES = {
-    'unwrappedPhase': 'unwrapStack',
-    'gacos_corrections': 'gacosStack',
-    'coherence': 'cohStack',
-    'connectedComponents': 'connCompStack',
-    'bParallel': 'bParStack',
-    'amplitude': 'ampStack',
-    'troposphereHydrostatic': 'tropoHydrostaticStack',
-    'troposphereWet': 'tropoWetStack',
-    'troposphereTotal': 'tropoStack',
-    'ionosphere': 'ionoStack',
-    'solidEarthTide': 'setStack'
-}
-ARIA_STACK_OUTFILES.update({i:i+'Stack' for i in ARIA_TROPO_MODELS})
+# Import TS-related global variables
+from ARIAtools.ARIA_global_variables import ARIA_EXTERNAL_CORRECTIONS, \
+    ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES
 
 
 def create_parser():
@@ -105,6 +65,10 @@ def create_parser():
                         '"solidEarthTide". '
                         'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
+    parser.add_argument('-tm', '--tropo_models', dest='tropo_models',
+                        type=str, default='all', help='Provide list of '
+                        'weather models you wish to extract. Refer to '
+                        'ARIA_TROPO_INTERNAL for list of supported models')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '
                         'download new DEM.')
@@ -533,11 +497,12 @@ def main(inps=None):
                     **export_dict)
 
     # Extracting other layers, if specified
-    layers, \
-        inps.tropo_total = layerCheck(standardproduct_info.products[1],
+    layers, inps.tropo_total, \
+        model_names = layerCheck(standardproduct_info.products[1],
                                       inps.layers,
                                       inps.nc_version,
                                       inps.gacos_products,
+                                      inps.tropo_models,
                                       extract_or_ts = 'tssetup')
     if layers != [] or inps.tropo_total is True:
         if layers != []:
@@ -548,6 +513,7 @@ def main(inps=None):
                   'interferogram pair' % ('troposphereTotal'))
         export_products(standardproduct_info.products[1],
                     tropo_total=inps.tropo_total,
+                    model_names=model_names,
                     layers=layers,
                     **export_dict)
 

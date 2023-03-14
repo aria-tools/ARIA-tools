@@ -17,6 +17,7 @@ from osgeo import gdal
 from ARIAtools.url_manager import url_versions
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 from ARIAtools.logger import logger
+from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -433,22 +434,25 @@ class ARIA_standardproduct:
                 '/science/grids/imagingGeometry/azimuthAngle'
             ]
             if version.lower()=='1c':
-                # get weather model name
-                meta = gdal.Info(fname)
-                for i in meta.split():
-                    if '/science/grids/corrections/external/troposphere/' in i:
-                        model_name = i.split('/')[-3]
-                        break
                 lyr_pref = '/science/grids/corrections'
                 sdskeys_addlyrs = [
                     lyr_pref + '/derived/ionosphere/ionosphere',
                     lyr_pref + '/external/tides/solidEarth'
-                        '/reference/solidEarthTide',
-                    lyr_pref + f'/external/troposphere/{model_name}'
-                        '/reference/troposphereWet',
-                    lyr_pref + f'/external/troposphere/{model_name}'
-                        '/reference/troposphereHydrostatic'
+                        '/reference/solidEarthTide'
                 ]
+                # get weather model name(s)
+                meta = gdal.Info(fname)
+                model_name = []
+                for i in meta.split():
+                    if '/science/grids/corrections/external/troposphere/' in i:
+                        model_name.append(i.split('/')[-3])
+                model_name = list(set(model_name))
+                for i in model_name:
+                    sdskeys_addlyrs.append(lyr_pref +
+                        f'/external/troposphere/{i}/reference/troposphereWet')
+                    sdskeys_addlyrs.append(lyr_pref +
+                        f'/external/troposphere/{i}/reference/'
+                        'troposphereHydrostatic')
                 # remove keys not found in product
                 sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
                 sdskeys.extend(sdskeys_addlyrs)
@@ -475,15 +479,24 @@ class ARIA_standardproduct:
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
             # remove references to keys not found in product
-            extrakeys = ['ionosphere', 'solidEarthTide', \
-                             'troposphereWet', 'troposphereHydrostatic']
-            keys_reject = [i for i in extrakeys \
+            addkeys = ['ionosphere', 'solidEarthTide']
+            keys_reject = [i for i in addkeys \
                                     if i not in ''.join(sdskeys)]
+            addkeys = [i for i in addkeys if i not in keys_reject]
+
+            # check for tropo layers for each model
+            tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+            for i in ARIA_TROPO_INTERNAL:
+                if i in ''.join(sdskeys):
+                    addkeys.append(f'{tropo_lyrs[0]}_' + i)
+                    addkeys.append(f'{tropo_lyrs[1]}_' + i)
+            keys_reject.extend([i for i in tropo_lyrs \
+                                    if i not in ''.join(addkeys)])
             for i in keys_reject:
                 log.warning(f'Expected data layer key {i} '
                     f'not found in {fname}')
-            extrakeys = [i for i in extrakeys if i not in keys_reject]
-            layerkeys.extend(extrakeys)
+
+            layerkeys.extend(addkeys)
 
         # Setup datalyr_dict
         datalyr_dict={}
