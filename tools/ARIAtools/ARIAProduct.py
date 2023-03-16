@@ -17,6 +17,7 @@ from osgeo import gdal
 from ARIAtools.url_manager import url_versions
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 from ARIAtools.logger import logger
+from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -436,10 +437,24 @@ class ARIA_standardproduct:
                 lyr_pref = '/science/grids/corrections'
                 sdskeys_addlyrs = [
                     lyr_pref + '/derived/ionosphere/ionosphere',
-                    lyr_pref + '/external/tides/solidEarth',
-                    lyr_pref + '/external/troposphere/troposphereWet',
-                    lyr_pref + '/external/troposphere/troposphereHydrostatic'
+                    lyr_pref + '/external/tides/solidEarth'
+                        '/reference/solidEarthTide'
                 ]
+                # get weather model name(s)
+                meta = gdal.Info(fname)
+                model_name = []
+                for i in meta.split():
+                    if '/science/grids/corrections/external/troposphere/' in i:
+                        model_name.append(i.split('/')[-3])
+                model_name = list(set(model_name))
+                for i in model_name:
+                    sdskeys_addlyrs.append(lyr_pref +
+                        f'/external/troposphere/{i}/reference/troposphereWet')
+                    sdskeys_addlyrs.append(lyr_pref +
+                        f'/external/troposphere/{i}/reference/'
+                        'troposphereHydrostatic')
+                # remove keys not found in product
+                sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
                 sdskeys.extend(sdskeys_addlyrs)
 
         return rdrmetadata_dict, sdskeys
@@ -463,18 +478,30 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.extend(['ionosphere', 'solidEarth', \
-                             'troposphereWet', 'troposphereHydrostatic'])
+            # remove references to keys not found in product
+            addkeys = ['ionosphere', 'solidEarthTide']
+            keys_reject = [i for i in addkeys \
+                                    if i not in ''.join(sdskeys)]
+            addkeys = [i for i in addkeys if i not in keys_reject]
+
+            # check for tropo layers for each model
+            tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+            for i in ARIA_TROPO_INTERNAL:
+                if i in ''.join(sdskeys):
+                    addkeys.append(f'{tropo_lyrs[0]}_' + i)
+                    addkeys.append(f'{tropo_lyrs[1]}_' + i)
+            keys_reject.extend([i for i in tropo_lyrs \
+                                    if i not in ''.join(addkeys)])
+            for i in keys_reject:
+                log.warning(f'Expected data layer key {i} '
+                    f'not found in {fname}')
+
+            layerkeys.extend(addkeys)
 
         # Setup datalyr_dict
         datalyr_dict={}
         for i in enumerate(layerkeys):
-            #If layer expected
-            try:
-                datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
-            #If new, unaccounted layer not expected in layerkeys
-            except:
-                log.warning("Data layer key %s not expected in sdskeys", i[1])
+            datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
