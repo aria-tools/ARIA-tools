@@ -27,6 +27,8 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, \
                                       product_stitch_2stage
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
                                  get_basic_attrs
+from ARIAtools.sequential_stitching import product_stitch_sequential, \
+                                           product_stitch_sequential_metadata
 import pyproj
 from pyproj import CRS, Transformer
 import rioxarray as xrr
@@ -94,7 +96,7 @@ def createParser():
         help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
         help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequnetial' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequential' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion',
@@ -685,7 +687,11 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
         # write ref and sec files
         for i in tup_outputs:
             if not os.path.exists(i[0]+'.vrt'):
-                gdal.BuildVRT(i[0]+'.vrt', i[1])
+                product_stitch_sequential_metadata(i[1],
+                                                   output_unw=i[0],
+                                                   output_format=driver,
+                                                   verbose=True)
+
                 # write height layers
                 gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
                      gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
@@ -714,7 +720,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                   hgt_field, driver):
-    """ Compute differential from referene and secondary scenes """
+    """ Compute differential from reference and secondary scenes """
 
     # if specified workdir doesn't exist, create it
     output_dir = os.path.dirname(outname)
@@ -841,7 +847,6 @@ def handle_epoch_layers(layers,
             all_outputs.append(workdir)
             all_outputs.append(ref_workdir)
             all_outputs.append(sec_workdir)
-        print('all_outputs', all_outputs)
 
         # capture if tropo and separate distinct wet and hydro layers
         if 'tropo' in key:
@@ -1145,7 +1150,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               verbose=verbose)
 
                     elif stitchMethodType == 'sequential':
-                        from sequential_stitching import product_stitch_sequential
                         product_stitch_sequential(phs_files,
                                                  conn_files,
                                                  bounds=bounds,
@@ -1153,7 +1157,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                  output_unw=outFilePhs,
                                                  output_conn=outFileConnComp,
                                                  mask_file=mask, # str filename
-                                                 outputFormat=outputFormat,
+                                                 output_format=outputFormat,
                                                  range_correction=True,
                                                  save_fig=True,
                                                  overwrite=True,

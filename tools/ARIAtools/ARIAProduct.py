@@ -775,7 +775,7 @@ class ARIA_standardproduct:
                 len(self.files))
 
         ### Split products in spatiotemporally continuous groups
-        log.info('Group GUNW products into spatiotemporally  '
+        log.info('Group GUNW products into spatiotemporally '
                 'continuous interferograms.')
         self.products = self.__continuous_time__()
 

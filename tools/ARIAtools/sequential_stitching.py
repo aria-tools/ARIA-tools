@@ -37,7 +37,7 @@ of consistency, add function to re-enumerate components.
 DISCLAIMER : This is development script. Requires some additional clean-up and restructuring
 '''
 
-################### STITCHING SUBRUTINES ##################################
+################### STITCHING SUBROUTINES ##################################
 def stitch_2frames(unw_data1 : NDArray, conncomp_data1 : NDArray, rdict1 : dict,  
                    unw_data2 : NDArray, conncomp_data2 : NDArray, rdict2 : dict,
                    correction_method : Optional[str] = 'cycle2pi',
@@ -149,7 +149,59 @@ def stitch_2frames(unw_data1 : NDArray, conncomp_data1 : NDArray, rdict1 : dict,
             unw_data1[conncomp_data1 == np.float32(pair[1])] -= correction
             conncomp_data1[conncomp_data1 == np.float32(pair[1])] = np.float32(pair[0])
                 
-    return unw_data1, unw_data2, conncomp_data1, conncomp_data2 
+    return unw_data1, unw_data2, conncomp_data1, conncomp_data2
+
+
+def stitch_2frames_metadata(unw_data1 : NDArray, rdict1 : dict,  
+                   unw_data2 : NDArray, rdict2 : dict,
+                   verbose: Optional[bool] = False) -> Tuple[NDArray, NDArray]:
+    """Sequential stitching function implementation from `stitch_2frames`
+    for metadata layers
+
+    Parameters
+    ----------
+    unw_data1 : array
+        array containing unwrapped phase in Frame-1 (South)
+    rdict1 : dict
+        dict containing raster metadata [SNWE, latlon_spacing, nodata etc..] for Frame-1 (South)
+    unw_data2 : array
+        array containing unwrapped phase in Frame-2 (North)
+    rdict2 : dict
+        dict containing raster metadata [SNWE, latlon_spacing, nodata etc..] for Frame-2 (North)
+    verbose : bool
+        print info messages [True/False]
+                                            
+    Returns
+    -------
+    unw_data1 : array
+        corrected array containing unwrapped phase in Frame-1 (South)
+    unw_data2 : array
+        corrected array containing unwrapped phase in Frame-2 (North)
+
+    TODO: combine corrected array in this function, return only the stitch unwrapped Phase
+    """
+
+    ###### GET FRAME OVERLAP ##########
+    box_1, box_2  = frame_overlap(rdict1['SNWE'], 
+                                  rdict2['SNWE'],
+                                  [rdict1['LAT_SPACING'], rdict1['LON_SPACING']],
+                                  [rdict2['LAT_SPACING'], rdict2['LON_SPACING']],
+                                  [-0.1,0.1])
+
+    ###### EXAMINE THE OVERLAP ##########
+    print('unw_data1', unw_data1.shape)
+    print('unw_data2', unw_data2.shape)
+    print('box_1, box_2', box_1, box_2)
+    for i in range(unw_data1.shape[0]):
+        print('unw_data1[i][box_1]', unw_data1[i][box_1].shape)
+        print('unw_data2[i][box_2]', unw_data2[i][box_2].shape)
+        diff = _metadata_offset(unw_data1[i][box_1],
+                            unw_data2[i][box_2], 
+                            print_msg=verbose)
+        
+        unw_data2[i] += diff
+                
+    return unw_data1, unw_data2
 
 
 def get_overlaping_conncomp(conn_comp1 : NDArray, 
@@ -342,6 +394,45 @@ def _range_correction(unw1 : NDArray,
     range_corr = np.angle(np.nanmean(np.exp(1j*arr)))
 
     return range_corr
+
+
+def _metadata_offset(unw1 : NDArray, unw2 : NDArray,
+                     print_msg : Optional[bool] = True) -> Tuple[np.float32]:
+    """
+    Get mean difference of metadata layers
+    
+    Parameters
+    ----------
+    unw1 : array
+        array containing unwrapped phase in Frame-1 (South)
+        
+    unw2 : array
+        array containing unwrapped phase in Frame-2 (North)
+
+    Returns
+    -------
+    diff_value : float
+        mean offset between overlapping area in two frames
+    """  
+    # Not sure if copy() is needed, left it here to avoid overwriting array due to numpy referencing
+    # TODO: use np.where to find the component in the data and keep overlap dimensions for comparison
+    data1 = unw1.copy()
+    data2 = unw2.copy()
+    
+    diff_value = np.nanmean(data1 - data2)
+    n_points = np.sum(~np.isnan(data1 - data2))
+
+    if n_points != 0:
+        if print_msg:
+            print(f'   Number of points: {n_points}\n'
+                f'   Mean diff: {diff_value:.2f}\n')
+
+        return diff_value
+    else:
+        print(f' {np.sum(~np.isnan(data1))}: {np.sum(~np.isnan(data2))}\n'
+              f' Number of points: {n_points}')
+        return None
+
 
 ########################### MAIN #############################################
 
@@ -555,7 +646,111 @@ def product_stitch_sequential(input_unw_files : List[str],
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')), str(output_conn.with_suffix('.vrt')))                
 
-    return combined_unwrap, combined_conn, combined_snwe 
+    return combined_unwrap, combined_conn, combined_snwe
+
+
+def product_stitch_sequential_metadata(input_unw_files : List[str],
+                              output_unw : Optional[str]  = './unwMerged',
+                              output_format : Optional[str] = 'ENVI',
+                              verbose : Optional[bool] = False) -> None:
+    """
+    Sequential stitching of frames implementation from `product_stitch_sequential`
+    for metadata layers
+
+    Parameters
+    ----------
+    input_unw_files : list
+        list of S1 files with Unwrapped Phase (multiple frames along same track)
+        ARIA GUNW: 'NETCDF:"%path/S1-GUNW-*.nc":/science/grids/data/unwrappedPhase'
+    output_unw : str
+        str pointing to path and filename of output stitched Unwrapped Phase
+    output_format : str
+        output format used for gdal writer [Gtiff, ENVI, VRT], default is ENVI
+        NOTE: did not test how it works with formats other than default, should be ok
+    verbose : bool
+        print info messages [True/False]
+                                       
+    NOTE: Move cropping (gdal.Warp to bounds and clip_json) and masking to ariaExtract.py to make this function
+          modular for other use
+    """
+
+    # Outputs
+    output_unw = Path(output_unw).absolute()
+    
+    # Get raster attributes [SNWE, latlon_spacing, length, width. nodata]
+    # from each input file
+
+    # Initalize variables
+    unw_attr_dicts = []  # metadata layers
+    temp_snwe_list = []
+    temp_latlon_spacing_list = []
+
+    for unw_file in input_unw_files:
+        unw_attr_dicts.append(get_GUNW_attr(unw_file))
+        temp_snwe_list.append(unw_attr_dicts[-1]['SNWE'])
+        temp_latlon_spacing_list.append([unw_attr_dicts[-1]['LAT_SPACING'], 
+                                        unw_attr_dicts[-1]['LON_SPACING']])
+
+    # get sorted indices for frame bounds, from South to North
+    # Sequential stitching starts from the most south frame and moves 
+    # forward to next one in the North direction
+    # TODO: add option to reverse direction of stitching
+    sorted_ix = np.argsort(np.array(temp_snwe_list)[:,0], axis=0)
+
+    # Loop through attributes
+    snwe_list = [temp_snwe_list[ii] for ii in sorted_ix]
+    latlon_spacing_list = [temp_latlon_spacing_list[ii] for ii in sorted_ix]
+    
+    # Loop through sorted frames, and stitch neighboring frames
+    for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
+        if verbose:
+            print('Frame-1:', unw_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
+            print('Frame-2:', unw_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
+        # Frame1
+        frame1_unw_array = get_GUNW_array(unw_attr_dicts[ix1]['PATH']) 
+        # Frame2
+        frame2_unw_array = get_GUNW_array(unw_attr_dicts[ix2]['PATH']) 
+
+        # Mask nodata values
+        frame1_unw_array[frame1_unw_array == unw_attr_dicts[ix1]['NODATA']] =np.nan
+        frame2_unw_array[frame2_unw_array == unw_attr_dicts[ix2]['NODATA']] =np.nan
+
+        if i == 0:
+            (corr_uw1, corr_unw2) = stitch_2frames_metadata(frame1_unw_array, unw_attr_dicts[ix1],
+                                                      frame2_unw_array, unw_attr_dicts[ix2],
+                                                      verbose=verbose)
+            # Store corrected values
+            corrected_unw_arrays = [corr_uw1, corr_unw2]
+        else:
+            (corr_uw1, corr_unw2) = stitch_2frames_metadata(corrected_unw_arrays[-1], unw_attr_dicts[ix1],
+                                                      frame2_unw_array, unw_attr_dicts[ix2],
+                                                      verbose=verbose)
+
+            # Overwrite the last element in corrected arrays
+            # TODO: check how to do this without using del
+            del corrected_unw_arrays[-1]
+            corrected_unw_arrays.extend([corr_uw1, corr_unw2])
+
+    # Combine corrected unwrappedPhase arrays
+    combined_unwrap, combined_snwe, _ = combine_data_to_single(corrected_unw_arrays, snwe_list, 
+                                                               latlon_spacing_list, method='mean',
+                                                               latlon_step=[-0.1,0.1])
+
+    # replace nan with 0.0
+    combined_unwrap = np.nan_to_num(combined_unwrap, nan=0.0)
+
+    # Write 
+    # create temp files
+    unw_out = output_unw.parent / (output_unw.name)
+    print('unw_out', unw_out)
+    # write stitched unwrappedPhase
+    write_GUNW_array(unw_out, combined_unwrap, combined_snwe, 
+                     format=output_format, verbose=verbose, 
+                     add_vrt=True, nodata=0.0)
+
+
+    return
+
 
 ############################################################################
 #################### READ/WRITE GDAL UTILITIES #############################
@@ -687,8 +882,14 @@ def write_GUNW_array(output_filename: Union[str, Path],
             output_vrt.unlink(missing_ok=True)
     
     # Get lat, lon pixel spacing
-    x_step = (snwe[3] - snwe[2]) / array.shape[1]
-    y_step = (snwe[0] - snwe[1]) / array.shape[0]
+    num_bands = 1
+    if len(array.shape) > 2:
+        num_bands = array.shape[0]
+        x_step = (snwe[3] - snwe[2]) / array.shape[2]
+        y_step = (snwe[0] - snwe[1]) / array.shape[1]
+    else:
+        x_step = (snwe[3] - snwe[2]) / array.shape[1]
+        y_step = (snwe[0] - snwe[1]) / array.shape[0]
 
     # Geotransform  
     geo = (snwe[2], x_step, 0, snwe[1], 0, y_step)   
@@ -697,7 +898,14 @@ def write_GUNW_array(output_filename: Union[str, Path],
     
     # Write
     driver = gdal.GetDriverByName(format)
-    out_ds = driver.Create(str(output), 
+    if len(array.shape) > 2:
+        out_ds = driver.Create(str(output),
+                           array.shape[2],
+                           array.shape[1], 
+                           array.shape[0], 
+                           array_type)
+    else:
+        out_ds = driver.Create(str(output), 
                            array.shape[1], 
                            array.shape[0], 
                            1, 
@@ -705,13 +913,18 @@ def write_GUNW_array(output_filename: Union[str, Path],
     
     out_ds.SetProjection(srs.ExportToWkt())
     out_ds.SetGeoTransform(geo)
-    band = out_ds.GetRasterBand(1)
 
     if verbose:
         print(f'Writing {output}')
-    band.WriteArray(array)
-    band.FlushCache()
-    band.ComputeStatistics(False)
+
+    for i in range(num_bands):
+        band = out_ds.GetRasterBand(i+1)
+        if num_bands > 1:
+            band.WriteArray(array[i])
+        else:
+            band.WriteArray(array)
+        band.FlushCache()
+        band.ComputeStatistics(False)
 
     # Close
     out_ds = None
@@ -726,7 +939,9 @@ def write_GUNW_array(output_filename: Union[str, Path],
 def frame_overlap(snwe1 : list,
                   snwe2 : list,
                   latlon_step1 : list,
-                  latlon_step2 : list) -> Tuple[tuple, tuple]:
+                  latlon_step2 : list,
+                  latlon_step: Optional[list] = [-0.000833334, 0.000833334] \
+                  ) -> Tuple[tuple, tuple]:
     """
     Parameters
     ----------
@@ -747,7 +962,7 @@ def frame_overlap(snwe1 : list,
     subset2 : np.slice
         Intersection subset [y1:y2, x1:x2] for the Image-2
     """ 
-    
+
     snwe = np.vstack([snwe1, snwe2])
     #Find overlap bounds
     overlap_snwe = [np.max(snwe[:,0]), np.min(snwe[:,1]), 
@@ -759,7 +974,6 @@ def frame_overlap(snwe1 : list,
 
     # Overlap bounds - force overlaps to have same dimensions
     # latlon_spacing sometimes diff at 13th decimal
-    latlon_step = [-0.000833334 , 0.000833334 ] # hardcoded for GUNW (90-m)
     length = int(round((overlap_snwe[0] - overlap_snwe[1]) / latlon_step[0])) 
     width  = int(round((overlap_snwe[3] - overlap_snwe[2]) / latlon_step[1]))
 
@@ -819,7 +1033,9 @@ def lalo2xy(lat : np.float32,
 def combine_data_to_single(data_list : list, 
                            snwe_list : list, 
                            latlon_step_list : list,
-                           method : Optional[str] = 'mean') -> Tuple[NDArray, NDArray, list]:
+                           method : Optional[str] = 'mean',
+                           latlon_step: Optional[list] = [-0.000833334, 0.000833334] \
+                           ) -> Tuple[NDArray, NDArray, list]:
     """
     Merge multiple arrays to one array. Combine them in ndarray, then apply function along the n_layers axis
 
@@ -852,15 +1068,22 @@ def combine_data_to_single(data_list : list,
     SNWE = np.array([np.min(snwe_all[:,0]), np.max(snwe_all[:,1]),
                      np.min(snwe_all[:,2]), np.max(snwe_all[:,3])]).T
            
-    latlon_step = [-0.000833334 , 0.000833334 ]
     length = abs(int(np.around((SNWE[1] - SNWE[0]) / latlon_step[0] + 0.01)))
     width = abs(int(np.around((SNWE[2] - SNWE[3]) / latlon_step[1] + 0.01)))
     
     # create combined data array
-    comb_data = np.empty((n, length, width), dtype=np.float64) * np.nan
+    # handle if 3D metadata layer
+    if len(data_list[0].shape) > 2:
+        comb_data = np.empty((n, data_list[0].shape[0], length, width), dtype=np.float64) * np.nan
+    else:
+        comb_data = np.empty((n, length, width), dtype=np.float64) * np.nan
     for i, data in enumerate(data_list):
         x, y = np.abs(lalo2xy(SNWE[1], SNWE[2], snwe_list[i], latlon_step_list[i], 'around'))
-        comb_data[i, y:y+data.shape[0], x: x+data.shape[1]] = data 
+        # handle if 3D metadata layer
+        if len(data.shape) > 2:
+            comb_data[i, 0:data.shape[0], y:y+data.shape[1], x: x+data.shape[2]] = data 
+        else:
+            comb_data[i, y:y+data.shape[0], x: x+data.shape[1]] = data 
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)

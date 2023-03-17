@@ -95,13 +95,15 @@ def create_parser():
                         'threads for multiprocessing operation in gdal. '
                         'By default "2". Can also specify "All" to use all '
                         'available threads.')
-    # parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
-    #                      type=str, default='overlap', help='Method applied '
-    #                      'to stitch the unwrapped data. Either "overlap", '
-    #                      'where product overlap is minimized, or "2stage", '
-    #                      'where minimization is done on connected '
-    #                      'components, are allowed methods. '
-    #                      'default: "overlap".')
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
+                        type=str, default='overlap', help='Method applied to '
+                        'stitch the unwrapped data. Allowed methods are: '
+                        '"overlap", "2stage", and "sequential". "overlap" - '
+                        'product overlap is minimized, "2stage" - '
+                        'minimization is done on connected components, '
+                        '"sequential" - sequential minimization of all '
+                        'overlapping connected components. '
+                        'Default is "overlap".')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str,
                         default='VRT', help='GDAL compatible output format '
                         '(e.g., "ENVI", "GTiff"). By default files are '
@@ -457,7 +459,7 @@ def main(inps=None):
         'mask': inps.mask,
         'outDir': inps.workdir,
         'outputFormat': inps.outputFormat,
-        'stitchMethodType': 'overlap',
+        'stitchMethodType': inps.stitchMethodType,
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking
