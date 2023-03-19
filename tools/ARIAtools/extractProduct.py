@@ -1023,10 +1023,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             ]
 
             # set iterative keys
-            lyr_input_dict['prog_bar'] = prog_bar
-            lyr_input_dict['product_dict'] = product_dict
             prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix=f'Generating: {model} {key} - ')
+            lyr_input_dict['prog_bar'] = prog_bar
+            lyr_input_dict['product_dict'] = product_dict
 
             # extract layers
             handle_epoch_layers(**lyr_input_dict)
