@@ -687,10 +687,14 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
         # write ref and sec files
         for i in tup_outputs:
             if not os.path.exists(i[0]+'.vrt'):
-                product_stitch_sequential_metadata(i[1],
+                # handle expected offset between frames only for SET
+                if key == 'solidEarthTide':
+                    product_stitch_sequential_metadata(i[1],
                                                    output_unw=i[0],
                                                    output_format=driver,
                                                    verbose=True)
+                else:
+                    gdal.BuildVRT(i[0]+'.vrt', i[1])
 
                 # write height layers
                 gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
