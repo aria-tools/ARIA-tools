@@ -674,6 +674,12 @@ def product_stitch_sequential_metadata(input_unw_files : List[str],
           modular for other use
     """
 
+    # Create VRT and exit early if only one frame passed,
+    # and therefore no stitching needed
+    if len(input_unw_files) == 1:
+        gdal.BuildVRT(output_unw+'.vrt', input_unw_files)
+        return
+
     # Outputs
     output_unw = Path(output_unw).absolute()
     
@@ -742,7 +748,6 @@ def product_stitch_sequential_metadata(input_unw_files : List[str],
     # Write 
     # create temp files
     unw_out = output_unw.parent / (output_unw.name)
-    print('unw_out', unw_out)
     # write stitched unwrappedPhase
     write_GUNW_array(unw_out, combined_unwrap, combined_snwe, 
                      format=output_format, verbose=verbose, 

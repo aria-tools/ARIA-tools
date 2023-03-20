@@ -686,19 +686,20 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
         # write ref and sec files
         for i in tup_outputs:
-            if not os.path.exists(i[0]+'.vrt'):
-                # handle expected offset between frames only for SET
-                if key == 'solidEarthTide':
-                    product_stitch_sequential_metadata(i[1],
+            # delete temporary files to circumvent potential inconsistent dims
+            for j in glob.glob(i[0]+'*'): os.remove(j)
+            # handle expected offset between frames only for SET
+            if key == 'solidEarthTide':
+                product_stitch_sequential_metadata(i[1],
                                                    output_unw=i[0],
                                                    output_format=driver,
                                                    verbose=True)
-                else:
-                    gdal.BuildVRT(i[0]+'.vrt', i[1])
+            else:
+                gdal.BuildVRT(i[0]+'.vrt', i[1])
 
-                # write height layers
-                gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
-                     gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
+            # write height layers
+            gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
+                 gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
 
         # compute differential
         generate_diff(ref_outname, sec_outname, outname, key, key, False,
@@ -831,6 +832,7 @@ def handle_epoch_layers(layers,
     # Iterate through all IFGs
     all_outputs = []
     for i in enumerate(product_dict[0]):
+        print('i[1]', i[1])
         ifg         = product_dict[1][i[0]][0]
         outname = os.path.abspath(os.path.join(workdir, ifg))
 
@@ -874,6 +876,7 @@ def handle_epoch_layers(layers,
                 sec_diff = sec_outname
                 outname_diff = os.path.join(model_dir, 'dates',
                     os.path.basename(ref_diff))
+                print('ref_diff, sec_diff, outname_diff', ref_diff, sec_diff, outname_diff)
                 if not os.path.exists(outname_diff):
                     generate_diff(ref_diff, sec_diff, outname_diff, key,
                       sec_key, tropo_total, hgt_field, driver)
