@@ -832,7 +832,6 @@ def handle_epoch_layers(layers,
     # Iterate through all IFGs
     all_outputs = []
     for i in enumerate(product_dict[0]):
-        print('i[1]', i[1])
         ifg         = product_dict[1][i[0]][0]
         outname = os.path.abspath(os.path.join(workdir, ifg))
 

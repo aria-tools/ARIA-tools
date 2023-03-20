@@ -247,7 +247,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             os.makedirs(stack_dir)
 
     # handle individual epochs if external correction layer
-    if domain_name in ARIA_EXTERNAL_CORRECTIONS:
+    if domain_name in ARIA_EXTERNAL_CORRECTIONS or \
+         domain_name in ARIA_TROPO_MODELS:
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # Find files
@@ -263,7 +264,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     # only perform following checks if a differential layer
     b_perp = []
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
-    if domain_name not in ARIA_EXTERNAL_CORRECTIONS:
+    if domain_name not in ARIA_EXTERNAL_CORRECTIONS and \
+         domain_name not in ARIA_TROPO_MODELS:
         # get az times for each date
         aztime_list = []
         for i in aria_prod.products[0]:

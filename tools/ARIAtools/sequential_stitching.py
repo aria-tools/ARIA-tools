@@ -189,12 +189,7 @@ def stitch_2frames_metadata(unw_data1 : NDArray, rdict1 : dict,
                                   [-0.1,0.1])
 
     ###### EXAMINE THE OVERLAP ##########
-    print('unw_data1', unw_data1.shape)
-    print('unw_data2', unw_data2.shape)
-    print('box_1, box_2', box_1, box_2)
     for i in range(unw_data1.shape[0]):
-        print('unw_data1[i][box_1]', unw_data1[i][box_1].shape)
-        print('unw_data2[i][box_2]', unw_data2[i][box_2].shape)
         diff = _metadata_offset(unw_data1[i][box_1],
                             unw_data2[i][box_2], 
                             print_msg=verbose)
