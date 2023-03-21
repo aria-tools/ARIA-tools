@@ -691,7 +691,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
             # handle expected offset between frames only for SET
             if key == 'solidEarthTide':
                 product_stitch_sequential_metadata(i[1],
-                                                   output_unw=i[0],
+                                                   output_meta=i[0],
                                                    output_format=driver,
                                                    verbose=True)
             else:
