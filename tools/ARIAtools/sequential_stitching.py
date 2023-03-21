@@ -719,14 +719,14 @@ def product_stitch_sequential(input_unw_files : List[str],
 
         # Mask
         if mask_file:
-            [print(f'Mask {output} with {mask_file}') if verbose else None]
+            if verbose:
+                print(f'Mask {output} with {mask_file.GetDescription()}')
 
-            mask_array = get_GUNW_array(mask_file).astype(np.float32)
+            mask_array = mask_file.ReadAsArray()
             array = get_GUNW_array(str(output.with_suffix('.vrt')))
 
             if output == output_conn:
                 # Mask connected components
-                mask_array[mask_array==0.0] = np.nan
                 array[array==-1.0] = np.nan
                 update_array = mask_array * array
                 update_array = np.nan_to_num(update_array, nan=-1.0)

@@ -1787,7 +1787,7 @@ def main(inps=None):
         'mask': inps.mask,
         'outDir': inps.workdir,
         'outputFormat': inps.outputFormat,
-        'stitchMethodType': 'overlap',
+        'stitchMethodType': inps.stitchMethodType,
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking,
