@@ -31,7 +31,7 @@ from ARIAtools.sequential_stitching import product_stitch_sequential, \
                                            product_stitch_sequential_metadata
 import pyproj
 from pyproj import CRS, Transformer
-import rioxarray as xrr
+from rioxarray import open_rasterio
 import rasterio as rio
 
 gdal.UseExceptions()
@@ -710,7 +710,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
                     # write to file
-                    da = xrr.open_rasterio(i + '.vrt')
+                    da = open_rasterio(i + '.vrt')
                     da.rio.to_raster(i, driver=driver)
                     da.close()
     else:
@@ -733,9 +733,9 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
         os.makedirs(output_dir)
 
     # open intermediate files
-    with xrr.open_rasterio(sec_outname + '.vrt') as da_sec:
+    with open_rasterio(sec_outname + '.vrt') as da_sec:
         arr_sec = da_sec.data
-    with xrr.open_rasterio(ref_outname + '.vrt') as da_ref:
+    with open_rasterio(ref_outname + '.vrt') as da_ref:
         arr_ref = da_ref.data
 
     # make the total arr
@@ -1284,7 +1284,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                            (data_array.GetGeoTransform()[1] * \
                            data_array.RasterXSize), data_array.RasterXSize)
 
-        da_dem = xrr.open_rasterio(dem.GetDescription(), 
+        da_dem = open_rasterio(dem.GetDescription(), 
                      band_as_variable=True)['band_1']
 
         # interpolate the DEM to the GUNW lat/lon
