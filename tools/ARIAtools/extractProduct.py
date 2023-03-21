@@ -1165,7 +1165,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                  mask_file=mask, # str filename
                                                  output_format=outputFormat,
                                                  range_correction=True,
-                                                 save_fig=True,
+                                                 save_fig=False,
                                                  overwrite=True,
                                                  verbose=verbose)
 
