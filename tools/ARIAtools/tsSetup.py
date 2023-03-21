@@ -481,8 +481,9 @@ def main(inps=None):
     extract_dict = defaultdict(list)
     for d in standardproduct_info.products[1]:
         for key in standardproduct_info.products[1][0].keys():
-            for item in list(set(d[key])):
-                extract_dict[key].append(item)
+            if key in d.keys():
+                for item in list(set(d[key])):
+                    extract_dict[key].append(item)
 
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
