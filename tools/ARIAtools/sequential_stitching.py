@@ -486,103 +486,116 @@ def product_stitch_sequential(input_unw_files : List[str],
                                        
     NOTE: Move cropping (gdal.Warp to bounds and clip_json) and masking to ariaExtract.py to make this function
           modular for other use
-    """   
+    """
 
     # Outputs
     output_unw = Path(output_unw).absolute()
+    if not output_unw.parent.exists():
+        output_unw.parent.mkdir()
     output_conn = Path(output_conn).absolute()
-    
-    # Get raster attributes [SNWE, latlon_spacing, length, width. nodata]
-    # from each input file
+    if not output_conn.parent.exists():
+        output_conn.parent.mkdir()
+    # create temp files
+    temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
+    temp_conn_out = output_conn.parent / ('temp_' + output_conn.name)
 
-    # Initalize variables
-    unw_attr_dicts = []  # unwrappedPhase
-    conncomp_attr_dicts = [] # connectedComponents
+    # Create VRT and exit early if only one frame passed,
+    # and therefore no stitching needed
+    if len(input_unw_files) == 1:
+        gdal.BuildVRT(str(temp_unw_out.with_suffix('.vrt')),
+                      input_unw_files)
+        gdal.BuildVRT(str(temp_conn_out.with_suffix('.vrt')),
+                      input_conncomp_files)
     
-    # We assume that the filename order is the same for unwrappedPhase and
-    # connectedComponent lists 
-    temp_snwe_list = []
-    temp_latlon_spacing_list = []
+    else:
+        # Get raster attributes [SNWE, latlon_spacing, length, width. nodata]
+        # from each input file
 
-    for unw_file, conn_file in zip(input_unw_files, input_conncomp_files):
-        unw_attr_dicts.append(get_GUNW_attr(unw_file))
-        conncomp_attr_dicts.append(get_GUNW_attr(conn_file))
-        # get frame bounds, assume are the same for unw and conncomp
-        temp_snwe_list.append(unw_attr_dicts[-1]['SNWE'])
-        temp_latlon_spacing_list.append([unw_attr_dicts[-1]['LAT_SPACING'], 
+        # Initalize variables
+        unw_attr_dicts = []  # unwrappedPhase
+        conncomp_attr_dicts = [] # connectedComponents
+    
+        # We assume that the filename order is the same for unwrappedPhase and
+        # connectedComponent lists 
+        temp_snwe_list = []
+        temp_latlon_spacing_list = []
+
+        for unw_file, conn_file in zip(input_unw_files, input_conncomp_files):
+            unw_attr_dicts.append(get_GUNW_attr(unw_file))
+            conncomp_attr_dicts.append(get_GUNW_attr(conn_file))
+            # get frame bounds, assume are the same for unw and conncomp
+            temp_snwe_list.append(unw_attr_dicts[-1]['SNWE'])
+            temp_latlon_spacing_list.append([unw_attr_dicts[-1]['LAT_SPACING'], 
                                         unw_attr_dicts[-1]['LON_SPACING']])
 
-    # get sorted indices for frame bounds, from South to North
-    # Sequential stitching starts from the most south frame and moves 
-    # forward to next one in the North direction
-    # TODO: add option to reverse direction of stitching
-    sorted_ix = np.argsort(np.array(temp_snwe_list)[:,0], axis=0)
+        # get sorted indices for frame bounds, from South to North
+        # Sequential stitching starts from the most south frame and moves 
+        # forward to next one in the North direction
+        # TODO: add option to reverse direction of stitching
+        sorted_ix = np.argsort(np.array(temp_snwe_list)[:,0], axis=0)
 
-    # Loop through attributes
-    snwe_list = [temp_snwe_list[ii] for ii in sorted_ix]
-    latlon_spacing_list = [temp_latlon_spacing_list[ii] for ii in sorted_ix]
+        # Loop through attributes
+        snwe_list = [temp_snwe_list[ii] for ii in sorted_ix]
+        latlon_spacing_list = [temp_latlon_spacing_list[ii] for ii in sorted_ix]
     
-    # Loop through sorted frames, and stitch neighboring frames
-    for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
-        if verbose:
-            print('Frame-1:', unw_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
-            print('Frame-2:', unw_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
-        # Frame1
-        frame1_unw_array = get_GUNW_array(unw_attr_dicts[ix1]['PATH']) 
-        frame1_conn_array = get_GUNW_array(conncomp_attr_dicts[ix1]['PATH']) 
-        # Frame2
-        frame2_unw_array = get_GUNW_array(unw_attr_dicts[ix2]['PATH']) 
-        frame2_conn_array = get_GUNW_array(conncomp_attr_dicts[ix2]['PATH']) 
+        # Loop through sorted frames, and stitch neighboring frames
+        for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
+            if verbose:
+                print('Frame-1:', unw_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
+                print('Frame-2:', unw_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
+            # Frame1
+            frame1_unw_array = get_GUNW_array(unw_attr_dicts[ix1]['PATH']) 
+            frame1_conn_array = get_GUNW_array(conncomp_attr_dicts[ix1]['PATH']) 
+            # Frame2
+            frame2_unw_array = get_GUNW_array(unw_attr_dicts[ix2]['PATH']) 
+            frame2_conn_array = get_GUNW_array(conncomp_attr_dicts[ix2]['PATH']) 
 
-        # Mask nodata values
-        frame1_unw_array[frame1_unw_array == unw_attr_dicts[ix1]['NODATA']] =np.nan
-        frame1_conn_array[frame1_conn_array == conncomp_attr_dicts[ix1]['NODATA']] =np.nan
-        frame2_unw_array[frame2_unw_array == unw_attr_dicts[ix2]['NODATA']] =np.nan
-        frame2_conn_array[frame2_conn_array == conncomp_attr_dicts[ix2]['NODATA']] =np.nan
+            # Mask nodata values
+            frame1_unw_array[frame1_unw_array == unw_attr_dicts[ix1]['NODATA']] =np.nan
+            frame1_conn_array[frame1_conn_array == conncomp_attr_dicts[ix1]['NODATA']] =np.nan
+            frame2_unw_array[frame2_unw_array == unw_attr_dicts[ix2]['NODATA']] =np.nan
+            frame2_conn_array[frame2_conn_array == conncomp_attr_dicts[ix2]['NODATA']] =np.nan
 
-        if i == 0:
-            (corr_uw1, corr_unw2,
-             corr_conn1, corr_conn2) = stitch_2frames(frame1_unw_array, frame1_conn_array, unw_attr_dicts[ix1],  
+            if i == 0:
+                (corr_uw1, corr_unw2,
+                 corr_conn1, corr_conn2) = stitch_2frames(frame1_unw_array, frame1_conn_array, unw_attr_dicts[ix1],  
                                                       frame2_unw_array, frame2_conn_array, unw_attr_dicts[ix2],
                                                       correction_method=correction_method, range_correction=range_correction,
                                                       verbose=verbose)
-            # Store corrected values
-            corrected_unw_arrays = [corr_uw1, corr_unw2]
-            corrected_conn_arrays = [corr_conn1, corr_conn2]
-        else:
-            (corr_uw1, corr_unw2,
-             corr_conn1, corr_conn2) = stitch_2frames(corrected_unw_arrays[-1], corrected_conn_arrays[-1], unw_attr_dicts[ix1],  
+                # Store corrected values
+                corrected_unw_arrays = [corr_uw1, corr_unw2]
+                corrected_conn_arrays = [corr_conn1, corr_conn2]
+            else:
+                (corr_uw1, corr_unw2,
+                 corr_conn1, corr_conn2) = stitch_2frames(corrected_unw_arrays[-1], corrected_conn_arrays[-1], unw_attr_dicts[ix1],  
                                                       frame2_unw_array, frame2_conn_array, unw_attr_dicts[ix2], 
                                                       correction_method=correction_method, range_correction=range_correction,
                                                       verbose=verbose)
 
-            # Overwrite the last element in corrected arrays
-            # TODO: check how to do this without using del
-            del corrected_unw_arrays[-1], corrected_conn_arrays[-1] 
-            corrected_unw_arrays.extend([corr_uw1, corr_unw2])
-            corrected_conn_arrays.extend([corr_conn1, corr_conn2])      
+                # Overwrite the last element in corrected arrays
+                # TODO: check how to do this without using del
+                del corrected_unw_arrays[-1], corrected_conn_arrays[-1] 
+                corrected_unw_arrays.extend([corr_uw1, corr_unw2])
+                corrected_conn_arrays.extend([corr_conn1, corr_conn2])      
 
-    # Combine corrected unwrappedPhase and connectedComponents arrays
-    combined_unwrap, combined_snwe, _ = combine_data_to_single(corrected_unw_arrays, snwe_list, 
+        # Combine corrected unwrappedPhase and connectedComponents arrays
+        combined_unwrap, combined_snwe, _ = combine_data_to_single(corrected_unw_arrays, snwe_list, 
                                                                latlon_spacing_list, method='mean')
-    combined_conn, _, _ = combine_data_to_single(corrected_conn_arrays, snwe_list,
+        combined_conn, _, _ = combine_data_to_single(corrected_conn_arrays, snwe_list,
                                                  latlon_spacing_list, method='min')
 
-    # replace nan with 0.0
-    combined_unwrap = np.nan_to_num(combined_unwrap, nan=0.0)
-    combined_conn = np.nan_to_num(combined_conn, nan=-1.0)
+        # replace nan with 0.0
+        combined_unwrap = np.nan_to_num(combined_unwrap, nan=0.0)
+        combined_conn = np.nan_to_num(combined_conn, nan=-1.0)
 
-    # Write 
-    # create temp files
-    temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
-    temp_conn_out = output_conn.parent / ('temp_' + output_conn.name)
-    # write stitched unwrappedPhase
-    write_GUNW_array(temp_unw_out, combined_unwrap, combined_snwe, 
+        # Write
+        # write stitched unwrappedPhase
+        write_GUNW_array(temp_unw_out, combined_unwrap, combined_snwe, 
                      format=output_format, verbose=verbose, update_mode=overwrite, 
                      add_vrt=True, nodata=0.0)
     
-    # write stitched connectedComponents 
-    write_GUNW_array(temp_conn_out, combined_conn, combined_snwe, 
+        # write stitched connectedComponents 
+        write_GUNW_array(temp_conn_out, combined_conn, combined_snwe, 
                      format=output_format, verbose=verbose, update_mode=overwrite, 
                      add_vrt=True, nodata=-1.0)
 
@@ -613,7 +626,8 @@ def product_stitch_sequential(input_unw_files : List[str],
         gdal.Translate(str(output.with_suffix('.vrt')), str(output), format="VRT")
         # Remove temp files
         [ii.unlink() for ii in [input, input.with_suffix('.vrt'), 
-                                input.with_suffix('.hdr'), input.with_suffix('.aux.xml')]]
+                                input.with_suffix('.hdr'), input.with_suffix('.aux.xml')]
+                                if ii.exists()]
 
         # Mask
         if mask_file:
@@ -641,7 +655,7 @@ def product_stitch_sequential(input_unw_files : List[str],
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')), str(output_conn.with_suffix('.vrt')))                
 
-    return combined_unwrap, combined_conn, combined_snwe
+    return
 
 
 def product_stitch_sequential_metadata(input_unw_files : List[str],
