@@ -1,6 +1,6 @@
 # ARIA-tools
 
-[![Language](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![Language](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-GPL-yellow.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
 
 ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the GNU General Public License. Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.

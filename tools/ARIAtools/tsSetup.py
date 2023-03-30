@@ -95,13 +95,15 @@ def create_parser():
                         'threads for multiprocessing operation in gdal. '
                         'By default "2". Can also specify "All" to use all '
                         'available threads.')
-    # parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
-    #                      type=str, default='overlap', help='Method applied '
-    #                      'to stitch the unwrapped data. Either "overlap", '
-    #                      'where product overlap is minimized, or "2stage", '
-    #                      'where minimization is done on connected '
-    #                      'components, are allowed methods. '
-    #                      'default: "overlap".')
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
+                        type=str, default='overlap', help='Method applied to '
+                        'stitch the unwrapped data. Allowed methods are: '
+                        '"overlap", "2stage", and "sequential". "overlap" - '
+                        'product overlap is minimized, "2stage" - '
+                        'minimization is done on connected components, '
+                        '"sequential" - sequential minimization of all '
+                        'overlapping connected components. '
+                        'Default is "overlap".')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str,
                         default='VRT', help='GDAL compatible output format '
                         '(e.g., "ENVI", "GTiff"). By default files are '
@@ -245,7 +247,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             os.makedirs(stack_dir)
 
     # handle individual epochs if external correction layer
-    if domain_name in ARIA_EXTERNAL_CORRECTIONS:
+    if domain_name in ARIA_EXTERNAL_CORRECTIONS or \
+         domain_name in ARIA_TROPO_MODELS:
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # Find files
@@ -261,7 +264,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     # only perform following checks if a differential layer
     b_perp = []
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
-    if domain_name not in ARIA_EXTERNAL_CORRECTIONS:
+    if domain_name not in ARIA_EXTERNAL_CORRECTIONS and \
+         domain_name not in ARIA_TROPO_MODELS:
         # get az times for each date
         aztime_list = []
         for i in aria_prod.products[0]:
@@ -457,7 +461,7 @@ def main(inps=None):
         'mask': inps.mask,
         'outDir': inps.workdir,
         'outputFormat': inps.outputFormat,
-        'stitchMethodType': 'overlap',
+        'stitchMethodType': inps.stitchMethodType,
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking
@@ -477,8 +481,9 @@ def main(inps=None):
     extract_dict = defaultdict(list)
     for d in standardproduct_info.products[1]:
         for key in standardproduct_info.products[1][0].keys():
-            for item in list(set(d[key])):
-                extract_dict[key].append(item)
+            if key in d.keys():
+                for item in list(set(d[key])):
+                    extract_dict[key].append(item)
 
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '

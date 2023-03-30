@@ -27,9 +27,11 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, \
                                       product_stitch_2stage
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
                                  get_basic_attrs
+from ARIAtools.sequential_stitching import product_stitch_sequential, \
+                                           product_stitch_sequential_metadata
 import pyproj
 from pyproj import CRS, Transformer
-import rioxarray as xrr
+from rioxarray import open_rasterio
 import rasterio as rio
 
 gdal.UseExceptions()
@@ -94,7 +96,7 @@ def createParser():
         help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
         help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequnetial' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap', help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequential' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion',
@@ -684,11 +686,20 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
         # write ref and sec files
         for i in tup_outputs:
-            if not os.path.exists(i[0]+'.vrt'):
+            # delete temporary files to circumvent potential inconsistent dims
+            for j in glob.glob(i[0]+'*'): os.remove(j)
+            # handle expected offset between frames only for SET
+            if key == 'solidEarthTide':
+                product_stitch_sequential_metadata(i[1],
+                                                   output_meta=i[0],
+                                                   output_format=driver,
+                                                   verbose=True)
+            else:
                 gdal.BuildVRT(i[0]+'.vrt', i[1])
-                # write height layers
-                gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
-                     gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
+
+            # write height layers
+            gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field, \
+                 gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
 
         # compute differential
         generate_diff(ref_outname, sec_outname, outname, key, key, False,
@@ -699,7 +710,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
                     # write to file
-                    da = xrr.open_rasterio(i + '.vrt')
+                    da = open_rasterio(i + '.vrt')
                     da.rio.to_raster(i, driver=driver)
                     da.close()
     else:
@@ -714,7 +725,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                   hgt_field, driver):
-    """ Compute differential from referene and secondary scenes """
+    """ Compute differential from reference and secondary scenes """
 
     # if specified workdir doesn't exist, create it
     output_dir = os.path.dirname(outname)
@@ -722,9 +733,9 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
         os.makedirs(output_dir)
 
     # open intermediate files
-    with xrr.open_rasterio(sec_outname + '.vrt') as da_sec:
+    with open_rasterio(sec_outname + '.vrt') as da_sec:
         arr_sec = da_sec.data
-    with xrr.open_rasterio(ref_outname + '.vrt') as da_ref:
+    with open_rasterio(ref_outname + '.vrt') as da_ref:
         arr_ref = da_ref.data
 
     # make the total arr
@@ -841,7 +852,6 @@ def handle_epoch_layers(layers,
             all_outputs.append(workdir)
             all_outputs.append(ref_workdir)
             all_outputs.append(sec_workdir)
-        print('all_outputs', all_outputs)
 
         # capture if tropo and separate distinct wet and hydro layers
         if 'tropo' in key:
@@ -865,6 +875,7 @@ def handle_epoch_layers(layers,
                 sec_diff = sec_outname
                 outname_diff = os.path.join(model_dir, 'dates',
                     os.path.basename(ref_diff))
+                print('ref_diff, sec_diff, outname_diff', ref_diff, sec_diff, outname_diff)
                 if not os.path.exists(outname_diff):
                     generate_diff(ref_diff, sec_diff, outname_diff, key,
                       sec_key, tropo_total, hgt_field, driver)
@@ -1014,10 +1025,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             ]
 
             # set iterative keys
-            lyr_input_dict['prog_bar'] = prog_bar
-            lyr_input_dict['product_dict'] = product_dict
             prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix=f'Generating: {model} {key} - ')
+            lyr_input_dict['prog_bar'] = prog_bar
+            lyr_input_dict['product_dict'] = product_dict
 
             # extract layers
             handle_epoch_layers(**lyr_input_dict)
@@ -1145,7 +1156,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               verbose=verbose)
 
                     elif stitchMethodType == 'sequential':
-                        from sequential_stitching import product_stitch_sequential
                         product_stitch_sequential(phs_files,
                                                  conn_files,
                                                  bounds=bounds,
@@ -1153,9 +1163,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                  output_unw=outFilePhs,
                                                  output_conn=outFileConnComp,
                                                  mask_file=mask, # str filename
-                                                 outputFormat=outputFormat,
+                                                 output_format=outputFormat,
                                                  range_correction=True,
-                                                 save_fig=True,
+                                                 save_fig=False,
                                                  overwrite=True,
                                                  verbose=verbose)
 
@@ -1274,7 +1284,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                            (data_array.GetGeoTransform()[1] * \
                            data_array.RasterXSize), data_array.RasterXSize)
 
-        da_dem = xrr.open_rasterio(dem.GetDescription(), 
+        da_dem = open_rasterio(dem.GetDescription(), 
                      band_as_variable=True)['band_1']
 
         # interpolate the DEM to the GUNW lat/lon
@@ -1777,7 +1787,7 @@ def main(inps=None):
         'mask': inps.mask,
         'outDir': inps.workdir,
         'outputFormat': inps.outputFormat,
-        'stitchMethodType': 'overlap',
+        'stitchMethodType': inps.stitchMethodType,
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking,
