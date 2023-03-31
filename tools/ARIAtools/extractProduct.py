@@ -358,7 +358,7 @@ class metadata_qualitycheck:
 
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         proj, arrshape=None, workdir='./',
-                        outputFormat='ENVI', num_threads='2'):
+                        outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90'):
     """Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
@@ -421,7 +421,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     return aria_dem, ds_aria, Latitude, Longitude
 
 
-def dl_dem(path_dem, path_prod_union, num_threads, dem_name: str = 'glo_30'):
+def dl_dem(path_dem, path_prod_union, num_threads, dem_name: str = 'glo_90'):
     """Download the DEM over product bbox union."""
     # Import functions
     from ARIAtools.shapefile_util import shapefile_area
