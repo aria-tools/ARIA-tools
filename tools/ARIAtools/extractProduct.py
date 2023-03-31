@@ -423,8 +423,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
 def dl_dem(path_dem, path_prod_union, num_threads, dem_name: str = 'glo_90'):
     """Download the DEM over product bbox union."""
-    # Import functions
-    from ARIAtools.shapefile_util import shapefile_area
 
     root  = os.path.splitext(path_dem)[0]
     prod_shapefile = open_shapefile(path_prod_union, 0, 0)
