@@ -255,12 +255,12 @@ def arr2ds(ds_orig, arr, noData=0):
 
 
 class NLCDMasker(object):
-    def __init__(self, path_aria, lc=[11, 12, 90, 95]):
+    def __init__(self, path_aria, lc=None, dem_name='glo_90'):
         self.path_aria = path_aria
         self.path_bbox = op.join(self.path_aria, 'productBoundingBox',
                                                     'productBoundingBox.json')
-        self.path_dem  = op.join(self.path_aria, 'DEM', 'SRTM_3arcsec.dem')
-        self.lc        = lc # landcover classes to mask
+        self.path_dem  = op.join(self.path_aria, 'DEM', f'{dem_name}.dem')
+        self.lc        = lc or [11, 12, 90, 95] # landcover classes to mask
         gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 
