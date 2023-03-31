@@ -15,6 +15,8 @@ import os
 import numpy as np
 from copy import deepcopy
 import glob
+from dem_stitcher.datasets import DATASETS
+from dem_stitcher import get_dem_tile_paths
 from osgeo import gdal, osr
 import logging
 import requests
@@ -40,19 +42,6 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
 
-
-## Set DEM path
-_world_dem = "https://portal.opentopography.org/API/globaldem?demtype="\
-               "SRTMGL1_E&west={}&south={}&east={}&north={}&outputFormat=GTiff"
-dot_topo = os.path.expanduser('~/.topoapi')
-if os.path.exists(dot_topo):
-    topapi = '&API_Key='
-    with open(dot_topo) as f:
-        topapi = topapi + f.readlines()[0].split('\n')[0]
-    _world_dem = _world_dem + topapi
-else:  # your .topoapi does not exist
-    raise ValueError('Add your Open Topo API key to `~/.topoapi`.'
-                     'Refer to ARIAtools installation instructions.')
 
 
 def createParser():
@@ -375,7 +364,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     """
     # If specified DEM subdirectory exists, delete contents
     workdir      = os.path.join(workdir,'DEM')
-    aria_dem     = os.path.join(workdir, 'SRTM_3arcsec.dem')
+    aria_dem     = os.path.join(workdir, f'{dem_name}.dem')
     os.makedirs(workdir, exist_ok=True)
 
     bounds       = open_shapefile(bbox_file, 0, 0).bounds # bounds of user bbox
@@ -384,7 +373,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     if demfilename.lower()=='download':
-        demfilename = dl_dem(aria_dem, prods_TOTbbox_metadatalyr, num_threads)
+        if dem_name not in DATASETS:
+            raise ValueError(f'"dem_name" must be in {", ".join(DATASETS)}')
+        demfilename = dl_dem(aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name)
 
     else: # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
@@ -430,49 +421,25 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     return aria_dem, ds_aria, Latitude, Longitude
 
 
-def dl_dem(path_dem, path_prod_union, num_threads):
+def dl_dem(path_dem, path_prod_union, num_threads, dem_name: str = 'glo_30'):
     """Download the DEM over product bbox union."""
     # Import functions
     from ARIAtools.shapefile_util import shapefile_area
 
-    root      = os.path.splitext(path_dem)[0]
+    root  = os.path.splitext(path_dem)[0]
     prod_shapefile = open_shapefile(path_prod_union, 0, 0)
-    WSEN      = prod_shapefile.bounds
-    # If area > 450000 km2, must split requests into chunks to successfully access data
-    chunk = False
-    if shapefile_area(prod_shapefile, bounds = True) > 400000:
-        chunk = True
-        # Increase chunking size to discretize box into smaller grids
-        log.warning('User-defined bounds results in an area of %d km which ' \
-                    'exceeds the maximum download area of 400000; ' \
-                    'downloading in chunks', \
-                    shapefile_area(prod_shapefile, bounds = True))
-        rows, cols = chunk_area(WSEN)
+    extent = prod_shapefile.bounds
 
-    if chunk: # Download in chunks (if necessary)
-        chunked_files, k = [], 0
-        for i in range(len(rows)-1):
-            for j in range(len(cols)-1):
-                dst = f'{root}_{k}_uncropped.tif'
-                chunked_files.append(dst)
-                WSEN = [cols[j], rows[i], cols[j+1], rows[i+1]]
-                r    = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
-                with open(dst, 'wb') as fh:
-                    fh.write(r.content)
-                k+=1
+    dem_tile_paths = get_dem_tile_paths(bounds=extent,
+                                        dem_name=dem_name,
+                                        localize_tiles_to_gtiff=(False if dem_name == 'glo_30' else True),
+                                        tile_dir=f'{dem_name}_tiles')
 
-        # Tile chunked products together after last iteration
-        dst       = f'{root}_uncropped.tif'
-        gdal.Warp(dst, chunked_files, multithread=True, options=[f'NUM_THREADS={num_threads}'])
-        [os.remove(i) for i in glob.glob(f'{root}_*_uncropped.tif')] # remove tmp
+    vrt_path = f'{root}_uncropped.vrt'
+    ds = gdal.BuildVRT(vrt_path, dem_tile_paths)
+    ds = None
 
-    else:
-        dst = f'{root}_uncropped.tif'
-        r   = requests.get(_world_dem.format(*WSEN), allow_redirects=True)
-        with open(dst, 'wb') as fh:
-            fh.write(r.content)
-    del r
-    return dst
+    return vrt_path
 
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./',
