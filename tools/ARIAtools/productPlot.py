@@ -74,8 +74,12 @@ def createParser():
     parser.add_argument('--figwidth', dest='figwidth', type=str, default='standard',
         help='Width of lat extents figure in inches. Default is \"standard\", i.e., the 6.4-inch-wide standard figure size. Optionally, theuser may define the width manually, e.g,. 8 [inches] or set the parameter to \"wide\" format, i.e., the width of the figure automatically scales with the number of interferograms. Other options include')
     parser.add_argument('--version', dest='version',  default=None,
-        help='Specify version as str, e.g. 2_0_4 or all prods; default: '
-             'newest')
+                        help='Specify version as str, e.g. 2_0_4 or all prods; '
+                        'default: all')
+    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
+                        help='Specify netcdf version as str, '
+                        'e.g. 1c or all prods;'
+                        'default: 1b')
     parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     return parser
@@ -587,6 +591,7 @@ def main(inps=None):
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
+                                                nc_version=inps.nc_version,
                                                 verbose=inps.verbose)
 
     # If user requests to generate all plots.

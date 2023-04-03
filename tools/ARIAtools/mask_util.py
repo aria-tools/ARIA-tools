@@ -85,15 +85,16 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
 
         ## Update water-mask with lakes/ponds union
         mask_file = gdal.Open(maskfilename, gdal.GA_Update)
-        mask_file.GetRasterBand(1).WriteArray(lake_masks*gdal.Open(maskfilename).ReadAsArray())
+        mask_array = lake_masks*gdal.Open(maskfilename).ReadAsArray()
+        mask_file.GetRasterBand(1).WriteArray(mask_array)
         #Delete temp files
         del lake_masks, mask_file
 
     ## Use NLCD Mask
     elif os.path.basename(maskfilename).lower().startswith('nlcd'):
-            log.info("***Accessing and cropping the NLCD mask...***")
-            maskfilename = NLCDMasker(os.path.dirname(workdir))(
-                                            proj, bounds, arrshape, outputFormat)
+        log.info("***Accessing and cropping the NLCD mask...***")
+        maskfilename = NLCDMasker(os.path.dirname(workdir))(
+                                  proj, bounds, arrshape, outputFormat)
 
     ## User specified mask
     else:
@@ -146,13 +147,23 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         del mask_file, amp_file
 
     # crop/expand mask to DEM size?
-    mask = gdal.Warp('', maskfilename, format='MEM',
+    gdal.Warp(maskfilename, maskfilename, format=outputFormat,
                     cutlineDSName=prods_TOTbbox, outputBounds=bounds,
                     width=arrshape[1], height=arrshape[0], multithread=True,
-                    options=[f'NUM_THREADS={num_threads}'])
-
+                    options=[f'NUM_THREADS={num_threads} -overwrite'])
+    mask = gdal.Open(maskfilename, gdal.GA_Update)
     mask.SetProjection(proj)
     mask.SetDescription(maskfilename)
+    mask_array = mask.ReadAsArray()
+    mask_array[mask_array!=1] = 0
+    mask.GetRasterBand(1).WriteArray(mask_array)
+    del mask, mask_array
+    # Update VRT
+    gdal.Translate(maskfilename+'.vrt', maskfilename,
+                   options=gdal.TranslateOptions(format="VRT"))
+
+    # pass maskfile object
+    mask = gdal.Open(maskfilename)
 
     try:
         ## remove extra files
@@ -161,7 +172,6 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     except:
         pass
 
-    mask.FlushCache()
     return mask
 
 

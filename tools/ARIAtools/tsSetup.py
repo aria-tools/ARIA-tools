@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Extract unwrapped interferogram, coherence, ⊥ baseline, and LOS file(s).
-This script is intended to extract required information and files to carry-out
-time series analysis on ARIA products.
-Copyright (c) 2023, by the California Institute of Technology.
-ALL RIGHTS RESERVED. United States Government Sponsorship acknowledged.
-Author(s): Simran Sangha, David Bekaert, & Emre Havazli
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# Author(s): Simran Sangha, David Bekaert, & Emre Havazli
+# Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
+# RESERVED. United States Government Sponsorship acknowledged.
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""
+Extract minimum required information and files to carry-out time series analysis.
+Specifically, extract unwrapped interferogram, coherence, perp baseline,
+LOS file(s), and (where available) tropospheric correction layers.
 """
 
 import os

@@ -10,9 +10,17 @@ import os
 import glob
 import numpy as np
 from osgeo import gdal
+import logging
+
+# Import functions
+from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
+
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
+
+log = logging.getLogger(__name__)
+
 
 ###Save file with gdal
 def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
@@ -279,3 +287,135 @@ def tifGacos(intif):
     tropo_rsc_dict['TIME_OF_DAY'] = 'NoneUTC'
 
     return tropo_rsc_dict
+
+
+###Perform initial layer, product, and correction sanity checks
+def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
+               extract_or_ts):
+    """Check if any conflicts between netcdf versions and expected layers."""
+    from copy import deepcopy
+
+    # Ignore productBoundingBoxes & pair-names, they are not raster layers
+    ignore_lyr = ['productBoundingBox','productBoundingBoxFrames','pair_name']
+    # Check all available layers in stack
+    products = [list(i.keys()) for i in products]
+    products = [[sub for sub in i if sub not in ignore_lyr] for i in products]
+    all_valid_layers = list(set.union(*map(set, products)))
+    all_valid_layers = list(set(all_valid_layers))
+
+    # track tropo model names
+    model_names = [i.split('_')[-1] for i in all_valid_layers if '_' in i]
+    model_names = list(set(model_names))
+    all_valid_layers = [i.split('_')[0] for i in all_valid_layers]
+    raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic']
+    tropo_total = False
+
+    if tropo_models.lower()=='all':
+        log.info('All available tropo models are to be extracted')
+        tropo_models = deepcopy(ARIA_TROPO_INTERNAL)
+    # If valid argument for tropo models passed, parse to list
+    if isinstance(tropo_models, str):
+        tropo_models = list(tropo_models.split(','))
+        tropo_models = [i.replace(' ','') for i in tropo_models]
+    model_names = list(set.intersection(*map(set, \
+                        [model_names, tropo_models])))
+    for i in tropo_models:
+        if i not in model_names:
+            log.warning(f'User-requested tropo model {i} will not be '
+                    'generated as it does not exist in any of the input '
+                    'products')
+
+    # If specified, extract all layers
+    if layers:
+        if layers.lower()=='all':
+            log.info('All layers are to be extracted, pass all keys.')
+            layers = deepcopy(all_valid_layers)
+            if set(raider_tropo_layers).issubset(all_valid_layers):
+                tropo_total = True
+        # If valid argument for input layers passed, parse to list
+        if isinstance(layers, str):
+            layers = list(layers.split(','))
+            layers = [i.replace(' ','') for i in layers]
+        if 'troposphereTotal' in layers and \
+             set(raider_tropo_layers).issubset(all_valid_layers):
+            tropo_total = True
+
+    # differentiate between extract and TS pipeline
+    # extract pipeline
+    if extract_or_ts == 'extract':
+        if not layers and not gacos_products:
+            log.info('No layers specified; only creating bounding box shapes')
+            return [], [], []
+        elif gacos_products:
+            log.info('Tropospheric corrections will be applied, making sure '
+                     'at least unwrappedPhase and incidenceAngle '
+                     'are extracted.')
+            # If no input layers specified, initialize list
+            if not layers:
+                layers = []
+            if 'incidenceAngle' not in layers:
+                layers.append('incidenceAngle')
+            if 'unwrappedPhase' not in layers:
+                layers.append('unwrappedPhase')
+        else:
+            layers = [i.replace(' ','') for i in layers]
+
+    # TS pipeline
+    ts_layers_dup = ['unwrappedPhase', 'coherence', 'incidenceAngle',
+                     'lookAngle', 'azimuthAngle', 'bPerpendicular']
+    ts_defaults = ['ionosphere', 'solidEarthTide']
+    if extract_or_ts == 'tssetup':
+        if layers:
+            # remove layers already generated in default TS workflow
+            layers = [i for i in layers if i not in ts_layers_dup]
+        else:
+            layers = []
+        # add additional layers for default workflow
+        ts_defaults = list(set.intersection(*map(set, \
+                        [ts_defaults, all_valid_layers])))
+        for i in ts_defaults:
+            if i not in layers:
+                layers.append(i)
+        # check if troposphere can be extracted downstream
+        tropo_total = True
+
+    # pass intersection of valid layers and track invalid requests
+    layer_reject = list(set.symmetric_difference(*map(set, \
+                        [all_valid_layers, layers])))
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, raider_tropo_layers])))
+    # only report layers which user requested
+    layer_reject = list(set.intersection(*map(set, \
+                        [layer_reject, layers])))
+    layers = list(set.intersection(*map(set, [layers, all_valid_layers])))
+    if layer_reject != []:
+        log.warning('User-requested layers %s cannot be extracted as they '
+                    'are not common to all products. Consider fixing input '
+                    '"-nc_version %s" constraint to filter older product '
+                    'variants \n', layer_reject, nc_version)
+
+    # if specified, determine if computation of
+    # total tropospheric is possible
+    if tropo_total:
+        if not set(raider_tropo_layers).issubset(all_valid_layers):
+            log.warning('User-requested computation of raider-derived total '
+                        'troposphere "-l %s" is not possible as tropo '
+                        'component layers are not common '
+                        'to all products.'%('troposphereTotal'))
+            tropo_total = False
+
+    return layers, tropo_total, model_names
+
+
+def get_basic_attrs(fname):
+    """ Access product dimensions and nodata values """
+
+    data_set = gdal.Open(fname, gdal.GA_ReadOnly)
+    width = data_set.RasterXSize
+    height = data_set.RasterYSize
+    no_data = data_set.GetRasterBand(1).GetNoDataValue()
+    geo_trans = data_set.GetGeoTransform()
+    proj = data_set.GetProjection()
+    data_set = None
+
+    return width, height, no_data, geo_trans, proj

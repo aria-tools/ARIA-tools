@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
 import re
@@ -17,12 +17,14 @@ from osgeo import gdal
 from ARIAtools.url_manager import url_versions
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 from ARIAtools.logger import logger
+from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 # gdal.SetConfigOption('CPL_VSIL_CURL_USE_HEAD', 'NO')
 
 log = logging.getLogger(__name__)
+
 
 # Unpacking class fuction of readproduct to become
 # global fucntion that can be called in parallel
@@ -36,7 +38,7 @@ def unwrap_self_readproduct(arg):
 
 
 def package_dict(scene, new_scene, scene_ind, \
-                 sorted_dict = None, dict_ind = None):
+                 sorted_dict=None, dict_ind=None):
     """
 
     Strip and prep keys and values for dictionary of sorted, spatiotemporally contiguous products
@@ -52,8 +54,11 @@ def package_dict(scene, new_scene, scene_ind, \
     dict_keys = scene[scene_ind].keys()
     # initialize new entry for new IFG and extend dict
     if not sorted_dict:
-        dict_vals = [list(a) for a in zip(scene[scene_ind].values(), \
-            new_scene[scene_ind].values())]
+        if scene != new_scene:
+            dict_vals = [list(a) for a in zip(scene[scene_ind].values(), \
+                new_scene[scene_ind].values())]
+        else:
+            dict_vals = [list(a) for a in zip(scene[scene_ind].values())]
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
         dict_vals = [[subitem for item in a \
@@ -65,7 +70,7 @@ def package_dict(scene, new_scene, scene_ind, \
     return new_dict
 
 
-#Input file(s) and bbox as either list or physical shape file.
+# Input file(s) and bbox as either list or physical shape file.
 class ARIA_standardproduct:
     """
     Load ARIA standard products
@@ -74,8 +79,9 @@ class ARIA_standardproduct:
     spatiotemporally contiguous interferograms.
     """
     import glob
+
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
-                 url_version='None', verbose=False):
+                 url_version='None', nc_version='None', verbose=False):
         """
 
         Parse products and input bounding box (if specified)
@@ -91,13 +97,15 @@ class ARIA_standardproduct:
         # Pair name for layer extraction
         self.pairname = None
         self.num_threads = int(num_threads)
+        # enforced netcdf version
+        self.nc_version = nc_version
 
-        ### Determine if file input is single file, a list, or wildcard
+        # Determine if file input is single file, a list, or wildcard
         # If list of files
-        if len([str(val) for val in filearg.split(',')])>1:
-            self.files=[str(i) for i in filearg.split(',')]
+        if len([str(val) for val in filearg.split(',')]) > 1:
+            self.files = [str(i) for i in filearg.split(',')]
             # If wildcard
-            self.files=[os.path.abspath(item) for sublist in \
+            self.files = [os.path.abspath(item) for sublist in \
                 [self.glob.glob(os.path.expanduser(os.path.expandvars(i))) \
                 if '*' in i else [i] for i in self.files] for item in sublist]
 
@@ -130,16 +138,16 @@ class ARIA_standardproduct:
                 log.warning('%s is not a supported NetCDF... skipping', f)
 
         # If URLs, append with '/vsicurl/'
-        self.files=[f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
+        self.files = [f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
         #check if virtual file reader is being captured as netcdf
         if any("https://" in i for i in self.files):
             # must configure gdal to load URLs
-            gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE','cookies.txt')
+            gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE', 'cookies.txt')
             gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', 'cookies.txt')
-            #gdal.SetConfigOption('CPL_VSIL_CURL_CHUNK_SIZE','10485760')
-            gdal.SetConfigOption('VSI_CACHE','YES')
+            # gdal.SetConfigOption('CPL_VSIL_CURL_CHUNK_SIZE','10485760')
+            gdal.SetConfigOption('VSI_CACHE', 'YES')
 
-            fmt=gdal.Open( \
+            fmt = gdal.Open( \
                 [s for s in self.files if 'https://' in s][0] \
                 ).GetDriver().GetDescription()
             if fmt != 'netCDF': raise Exception('System update required to '
@@ -210,6 +218,17 @@ class ARIA_standardproduct:
             version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
         except:
             log.warning('%s is not a supported file type... skipping', fname)
+            return []
+
+        # Enforce forward-compatibility of netcdf versions
+        if self.nc_version == '1a': nc_version_check = ['1a', '1b', '1c']
+        if self.nc_version == '1b': nc_version_check = ['1b', '1c']
+        if self.nc_version == '1c': nc_version_check = ['1c']
+
+        if version not in nc_version_check:
+            log.warning('input nc_version = %s, file %s rejected because '
+                        'it is a version %s product', \
+                        self.nc_version, fname, version)
             return []
 
         ### Get lists of radarmetadata/layer keys for this file version
@@ -368,11 +387,6 @@ class ARIA_standardproduct:
 
             # Radarmetadata names for these versions
             rdrmetadata_dict['pair_name'] = self.pairname
-            rdrmetadata_dict['azimuthZeroDopplerMidTime'] = basename[21:25] \
-                + '-'+basename[25:27] + '-' + basename[27:29] + 'T' \
-                + basename[39:41] + ':' + basename[41:43] + ':' \
-                + basename[43:45] + '.0'
-
             rdrmetadata_dict['azimuthZeroDopplerMidTime'] = self.pairname[:4] \
                 + '-' + self.pairname[4:6] + '-' + self.pairname[6:8] \
                 + 'T' + basename.split('-')[7][:2] + ':' \
@@ -420,8 +434,28 @@ class ARIA_standardproduct:
                 '/science/grids/imagingGeometry/azimuthAngle'
             ]
             if version.lower()=='1c':
-                sdskeys.append('/science/grids/corrections' \
-                               '/derived/ionosphere/ionosphere')
+                lyr_pref = '/science/grids/corrections'
+                sdskeys_addlyrs = [
+                    lyr_pref + '/derived/ionosphere/ionosphere',
+                    lyr_pref + '/external/tides/solidEarth'
+                        '/reference/solidEarthTide'
+                ]
+                # get weather model name(s)
+                meta = gdal.Info(fname)
+                model_name = []
+                for i in meta.split():
+                    if '/science/grids/corrections/external/troposphere/' in i:
+                        model_name.append(i.split('/')[-3])
+                model_name = list(set(model_name))
+                for i in model_name:
+                    sdskeys_addlyrs.append(lyr_pref +
+                        f'/external/troposphere/{i}/reference/troposphereWet')
+                    sdskeys_addlyrs.append(lyr_pref +
+                        f'/external/troposphere/{i}/reference/'
+                        'troposphereHydrostatic')
+                # remove keys not found in product
+                sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
+                sdskeys.extend(sdskeys_addlyrs)
 
         return rdrmetadata_dict, sdskeys
 
@@ -444,17 +478,30 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','amplitude','bPerpendicular',
         'bParallel','incidenceAngle','lookAngle','azimuthAngle']
         if version.lower()=='1c':
-            layerkeys.append('ionosphere')
+            # remove references to keys not found in product
+            addkeys = ['ionosphere', 'solidEarthTide']
+            keys_reject = [i for i in addkeys \
+                                    if i not in ''.join(sdskeys)]
+            addkeys = [i for i in addkeys if i not in keys_reject]
+
+            # check for tropo layers for each model
+            tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+            for i in ARIA_TROPO_INTERNAL:
+                if i in ''.join(sdskeys):
+                    addkeys.append(f'{tropo_lyrs[0]}_' + i)
+                    addkeys.append(f'{tropo_lyrs[1]}_' + i)
+            keys_reject.extend([i for i in tropo_lyrs \
+                                    if i not in ''.join(addkeys)])
+            for i in keys_reject:
+                log.warning(f'Expected data layer key {i} '
+                    f'not found in {fname}')
+
+            layerkeys.extend(addkeys)
 
         # Setup datalyr_dict
         datalyr_dict={}
         for i in enumerate(layerkeys):
-            #If layer expected
-            try:
-                datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
-            #If new, unaccounted layer not expected in layerkeys
-            except:
-                log.warning("Data layer key %s not expected in sdskeys", i[1])
+            datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
         datalyr_dict['pair_name']=self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
@@ -551,13 +598,17 @@ class ARIA_standardproduct:
         for i in enumerate(self.products[:-1]):
             scene = i[1]
             new_scene = self.products[i[0]+1]
+            scene_t_ref = datetime.strptime(scene[0]['pair_name'][:8],
+                "%Y%m%d")
+            new_scene_t_ref = datetime.strptime(new_scene[0]['pair_name'][:8],
+                "%Y%m%d")
             scene_t = datetime.strptime(scene[0]['pair_name'][9:],
+                "%Y%m%d")
+            new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
                 "%Y%m%d")
             scene_area = open_shapefile( \
                                        scene[1]['productBoundingBox'],  \
                                        'productBoundingBox', 1)
-            new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
-                "%Y%m%d")
             new_scene_area = open_shapefile( \
                                                new_scene[1]['productBoundingBox'], \
                                                'productBoundingBox', 1)
@@ -565,7 +616,8 @@ class ARIA_standardproduct:
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
             if scene_area.intersection(new_scene_area).area > 0. and \
-                 abs(new_scene_t-scene_t) <= timedelta(days=1):
+                 abs(new_scene_t-scene_t) <= timedelta(days=1) and \
+                 abs(new_scene_t_ref-scene_t_ref) <= timedelta(days=1):
                 # Do not export prod if already tracked as a rejected pair
                 if scene[0]['pair_name'] in track_rejected_pairs or \
                      new_scene[0]['pair_name'] in track_rejected_pairs:
@@ -596,7 +648,8 @@ class ARIA_standardproduct:
             # but do not intersect this means there is a gap
             # Reject date from prod list, and keep track of all failed dates
             elif scene_area.intersection(new_scene_area).area == 0. and \
-                 abs(new_scene_t-scene_t) <= timedelta(days=1):
+                 abs(new_scene_t-scene_t) <= timedelta(days=1) and \
+                 abs(new_scene_t_ref-scene_t_ref) <= timedelta(days=1):
                 track_rejected_pairs.extend((scene[0]['pair_name'], \
                     new_scene[0]['pair_name']))
                 log.debug("Gap for interferogram %s \n", scene[0]['pair_name'])
@@ -637,10 +690,10 @@ class ARIA_standardproduct:
             log.debug('Specifically, gaps were found between the '
                         'following interferograms:')
             record_rejected_scenes = []
-            for item in sorted_products:
-                if item[1]['pair_name'][0] in track_rejected_pairs:
-                    record_rejected_scenes.extend([rejects.split('"')[1] \
-                         for rejects in item[1]['productBoundingBox']])
+            for item in self.products:
+                if item[0]['pair_name'] in track_rejected_pairs:
+                    record_rejected_scenes.append( \
+                         item[1]['productBoundingBox'].split('"')[1])
             record_rejected_scenes = list(set(record_rejected_scenes))
             record_rejected_scenes = [os.path.basename(i) \
                  for i in record_rejected_scenes]
@@ -693,6 +746,7 @@ class ARIA_standardproduct:
             self.products += self.__readproduct__(self.files[0])
 
         # Sort by pair and start time.
+        self.products = [i for i in self.products if i != []]
         self.products = sorted(self.products, key=lambda k:
                     (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
         self.products = list(self.products)
@@ -708,8 +762,7 @@ class ARIA_standardproduct:
             raise Exception('No valid pairs meet spatial criteria, nothing '
                 'to export.')
         if len(self.products)!=len(self.files):
-            log.warning('%d out of %d GUNW products rejected for not meeting '
-                'users bbox spatial criteria', \
+            log.warning('%d out of %d GUNW products rejected', \
                 len(self.files)-len(self.products), len(self.files))
             # Provide report of which files were kept vs. which weren't
             log.debug('Specifically, the following GUNW products '
@@ -722,7 +775,7 @@ class ARIA_standardproduct:
                 len(self.files))
 
         ### Split products in spatiotemporally continuous groups
-        log.info('Group GUNW products into spatiotemporally  '
+        log.info('Group GUNW products into spatiotemporally '
                 'continuous interferograms.')
         self.products = self.__continuous_time__()
 
