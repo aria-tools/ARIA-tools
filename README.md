@@ -1,11 +1,11 @@
 # ARIA-tools
 
 [![Language](https://img.shields.io/badge/python-3.5%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-GPL-yellow.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/595831e8aa014ece8cb9b81f76087db0)](https://www.codacy.com/app/bekaertdavid/ARIA-tools?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=aria-tools/ARIA-tools&amp;utm_campaign=Badge_Grade)
 [![CircleCI](https://circleci.com/gh/aria-tools/ARIA-tools.svg?style=svg)](https://circleci.com/gh/aria-tools/ARIA-tools)
 
-ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the GNU General Public License. Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.
+ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the [Apache 2.0 License](LICENSE). Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.
 
 For a full overview of available ARIA standard products and their specification, see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be downloaded for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series. 

@@ -2,7 +2,7 @@
 """Extract unwrapped interferogram, coherence, ⊥ baseline, and LOS file(s).
 This script is intended to extract required information and files to carry-out
 time series analysis on ARIA products.
-Copyright 2019, by the California Institute of Technology.
+Copyright (c) 2023, by the California Institute of Technology.
 ALL RIGHTS RESERVED. United States Government Sponsorship acknowledged.
 Author(s): Simran Sangha, David Bekaert, & Emre Havazli
 """
