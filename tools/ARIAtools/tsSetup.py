@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author(s): Simran Sangha, David Bekaert, & Emre Havazli
-# Copyright 2019, by the California Institute of Technology. ALL RIGHTS
+# Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 Extract minimum required information and files to carry-out time series analysis.
 Specifically, extract unwrapped interferogram, coherence, perp baseline,
@@ -28,14 +28,13 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import resampleRaster, layerCheck, get_basic_attrs
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, \
-                                      export_products, gacos_correction
+    export_products, gacos_correction
 
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
-
 
 # Import TS-related global variables
 from ARIAtools.ARIA_global_variables import ARIA_EXTERNAL_CORRECTIONS, \
@@ -45,102 +44,102 @@ from ARIAtools.ARIA_global_variables import ARIA_EXTERNAL_CORRECTIONS, \
 def create_parser():
     """Parser to read command line arguments."""
     parser = argparse.ArgumentParser(description='Prepare ARIA products for '
-                                     'time series processing.')
+                                                 'time series processing.')
     parser.add_argument('-f', '--file', dest='imgfile', type=str,
                         required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./',
                         help='Specify directory to deposit all outputs. '
-                        'Default is local directory where script is launched.')
+                             'Default is local directory where script is launched.')
     parser.add_argument('-gp', '--gacos_products', dest='gacos_products',
                         type=str, default=None, help='Path to director(ies) '
-                        'or tar file(s) containing GACOS products.')
+                                                     'or tar file(s) containing GACOS products.')
     parser.add_argument('-l', '--layers', dest='layers', default=None,
                         help='Specify layers to extract as a comma '
-                        'deliminated list bounded by single quotes. '
-                        'Allowed keys are: "unwrappedPhase", "coherence", '
-                        '"amplitude", "bPerpendicular", "bParallel", '
-                        '"incidenceAngle", "lookAngle", "azimuthAngle", '
-                        '"ionosphere", "troposphereWet", '
-                        '"troposphereHydrostatic", "troposphereTotal", '
-                        '"solidEarthTide". '
-                        'If "all" specified, then all layers are extracted. '
-                        'If blank, will only extract bounding box.')
+                             'deliminated list bounded by single quotes. '
+                             'Allowed keys are: "unwrappedPhase", "coherence", '
+                             '"amplitude", "bPerpendicular", "bParallel", '
+                             '"incidenceAngle", "lookAngle", "azimuthAngle", '
+                             '"ionosphere", "troposphereWet", '
+                             '"troposphereHydrostatic", "troposphereTotal", '
+                             '"solidEarthTide". '
+                             'If "all" specified, then all layers are extracted. '
+                             'If blank, will only extract bounding box.')
     parser.add_argument('-tm', '--tropo_models', dest='tropo_models',
                         type=str, default='all', help='Provide list of '
-                        'weather models you wish to extract. Refer to '
-                        'ARIA_TROPO_INTERNAL for list of supported models')
+                                                      'weather models you wish to extract. Refer to '
+                                                      'ARIA_TROPO_INTERNAL for list of supported models')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '
-                        'download new DEM.')
+                                                 'download new DEM.')
     parser.add_argument('-p', '--projection', dest='projection',
                         default='WGS84', type=str, help='projection for DEM. '
-                        'By default WGS84.')
+                                                        'By default WGS84.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None,
                         help='Provide either valid shapefile or Lat/Lon '
-                        'Bounding SNWE. -- Example : "19 20 -99.5 -98.5"')
+                             'Bounding SNWE. -- Example : "19 20 -99.5 -98.5"')
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None,
                         help='Path to mask file or "Download". '
-                        'File needs to be GDAL compatabile, contain spatial '
-                        'reference information, and have invalid/valid data '
-                        'represented by 0/1, respectively. '
-                        'If "Download", will use GSHHS water mask. '
-                        'If "NLCD", will mask classes 11, 12, 90, 95; see: '
-                        'www.mrlc.gov/national-land-cover-database-nlcd-2016')
+                             'File needs to be GDAL compatabile, contain spatial '
+                             'reference information, and have invalid/valid data '
+                             'represented by 0/1, respectively. '
+                             'If "Download", will use GSHHS water mask. '
+                             'If "NLCD", will mask classes 11, 12, 90, 95; see: '
+                             'www.mrlc.gov/national-land-cover-database-nlcd-2016')
     parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None,
                         type=str, help='Amplitudes below this threshold '
-                        'will be masked. Specify "None" to omit '
-                        'amplitude mask. default: "None".')
+                                       'will be masked. Specify "None" to omit '
+                                       'amplitude mask. default: "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads',
                         default='2', type=str, help='Specify number of '
-                        'threads for multiprocessing operation in gdal. '
-                        'By default "2". Can also specify "All" to use all '
-                        'available threads.')
+                                                    'threads for multiprocessing operation in gdal. '
+                                                    'By default "2". Can also specify "All" to use all '
+                                                    'available threads.')
     parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
                         type=str, default='overlap', help='Method applied to '
-                        'stitch the unwrapped data. Allowed methods are: '
-                        '"overlap", "2stage", and "sequential". "overlap" - '
-                        'product overlap is minimized, "2stage" - '
-                        'minimization is done on connected components, '
-                        '"sequential" - sequential minimization of all '
-                        'overlapping connected components. '
-                        'Default is "overlap".')
+                                                          'stitch the unwrapped data. Allowed methods are: '
+                                                          '"overlap", "2stage", and "sequential". "overlap" - '
+                                                          'product overlap is minimized, "2stage" - '
+                                                          'minimization is done on connected components, '
+                                                          '"sequential" - sequential minimization of all '
+                                                          'overlapping connected components. '
+                                                          'Default is "overlap".')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str,
                         default='VRT', help='GDAL compatible output format '
-                        '(e.g., "ENVI", "GTiff"). By default files are '
-                        'generated virtually except for "bPerpendicular", '
-                        '"bParallel", "incidenceAngle", "lookAngle", '
-                        '"azimuthAngle", "unwrappedPhase" as these require '
-                        'either DEM intersection or corrections '
-                        'to be applied')
+                                            '(e.g., "ENVI", "GTiff"). By default files are '
+                                            'generated virtually except for "bPerpendicular", '
+                                            '"bParallel", "incidenceAngle", "lookAngle", '
+                                            '"azimuthAngle", "unwrappedPhase" as these require '
+                                            'either DEM intersection or corrections '
+                                            'to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true',
                         dest='croptounion', help='If turned on, IFGs cropped '
-                        'to bounds based off of union and bbox '
-                        '(if specified). Program defaults to crop all IFGs '
-                        'to bounds based off of common intersection and '
-                        'bbox (if specified).')
+                                                 'to bounds based off of union and bbox '
+                                                 '(if specified). Program defaults to crop all IFGs '
+                                                 'to bounds based off of common intersection and '
+                                                 'bbox (if specified).')
     parser.add_argument('-ml', '--multilooking', dest='multilooking', type=int,
                         default=None, help='Multilooking factor is an integer '
-                        'multiple of standard resolution. '
-                        'E.g. 2 = 90m*2 = 180m')
+                                           'multiple of standard resolution. '
+                                           'E.g. 2 = 90m*2 = 180m')
     parser.add_argument('-rr', '--rankedResampling', action='store_true',
                         dest='rankedResampling', help='If turned on, IFGs '
-                        'resampled based off of the average of pixels in a '
-                        'given resampling window corresponding to the '
-                        'connected component mode (if multilooking specified).'
-                        ' Program defaults to lanczos resampling algorithm'
-                        ' through gdal (if multilooking specified).')
+                                                      'resampled based off of the average of pixels in a '
+                                                      'given resampling window corresponding to the '
+                                                      'connected component mode (if multilooking specified).'
+                                                      ' Program defaults to lanczos resampling algorithm'
+                                                      ' through gdal (if multilooking specified).')
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap',
                         type=float, default=0.0081, help='Minimum km\u00b2 '
-                        'area of overlap of scenes wrt specified bounding box.'
-                        ' Default 0.0081 = 0.0081km\u00b2 = area of single'
-                        ' pixel at standard 90m resolution')
-    parser.add_argument('--version', dest='version',  default=None,
+                                                         'area of overlap of scenes wrt specified bounding box.'
+                                                         ' Default 0.0081 = 0.0081km\u00b2 = area of single'
+                                                         ' pixel at standard 90m resolution')
+    parser.add_argument('--version', dest='version', default=None,
                         help='Specify version as str, e.g. 2_0_4 or all prods; '
-                        'default: all')
-    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
+                             'default: all')
+    parser.add_argument('--nc_version', dest='nc_version', default='1b',
                         help='Specify netcdf version as str, '
-                        'e.g. 1c or all prods;'
-                        'default: 1b')
+                             'e.g. 1c or all prods;'
+                             'default: 1b')
     parser.add_argument('-verbose', '--verbose', action='store_true',
                         dest='verbose', help="Toggle verbose mode on.")
 
@@ -192,8 +191,8 @@ def extract_utc_time(aria_dates, aztime_list):
         pair_name = aria_dates[i]
 
         # Only iterate on utc_calculation if values in list are different
-        if ([aztime_list[0]]*len(aztime_list) != aztime_list) or \
-                 utc_time is None:
+        if ([aztime_list[0]] * len(aztime_list) != aztime_list) or \
+                utc_time is None:
             # Grab mid-times, append to a list and find minimum and
             # maximum mid-times
             mid_time_list = aztime_list[i]
@@ -205,8 +204,8 @@ def extract_utc_time(aria_dates, aztime_list):
 
             # Calculate time difference between minimum start and maximum end time,
             # and add it to mean start time.
-            time_delta = (max_mid_time - min_mid_time)/2
-            utc_time = (min_mid_time+time_delta).time()
+            time_delta = (max_mid_time - min_mid_time) / 2
+            utc_time = (min_mid_time + time_delta).time()
 
         # Write calculated UTC time into a dictionary
         # with associated pair names as keys
@@ -248,7 +247,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # handle individual epochs if external correction layer
     if domain_name in ARIA_EXTERNAL_CORRECTIONS or \
-         domain_name in ARIA_TROPO_MODELS:
+            domain_name in ARIA_TROPO_MODELS:
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # Find files
@@ -265,7 +264,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     b_perp = []
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
     if domain_name not in ARIA_EXTERNAL_CORRECTIONS and \
-         domain_name not in ARIA_TROPO_MODELS:
+            domain_name not in ARIA_TROPO_MODELS:
         # get az times for each date
         aztime_list = []
         for i in aria_prod.products[0]:
@@ -289,7 +288,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     else:
         # get az times for each date
         aztime_list = len(aria_dates) * \
-                  [aria_prod.products[0][0]['azimuthZeroDopplerMidTime']]
+                      [aria_prod.products[0][0]['azimuthZeroDopplerMidTime']]
 
     # get UTC times
     utc_time = extract_utc_time(aria_dates, aztime_list)
@@ -310,7 +309,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
 
-    with open(os.path.join(stack_dir, output_file_name+'.vrt'), 'w') as fid:
+    with open(os.path.join(stack_dir, output_file_name + '.vrt'), 'w') as fid:
         fid.write('''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
         <SRS>{proj}</SRS>
         <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n
@@ -328,7 +327,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             try:
                 acq = utc_time[dates]
             except:
-                log.debug('Skipping %s; it likely exists in the %s, '\
+                log.debug('Skipping %s; it likely exists in the %s, ' \
                           'but was not specified in the product list',
                           dates, os.path.dirname(data[1]))
                 continue
@@ -416,7 +415,7 @@ def main(inps=None):
      proj) = merged_productbbox(standardproduct_info.products[0],
                                 standardproduct_info.products[1],
                                 os.path.join(inps.workdir,
-                                'productBoundingBox'),
+                                             'productBoundingBox'),
                                 standardproduct_info.bbox_file,
                                 inps.croptounion,
                                 num_threads=inps.num_threads,
@@ -453,7 +452,7 @@ def main(inps=None):
     # Extract
     # aria_extract default parms
     export_dict = {
-        'bbox_file': standardproduct_info.bbox_file, 
+        'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_tot_bbox,
         'dem': demfile,
         'lat': Latitude,
@@ -504,11 +503,11 @@ def main(inps=None):
     # Extracting other layers, if specified
     layers, inps.tropo_total, \
         model_names = layerCheck(standardproduct_info.products[1],
-                                      inps.layers,
-                                      inps.nc_version,
-                                      inps.gacos_products,
-                                      inps.tropo_models,
-                                      extract_or_ts = 'tssetup')
+                                 inps.layers,
+                                 inps.nc_version,
+                                 inps.gacos_products,
+                                 inps.tropo_models,
+                                 extract_or_ts='tssetup')
     if layers != [] or inps.tropo_total is True:
         if layers != []:
             print('\nExtracting optional, user-specified layers %s for each '
@@ -517,10 +516,10 @@ def main(inps=None):
             print('\nExtracting, %s for each applicable '
                   'interferogram pair' % ('troposphereTotal'))
         export_products(standardproduct_info.products[1],
-                    tropo_total=inps.tropo_total,
-                    model_names=model_names,
-                    layers=layers,
-                    **export_dict)
+                        tropo_total=inps.tropo_total,
+                        model_names=model_names,
+                        layers=layers,
+                        **export_dict)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # metadata layers and mask output layers, respectively
@@ -559,8 +558,8 @@ def main(inps=None):
         lyr_dir = os.path.join(inps.workdir, i)
         if not os.path.exists(lyr_dir):
             log.warning(f'Stack for default ARIA TS layer {i} cannot be '
-                    'generated as it does not exist in any of the input '
-                    'products')
+                        'generated as it does not exist in any of the input '
+                        'products')
             if i in layers:
                 remove_lyrs.append(i)
     layers = [i for i in layers if i not in remove_lyrs]
@@ -569,7 +568,7 @@ def main(inps=None):
             layers.remove('troposphereTotal')
     if inps.gacos_products:
         layers += ['gacos_corrections']
-    
+
     # generate other stack layers
     # generate stack default parms
     stack_dict = {
@@ -582,7 +581,7 @@ def main(inps=None):
             # iterate through model dirs if necessary
             if 'tropo' in layer:
                 model_dirs = glob.glob(inps.workdir + f'/{layer}/*',
-                                       recursive = True)
+                                       recursive=True)
                 model_dirs = [os.path.basename(i) for i in model_dirs]
                 for sublyr in model_dirs:
                     generate_stack(standardproduct_info,
