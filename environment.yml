@@ -23,7 +23,7 @@ dependencies:
   - pip
   - pyproj
   - requests
-  - scipy<1.10
+  - scipy>1.10.0
   - mintpy
   - shapely
   #for ARIA-tools-docs
