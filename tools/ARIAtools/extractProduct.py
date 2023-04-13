@@ -571,7 +571,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
     arrres = [abs(arrres.GetGeoTransform()[1]), abs(arrres.GetGeoTransform()[-1])]
     ds = gdal.Warp('', gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]), options=gdal.WarpOptions(format="MEM", \
-        outputBounds = OG_bounds, xRes = arrres[0], yRes = arrres[1], targetAlignedPixels = True, multithread = True, \
+        outputBounds = OG_bounds, xRes = arrres[0], yRes = arrres[1], targetAlignedPixels = True, \
         options = ['NUM_THREADS = %s'%(num_threads)]))
     # Get shape of full res layers
     arrshape=[ds.RasterYSize, ds.RasterXSize]
@@ -1069,11 +1069,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', i[1])
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, options=['NUM_THREADS=%s'%(num_threads)]))
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname +'.vrt', i[1])
-                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname, outname+'.vrt', options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, options=['NUM_THREADS=%s'%(num_threads)]))
 
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, options=gdal.TranslateOptions(format="VRT"))
@@ -1201,7 +1201,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     tmp_name = outname+'.vrt'
     data_array = gdal.Warp('', tmp_name,
                      options=gdal.WarpOptions(format="MEM",
-                         multithread=True,
                          options=['NUM_THREADS=%s'%(num_threads)]))
 
     # get minimum version
@@ -1289,7 +1288,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                   dstNodata=data_array.GetRasterBand(1).GetNoDataValue(),
                   width=arrshape[1],
                   height=arrshape[0],
-                  multithread=True,
                   options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
     #remove temp files
     for i in glob.glob(outname+'_temp*'): os.remove(i)
