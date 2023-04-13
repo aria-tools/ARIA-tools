@@ -411,6 +411,10 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                      multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
         ds_aria.SetProjection(proj); ds_aria.SetDescription(aria_dem)
 
+    # Delete temporary dem-stitcher directory
+    if os.path.exists(f'{dem_name}_tiles'):
+        shutil.rmtree(f'{dem_name}_tiles')
+
     # Define lat/lon arrays for fullres layers
     gt, xs, ys  = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
     Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*ys), ys)
