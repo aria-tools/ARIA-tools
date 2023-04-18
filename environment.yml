@@ -29,6 +29,6 @@ dependencies:
   #for ARIA-tools-docs
   - jupyterlab
   - jupyter_contrib_nbextensions
+  - dem_stitcher>=2.5.0
   - pip:
-    - git+https://github.com/ACCESS-Cloud-Based-InSAR/dem-stitcher.git@merge_raw_tiles # TODO: change this to >= 2.4.1
     - rise
