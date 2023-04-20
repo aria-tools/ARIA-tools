@@ -10,9 +10,11 @@
 import os
 import os.path as op
 import glob
-import numpy as np
 import logging
 import shutil
+
+import numpy as np
+import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, gdalconst
 
 from ARIAtools.shapefile_util import open_shapefile
@@ -93,7 +95,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     ## Use NLCD Mask
     elif os.path.basename(maskfilename).lower().startswith('nlcd'):
         log.info("***Accessing and cropping the NLCD mask...***")
-        maskfilename = NLCDMasker(os.path.dirname(workdir))(
+        maskfilename = NLCDMasker(os.path.dirname(workdir), product_dict)(
                                   proj, bounds, arrshape, outputFormat)
 
     ## User specified mask
@@ -229,7 +231,6 @@ def crop_ds(path_raster, path_poly, path_write=''):
 
 def arr2ds(ds_orig, arr, noData=0):
     """Create a new dataset identical to ds_orig except with values of 'arr'
-
     Performed in memory
     """
     ds_orig = gdal.Open(ds_orig, gdal.GA_ReadOnly) if isinstance(ds_orig, str) else ds_orig
@@ -255,19 +256,17 @@ def arr2ds(ds_orig, arr, noData=0):
 
 
 class NLCDMasker(object):
-    def __init__(self, path_aria, lc=[11, 12, 90, 95]):
+    def __init__(self, path_aria, product_dict, lc=None):
         self.path_aria = path_aria
+        self.product_dict = product_dict
         self.path_bbox = op.join(self.path_aria, 'productBoundingBox',
                                                     'productBoundingBox.json')
-        self.path_dem  = op.join(self.path_aria, 'DEM', 'SRTM_3arcsec.dem')
-        self.lc        = lc # landcover classes to mask
+        self.lc        = lc or [11, 12, 90, 95] # landcover classes to mask
         gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 
     def __call__(self, proj, bounds, arrshape, outputFormat='ENVI', test=False):
         """ view=True to plot the mask; test=True to apply mask to dummy data """
-        import matplotlib.pyplot as plt
-
         # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
         if outputFormat=='VRT':
             outputFormat='ENVI'
@@ -302,8 +301,17 @@ class NLCDMasker(object):
         plt.title(f'Resampled mask\nDims: {arr.shape}')
         plt.savefig(f'{op.splitext(dst)[0]}.png')
 
-        if test: self.__test__(ds_mask)
+        if test:
+            # create temporary reference file to access geolocation info
+            self.path_temp = gdal.Warp('', self.product_dict[0][1],
+                                       width=arrshape[1], height=arrshape[0],
+                                       options=gdal.WarpOptions(format="MEM",
+                                           outputBounds=bounds))
+            self.__test__(ds_mask)
+            self.path_temp = None
+
         ds.FlushCache()
+
         del ds, ds1, ds_crop, ds_resamp, ds_mask
 
         return dst
@@ -311,8 +319,7 @@ class NLCDMasker(object):
 
     def __test__(self, ds_maskre):
         ## apply mask to dummy data FOR TESTING
-        import matplotlib.pyplot as plt
-        ds_dummy  = self._dummy_data(self.path_dem)
+        ds_dummy  = self._dummy_data(self.path_temp)
         ds_masked = self._apply_mask(ds_maskre, ds_dummy)
 
         arr = ds_masked.ReadAsArray()
