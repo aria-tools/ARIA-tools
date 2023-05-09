@@ -70,7 +70,7 @@ def createParser():
                         'If "all" specified, then all layers are extracted. '
                         'If blank, will only extract bounding box.')
     parser.add_argument('-tm', '--tropo_models', dest='tropo_models',
-                        type=str, default='all', help='Provide list of '
+                        type=str, default=None, help='Provide list of '
                         'weather models you wish to extract. Refer to '
                         'ARIA_TROPO_MODELS for list of supported models')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -1141,10 +1141,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
                         resampleRaster(outFilePhs, multilooking, bounds,
-                                       prods_TOTbbox, rankedResampling,
-                                       outputFormat=outputFormat,
-                                       num_threads=num_threads)
-                        resampleRaster(outFileConnComp, multilooking, bounds,
                                        prods_TOTbbox, rankedResampling,
                                        outputFormat=outputFormat,
                                        num_threads=num_threads)

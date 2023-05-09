@@ -65,7 +65,7 @@ def create_parser():
                              'If "all" specified, then all layers are extracted. '
                              'If blank, will only extract bounding box.')
     parser.add_argument('-tm', '--tropo_models', dest='tropo_models',
-                        type=str, default='all', help='Provide list of '
+                        type=str, default=None, help='Provide list of '
                                                       'weather models you wish to extract. Refer to '
                                                       'ARIA_TROPO_INTERNAL for list of supported models')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
@@ -557,9 +557,6 @@ def main(inps=None):
     for i in layers:
         lyr_dir = os.path.join(inps.workdir, i)
         if not os.path.exists(lyr_dir):
-            log.warning(f'Stack for default ARIA TS layer {i} cannot be '
-                        'generated as it does not exist in any of the input '
-                        'products')
             if i in layers:
                 remove_lyrs.append(i)
     layers = [i for i in layers if i not in remove_lyrs]

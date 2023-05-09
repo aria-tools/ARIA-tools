@@ -310,20 +310,23 @@ def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
     raider_tropo_layers = ['troposphereWet', 'troposphereHydrostatic']
     tropo_total = False
 
-    if tropo_models.lower()=='all':
-        log.info('All available tropo models are to be extracted')
-        tropo_models = deepcopy(ARIA_TROPO_INTERNAL)
     # If valid argument for tropo models passed, parse to list
     if isinstance(tropo_models, str):
-        tropo_models = list(tropo_models.split(','))
-        tropo_models = [i.replace(' ','') for i in tropo_models]
-    model_names = list(set.intersection(*map(set, \
+        if tropo_models.lower()=='all':
+            log.info('All available tropo models are to be extracted')
+            tropo_models = deepcopy(ARIA_TROPO_INTERNAL)
+        else:
+            tropo_models = list(tropo_models.split(','))
+            tropo_models = [i.replace(' ','') for i in tropo_models]
+        model_names = list(set.intersection(*map(set, \
                         [model_names, tropo_models])))
-    for i in tropo_models:
-        if i not in model_names:
-            log.warning(f'User-requested tropo model {i} will not be '
+        for i in tropo_models:
+            if i not in model_names:
+                log.warning(f'User-requested tropo model {i} will not be '
                     'generated as it does not exist in any of the input '
                     'products')
+    else:
+        model_names = []
 
     # If specified, extract all layers
     if layers:
@@ -373,11 +376,11 @@ def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
         # add additional layers for default workflow
         ts_defaults = list(set.intersection(*map(set, \
                         [ts_defaults, all_valid_layers])))
-        for i in ts_defaults:
-            if i not in layers:
-                layers.append(i)
-        # check if troposphere can be extracted downstream
-        tropo_total = True
+        if ts_defaults != []:
+            tropo_total = True
+            for i in ts_defaults:
+                if i not in layers:
+                    layers.append(i)
 
     # pass intersection of valid layers and track invalid requests
     layer_reject = list(set.symmetric_difference(*map(set, \
@@ -389,19 +392,24 @@ def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
                         [layer_reject, layers])))
     layers = list(set.intersection(*map(set, [layers, all_valid_layers])))
     if layer_reject != []:
-        log.warning('User-requested layers %s cannot be extracted as they '
-                    'are not common to all products. Consider fixing input '
-                    '"-nc_version %s" constraint to filter older product '
-                    'variants \n', layer_reject, nc_version)
+        log.warning(f'User-requested layers {layer_reject} cannot be '
+                    'extracted as they are not common to all products. '
+                    f'Consider fixing input "-nc_version {nc_version}" '
+                    'constraint to filter older product variants \n')
 
     # if specified, determine if computation of
     # total tropospheric is possible
     if tropo_total:
         if not set(raider_tropo_layers).issubset(all_valid_layers):
             log.warning('User-requested computation of raider-derived total '
-                        'troposphere "-l %s" is not possible as tropo '
-                        'component layers are not common '
-                        'to all products.'%('troposphereTotal'))
+                        'troposphere "-l troposphereTotal" is not possible '
+                        'as tropo component layers are not common '
+                        'to all products.')
+            tropo_total = False
+        if model_names == []:
+            log.warning('Extraction of raider-derived troposphere '
+                        'layers is not possible as specified tropo model '
+                        f'name(s) "-tm {tropo_models}" is not valid.')
             tropo_total = False
 
     return layers, tropo_total, model_names
