@@ -26,7 +26,8 @@ from ARIAtools import progBar
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import resampleRaster, layerCheck, get_basic_attrs
+from ARIAtools.vrtmanager import resampleRaster, layerCheck, \
+    get_basic_attrs, ancillaryLooks
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, \
     export_products, gacos_correction
 
@@ -410,8 +411,8 @@ def main(inps=None):
     # report common track bbox (default is to take common intersection,
     # but user may specify union), and expected shape for DEM.
     (standardproduct_info.products[0], standardproduct_info.products[1],
-     standardproduct_info.bbox_file, prods_tot_bbox,
-     prods_tot_bbox_metadatalyr, arrshape,
+     standardproduct_info.bbox_file, prods_TOTbbox,
+     prods_TOTbbox_metadatalyr, arrshape,
      proj) = merged_productbbox(standardproduct_info.products[0],
                                 standardproduct_info.products[1],
                                 os.path.join(inps.workdir,
@@ -429,7 +430,7 @@ def main(inps=None):
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         inps.demfile, demfile, Latitude, Longitude = prep_dem(
             inps.demfile, standardproduct_info.bbox_file,
-            prods_tot_bbox, prods_tot_bbox_metadatalyr, proj,
+            prods_TOTbbox, prods_TOTbbox_metadatalyr, proj,
             arrshape=arrshape, workdir=inps.workdir,
             outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
@@ -443,7 +444,7 @@ def main(inps=None):
                     amplitude_products.append(item)
         inps.mask = prep_mask(amplitude_products, inps.mask,
                               standardproduct_info.bbox_file,
-                              prods_tot_bbox, proj, amp_thresh=inps.amp_thresh,
+                              prods_TOTbbox, proj, amp_thresh=inps.amp_thresh,
                               arrshape=arrshape,
                               workdir=inps.workdir,
                               outputFormat=inps.outputFormat,
@@ -453,7 +454,7 @@ def main(inps=None):
     # aria_extract default parms
     export_dict = {
         'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_tot_bbox,
+        'prods_TOTbbox': prods_TOTbbox,
         'dem': demfile,
         'lat': Latitude,
         'lon': Longitude,
@@ -470,11 +471,11 @@ def main(inps=None):
     layers = ['unwrappedPhase', 'coherence']
     print('\nExtracting unwrapped phase, coherence, '
           'and connected components for each interferogram pair')
-    export_products(standardproduct_info.products[1],
-                    tropo_total=False,
-                    layers=layers,
-                    rankedResampling=inps.rankedResampling,
-                    **export_dict)
+    arrshape = export_products(standardproduct_info.products[1],
+                               tropo_total=False,
+                               layers=layers,
+                               rankedResampling=inps.rankedResampling,
+                               **export_dict)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = defaultdict(list)
@@ -487,18 +488,18 @@ def main(inps=None):
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
           'files valid over common interferometric grid')
-    export_products([extract_dict],
-                    tropo_total=False,
-                    layers=layers,
-                    **export_dict)
+    _ = export_products([extract_dict],
+                        tropo_total=False,
+                        layers=layers,
+                        **export_dict)
 
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
-    export_products(standardproduct_info.products[1],
-                    tropo_total=False,
-                    layers=layers,
-                    **export_dict)
+    _ = export_products(standardproduct_info.products[1],
+                        tropo_total=False,
+                        layers=layers,
+                        **export_dict)
 
     # Extracting other layers, if specified
     layers, inps.tropo_total, \
@@ -515,34 +516,31 @@ def main(inps=None):
         if inps.tropo_total is True:
             print('\nExtracting, %s for each applicable '
                   'interferogram pair' % ('troposphereTotal'))
-        export_products(standardproduct_info.products[1],
-                        tropo_total=inps.tropo_total,
-                        model_names=model_names,
-                        layers=layers,
-                        **export_dict)
+        _ = export_products(standardproduct_info.products[1],
+                            tropo_total=inps.tropo_total,
+                            model_names=model_names,
+                            layers=layers,
+                            **export_dict)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
-    # metadata layers and mask output layers, respectively
-    if inps.multilooking is not None:
-        # Import functions
-        bounds = open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
-        # Resample mask
-        if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking,
-                           bounds, prods_tot_bbox, inps.rankedResampling,
-                           outputFormat=inps.outputFormat,
-                           num_threads=inps.num_threads)
-        # Resample DEM
-        if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking,
-                           bounds, prods_tot_bbox, inps.rankedResampling,
-                           outputFormat=inps.outputFormat,
-                           num_threads=inps.num_threads)
+    # If necessary, resample DEM/mask AFTER they have been used to extract
+    ancillary_dict = {
+        'mask': inps.mask,
+        'dem': demfile,
+        'arrshape': arrshape,
+        'standardproduct_info': standardproduct_info,
+        'multilooking': inps.multilooking,
+        'prods_TOTbbox': prods_TOTbbox,
+        'rankedResampling': inps.rankedResampling,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads
+    }
+    ancillaryLooks(**ancillary_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.gacos_products:
         gacos_correction(standardproduct_info.products, inps.gacos_products,
-                         standardproduct_info.bbox_file, prods_tot_bbox,
+                         standardproduct_info.bbox_file, prods_TOTbbox,
                          outDir=inps.workdir, outputFormat=inps.outputFormat,
                          verbose=inps.verbose, num_threads=inps.num_threads)
 

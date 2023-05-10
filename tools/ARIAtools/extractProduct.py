@@ -26,11 +26,11 @@ from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, chunk_area
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, \
-                                      product_stitch_2stage
+    product_stitch_2stage
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
-                                 get_basic_attrs
+    get_basic_attrs, ancillaryLooks
 from ARIAtools.sequential_stitching import product_stitch_sequential, \
-                                           product_stitch_sequential_metadata
+    product_stitch_sequential_metadata
 import pyproj
 from pyproj import CRS, Transformer
 from rioxarray import open_rasterio
@@ -80,7 +80,7 @@ def createParser():
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None,
         help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None,
-        help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: https://www.mrlc.gov/national-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover-database-nlcd-2016")
+        help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: www.mrlc.gov/national-land-cover-database-nlcd-2016")
     parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
@@ -1177,7 +1177,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             if len(os.listdir(plots_subdir)) == 0:
                 shutil.rmtree(plots_subdir)
 
-    return
+    return [ref_height, ref_wid]
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
@@ -1759,19 +1759,21 @@ def main(inps=None):
     }
 
     # Extract user expected layers
-    export_products(**export_dict)
+    arrshape = export_products(**export_dict)
 
-    # If necessary, resample DEM/mask AFTER they have been used to extract metadata layers and mask output layers, respectively
-    if inps.multilooking is not None:
-        bounds=open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
-        # Resample mask
-        if inps.mask is not None:
-            resampleRaster(inps.mask.GetDescription(), inps.multilooking, bounds, prods_TOTbbox,
-                        inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
-        # Resample DEM
-        if demfile is not None:
-            resampleRaster(demfile.GetDescription(), inps.multilooking, bounds,
-                            prods_TOTbbox, inps.rankedResampling, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+    # If necessary, resample DEM/mask AFTER they have been used to extract
+    ancillary_dict = {
+        'mask': inps.mask,
+        'dem': demfile,
+        'arrshape': arrshape,
+        'standardproduct_info': standardproduct_info,
+        'multilooking': inps.multilooking,
+        'prods_TOTbbox': prods_TOTbbox,
+        'rankedResampling': inps.rankedResampling,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads
+    }
+    ancillaryLooks(**ancillary_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.gacos_products:

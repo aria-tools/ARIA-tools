@@ -14,6 +14,7 @@ import logging
 
 # Import functions
 from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
+from ARIAtools.shapefile_util import open_shapefile
 
 gdal.UseExceptions()
 # Suppress warnings
@@ -185,6 +186,45 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
     if outputFormat!='VRT':
         # update VRT
         gdal.BuildVRT(fname+'.vrt', fname, options=gdal.BuildVRTOptions(options=['-overwrite']))
+
+    return
+
+
+###Check ancillary layers'
+def ancillaryLooks(mask, dem, arrshape, standardproduct_info, multilooking,
+                   prods_TOTbbox, rankedResampling, outputFormat='ENVI',
+                   num_threads='2'):
+    """Check and apply looks on ancillary layers, if necessary"""
+    # Cannot proceed with VRT format. Defaulting to ENVI format.
+    if outputFormat=='VRT':
+        outputFormat='ENVI'
+
+    # If necessary, resample DEM/mask AFTER they have been used to extract
+    # metadata layers and mask output layers, respectively
+    if multilooking is not None:
+        ref_height = arrshape[0]
+        ref_wid = arrshape[1]
+        bounds = open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
+        # Resample mask
+        if mask is not None:
+            prod_wid, prod_height, \
+            _, _, _ = get_basic_attrs(mask.GetDescription())
+            if (ref_wid != prod_wid) or (ref_height != prod_height):
+                resampleRaster(mask.GetDescription(), multilooking,
+                           bounds, prods_TOTbbox, rankedResampling,
+                           outputFormat=outputFormat,
+                           num_threads=num_threads)
+        # Resample DEM
+        if dem is not None:
+            prod_wid, prod_height, \
+            _, _, _ = get_basic_attrs(dem.GetDescription())
+            print('ref_height, ref_wid', ref_height, ref_wid)
+            print('prod_wid, prod_height', prod_wid, prod_height)
+            if (ref_wid != prod_wid) or (ref_height != prod_height):
+                resampleRaster(dem.GetDescription(), multilooking,
+                           bounds, prods_TOTbbox, rankedResampling,
+                           outputFormat=outputFormat,
+                           num_threads=num_threads)
 
     return
 
