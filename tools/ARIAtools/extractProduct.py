@@ -598,7 +598,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr, arrshape, proj
 
 
-def prep_metadatalayers(outname, metadata_arr, dem, key, layers, driver):
+def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
+                        driver='ENVI'):
     """ Wrapper to prep metadata layer for extraction """
 
     if dem is None:
@@ -795,9 +796,6 @@ def handle_epoch_layers(layers,
                      i, 'dates/*[0-9].vrt')))
     existing_outputs = list(set(existing_outputs))
 
-    # set driver
-    driver = 'ENVI' if outputFormat == 'VRT' else outputFormat
-
     # Iterate through all IFGs
     all_outputs = []
     for i in enumerate(product_dict[0]):
@@ -808,7 +806,7 @@ def handle_epoch_layers(layers,
         ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
         hgt_field, model_name, ref_outname = prep_metadatalayers(ref_outname,
                                       i[1], dem,
-                                      ref_key, layers, driver)
+                                      ref_key, layers, outputFormat)
         # Update progress bar
         prog_bar.update(i[0]+1,suffix=ifg)
 
@@ -834,7 +832,7 @@ def handle_epoch_layers(layers,
             hgt_field, model_name, sec_outname = prep_metadatalayers(
                                                sec_outname,
                                                sec_comp, dem,
-                                               sec_key, layers, driver)
+                                               sec_key, layers, outputFormat)
             # if specified, compute total delay
             if tropo_total:
                 model_dir = os.path.abspath(os.path.join(workdir, model_name))
@@ -847,7 +845,7 @@ def handle_epoch_layers(layers,
                 print('ref_diff, sec_diff, outname_diff', ref_diff, sec_diff, outname_diff)
                 if not os.path.exists(outname_diff):
                     generate_diff(ref_diff, sec_diff, outname_diff, key,
-                      sec_key, tropo_total, hgt_field, driver)
+                      sec_key, tropo_total, hgt_field, outputFormat)
                 # compute secondary diff
                 ref_diff = os.path.join(os.path.dirname(ref_outname),
                                         ifg.split('_')[1])
@@ -857,12 +855,12 @@ def handle_epoch_layers(layers,
                     os.path.basename(ref_diff))
                 if not os.path.exists(outname_diff):
                     generate_diff(ref_diff, sec_diff, outname_diff, key,
-                      sec_key, tropo_total, hgt_field, driver)
+                      sec_key, tropo_total, hgt_field, outputFormat)
                 # compute total diff
                 ref_diff = os.path.join(ref_workdir, model_name, ifg)
                 sec_diff = os.path.join(sec_workdir, model_name, ifg)
                 generate_diff(ref_diff, sec_diff, outname, key,
-                      sec_key, tropo_total, hgt_field, driver)
+                      sec_key, tropo_total, hgt_field, outputFormat)
         else:
             sec_outname = os.path.dirname(ref_outname)
             sec_outname = os.path.abspath(os.path.join(sec_outname,
@@ -962,9 +960,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     # Mask specified, so file must be physically extracted,
     # cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT' and mask is not None:
+    if (outputFormat=='VRT' and mask is not None) or \
+         (outputFormat=='VRT' and multilooking is not None):
         outputFormat='ENVI'
-    lyr_input_dict['outputFormat'] = outputFormat
+    # Set output format layers that must always be physically extracted
+    outputFormatPhys = 'ENVI'
+    if outputFormat != 'VRT':
+        outputFormatPhys = outputFormat
+    lyr_input_dict['outputFormat'] = outputFormatPhys
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
@@ -1057,19 +1060,18 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  in s for s in i[1]):
                 # make VRT pointing to metadata layers in standard product
                 hgt_field, model_name, outname = prep_metadatalayers(outname,
-                                                     i[1], dem, key, layers,
-                                                     outputFormat)
+                                                     i[1], dem, key, layers)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  i[1], mask, outputFormat,
+                                  i[1], mask, outputFormatPhys,
                                   verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp" which requires advanced stitching
             elif key!='unwrappedPhase' and \
                  key!='connectedComponents':
-                if outputFormat=='VRT' and mask is None:
+                if outputFormat=='VRT':
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', i[1])
                     # building the cropped vrt
@@ -1110,7 +1112,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               outFileUnw=outFilePhs,
                                               outFileConnComp=outFileConnComp,
                                               mask=mask,
-                                              outputFormat=outputFormat,
+                                              outputFormat=outputFormatPhys,
                                               verbose=verbose)
                         
                     elif stitchMethodType == '2stage':
@@ -1121,28 +1123,28 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               outFileUnw=outFilePhs,
                                               outFileConnComp=outFileConnComp,
                                               mask=mask,
-                                              outputFormat=outputFormat,
+                                              outputFormat=outputFormatPhys,
                                               verbose=verbose)
 
                     elif stitchMethodType == 'sequential':
                         product_stitch_sequential(phs_files,
-                                                 conn_files,
-                                                 bounds=bounds,
-                                                 clip_json=prods_TOTbbox,
-                                                 output_unw=outFilePhs,
-                                                 output_conn=outFileConnComp,
-                                                 mask_file=mask, # str filename
-                                                 output_format=outputFormat,
-                                                 range_correction=True,
-                                                 save_fig=False,
-                                                 overwrite=True)
-                                                 #verbose=verbose)
+                                               conn_files,
+                                               bounds=bounds,
+                                               clip_json=prods_TOTbbox,
+                                               output_unw=outFilePhs,
+                                               output_conn=outFileConnComp,
+                                               mask_file=mask, # str filename
+                                               output_format=outputFormatPhys,
+                                               range_correction=True,
+                                               save_fig=False,
+                                               overwrite=True)
+                                               #verbose=verbose)
 
                     # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
                         resampleRaster(outFilePhs, multilooking, bounds,
                                        prods_TOTbbox, rankedResampling,
-                                       outputFormat=outputFormat,
+                                       outputFormat=outputFormatPhys,
                                        num_threads=num_threads)
 
             # If necessary, resample raster
@@ -1150,7 +1152,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                  key!='unwrappedPhase' and \
                  key!='connectedComponents':
                 resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                               rankedResampling, outputFormat=outputFormat,
+                               rankedResampling,
+                               outputFormat=outputFormatPhys,
                                num_threads=num_threads)
 
             # Track consistency of dimensions

@@ -985,10 +985,6 @@ def write_GUNW_array(output_filename: Union[str, Path],
 
     array_type = gdal_array.NumericTypeCodeToGDALTypeCode(array.dtype)
 
-    # File must be physically extracted, cannot proceed with VRT format.
-    # Defaulting to ENVI format.
-    format = 'ENVI' if format == 'VRT' else format
-
     # Output path
     output = Path(output_filename).absolute()
     output_vrt = output.with_suffix('.vrt') 
@@ -1303,3 +1299,5 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
 
     fig.tight_layout()
     fig.savefig(str(output_fig))
+    fig.clear()
+    plt.close(fig)
