@@ -1135,8 +1135,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                  output_format=outputFormat,
                                                  range_correction=True,
                                                  save_fig=False,
-                                                 overwrite=True,
-                                                 verbose=verbose)
+                                                 overwrite=True)
+                                                 #verbose=verbose)
 
                     # If necessary, resample phs/conn_comp file
                     if multilooking is not None:
