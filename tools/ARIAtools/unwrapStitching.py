@@ -429,7 +429,8 @@ class UnwrapOverlap(Stitching):
                 connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
                 connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
                 connCompData2_temp = (connCompData2*100)
-                temp = connCompData2_temp.astype(int)-connCompData1.astype(int)
+                with np.errstate(invalid='ignore'):
+                    temp = connCompData2_temp.astype(int)-connCompData1.astype(int)
                 temp[(temp<0) | (temp>2000)]=0
                 temp_count = collections.Counter(temp.flatten())
                 maxKey = 0
@@ -1415,7 +1416,7 @@ def point2unwPhase(inputs):
     return unwPhase
 
 
-def gdalTest(file, verbose=False):
+def gdalTest(file):
     '''
         Checks if the file is GDAL compatible and return compatible VRT in case it exists
     '''
@@ -1449,13 +1450,10 @@ def gdalTest(file, verbose=False):
         if os.path.isfile(filetest):
             ds = gdal.Open(filetest, gdal.GA_ReadOnly)
             ds = None
-            log.debug("%s is GDAL compatible", filetest)
             return filetest
         else:
-            log.debug("%s is GDAL compatible", file)
             return file
     except:
-        log.debug("%s is GDAL compatible", file)
         return file
 
 
