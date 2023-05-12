@@ -78,10 +78,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
     from scipy import stats
     from decimal import Decimal, ROUND_HALF_UP
 
-    # Check if physical raster exists and needs to be updated
-    # Also get datasource name (inputname)
-    if outputFormat=='VRT' and os.path.exists(fname.split('.vrt')[0]):
-        outputFormat='ENVI'
+    # Get datasource name (inputname)
     if os.path.exists(fname.split('.vrt')[0]):
         inputname=fname
     else:
@@ -218,8 +215,6 @@ def ancillaryLooks(mask, dem, arrshape, standardproduct_info, multilooking,
         if dem is not None:
             prod_wid, prod_height, \
             _, _, _ = get_basic_attrs(dem.GetDescription())
-            print('ref_height, ref_wid', ref_height, ref_wid)
-            print('prod_wid, prod_height', prod_wid, prod_height)
             if (ref_wid != prod_wid) or (ref_height != prod_height):
                 resampleRaster(dem.GetDescription(), multilooking,
                            bounds, prods_TOTbbox, rankedResampling,

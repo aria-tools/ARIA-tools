@@ -131,10 +131,7 @@ class Stitching:
 
     def setOutputFormat(self,outputFormat):
         """ Set the output format of the files to be generated """
-        # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
         self.outputFormat = outputFormat
-        if self.outputFormat=='VRT':
-            self.outputFormat='ENVI'
 
     def setOutFileUnw(self,outFileUnw):
         """ Set the output file name for the unwrapped stiched file to be generated"""

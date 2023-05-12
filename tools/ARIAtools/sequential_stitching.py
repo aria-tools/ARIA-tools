@@ -149,7 +149,8 @@ def stitch_2frames(unw_data1 : NDArray, conn_data1 : NDArray, rdict1 : dict,
                 conn_reverse[conn_reverse[:,0] == pair[0], 0] = \
                     np.float32(pair[1])
         else:
-            print('SKIPPED!:', correction, pair, '\n')
+            if verbose:
+                print('SKIPPED!:', correction, pair, '\n')
     
     # Backward correction
     for pair in conn_reverse:
@@ -330,7 +331,7 @@ def get_overlapping_conn(conn1 : NDArray,
 def _integer_2pi_cycles(unw1 : NDArray, concom1 : NDArray, ix1 : np.float32,
                         unw2 : NDArray, concom2 : NDArray, ix2 : np.float32,
                         range_correction : Optional[bool] = False,
-                        print_msg : Optional[bool] = True,) -> \
+                        print_msg : Optional[bool] = False) -> \
                                     Tuple[np.float32, np.float32, np.float32]:
     """
     Get mean difference of unwrapped Phase values for overlapping
@@ -411,7 +412,7 @@ def _integer_2pi_cycles(unw1 : NDArray, concom1 : NDArray, ix1 : np.float32,
         return None, None, None
 
 def _range_correction(unw1 : NDArray,
-                      unw2 : NDArray,) -> np.float32:
+                      unw2 : NDArray) -> np.float32:
     """
     Calculate range correction due to small non 2-pi shift caused by ESD 
     different between frames. If ESD is not used, this correction 
@@ -443,7 +444,7 @@ def _range_correction(unw1 : NDArray,
 
 
 def _metadata_offset(unw1 : NDArray, unw2 : NDArray,
-                     print_msg : Optional[bool] = True) -> Tuple[np.float32]:
+                     print_msg : Optional[bool] = False) -> Tuple[np.float32]:
     """
     Get mean difference of metadata layers
     
@@ -1298,3 +1299,5 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
 
     fig.tight_layout()
     fig.savefig(str(output_fig))
+    fig.clear()
+    plt.close(fig)
