@@ -939,6 +939,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     if not layers and not tropo_total: return # only bbox
 
+    # initiate tracker of output dimensions
+    ref_wid = None; ref_height = None
+
     # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
             'layers': layers,
@@ -1020,8 +1023,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         key = 'solidEarthTide'
         ref_key = key
         sec_key = key
-        product_dict = [[j[key] for j in full_product_dict], \
-                      [j["pair_name"] for j in full_product_dict]]
+        product_dict = \
+            [[j[key] for j in full_product_dict if key in j.keys()],
+            [j["pair_name"] for j in full_product_dict if key in j.keys()]]
 
         workdir = os.path.join(outDir, key)
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
