@@ -26,7 +26,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
-                    amp_thresh=None, arrshape=None, workdir='./',
+                    amp_thresh=None, arrres=None, workdir='./',
                     outputFormat='ENVI', num_threads='2'):
     """Function to load and export mask file.
     If "Download" flag, GSHHS water mask will be donwloaded on the fly.
@@ -64,26 +64,39 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
 
         ###Initiate water-mask with coastlines/islands union VRT
         # save uncropped mask
-        gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'), os.path.join(workdir,'watermsk_shorelines.vrt'),
-                                    format=outputFormat, outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1],
-                                    height=arrshape[0], burnValues=[1], layers='merged')
-        gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'), os.path.join(workdir,'watermask_uncropped.msk'), format="VRT")
+        gdal.Rasterize(os.path.join(workdir,'watermask_uncropped.msk'),
+                       os.path.join(workdir,'watermsk_shorelines.vrt'),
+                       format=outputFormat, outputBounds=bounds,
+                       outputType=gdal.GDT_Byte,
+                       xRes=arrres[0], yRes=arrres[1],
+                       targetAlignedPixels=True, burnValues=[1],
+                       layers='merged')
+        gdal.Translate(os.path.join(workdir,'watermask_uncropped.msk.vrt'),
+                       os.path.join(workdir,'watermask_uncropped.msk'),
+                       format="VRT")
         # save cropped mask
-        gdal.Warp(maskfilename, os.path.join(workdir,'watermask_uncropped.msk.vrt'), format=outputFormat, outputBounds=bounds,
-                         outputType=gdal.GDT_Byte, width=arrshape[1], height=arrshape[0], multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+        gdal.Warp(maskfilename,
+                  os.path.join(workdir,'watermask_uncropped.msk.vrt'),
+                  format=outputFormat, outputBounds=bounds,
+                  outputType=gdal.GDT_Byte, xRes=arrres[0], yRes=arrres[1],
+                  targetAlignedPixels=True, multithread=True,
+                  options=['NUM_THREADS=%s'%(num_threads)])
 
         update_file=gdal.Open(maskfilename,gdal.GA_Update)
         update_file.SetProjection(proj)
         update_file.GetRasterBand(1).SetNoDataValue(0.); del update_file
         gdal.Translate(f'{maskfilename}.vrt', maskfilename, format='VRT')
 
-        ###Must take inverse of lakes/ponds union because of opposite designation (1 for water, 0 for land) as desired (0 for water, 1 for land)
-        lake_masks=gdal.Rasterize('', os.path.join(workdir,'watermsk_lakes.vrt'),
-                        format='MEM', outputBounds=bounds, outputType=gdal.GDT_Byte, width=arrshape[1],
-                        height=arrshape[0], burnValues=[1], layers='merged', inverse=True)
+        # Take inverse of lakes/ponds union because of opposite designation
+        # (1 for water, 0 for land) as desired (0 for water, 1 for land)
+        lake_masks = gdal.Rasterize('',
+                  os.path.join(workdir,'watermsk_lakes.vrt'), format='MEM',
+                  outputBounds=bounds, outputType=gdal.GDT_Byte,
+                  xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+                  burnValues=[1], layers='merged', inverse=True)
 
         lake_masks.SetProjection(proj)
-        lake_masks=lake_masks.ReadAsArray()
+        lake_masks = lake_masks.ReadAsArray()
 
         ## Update water-mask with lakes/ponds union
         mask_file = gdal.Open(maskfilename, gdal.GA_Update)
@@ -96,7 +109,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     elif os.path.basename(maskfilename).lower().startswith('nlcd'):
         log.info("***Accessing and cropping the NLCD mask...***")
         maskfilename = NLCDMasker(os.path.dirname(workdir), product_dict)(
-                                  proj, bounds, arrshape, outputFormat)
+                                  proj, bounds, arrres, outputFormat)
 
     ## User specified mask
     else:
@@ -120,10 +133,10 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
 
             # crop the user mask and write
             gdal.Warp(f'{local_mask}', ds,
-                            format=outputFormat, cutlineDSName=prods_TOTbbox,
-                            outputBounds=bounds, width=arrshape[1],
-                            height=arrshape[0], multithread=True,
-                            options=[f'NUM_THREADS={num_threads}'])
+                      format=outputFormat, cutlineDSName=prods_TOTbbox,
+                      outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                      targetAlignedPixels=True, multithread=True,
+                      options=[f'NUM_THREADS={num_threads}'])
 
             # set projection of the local mask
             mask_file = gdal.Open(local_mask, gdal.GA_Update)
@@ -150,9 +163,10 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
 
     # crop/expand mask to DEM size?
     gdal.Warp(maskfilename, maskfilename, format=outputFormat,
-                    cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                    width=arrshape[1], height=arrshape[0], multithread=True,
-                    options=[f'NUM_THREADS={num_threads} -overwrite'])
+              cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+              xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+              multithread=True,
+              options=[f'NUM_THREADS={num_threads} -overwrite'])
     mask = gdal.Open(maskfilename, gdal.GA_Update)
     mask.SetProjection(proj)
     mask.SetDescription(maskfilename)
@@ -190,16 +204,18 @@ def make_mask(ds_crop, lc):
     return ds
 
 
-def resamp(src, proj, bounds, arrshape, view=False):
+def resamp(src, proj, bounds, arrres, view=False):
     """ Resample a dataset from src dims using result of merged_productbbox """
     if isinstance(src, str) and op.exists(src):
         src = gdal.Open(src, gdal.GA_ReadOnly)
     path = path if op.exists(src.GetDescription()) else ''
 
     ## compute geotranform
-    height, width = arrshape
-    pix_width = (bounds[2]-bounds[0]) / width
-    pix_height = (bounds[1] - bounds[3]) / height
+    pix_width, pix_height = arrres
+    pix_width *= np.sign(bounds[2] - bounds[0])
+    pix_height *= np.sign(bounds[1] - bounds[3])
+    width = (bounds[2] - bounds[0]) / pix_width
+    height = (bounds[1] - bounds[3]) / pix_height
     gt = [bounds[0], pix_width, 0, bounds[3], 0, pix_height]
 
     if path:
@@ -265,7 +281,7 @@ class NLCDMasker(object):
         gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 
-    def __call__(self, proj, bounds, arrshape, outputFormat='ENVI', test=False):
+    def __call__(self, proj, bounds, arrres, outputFormat='ENVI', test=False):
         """ view=True to plot the mask; test=True to apply mask to dummy data """
         # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
         if outputFormat=='VRT':
@@ -280,7 +296,7 @@ class NLCDMasker(object):
 
         ## resample the mask to the size of the products (mimic ariaExtract)
         log.info('Resampling NLCD to selected bbox...')
-        ds_resamp = resamp(ds_crop, proj, bounds, arrshape)
+        ds_resamp = resamp(ds_crop, proj, bounds, arrres)
 
         ## mask the landcover classes in lc
         log.info('Masking water and wetlands...')
@@ -304,7 +320,8 @@ class NLCDMasker(object):
         if test:
             # create temporary reference file to access geolocation info
             self.path_temp = gdal.Warp('', self.product_dict[0][1],
-                                       width=arrshape[1], height=arrshape[0],
+                                       xRes=arrres[0], yRes=arrres[1],
+                                       targetAlignedPixels=True,
                                        options=gdal.WarpOptions(format="MEM",
                                            outputBounds=bounds))
             self.__test__(ds_mask)

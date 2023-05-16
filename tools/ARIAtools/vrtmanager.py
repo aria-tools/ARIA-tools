@@ -72,7 +72,9 @@ def renderOGRVRT(vrt_filename, src_datasets):
 
 
 ###Resample raster
-def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=False, outputFormat='ENVI', num_threads='2'):
+def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
+                   rankedResampling=False, outputFormat='ENVI',
+                   num_threads='2'):
     """Resample rasters and update corresponding VRTs."""
     # Import functions
     from scipy import stats
@@ -86,103 +88,171 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox, rankedResampling=
         inputname=gdal.Open(fname).GetFileList()[-1]
 
     # Access original shape
-    ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-    arrshape=[abs(ds.GetGeoTransform()[1])*multilooking, abs(ds.GetGeoTransform()[-1])*multilooking] # Get output res
-    #get geotrans/proj
-    ds=gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)]))
-    geotrans=ds.GetGeoTransform() ; proj=ds.GetProjection()
+    ds = gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM",
+                   cutlineDSName=prods_TOTbbox,
+                   outputBounds=bounds,
+                   multithread=True,
+                   options=['NUM_THREADS=%s'%(num_threads)]))
+    # Get output res
+    arrres = [abs(ds.GetGeoTransform()[1])*multilooking,
+                abs(ds.GetGeoTransform()[-1])*multilooking]
+    # Get geotrans/proj
+    ds = gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM",
+                   cutlineDSName=prods_TOTbbox,
+                   outputBounds=bounds,
+                   xRes=arrres[0], yRes=arrres[1],
+                   resampleAlg='near', multithread=True,
+                   options=['NUM_THREADS=%s'%(num_threads)]))
+    geotrans = ds.GetGeoTransform()
+    proj = ds.GetProjection()
 
     # Must resample mask with nearest-neighbor
     if fname.split('/')[-2]=='mask':
         # Resample raster
-        gdal.Warp(fname, inputname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+        gdal.Warp(fname, inputname,
+                  options=gdal.WarpOptions(format=outputFormat,
+                  cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                  xRes=arrres[0], yRes=arrres[1],
+                  resampleAlg='near', multithread=True,
+                  options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
-    # Use pixel function to downsample connected components/unw files based off of frequency of connected components in each window
-    elif fname.split('/')[-2]=='connectedComponents' or fname.split('/')[-2]=='unwrappedPhase':
+    # Use pixel function to downsample connected components/unw files
+    # based off of frequency of connected components in each window
+    elif fname.split('/')[-2]=='connectedComponents' \
+         or fname.split('/')[-2]=='unwrappedPhase':
         # Resample unw phase based off of mode of connected components
-        fnameunw=os.path.join('/'.join(fname.split('/')[:-2]),'unwrappedPhase',''.join(fname.split('/')[-1]).split('.vrt')[0])
-        fnameconcomp=os.path.join('/'.join(fname.split('/')[:-2]),'connectedComponents',''.join(fname.split('/')[-1]).split('.vrt')[0])
+        fnameunw = os.path.join('/'.join(fname.split('/')[:-2]), 
+            'unwrappedPhase',
+            ''.join(fname.split('/')[-1]).split('.vrt')[0])
+        fnameconcomp = os.path.join('/'.join(fname.split('/')[:-2]),
+            'connectedComponents',
+            ''.join(fname.split('/')[-1]).split('.vrt')[0])
         if rankedResampling:
             #open connected components/unw files
-            ds_concomp=gdal.Open(fnameconcomp)
-            ds_concomp_nodata=ds_concomp.GetRasterBand(1).GetNoDataValue()
-            ds_concomp=ds_concomp.ReadAsArray()
-            ds_concomp=np.ma.masked_where(ds_concomp == ds_concomp_nodata, ds_concomp)
+            ds_concomp = gdal.Open(fnameconcomp)
+            ds_concomp_nodata = ds_concomp.GetRasterBand(1).GetNoDataValue()
+            ds_concomp = ds_concomp.ReadAsArray()
+            ds_concomp = np.ma.masked_where(ds_concomp == ds_concomp_nodata,
+                                            ds_concomp)
             np.ma.set_fill_value(ds_concomp, ds_concomp_nodata)
 
-            ds_unw=gdal.Open(fnameunw)
-            ds_unw_nodata=ds_unw.GetRasterBand(1).GetNoDataValue()
-            ds_unw=ds_unw.ReadAsArray()
-            ds_unw=np.ma.masked_where(ds_unw == ds_unw_nodata, ds_unw)
+            ds_unw = gdal.Open(fnameunw)
+            ds_unw_nodata = ds_unw.GetRasterBand(1).GetNoDataValue()
+            ds_unw = ds_unw.ReadAsArray()
+            ds_unw = np.ma.masked_where(ds_unw == ds_unw_nodata,
+                                        ds_unw)
             np.ma.set_fill_value(ds_unw, ds_unw_nodata)
 
-            unwmap=[]
-            for row in range(multilooking,(ds_unw.shape[0])+multilooking,multilooking):
-                unwmap_row=[]
-                for column in range(multilooking,(ds_unw.shape[1])+multilooking,multilooking):
+            unwmap = []
+            for row in range(multilooking, (ds_unw.shape[0]) + multilooking,
+                             multilooking):
+                unwmap_row = []
+                for column in range(multilooking,
+                                    (ds_unw.shape[1]) + multilooking,
+                                    multilooking):
                     #get subset values
-                    subset_concomp = ds_concomp[row-multilooking:row,column-multilooking:column]
-                    subset_unw = ds_unw[row-multilooking:row,column-multilooking:column]
-                    concomp_mode = stats.mode(subset_concomp.flatten()).mode[0]
+                    subset_concomp = ds_concomp[row-multilooking:row,
+                                                column-multilooking:column]
+                    subset_unw = ds_unw[row-multilooking:row,
+                                        column-multilooking:column]
+                    concomp_mode = stats.mode(subset_concomp.flatten() \
+                                             ).mode[0]
                     #average only phase values coinciding with concomp mode
-                    subset_concomp = np.where(subset_concomp != concomp_mode, 0, 1)
-                    subset_unw=subset_unw*subset_concomp
+                    subset_concomp = np.where(subset_concomp != concomp_mode,
+                                              0, 1)
+                    subset_unw = subset_unw * subset_concomp
                     #assign downsampled pixel values
                     unwmap_row.append(subset_unw.mean())
                 unwmap.append(unwmap_row)
 
             #finalize unw array
-            unwmap=np.array(unwmap)
+            unwmap = np.array(unwmap)
             #finalize unw array shape
-            unwmap=unwmap[0:int(Decimal(ds_unw.shape[0]/multilooking).quantize(0, ROUND_HALF_UP)), \
-                0:int(Decimal(ds_unw.shape[1]/multilooking).quantize(0, ROUND_HALF_UP))]
-            unwmap=np.ma.masked_invalid(unwmap) ; np.ma.set_fill_value(unwmap, ds_unw_nodata)
+            unwmap = unwmap[0:int(Decimal(ds_unw.shape[0]/multilooking \
+                                 ).quantize(0, ROUND_HALF_UP)), \
+                            0:int(Decimal(ds_unw.shape[1]/multilooking \
+                                 ).quantize(0, ROUND_HALF_UP))]
+            unwmap = np.ma.masked_invalid(unwmap)
+            np.ma.set_fill_value(unwmap, ds_unw_nodata)
             #unwphase
-            renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+            renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans,
+                      drivername=outputFormat, gdal_fmt='float32',
+                      proj=proj, nodata=ds_unw_nodata)
             #temp workaround for gdal bug
             try:
                 gdal.Open(fnameunw)
             except RuntimeError:
-                for f in glob.glob(fnameunw+"*"):
+                for f in glob.glob(fnameunw + "*"):
                     os.remove(f)
-                unwmap[0,0]=unwmap[0,0]-1e-6
-                renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+                unwmap[0,0] = unwmap[0,0] - 1e-6
+                renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans,
+                          drivername=outputFormat, gdal_fmt='float32',
+                          proj=proj, nodata=ds_unw_nodata)
             del unwmap
             # Resample connected components
-            gdal.Warp(fnameconcomp, fnameconcomp, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='mode',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            gdal.Warp(fnameconcomp, fnameconcomp,
+                      options=gdal.WarpOptions(format=outputFormat,
+                      cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                      xRes=arrres[0], yRes=arrres[1],
+                      resampleAlg='mode', multithread=True,
+                      options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
-            gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp, options=gdal.BuildVRTOptions(options=['-overwrite']))
+            gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp,
+                          options=gdal.BuildVRTOptions( \
+                          options=['-overwrite']))
         # Default: resample unw phase with gdal average algorithm
         else:
             # Resample unwphase
-            ds_unw_nodata=gdal.Open(fnameunw)
-            ds_unw_nodata=ds_unw_nodata.GetRasterBand(1).GetNoDataValue()
-            gdal.Warp(fnameunw, fnameunw, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='average',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            ds_unw_nodata = gdal.Open(fnameunw)
+            ds_unw_nodata = ds_unw_nodata.GetRasterBand(1).GetNoDataValue()
+            gdal.Warp(fnameunw, fnameunw,
+                      options=gdal.WarpOptions(format=outputFormat,
+                      cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                      xRes=arrres[0], yRes=arrres[1],
+                      resampleAlg='average',multithread=True,
+                      options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
-            gdal.BuildVRT(fnameunw+'.vrt', fnameunw, options=gdal.BuildVRTOptions(options=['-overwrite']))
+            gdal.BuildVRT(fnameunw+'.vrt', fnameunw,
+                          options=gdal.BuildVRTOptions( \
+                          options=['-overwrite']))
             #temp workaround for gdal bug
             try:
                 gdal.Open(fnameunw)
             except RuntimeError:
-                unwmap=np.fromfile(fnameunw,dtype=np.float32).reshape(ds.GetRasterBand(1).ReadAsArray().shape)
-                for f in glob.glob(fnameunw+"*"):
+                unwmap = np.fromfile(fnameunw, dtype=np.float32).reshape( \
+                                     ds.GetRasterBand(1).ReadAsArray().shape)
+                for f in glob.glob(fnameunw + "*"):
                     os.remove(f)
-                unwmap[0,0]=unwmap[0,0]-1e-6
-                renderVRT(fnameunw, unwmap, geotrans=geotrans, drivername=outputFormat, gdal_fmt='float32', proj=proj, nodata=ds_unw_nodata)
+                unwmap[0,0] = unwmap[0,0] - 1e-6
+                renderVRT(fnameunw, unwmap, geotrans=geotrans,
+                          drivername=outputFormat, gdal_fmt='float32',
+                          proj=proj, nodata=ds_unw_nodata)
                 del unwmap
             # Resample connected components
-            gdal.Warp(fnameconcomp, fnameconcomp, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+            gdal.Warp(fnameconcomp, fnameconcomp,
+                      options=gdal.WarpOptions(format=outputFormat,
+                      cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                      xRes=arrres[0], yRes=arrres[1],
+                      resampleAlg='near', multithread=True,
+                      options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
-            gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp, options=gdal.BuildVRTOptions(options=['-overwrite']))
+            gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp,
+                          options=gdal.BuildVRTOptions(options=['-overwrite']))
 
     # Resample all other files with lanczos
     else:
         # Resample raster
-        gdal.Warp(fname, inputname, options=gdal.WarpOptions(format=outputFormat, cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',multithread=True, options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+        gdal.Warp(fname, inputname,
+                  options=gdal.WarpOptions(format=outputFormat,
+                  cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                  xRes=arrres[0], yRes=arrres[1],
+                  resampleAlg='lanczos', multithread=True,
+                  options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
-    if outputFormat!='VRT':
+    if outputFormat != 'VRT':
         # update VRT
-        gdal.BuildVRT(fname+'.vrt', fname, options=gdal.BuildVRTOptions(options=['-overwrite']))
+        gdal.BuildVRT(fname+'.vrt', fname,
+                      options=gdal.BuildVRTOptions(options=['-overwrite']))
 
     return
 
