@@ -412,7 +412,7 @@ def main(inps=None):
     # but user may specify union), and expected shape for DEM.
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres,
+     prods_TOTbbox_metadatalyr, arrshape,
      proj) = merged_productbbox(standardproduct_info.products[0],
                                 standardproduct_info.products[1],
                                 os.path.join(inps.workdir,
@@ -431,7 +431,7 @@ def main(inps=None):
         inps.demfile, demfile, Latitude, Longitude = prep_dem(
             inps.demfile, standardproduct_info.bbox_file,
             prods_TOTbbox, prods_TOTbbox_metadatalyr, proj,
-            arrres=arrres, workdir=inps.workdir,
+            arrshape=arrshape, workdir=inps.workdir,
             outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Load or download mask (if specified).
@@ -445,7 +445,7 @@ def main(inps=None):
         inps.mask = prep_mask(amplitude_products, inps.mask,
                               standardproduct_info.bbox_file,
                               prods_TOTbbox, proj, amp_thresh=inps.amp_thresh,
-                              arrres=arrres,
+                              arrshape=arrshape,
                               workdir=inps.workdir,
                               outputFormat=inps.outputFormat,
                               num_threads=inps.num_threads)
@@ -456,7 +456,6 @@ def main(inps=None):
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'dem': demfile,
-        'arrres': arrres,
         'lat': Latitude,
         'lon': Longitude,
         'mask': inps.mask,
