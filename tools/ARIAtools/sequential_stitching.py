@@ -743,7 +743,11 @@ def product_stitch_sequential(input_unw_files : List[str],
     # NOTE: saving output figure adds 4 seconds 
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')),
-                           str(output_conn.with_suffix('.vrt')))                
+                           str(output_conn.with_suffix('.vrt')))
+
+    # Remove temp files
+    [ii.unlink() for ii in [temp_unw_out, 
+                            temp_unw_out] if ii.exists()]
 
     return
 
