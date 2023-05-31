@@ -954,16 +954,16 @@ def get_GUNW_array(filename : Union[str, Path],
     return data
 
 def write_GUNW_array(output_filename: Union[str, Path], 
-                     array:np.ndarray, 
-                     snwe:list,
+                     array: np.ndarray, 
+                     snwe: list,
                      nodata: Optional[str] = 'NAN',
-                     format : Optional[str] ='ENVI',
-                     epsg : Optional[int]= 4326,
-                     add_vrt : Optional[bool] = True, 
-                     verbose : Optional[bool] = False,
-                     update_mode : Optional[bool] = True) -> None:
+                     format: Optional[str] ='ENVI',
+                     epsg: Optional[int]= 4326,
+                     add_vrt: Optional[bool] = True, 
+                     verbose: Optional[bool] = False,
+                     update_mode: Optional[bool] = True) -> None:
     """
-    Use GDAl to write raster 
+    Use GDAL to write raster
 
     Parameters
     ----------
@@ -1052,7 +1052,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
         # Build virtual VRT  
         vrt = gdal.BuildVRT(str(output_vrt), str(output), srcNodata=nodata)
         vrt.FlushCache()
-        vrt = None      
+        vrt = None
 
 # Extract overlap bounds
 def frame_overlap(snwe1 : list,

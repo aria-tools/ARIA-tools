@@ -423,9 +423,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     # Define lat/lon arrays for fullres layers
     gt, xs, ys  = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
-    Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*ys), ys)
+    Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*(ys-1)), ys)
     Latitude    = np.repeat(Latitude[:, np.newaxis], xs, axis=1)
-    Longitude   = np.linspace(gt[0], gt[0]+(gt[1]*xs), xs)
+    Longitude   = np.linspace(gt[0], gt[0]+(gt[1]*(xs-1)), xs)
     Longitude   = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
 
     return aria_dem, ds_aria, Latitude, Longitude
@@ -1270,15 +1270,10 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem( \
              hgt_field)[1:-1].split(','), dtype='float32')
 
-        latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
-                           data_array.GetGeoTransform()[3] + \
-                           (data_array.GetGeoTransform()[5] * \
-                           data_array.RasterYSize-1), data_array.RasterYSize)
-        longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
-                           data_array.GetGeoTransform()[0] + \
-                           (data_array.GetGeoTransform()[1] * \
-                           data_array.RasterXSize-1), data_array.RasterXSize)
-
+        gt = data_array.GetGeoTransform()
+        xs, ys = data_array.RasterXSize, data_array.RasterYSize
+        latitudeMeta = np.linspace(gt[3], gt[3]+(gt[5]*(ys-1)), ys)
+        longitudeMeta = np.linspace(gt[0], gt[0]+(gt[1]*(xs-1)), xs)
         da_dem = open_rasterio(dem.GetDescription(), 
                      band_as_variable=True)['band_1']
 
@@ -1317,8 +1312,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
                   cutlineDSName=prods_TOTbbox,
                   outputBounds=bbox_bounds,
                   dstNodata=data_array.GetRasterBand(1).GetNoDataValue(),
-                  width=arrshape[1],
-                  height=arrshape[0],
                   options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
     #remove temp files
     for i in glob.glob(outname+'_temp*'): os.remove(i)
