@@ -1264,6 +1264,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     # only perform DEM intersection for rasters with valid height levels
     nohgt_lyrs = ['ionosphere']
+    print('INSIDE!!!')
     if metadatalyr_name not in nohgt_lyrs:
         tmp_name = outname+'_temp'
         # Define lat/lon/height arrays for metadata layers
@@ -1326,7 +1327,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
               width=arrshape[1], height=arrshape[0],
               options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
     #remove temp files
-    for i in glob.glob(outname+'_temp*'): os.remove(i)
+    for i in glob.glob(outname+'*_temp*'): os.remove(i)
 
     # Update VRT
     gdal.Translate(outname+'.vrt',

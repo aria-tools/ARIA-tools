@@ -214,8 +214,8 @@ def resamp(src, proj, bounds, arrres, view=False):
     pix_width, pix_height = arrres
     pix_width *= np.sign(bounds[2] - bounds[0])
     pix_height *= np.sign(bounds[1] - bounds[3])
-    width = (bounds[2] - bounds[0]) / pix_width
-    height = (bounds[1] - bounds[3]) / pix_height
+    width = int((bounds[2] - bounds[0]) / pix_width)
+    height = int((bounds[1] - bounds[3]) / pix_height)
     gt = [bounds[0], pix_width, 0, bounds[3], 0, pix_height]
 
     if path:
@@ -223,7 +223,8 @@ def resamp(src, proj, bounds, arrres, view=False):
                                                         gdalconst.GDT_Float32)
 
     else:
-        dst = gdal.GetDriverByName('MEM').Create(path, width, height, 1,
+        print('width, height', width, height)
+        dst = gdal.GetDriverByName('MEM').Create('', width, height, 1,
                                                         gdalconst.GDT_Int16)
 
     dst.SetGeoTransform(gt)
