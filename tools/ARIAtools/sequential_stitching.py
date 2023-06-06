@@ -487,6 +487,7 @@ def _metadata_offset(unw1 : NDArray, unw2 : NDArray,
 
 def product_stitch_sequential(input_unw_files : List[str],
                              input_conncomp_files : List[str],
+                             arrres : List[float],
                              output_unw : Optional[str] = './unwMerged',
                              output_conn : Optional[str] = './connCompMerged',
                              output_format : Optional[str] = 'ENVI',
@@ -704,8 +705,10 @@ def product_stitch_sequential(input_unw_files : List[str],
                        str(input.with_suffix('.vrt')),
                        format=output_format,
                        cutlineDSName=clip_json,
-                       outputBounds=bounds,
+                       xRes=arrres[0], yRes=arrres[1],
+                       targetAlignedPixels=True,
                        #cropToCutline = True,
+                       outputBounds=bounds
                     )
         ds = None
         # Update VRT
@@ -747,7 +750,7 @@ def product_stitch_sequential(input_unw_files : List[str],
 
     # Remove temp files
     [ii.unlink() for ii in [temp_unw_out, 
-                            temp_unw_out] if ii.exists()]
+                            temp_unw_out] if ii.exists()]              
 
     return
 
@@ -954,16 +957,16 @@ def get_GUNW_array(filename : Union[str, Path],
     return data
 
 def write_GUNW_array(output_filename: Union[str, Path], 
-                     array: np.ndarray, 
-                     snwe: list,
+                     array:np.ndarray, 
+                     snwe:list,
                      nodata: Optional[str] = 'NAN',
-                     format: Optional[str] ='ENVI',
-                     epsg: Optional[int]= 4326,
-                     add_vrt: Optional[bool] = True, 
-                     verbose: Optional[bool] = False,
-                     update_mode: Optional[bool] = True) -> None:
+                     format : Optional[str] ='ENVI',
+                     epsg : Optional[int]= 4326,
+                     add_vrt : Optional[bool] = True, 
+                     verbose : Optional[bool] = False,
+                     update_mode : Optional[bool] = True) -> None:
     """
-    Use GDAL to write raster
+    Use GDAl to write raster 
 
     Parameters
     ----------
@@ -1052,7 +1055,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
         # Build virtual VRT  
         vrt = gdal.BuildVRT(str(output_vrt), str(output), srcNodata=nodata)
         vrt.FlushCache()
-        vrt = None
+        vrt = None      
 
 # Extract overlap bounds
 def frame_overlap(snwe1 : list,

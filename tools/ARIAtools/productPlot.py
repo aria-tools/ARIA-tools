@@ -93,13 +93,14 @@ class PlotClass(object):
     mpl._log.setLevel('ERROR')
 
     def __init__(self, product_dict, workdir='./', bbox_file=None,
-                        prods_TOTbbox=None, mask=None, outputFormat='ENVI',
-                        croptounion=False, num_threads='2'):
+                 prods_TOTbbox=None, arrres=None, mask=None,
+                 outputFormat='ENVI', croptounion=False, num_threads='2'):
         # Pass inputs, and initialize list of pairs
         self.product_dict  = product_dict
         self.bbox_file     = bbox_file
         self.workdir       = os.path.join(workdir,'figures')
         self.prods_TOTbbox = prods_TOTbbox
+        self.arrres        = arrres
         self.mask          = mask
         self.outputFormat  = outputFormat
         self.croptounion   = croptounion
@@ -407,8 +408,10 @@ class PlotClass(object):
         outname = os.path.join(self.workdir, f'avgcoherence{self.mask_ext}')
 
         ## Make average coherence raster
-        coh_file = rasterAverage(outname, self.product_dict[0], self.bbox_file,
-                            self.prods_TOTbbox, outputFormat=self.outputFormat)
+        coh_file = rasterAverage(outname, self.product_dict[0],
+                                 self.bbox_file,
+                                 self.prods_TOTbbox, self.arrres,
+                                 outputFormat=self.outputFormat)
 
         # Apply mask (if specified).
         if self.mask is not None:
@@ -618,7 +621,7 @@ def main(inps=None):
         # report common track bbox (default is to take common intersection, but user may specify union), and expected shape for DEM.
         standardproduct_info.products[0], standardproduct_info.products[1], \
         standardproduct_info.bbox_file, prods_TOTbbox, \
-            prods_TOTbbox_metadatalyr, arrshape, proj = merged_productbbox(
+            prods_TOTbbox_metadatalyr, arrres, proj = merged_productbbox(
             standardproduct_info.products[0], standardproduct_info.products[1],
             os.path.join(inps.workdir, 'productBoundingBox'),
             standardproduct_info.bbox_file, inps.croptounion,
@@ -632,33 +635,33 @@ def main(inps=None):
     # Make spatial extent plot
     if inps.plottracks:
         log.info("- Make plot of track latitude extents vs bounding bbox/common track extent.")
-        make_plot=PlotClass([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, croptounion=inps.croptounion)
+        make_plot=PlotClass([[j['productBoundingBox'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, arrres=None, croptounion=inps.croptounion)
         make_plot.plot_extents(figwidth=inps.figwidth)
 
 
     # Make pbaseline plot
     if inps.plotbperp:
         log.info("- Make baseline plot and histogram.")
-        make_plot=PlotClass([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir)
+        make_plot=PlotClass([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], arrres=None, workdir=inps.workdir)
         make_plot.plot_pbaselines()
 
 
     # Make average land coherence plot
     if inps.plotcoh:
         log.info("- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
-        make_plot=PlotClass([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, num_threads=inps.num_threads)
+        make_plot=PlotClass([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, arrres=None, mask=inps.mask, num_threads=inps.num_threads)
         make_plot.plot_coherence()
 
 
     # Generate average land coherence raster
     if inps.makeavgoh:
         log.info("- Generate 2D raster of average coherence.")
-        make_plot=PlotClass([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        make_plot=PlotClass([[j['coherence'] for j in standardproduct_info.products[1]], [j["pair_name"] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, arrres=None, mask=inps.mask, outputFormat=inps.outputFormat, num_threads=inps.num_threads)
         make_plot.plot_avgcoherence()
 
 
     # Make pbaseline/coherence combo plot
     if inps.plotbperpcoh:
         log.info("- Make baseline plot that is color-coded with respect to mean IFG coherence.")
-        make_plot=PlotClass([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, mask=inps.mask)
+        make_plot=PlotClass([[j['bPerpendicular'] for j in standardproduct_info.products[1]],  [j["pair_name"] for j in standardproduct_info.products[1]], [j['coherence'] for j in standardproduct_info.products[1]]], workdir=inps.workdir, bbox_file=standardproduct_info.bbox_file, prods_TOTbbox=prods_TOTbbox, arrres=None, mask=inps.mask)
         make_plot.plotbperpcoh()

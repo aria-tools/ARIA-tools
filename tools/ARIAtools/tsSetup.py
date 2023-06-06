@@ -27,7 +27,7 @@ from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import resampleRaster, layerCheck, \
-    get_basic_attrs, ancillaryLooks
+    get_basic_attrs, ancillaryLooks, dim_check
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, \
     export_products, gacos_correction
 
@@ -295,7 +295,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     utc_time = extract_utc_time(aria_dates, aztime_list)
 
     # get attributes from first product
-    width, height, no_data, geo_trans, projection = get_basic_attrs(dlist[0])
+    width, height, geo_trans, projection, no_data = get_basic_attrs(dlist[0])
 
     # setting up a subset of the stack
     ymin, ymax, xmin, xmax = [0, height, 0, width]
@@ -412,7 +412,7 @@ def main(inps=None):
     # but user may specify union), and expected shape for DEM.
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrshape,
+     prods_TOTbbox_metadatalyr, arrres,
      proj) = merged_productbbox(standardproduct_info.products[0],
                                 standardproduct_info.products[1],
                                 os.path.join(inps.workdir,
@@ -431,7 +431,7 @@ def main(inps=None):
         inps.demfile, demfile, Latitude, Longitude = prep_dem(
             inps.demfile, standardproduct_info.bbox_file,
             prods_TOTbbox, prods_TOTbbox_metadatalyr, proj,
-            arrshape=arrshape, workdir=inps.workdir,
+            arrres=arrres, workdir=inps.workdir,
             outputFormat=inps.outputFormat, num_threads=inps.num_threads)
 
     # Load or download mask (if specified).
@@ -445,7 +445,7 @@ def main(inps=None):
         inps.mask = prep_mask(amplitude_products, inps.mask,
                               standardproduct_info.bbox_file,
                               prods_TOTbbox, proj, amp_thresh=inps.amp_thresh,
-                              arrshape=arrshape,
+                              arrres=arrres,
                               workdir=inps.workdir,
                               outputFormat=inps.outputFormat,
                               num_threads=inps.num_threads)
@@ -456,6 +456,7 @@ def main(inps=None):
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'dem': demfile,
+        'arrres': arrres,
         'lat': Latitude,
         'lon': Longitude,
         'mask': inps.mask,
@@ -471,7 +472,7 @@ def main(inps=None):
     layers = ['unwrappedPhase', 'coherence']
     print('\nExtracting unwrapped phase, coherence, '
           'and connected components for each interferogram pair')
-    arrshape = export_products(standardproduct_info.products[1],
+    ref_arr_record = export_products(standardproduct_info.products[1],
                                tropo_total=False,
                                layers=layers,
                                rankedResampling=inps.rankedResampling,
@@ -488,18 +489,22 @@ def main(inps=None):
     layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
     print('\nExtracting single incidence angle, look angle and azimuth angle '
           'files valid over common interferometric grid')
-    _ = export_products([extract_dict],
+    prod_arr_record = export_products([extract_dict],
                         tropo_total=False,
                         layers=layers,
                         **export_dict)
+    # Track consistency of dimensions
+    dim_check(ref_arr_record, prod_arr_record)
 
     layers = ['bPerpendicular']
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
-    _ = export_products(standardproduct_info.products[1],
+    prod_arr_record = export_products(standardproduct_info.products[1],
                         tropo_total=False,
                         layers=layers,
                         **export_dict)
+    # Track consistency of dimensions
+    dim_check(ref_arr_record, prod_arr_record)
 
     # Extracting other layers, if specified
     layers, inps.tropo_total, \
@@ -516,11 +521,13 @@ def main(inps=None):
         if inps.tropo_total is True:
             print('\nExtracting, %s for each applicable '
                   'interferogram pair' % ('troposphereTotal'))
-        _ = export_products(standardproduct_info.products[1],
+        prod_arr_record = export_products(standardproduct_info.products[1],
                             tropo_total=inps.tropo_total,
                             model_names=model_names,
                             layers=layers,
                             **export_dict)
+        # Track consistency of dimensions
+        dim_check(ref_arr_record, prod_arr_record)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
     # If necessary, resample DEM/mask AFTER they have been used to extract

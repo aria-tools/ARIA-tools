@@ -24,8 +24,7 @@ log = logging.getLogger(__name__)
 
 
 ###Save file with gdal
-def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI',
-              gdal_fmt='float32', proj=None, nodata=None, verbose=False):
+def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
     """Exports raster and renders corresponding VRT file."""
     gdalMap = { 'byte'   : 1,
                 'int16'  : 3,
@@ -35,9 +34,7 @@ def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI',
                 'cfloat32' : 10,
                 'cfloat64': 11}
 
-    gdalfile = gdal.GetDriverByName(drivername).Create(fname,
-                   data_lyr.shape[1], data_lyr.shape[0], 1,
-                   gdalMap[gdal_fmt])
+    gdalfile=gdal.GetDriverByName(drivername).Create(fname, data_lyr.shape[1], data_lyr.shape[0], 1, gdalMap[gdal_fmt])
     gdalfile.GetRasterBand(1).WriteArray(data_lyr)
     if geotrans: #If user wishes to update geotrans.
         gdalfile.SetGeoTransform(geotrans)
@@ -46,15 +43,10 @@ def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI',
     if nodata is not None: #If user wishes to set nodata val.
         gdalfile.GetRasterBand(1).SetNoDataValue(nodata)
         # Finalize VRT
-        gdal.Translate(fname+'.vrt', gdalfile,
-                       options=gdal.TranslateOptions(format="VRT",
-                                                     noData=nodata)
-                       )
+        gdal.Translate(fname+'.vrt', gdalfile, options=gdal.TranslateOptions(format="VRT", noData=nodata))
     else:
         # Finalize VRT
-        gdal.Translate(fname+'.vrt', gdalfile,
-                       options=gdal.TranslateOptions(format="VRT")
-                       )
+        gdal.Translate(fname+'.vrt', gdalfile, options=gdal.TranslateOptions(format="VRT"))
 
     gdalfile = None
 
@@ -64,20 +56,15 @@ def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI',
 ###Make OGR VRT file
 def renderOGRVRT(vrt_filename, src_datasets):
     """Generate VRT of shapefile unions."""
-    vrt_head = '<OGRVRTDataSource>\n  ' \
-               '<OGRVRTUnionLayer name="merged">\n    ' \
-               '<FieldStrategy>Union</FieldStrategy>\n'
-    vrt_tail = '  </OGRVRTUnionLayer>\n</OGRVRTDataSource>\n'
+    vrt_head='<OGRVRTDataSource>\n  <OGRVRTUnionLayer name="merged">\n    <FieldStrategy>Union</FieldStrategy>\n'
+    vrt_tail='  </OGRVRTUnionLayer>\n</OGRVRTDataSource>\n'
 
     with open(vrt_filename,'w') as vrt_write:
         vrt_write.write(vrt_head)
         for i in enumerate(src_datasets):
-            vrt_write.write('    <OGRVRTLayer name="Dataset%i_%s">\n'%(i[0],
-                            os.path.basename(i[1]).split('.shp')[0]))
-            vrt_write.write('      <SrcDataSource shared="1">%s'%(i[1]))
-            vrt_write.write('</SrcDataSource>\n')
-            vrt_write.write('      <SrcLayer>%s</SrcLayer>\n'%( \
-                            os.path.basename(i[1]).split('.shp')[0]))
+            vrt_write.write('    <OGRVRTLayer name="Dataset%i_%s">\n'%(i[0],os.path.basename(i[1]).split('.shp')[0]))
+            vrt_write.write('      <SrcDataSource shared="1">%s</SrcDataSource>\n'%(i[1]))
+            vrt_write.write('      <SrcLayer>%s</SrcLayer>\n'%(os.path.basename(i[1]).split('.shp')[0]))
             vrt_write.write('    </OGRVRTLayer>\n')
         vrt_write.write(vrt_tail)
 
@@ -95,41 +82,46 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
 
     # Get datasource name (inputname)
     if os.path.exists(fname.split('.vrt')[0]):
-        inputname = fname
+        inputname=fname
     else:
-        fname += '.vrt'
-        inputname = gdal.Open(fname).GetFileList()[-1]
+        fname+='.vrt'
+        inputname=gdal.Open(fname).GetFileList()[-1]
 
     # Access original shape
     ds = gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM",
-                   cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                   cutlineDSName=prods_TOTbbox,
+                   outputBounds=bounds,
                    multithread=True,
                    options=['NUM_THREADS=%s'%(num_threads)]))
-    arrshape = [abs(ds.GetGeoTransform()[1])*multilooking,
+    # Get output res
+    arrres = [abs(ds.GetGeoTransform()[1])*multilooking,
                 abs(ds.GetGeoTransform()[-1])*multilooking]
-    #get geotrans/proj
+    # Get geotrans/proj
     ds = gdal.Warp('', fname, options=gdal.WarpOptions(format="MEM",
-                   cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                   xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',
-                   multithread=True,
+                   cutlineDSName=prods_TOTbbox,
+                   outputBounds=bounds,
+                   xRes=arrres[0], yRes=arrres[1],
+                   targetAlignedPixels=True,
+                   resampleAlg='near', multithread=True,
                    options=['NUM_THREADS=%s'%(num_threads)]))
     geotrans = ds.GetGeoTransform()
     proj = ds.GetProjection()
 
     # Must resample mask with nearest-neighbor
-    if fname.split('/')[-2] == 'mask':
+    if fname.split('/')[-2]=='mask':
         # Resample raster
         gdal.Warp(fname, inputname,
                   options=gdal.WarpOptions(format=outputFormat,
                   cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                  xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',
-                  multithread=True,
+                  xRes=arrres[0], yRes=arrres[1],
+                  targetAlignedPixels=True,
+                  resampleAlg='near', multithread=True,
                   options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
     # Use pixel function to downsample connected components/unw files
     # based off of frequency of connected components in each window
-    elif fname.split('/')[-2]=='connectedComponents' or \
-        fname.split('/')[-2]=='unwrappedPhase':
+    elif fname.split('/')[-2]=='connectedComponents' \
+         or fname.split('/')[-2]=='unwrappedPhase':
         # Resample unw phase based off of mode of connected components
         fnameunw = os.path.join('/'.join(fname.split('/')[:-2]), 
             'unwrappedPhase',
@@ -184,11 +176,11 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
                                  ).quantize(0, ROUND_HALF_UP))]
             unwmap = np.ma.masked_invalid(unwmap)
             np.ma.set_fill_value(unwmap, ds_unw_nodata)
-            # unwphase
+            #unwphase
             renderVRT(fnameunw, unwmap.filled(), geotrans=geotrans,
                       drivername=outputFormat, gdal_fmt='float32',
                       proj=proj, nodata=ds_unw_nodata)
-            # temp workaround for gdal bug
+            #temp workaround for gdal bug
             try:
                 gdal.Open(fnameunw)
             except RuntimeError:
@@ -203,12 +195,14 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
             gdal.Warp(fnameconcomp, fnameconcomp,
                       options=gdal.WarpOptions(format=outputFormat,
                       cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                      xRes=arrshape[0], yRes=arrshape[1], resampleAlg='mode',
-                      multithread=True,
+                      xRes=arrres[0], yRes=arrres[1],
+                      targetAlignedPixels=True,
+                      resampleAlg='mode', multithread=True,
                       options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
             gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp,
-                         options=gdal.BuildVRTOptions(options=['-overwrite']))
+                          options=gdal.BuildVRTOptions( \
+                          options=['-overwrite']))
         # Default: resample unw phase with gdal average algorithm
         else:
             # Resample unwphase
@@ -217,12 +211,14 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
             gdal.Warp(fnameunw, fnameunw,
                       options=gdal.WarpOptions(format=outputFormat,
                       cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                      xRes=arrshape[0], yRes=arrshape[1],
+                      xRes=arrres[0], yRes=arrres[1],
+                      targetAlignedPixels=True,
                       resampleAlg='average', multithread=True,
                       options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
             gdal.BuildVRT(fnameunw+'.vrt', fnameunw,
-                         options=gdal.BuildVRTOptions(options=['-overwrite']))
+                          options=gdal.BuildVRTOptions( \
+                          options=['-overwrite']))
             #temp workaround for gdal bug
             try:
                 gdal.Open(fnameunw)
@@ -240,8 +236,9 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
             gdal.Warp(fnameconcomp, fnameconcomp,
                       options=gdal.WarpOptions(format=outputFormat,
                       cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                      xRes=arrshape[0], yRes=arrshape[1], resampleAlg='near',
-                      multithread=True,
+                      xRes=arrres[0], yRes=arrres[1],
+                      targetAlignedPixels=True,
+                      resampleAlg='near', multithread=True,
                       options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
             # update VRT
             gdal.BuildVRT(fnameconcomp+'.vrt', fnameconcomp,
@@ -253,11 +250,12 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
         gdal.Warp(fname, inputname,
                   options=gdal.WarpOptions(format=outputFormat,
                   cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                  xRes=arrshape[0], yRes=arrshape[1], resampleAlg='lanczos',
-                  multithread=True,
+                  xRes=arrres[0], yRes=arrres[1],
+                  targetAlignedPixels=True,
+                  resampleAlg='lanczos', multithread=True,
                   options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
 
-    if outputFormat!='VRT':
+    if outputFormat != 'VRT':
         # update VRT
         gdal.BuildVRT(fname+'.vrt', fname,
                       options=gdal.BuildVRTOptions(options=['-overwrite']))
@@ -282,8 +280,8 @@ def ancillaryLooks(mask, dem, arrshape, standardproduct_info, multilooking,
         bounds = open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
         # Resample mask
         if mask is not None:
-            prod_wid, prod_height, \
-            _, _, _ = get_basic_attrs(mask.GetDescription())
+            prod_wid, prod_height, ref_geotrans, \
+                _, _ = get_basic_attrs(mask.GetDescription())
             if (ref_wid != prod_wid) or (ref_height != prod_height):
                 resampleRaster(mask.GetDescription(), multilooking,
                            bounds, prods_TOTbbox, rankedResampling,
@@ -291,9 +289,10 @@ def ancillaryLooks(mask, dem, arrshape, standardproduct_info, multilooking,
                            num_threads=num_threads)
         # Resample DEM
         if dem is not None:
-            prod_wid, prod_height, \
-            _, _, _ = get_basic_attrs(dem.GetDescription())
-            if (ref_wid != prod_wid) or (ref_height != prod_height):
+            prod_wid, prod_height, prod_geotrans, \
+                _, _ = get_basic_attrs(dem.GetDescription())
+            if (ref_wid != prod_wid) or (ref_height != prod_height) or \
+                (ref_geotrans != prod_geotrans):
                 resampleRaster(dem.GetDescription(), multilooking,
                            bounds, prods_TOTbbox, rankedResampling,
                            outputFormat=outputFormat,
@@ -303,7 +302,7 @@ def ancillaryLooks(mask, dem, arrshape, standardproduct_info, multilooking,
 
 
 ###Average rasters
-def rasterAverage(outname, product_dict, bounds, prods_TOTbbox,
+def rasterAverage(outname, product_dict, bounds, prods_TOTbbox, arrres,
                   outputFormat='ENVI', thresh=None):
     """Generate average of rasters.
 
@@ -317,27 +316,31 @@ def rasterAverage(outname, product_dict, bounds, prods_TOTbbox,
     # Iterate through all layers
     for i in enumerate(product_dict):
         arr_file = gdal.Warp('', i[1], options=gdal.WarpOptions(format="MEM",
-                             cutlineDSName=prods_TOTbbox, outputBounds=bounds))
+                             cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                             xRes=arrres[0], yRes=arrres[1],
+                             targetAlignedPixels=True))
         arr_file_arr = np.ma.masked_where(arr_file.ReadAsArray() == \
-            arr_file.GetRasterBand(1).GetNoDataValue(), arr_file.ReadAsArray())
+                       arr_file.GetRasterBand(1).GetNoDataValue(), \
+                       arr_file.ReadAsArray())
         ### Iteratively update average raster file
         if os.path.exists(outname):
             arr_file = gdal.Open(outname,gdal.GA_Update)
-            arr_file = arr_file.GetRasterBand(1).WriteArray( \
-                arr_file_arr+arr_file.ReadAsArray())
+            arr_file = arr_file.GetRasterBand(1).WriteArray(arr_file_arr + \
+                       arr_file.ReadAsArray())
         else:
             # If looping through first raster file, nothing to sum so just save to file
-            renderVRT(outname, arr_file_arr,
-                     geotrans=arr_file.GetGeoTransform(),
-                     drivername=outputFormat,
-                     gdal_fmt=arr_file_arr.dtype.name,
-                     proj=arr_file.GetProjection(),
-                     nodata=arr_file.GetRasterBand(1).GetNoDataValue())
+            renderVRT(outname,
+                      arr_file_arr,
+                      geotrans=arr_file.GetGeoTransform(),
+                      drivername=outputFormat,
+                      gdal_fmt=arr_file_arr.dtype.name,
+                      proj=arr_file.GetProjection(),
+                      nodata=arr_file.GetRasterBand(1).GetNoDataValue())
         arr_file = arr_file_arr = None
 
     # Take average of raster sum
-    arr_file = gdal.Open(outname, gdal.GA_Update)
-    arr_mean = arr_file.ReadAsArray() / len(product_dict)
+    arr_file = gdal.Open(outname,gdal.GA_Update)
+    arr_mean = arr_file.ReadAsArray()/len(product_dict)
 
     # Mask using specified raster threshold
     if thresh:
@@ -541,9 +544,32 @@ def get_basic_attrs(fname):
     data_set = gdal.Open(fname, gdal.GA_ReadOnly)
     width = data_set.RasterXSize
     height = data_set.RasterYSize
-    no_data = data_set.GetRasterBand(1).GetNoDataValue()
     geo_trans = data_set.GetGeoTransform()
     proj = data_set.GetProjection()
+    no_data = data_set.GetRasterBand(1).GetNoDataValue()
     data_set = None
 
-    return width, height, no_data, geo_trans, proj
+    return width, height, geo_trans, proj, no_data
+
+###Check dimensions between successive products
+def dim_check(ref_arr, prod_arr):
+    """Check dimensions between successive products"""
+
+    # Access respective dimensions and geotrans from inputs
+    ref_wid = ref_arr[0]
+    ref_hgt = ref_arr[1]
+    ref_geotrans = ref_arr[2]
+    prev_outname = ref_arr[3]
+    prod_wid = prod_arr[0]
+    prod_hgt = prod_arr[1]
+    prod_geotrans = prod_arr[2]
+    outname = prod_arr[3]
+
+    if (ref_wid != prod_wid) or (ref_hgt != prod_hgt):
+        raise Exception('Inconsistent product dims '
+            f'between products {outname} and {prev_outname}: '
+            f'check respective width ({ref_wid}, {prod_wid}) '
+            f'and height ({ref_hgt}, {prod_hgt}) and geotrans '
+            f'({ref_geotrans}, {prod_geotrans})')
+
+    return
