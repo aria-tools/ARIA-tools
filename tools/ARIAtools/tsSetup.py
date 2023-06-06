@@ -530,11 +530,10 @@ def main(inps=None):
         dim_check(ref_arr_record, prod_arr_record)
 
     # If necessary, resample DEM/mask AFTER they have been used to extract
-    # If necessary, resample DEM/mask AFTER they have been used to extract
     ancillary_dict = {
         'mask': inps.mask,
         'dem': demfile,
-        'arrshape': arrshape,
+        'arrshape': ref_arr_record,
         'standardproduct_info': standardproduct_info,
         'multilooking': inps.multilooking,
         'prods_TOTbbox': prods_TOTbbox,
