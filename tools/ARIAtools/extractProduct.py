@@ -940,7 +940,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     if not layers and not tropo_total: return # only bbox
 
     # initiate tracker of output dimensions
-    ref_wid = None; ref_height = None
+    ref_wid = None; ref_height = None ; ref_geotrans = None
 
     # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
@@ -1006,6 +1006,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             ]
 
             # set iterative keys
+            prev_outname = os.path.abspath(os.path.join(workdir, i))
             prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix=f'Generating: {model} {key} - ')
             lyr_input_dict['prog_bar'] = prog_bar
@@ -1028,6 +1029,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             [j["pair_name"] for j in full_product_dict if key in j.keys()]]
 
         workdir = os.path.join(outDir, key)
+        prev_outname = deepcopy(workdir)
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix='Generating: '+key+' - ')
 
@@ -1264,7 +1266,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
 
     # only perform DEM intersection for rasters with valid height levels
     nohgt_lyrs = ['ionosphere']
-    print('INSIDE!!!')
     if metadatalyr_name not in nohgt_lyrs:
         tmp_name = outname+'_temp'
         # Define lat/lon/height arrays for metadata layers
