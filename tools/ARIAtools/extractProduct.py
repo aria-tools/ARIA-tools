@@ -418,9 +418,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     # Define lat/lon arrays for fullres layers
     gt, xs, ys  = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
-    Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*ys), ys)
+    Latitude    = np.linspace(gt[3], gt[3]+(gt[5]*(ys-1)), ys)
     Latitude    = np.repeat(Latitude[:, np.newaxis], xs, axis=1)
-    Longitude   = np.linspace(gt[0], gt[0]+(gt[1]*xs), xs)
+    Longitude   = np.linspace(gt[0], gt[0]+(gt[1]*(xs-1)), xs)
     Longitude   = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
 
     return aria_dem, ds_aria, Latitude, Longitude
