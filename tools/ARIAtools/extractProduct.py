@@ -391,25 +391,38 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
 
     else:
-        gdal.Warp(aria_dem, demfilename, format=outputFormat,
-                cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                outputType=gdal.GDT_Int16, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, multithread=True,
-                options=['NUM_THREADS=%s'%(num_threads)])
+        gdal_warp_kwargs = {'format': outputFormat,
+                            'cutlineDSName': prods_TOTbbox,
+                            'outputBounds': bounds,
+                            'outputType': gdal.GDT_Int16,
+                            'xRes': arrres[0],
+                            'yRes': arrres[1],
+                            'targetAlignedPixels': True,
+                            'multithread': True,
+                            'options': [f'NUM_THREADS={num_threads}']}
+        gdal.Warp(aria_dem,
+                  demfilename,
+                  options=gdal.WarpOptions(**gdal_warp_kwargs))
 
         update_file = gdal.Open(aria_dem, gdal.GA_Update)
         update_file.SetProjection(proj); del update_file
-        ds_aria     = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
+        ds_aria = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
         log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
     bounds = list(open_shapefile(prods_TOTbbox_metadatalyr, 0, 0).bounds)
     gt = ds_aria.GetGeoTransform()
-    ds_aria = gdal.Warp('', aria_dem, format='MEM', outputBounds=bounds,
-                 xRes=abs(gt[1]), yRes=abs(gt[-1]),
-                 targetAlignedPixels=True,
-                 multithread=True, options=['NUM_THREADS=%s'%(num_threads)])
+    gdal_warp_kwargs = {'format': 'MEM',
+                        'outputBounds': bounds,
+                        'xRes': abs(gt[1]),
+                        'yRes': abs(gt[-1]),
+                        'targetAlignedPixels': True,
+                        'multithread': True,
+                        'options': [f'NUM_THREADS={num_threads}']}
+    ds_aria = gdal.Warp('',
+                        aria_dem,
+                        options=gdal.WarpOptions(**gdal_warp_kwargs))
     ds_aria.SetProjection(proj); ds_aria.SetDescription(aria_dem)
 
     # Delete temporary dem-stitcher directory
@@ -577,13 +590,16 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
     arrres = [abs(arrres.GetGeoTransform()[1]),
               abs(arrres.GetGeoTransform()[-1])]
+    gdal_warp_kwargs = {'format': 'MEM',
+                        'outputBounds': OG_bounds,
+                        'xRes': arrres[0],
+                        'yRes': arrres[1],
+                        'targetAlignedPixels': True,
+                        'multithread': True,
+                        'options': [f'NUM_THREADS={num_threads}']}
     ds = gdal.Warp('',
                    gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]),
-                   options=gdal.WarpOptions(format="MEM",
-                   outputBounds = OG_bounds,
-                   xRes = arrres[0], yRes = arrres[1],
-                   targetAlignedPixels = True,
-                   options = ['NUM_THREADS = %s'%(num_threads)]))
+                   options=gdal.WarpOptions(**gdal_warp_kwargs))
     # Get shape of full res layers
     arrshape = [ds.RasterYSize, ds.RasterXSize]
     ds_gt = ds.GetGeoTransform()
@@ -978,6 +994,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         outputFormatPhys = outputFormat
     lyr_input_dict['outputFormat'] = outputFormatPhys
 
+    # Initialize warp dict
+    gdal_warp_kwargs = {'format': outputFormat,
+                        'cutlineDSName': prods_TOTbbox,
+                        'outputBounds': bounds,
+                        'xRes': arrres[0],
+                        'yRes': arrres[1],
+                        'targetAlignedPixels': True,
+                        'multithread': True,
+                        'options': [f'NUM_THREADS={num_threads}']}
+
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
     if tropo_total or list(set.intersection(*map(set, \
@@ -1088,23 +1114,15 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     # building the virtual vrt
                     gdal.BuildVRT(outname+ "_uncropped" +'.vrt', i[1])
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt', outname+"_uncropped"+'.vrt',
-                              options=gdal.WarpOptions(format=outputFormat,
-                              cutlineDSName=prods_TOTbbox,
-                              outputBounds=bounds,
-                              xRes=arrres[0], yRes=arrres[1],
-                              targetAlignedPixels=True,
-                              options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname+'.vrt',
+                              outname+'_uncropped.vrt',
+                              options=gdal.WarpOptions(**gdal_warp_kwargs))
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname +'.vrt', i[1])
-                    gdal.Warp(outname, outname+'.vrt',
-                              options=gdal.WarpOptions(format=outputFormat,
-                              cutlineDSName=prods_TOTbbox,
-                              outputBounds=bounds,
-                              xRes=arrres[0], yRes=arrres[1],
-                              targetAlignedPixels=True,
-                              options=['NUM_THREADS=%s'%(num_threads)]))
+                    gdal.Warp(outname,
+                              outname+'.vrt',
+                              options=gdal.WarpOptions(**gdal_warp_kwargs))
 
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname,
@@ -1313,20 +1331,27 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
     # outside of the expected track bounds,
     # it must be cut to conform with these bounds.
     # Crop to track extents
+    data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
+    gdal_warp_kwargs = {'format': outputFormat,
+                        'cutlineDSName': prods_TOTbbox,
+                        'outputBounds': bbox_bounds,
+                        'dstNodata': data_array_nodata,
+                        'xRes': arrres[0],
+                        'yRes': arrres[1],
+                        'targetAlignedPixels': True,
+                        'multithread': True,
+                        'options': [f'NUM_THREADS={num_threads}']}
     gdal.Warp(tmp_name+'_temp',
               tmp_name,
-              options=gdal.WarpOptions(format=outputFormat,
-              cutlineDSName=prods_TOTbbox,
-              outputBounds=bbox_bounds,
-              dstNodata=data_array.GetRasterBand(1).GetNoDataValue(),
-              xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-              options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+              options=gdal.WarpOptions(**gdal_warp_kwargs))
     # Adjust shape
+    gdal_warp_kwargs = {'format': outputFormat,
+                        'height': arrshape[0],
+                        'width': arrshape[1],
+                        'options': [f'NUM_THREADS={num_threads}']}
     gdal.Warp(outname,
               tmp_name+'_temp',
-              options=gdal.WarpOptions(format=outputFormat,
-              width=arrshape[1], height=arrshape[0],
-              options=['NUM_THREADS=%s'%(num_threads)+' -overwrite']))
+              options=gdal.WarpOptions(**gdal_warp_kwargs))
     #remove temp files
     for i in glob.glob(outname+'*_temp*'): os.remove(i)
 
@@ -1641,14 +1666,22 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                 product_dict[2][i][0])
 
             # Open corresponding tropo products and pass the difference
-            tropo_reference = gdal.Warp('', tropo_reference, format="MEM",
-                                      outputBounds=bounds, xRes=arrres[0],
-                                      yRes=arrres[1],
-                                      targetAlignedPixels=True).ReadAsArray()
-            tropo_secondary = gdal.Warp('', tropo_secondary, format="MEM",
-                                      outputBounds=bounds, xRes=arrres[0],
-                                      yRes=arrres[1],
-                                      targetAlignedPixels=True).ReadAsArray()
+            gdal_warp_kwargs = {'format': outputFormat,
+                                'cutlineDSName': prods_TOTbbox,
+                                'outputBounds': bounds,
+                                'xRes': arrres[0],
+                                'yRes': arrres[1],
+                                'targetAlignedPixels': True,
+                                'multithread': True,
+                                'options': [f'NUM_THREADS={num_threads}']}
+            tropo_reference = gdal.Warp('',
+                                        tropo_reference,
+                                        options=gdal.WarpOptions( \
+                                        **gdal_warp_kwargs)).ReadAsArray()
+            tropo_secondary = gdal.Warp('',
+                                        tropo_secondary,
+                                        options=gdal.WarpOptions( \
+                                        **gdal_warp_kwargs)).ReadAsArray()
             tropo_product  = np.subtract(tropo_secondary, tropo_reference)
 
             # Convert troposphere from m to rad
