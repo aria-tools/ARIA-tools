@@ -956,7 +956,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     if not layers and not tropo_total: return # only bbox
 
     # initiate tracker of output dimensions
-    ref_wid = None; ref_height = None ; ref_geotrans = None
+    ref_wid = None; ref_hgt = None ; ref_geotrans = None
 
     # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
@@ -1041,6 +1041,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             # extract layers
             handle_epoch_layers(**lyr_input_dict)
 
+        # Track consistency of dimensions
+        prev_outname = os.path.abspath(os.path.join(workdir,
+                                       product_dict[1][0][0]))
+        ref_wid, ref_hgt, ref_geotrans, \
+            _, _ = get_basic_attrs(prev_outname + '.vrt')
+        ref_arr = [ref_wid, ref_hgt, ref_geotrans,
+                   prev_outname]
+
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
@@ -1071,6 +1079,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
         # extract layers
         handle_epoch_layers(**lyr_input_dict)
+
+        # Track consistency of dimensions
+        prev_outname = os.path.abspath(os.path.join(workdir,
+                                       product_dict[1][0][0]))
+        ref_wid, ref_hgt, ref_geotrans, \
+            _, _ = get_basic_attrs(prev_outname + '.vrt')
+        ref_arr = [ref_wid, ref_hgt, ref_geotrans,
+                   prev_outname]
 
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
@@ -1229,7 +1245,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             if len(os.listdir(plots_subdir)) == 0:
                 shutil.rmtree(plots_subdir)
 
-    return [ref_height, ref_wid, ref_geotrans, prev_outname]
+    return [ref_hgt, ref_wid, ref_geotrans, prev_outname]
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
