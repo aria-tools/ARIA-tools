@@ -17,4 +17,5 @@ scipy>1.10.0
 shapely
 jupyterlab
 jupyter_contrib_nbextensions
+dem_stitcher>=2.5.0
 rise
