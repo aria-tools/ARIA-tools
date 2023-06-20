@@ -1042,7 +1042,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             handle_epoch_layers(**lyr_input_dict)
 
         # Track consistency of dimensions
-        prev_outname = os.path.abspath(os.path.join(workdir,
+        prev_outname = os.path.abspath(os.path.join(workdir, i,
                                        product_dict[1][0][0]))
         ref_wid, ref_hgt, ref_geotrans, \
             _, _ = get_basic_attrs(prev_outname + '.vrt')
