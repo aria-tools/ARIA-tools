@@ -121,6 +121,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         if user_mask == local_mask:
             log.warning('The mask you specified already exists in %s, '\
                     'using the existing one...', os.path.dirname(local_mask))
+            ds = gdal.Open(local_mask)
 
         else:
             # move the mask to the local directory and built a VRT for it

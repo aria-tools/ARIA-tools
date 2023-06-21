@@ -1041,13 +1041,18 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             # extract layers
             handle_epoch_layers(**lyr_input_dict)
 
-        # Track consistency of dimensions
-        prev_outname = os.path.abspath(os.path.join(workdir, i,
+            # track valid files
+            prev_outname = os.path.abspath(os.path.join(workdir, i,
                                        product_dict[1][0][0]))
-        ref_wid, ref_hgt, ref_geotrans, \
-            _, _ = get_basic_attrs(prev_outname + '.vrt')
-        ref_arr = [ref_wid, ref_hgt, ref_geotrans,
-                   prev_outname]
+            if os.path.exists(prev_outname + '.vrt'):
+                prev_outname_check = deepcopy(prev_outname)
+
+        # track consistency of dimensions
+        if prev_outname_check in locals():
+            ref_wid, ref_hgt, ref_geotrans, \
+                _, _ = get_basic_attrs(prev_outname_check + '.vrt')
+            ref_arr = [ref_wid, ref_hgt, ref_geotrans,
+                       prev_outname]
 
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
