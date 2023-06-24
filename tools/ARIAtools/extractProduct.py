@@ -1048,7 +1048,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                 prev_outname_check = deepcopy(prev_outname)
 
         # track consistency of dimensions
-        if prev_outname_check in locals():
+        if 'prev_outname_check' in locals():
             ref_wid, ref_hgt, ref_geotrans, \
                 _, _ = get_basic_attrs(prev_outname_check + '.vrt')
             ref_arr = [ref_wid, ref_hgt, ref_geotrans,

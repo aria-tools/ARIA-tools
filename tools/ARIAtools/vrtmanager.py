@@ -567,7 +567,7 @@ def dim_check(ref_arr, prod_arr):
 
     if (ref_wid != prod_wid) or (ref_hgt != prod_hgt):
         raise Exception('Inconsistent product dims '
-            f'between products {outname} and {prev_outname}: '
+            f'between products {prev_outname} and {outname}: '
             f'check respective width ({ref_wid}, {prod_wid}) '
             f'and height ({ref_hgt}, {prod_hgt}) and geotrans '
             f'({ref_geotrans}, {prod_geotrans})')
