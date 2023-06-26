@@ -487,6 +487,7 @@ def _metadata_offset(unw1 : NDArray, unw2 : NDArray,
 
 def product_stitch_sequential(input_unw_files : List[str],
                              input_conncomp_files : List[str],
+                             arrres : List[float],
                              output_unw : Optional[str] = './unwMerged',
                              output_conn : Optional[str] = './connCompMerged',
                              output_format : Optional[str] = 'ENVI',
@@ -704,8 +705,10 @@ def product_stitch_sequential(input_unw_files : List[str],
                        str(input.with_suffix('.vrt')),
                        format=output_format,
                        cutlineDSName=clip_json,
-                       outputBounds=bounds,
+                       xRes=arrres[0], yRes=arrres[1],
+                       targetAlignedPixels=True,
                        #cropToCutline = True,
+                       outputBounds=bounds
                     )
         ds = None
         # Update VRT
@@ -743,7 +746,11 @@ def product_stitch_sequential(input_unw_files : List[str],
     # NOTE: saving output figure adds 4 seconds 
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')),
-                           str(output_conn.with_suffix('.vrt')))                
+                           str(output_conn.with_suffix('.vrt')))
+
+    # Remove temp files
+    [ii.unlink() for ii in [temp_unw_out, 
+                            temp_unw_out] if ii.exists()]              
 
     return
 

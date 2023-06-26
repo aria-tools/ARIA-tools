@@ -90,6 +90,10 @@ class Stitching:
             connCompFile = [connCompFile]
         self.ccFile = connCompFile
 
+    def setArrRes(self,arrres):
+        """ Set output resolution """
+        self.arrres = arrres
+
     def setProdBBoxFile(self, ProdBBoxFile):
         """ Set the product bounding box file(s) """
         # Convert a string (i.e. user gave single file) to a list
@@ -268,33 +272,53 @@ class Stitching:
         # remove existing output file(s)
         for file in glob.glob(self.outFileUnw + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles, options=gdal.BuildVRTOptions(srcNodata=0))
-        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        gdal.BuildVRT(self.outFileUnw+'.vrt', unwFiles,
+                      options=gdal.BuildVRTOptions(srcNodata=0))
+        gdal.Warp(self.outFileUnw, self.outFileUnw+'.vrt',
+                 options=gdal.WarpOptions(format=self.outputFormat,
+                 cutlineDSName=self.setTotProdBBoxFile,
+                 outputBounds=self.bbox_file,
+                 xRes=self.arrres[0], yRes=self.arrres[1],
+                 targetAlignedPixels=True))
         # Update VRT
-        gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw, options=gdal.TranslateOptions(format="VRT"))
+        gdal.Translate(self.outFileUnw+'.vrt', self.outFileUnw,
+                       options=gdal.TranslateOptions(format="VRT"))
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file=gdal.Open(self.outFileUnw,gdal.GA_Update)
-            update_file=update_file.GetRasterBand(1).WriteArray(self.mask.ReadAsArray()*gdal.Open(self.outFileUnw+'.vrt').ReadAsArray())
-            update_file=None
+            update_file = gdal.Open(self.outFileUnw, gdal.GA_Update)
+            msk_arr = self.mask.ReadAsArray() * \
+                gdal.Open(self.outFileUnw+'.vrt').ReadAsArray()
+            update_file = update_file.GetRasterBand(1).WriteArray(msk_arr)
+            update_file = None
 
         # remove existing output file(s)
         for file in glob.glob(self.outFileConnComp + "*"):
             os.remove(file)
-        gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles, options=gdal.BuildVRTOptions(srcNodata=-1))
-        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt', options=gdal.WarpOptions(format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile, outputBounds=self.bbox_file))
+        gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles,
+                      options=gdal.BuildVRTOptions(srcNodata=-1))
+        gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt',
+                 options=gdal.WarpOptions(format=self.outputFormat,
+                 cutlineDSName=self.setTotProdBBoxFile,
+                 outputBounds=self.bbox_file,
+                 xRes=self.arrres[0], yRes=self.arrres[1],
+                 targetAlignedPixels=True))
         # Update VRT
-        gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp, options=gdal.TranslateOptions(format="VRT"))
+        gdal.Translate(self.outFileConnComp+'.vrt', self.outFileConnComp,
+                       options=gdal.TranslateOptions(format="VRT"))
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file=gdal.Open(self.outFileConnComp,gdal.GA_Update)
+            update_file = gdal.Open(self.outFileConnComp,gdal.GA_Update)
             #mask value for conncomp must be set to nodata value -1
-            ma_update_file=np.ma.masked_where(self.mask.ReadAsArray() == 0., gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
-            np.ma.set_fill_value(ma_update_file, update_file.GetRasterBand(1).GetNoDataValue())
-            update_file=update_file.GetRasterBand(1).WriteArray(ma_update_file.filled())
-            update_file=None
+            ma_update_file = np.ma.masked_where(self.mask.ReadAsArray() == 0.,
+                gdal.Open(self.outFileConnComp+'.vrt').ReadAsArray())
+            np.ma.set_fill_value(ma_update_file,
+                update_file.GetRasterBand(1).GetNoDataValue())
+            update_file = update_file.GetRasterBand(1).WriteArray( \
+                          ma_update_file.filled())
+            update_file = None
 
-        cmd = "gdal_translate -of png -scale -ot Byte -q " + self.outFileUnw + ".vrt " + self.outFileUnw + ".png"
+        cmd = 'gdal_translate -of png -scale -ot Byte ' \
+              f'-q {self.outFileUnw}.vrt {self.outFileUnw}.png'
         os.system(cmd)
 
         # Remove the directory with intermediate files as they are no longer needed
@@ -383,19 +407,21 @@ class UnwrapOverlap(Stitching):
                     self.ccFile[counter],data_band=1,loadData=False)
                 out_data,connCompNoData2,geoTrans,proj = GDALread( \
                     self.ccFile[counter+1],data_band=1,loadData=False)
-                connCompFile1 = gdal.Warp( \
-                    '', self.ccFile[counter], options = gdal.WarpOptions( \
-                    format="MEM", cutlineDSName=outname, \
-                    outputBounds=polyOverlap.bounds, \
-                    dstNodata=connCompNoData1))
+                connCompFile1 = gdal.Warp('', self.ccFile[counter],
+                    options = gdal.WarpOptions(format="MEM",
+                    cutlineDSName=outname,
+                    outputBounds=polyOverlap.bounds,
+                    dstNodata=connCompNoData1,
+                    xRes=self.arrres[0], yRes=self.arrres[1],
+                    targetAlignedPixels=True))
                 # need to specify spacing to avoid inconsistent dimensions
-                arrshape = connCompFile1.ReadAsArray().shape
-                connCompFile2 = gdal.Warp( \
-                    '', self.ccFile[counter+1], options=gdal.WarpOptions( \
-                    format="MEM", cutlineDSName=outname, \
-                    outputBounds=polyOverlap.bounds, \
-                    dstNodata=connCompNoData2, \
-                    width = arrshape[1], height = arrshape[0], \
+                connCompFile2 = gdal.Warp('', self.ccFile[counter+1],
+                    options=gdal.WarpOptions(format="MEM",
+                    cutlineDSName=outname,
+                    outputBounds=polyOverlap.bounds,
+                    dstNodata=connCompNoData2,
+                    xRes=self.arrres[0], yRes=self.arrres[1],
+                    targetAlignedPixels=True,
                     multithread = True))
 
 
@@ -404,19 +430,21 @@ class UnwrapOverlap(Stitching):
                     self.inpFile[counter],data_band=1,loadData=False)
                 out_data,unwNoData2,geoTrans,proj = GDALread( \
                     self.inpFile[counter+1],data_band=1,loadData=False)
-                unwFile1 = gdal.Warp( \
-                    '', self.inpFile[counter], options=gdal.WarpOptions( \
-                    format="MEM", cutlineDSName=outname, \
-                    outputBounds=polyOverlap.bounds, \
-                    dstNodata=unwNoData1, \
-                    width = arrshape[1], height = arrshape[0], \
+                unwFile1 = gdal.Warp('', self.inpFile[counter],
+                    options=gdal.WarpOptions(format="MEM",
+                    cutlineDSName=outname,
+                    outputBounds=polyOverlap.bounds,
+                    dstNodata=unwNoData1,
+                    xRes=self.arrres[0], yRes=self.arrres[1],
+                    targetAlignedPixels=True,
                     multithread = True))
-                unwFile2 = gdal.Warp( \
-                    '', self.inpFile[counter+1], options=gdal.WarpOptions( \
-                    format="MEM", cutlineDSName=outname, \
-                    outputBounds=polyOverlap.bounds, \
-                    dstNodata=unwNoData2, \
-                    width = arrshape[1], height = arrshape[0], \
+                unwFile2 = gdal.Warp('', self.inpFile[counter+1],
+                    options=gdal.WarpOptions(format="MEM",
+                    cutlineDSName=outname,
+                    outputBounds=polyOverlap.bounds,
+                    dstNodata=unwNoData2,
+                    xRes=self.arrres[0], yRes=self.arrres[1],
+                    targetAlignedPixels=True,
                     multithread = True))
 
 
@@ -1455,7 +1483,11 @@ def gdalTest(file):
 
 
 
-def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, prods_TOTbbox, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged', outputFormat='ENVI', mask=None, verbose=False):
+def product_stitch_overlap(unw_files, conn_files, arrres,
+                           prod_bbox_files, bbox_file, prods_TOTbbox,
+                           outFileUnw = './unwMerged',
+                           outFileConnComp = './connCompMerged',
+                           outputFormat='ENVI', mask=None, verbose=False):
     '''
         Stitching of products minimizing overlap betnween products
     '''
@@ -1468,6 +1500,7 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     unw = UnwrapOverlap()
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
+    unw.setArrRes(arrres)
     unw.setOutFileConnComp(outFileConnComp)
     unw.setOutFileUnw(outFileUnw)
     unw.setProdBBoxFile(prod_bbox_files)
@@ -1480,7 +1513,12 @@ def product_stitch_overlap(unw_files, conn_files, prod_bbox_files, bbox_file, pr
     unw.setVerboseMode(verbose)
     unw.UnwrapOverlap()
 
-def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwrapper_2stage_name = None, solver_2stage = None, outFileUnw = './unwMerged', outFileConnComp = './connCompMerged',outputFormat='ENVI',mask=None, verbose=False):
+def product_stitch_2stage(unw_files, conn_files, arrres,
+                          bbox_file, prods_TOTbbox,
+                          unwrapper_2stage_name = None,
+                          solver_2stage = None, outFileUnw = './unwMerged',
+                          outFileConnComp = './connCompMerged',
+                          outputFormat='ENVI',mask=None, verbose=False):
     '''
         Stitching of products using the two-stage unwrapper approach
         i.e. minimize the discontinuities between connected components
@@ -1505,6 +1543,7 @@ def product_stitch_2stage(unw_files, conn_files, bbox_file, prods_TOTbbox, unwra
     unw._legacy_flag = True
     unw.setInpFile(unw_files)
     unw.setConnCompFile(conn_files)
+    unw.setArrRes(arrres)
     unw.setOutFileConnComp(outFileConnComp)
     unw.setOutFileUnw(outFileUnw)
     unw.setSolver(solver_2stage)
