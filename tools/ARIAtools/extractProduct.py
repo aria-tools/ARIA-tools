@@ -1314,11 +1314,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
                            data_array.GetGeoTransform()[3] + \
                            (data_array.GetGeoTransform()[5] * \
-                           (data_array.RasterYSize-1)), data_array.RasterYSize)
+                           (data_array.RasterYSize-1)), data_array.RasterYSize,
+                           dtype='float32')
         longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
                            data_array.GetGeoTransform()[0] + \
                            (data_array.GetGeoTransform()[1] * \
-                           (data_array.RasterXSize-1)), data_array.RasterXSize)
+                           (data_array.RasterXSize-1)), data_array.RasterXSize,
+                           dtype='float32')
 
         da_dem = open_rasterio(dem.GetDescription(), 
                      band_as_variable=True)['band_1']
@@ -1332,8 +1334,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem, \
         pnts = transformPoints(lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
         # set up the interpolator with the GUNW cube
+        data_array_inp = data_array.ReadAsArray().astype('float32')
         interper = RegularGridInterpolator((latitudeMeta, longitudeMeta,
-                   heightsMeta), data_array.ReadAsArray().transpose(1, 2, 0),
+                   heightsMeta), data_array_inp.transpose(1, 2, 0),
                    fill_value=np.nan, bounds_error=False)
 
         # interpolate cube to DEM points
@@ -1935,6 +1938,6 @@ def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray, old_pr
         res = t.transform(lats, lons, hgts)
 
     if out_flip == 'east':
-        return np.stack((res[1], res[0], res[2]), axis=-1).T
+        return np.stack((res[1], res[0], res[2]), axis=-1, dtype='float32').T
     else:
-        return np.stack(res, axis=-1).T
+        return np.stack(res, axis=-1, dtype='float32').T
