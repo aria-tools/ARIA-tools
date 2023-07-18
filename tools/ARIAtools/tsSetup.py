@@ -12,6 +12,8 @@ Specifically, extract unwrapped interferogram, coherence, perp baseline,
 LOS file(s), and (where available) tropospheric correction layers.
 """
 
+from ARIAtools.ARIA_global_variables import ARIA_EXTERNAL_CORRECTIONS, \
+    ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES
 import os
 import glob
 import logging
@@ -38,8 +40,6 @@ gdal.PushErrorHandler('CPLQuietErrorHandler')
 log = logging.getLogger(__name__)
 
 # Import TS-related global variables
-from ARIAtools.ARIA_global_variables import ARIA_EXTERNAL_CORRECTIONS, \
-    ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES
 
 
 def create_parser():
@@ -258,7 +258,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     print(f'Number of {stack_layer} files discovered: ', len(int_list))
     dlist = sorted(int_list)
     # get dates
-    aria_dates = [os.path.basename(i).split('.vrt')[0] for i in \
+    aria_dates = [os.path.basename(i).split('.vrt')[0] for i in
                   int_list]
 
     # only perform following checks if a differential layer
@@ -289,7 +289,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     else:
         # get az times for each date
         aztime_list = len(aria_dates) * \
-                      [aria_prod.products[0][0]['azimuthZeroDopplerMidTime']]
+            [aria_prod.products[0][0]['azimuthZeroDopplerMidTime']]
 
     # get UTC times
     utc_time = extract_utc_time(aria_dates, aztime_list)
@@ -328,7 +328,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             try:
                 acq = utc_time[dates]
             except:
-                log.debug('Skipping %s; it likely exists in the %s, ' \
+                log.debug('Skipping %s; it likely exists in the %s, '
                           'but was not specified in the product list',
                           dates, os.path.dirname(data[1]))
                 continue
@@ -473,10 +473,10 @@ def main(inps=None):
     print('\nExtracting unwrapped phase, coherence, '
           'and connected components for each interferogram pair')
     ref_arr_record = export_products(standardproduct_info.products[1],
-                               tropo_total=False,
-                               layers=layers,
-                               rankedResampling=inps.rankedResampling,
-                               **export_dict)
+                                     tropo_total=False,
+                                     layers=layers,
+                                     rankedResampling=inps.rankedResampling,
+                                     **export_dict)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = defaultdict(list)
@@ -490,9 +490,9 @@ def main(inps=None):
     print('\nExtracting single incidence angle, look angle and azimuth angle '
           'files valid over common interferometric grid')
     prod_arr_record = export_products([extract_dict],
-                        tropo_total=False,
-                        layers=layers,
-                        **export_dict)
+                                      tropo_total=False,
+                                      layers=layers,
+                                      **export_dict)
     # Track consistency of dimensions
     dim_check(ref_arr_record, prod_arr_record)
 
@@ -500,9 +500,9 @@ def main(inps=None):
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
     prod_arr_record = export_products(standardproduct_info.products[1],
-                        tropo_total=False,
-                        layers=layers,
-                        **export_dict)
+                                      tropo_total=False,
+                                      layers=layers,
+                                      **export_dict)
     # Track consistency of dimensions
     dim_check(ref_arr_record, prod_arr_record)
 
@@ -522,10 +522,10 @@ def main(inps=None):
             print('\nExtracting, %s for each applicable '
                   'interferogram pair' % ('troposphereTotal'))
         prod_arr_record = export_products(standardproduct_info.products[1],
-                            tropo_total=inps.tropo_total,
-                            model_names=model_names,
-                            layers=layers,
-                            **export_dict)
+                                          tropo_total=inps.tropo_total,
+                                          model_names=model_names,
+                                          layers=layers,
+                                          **export_dict)
         # Track consistency of dimensions
         dim_check(ref_arr_record, prod_arr_record)
 
