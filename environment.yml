@@ -28,7 +28,7 @@ dependencies:
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
-  - jupyter_contrib_nbextensions
   - dem_stitcher>=2.5.0
   - pip:
     - rise
+    - jupyter_contrib_nbextensions
