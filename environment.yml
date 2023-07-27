@@ -11,6 +11,7 @@ dependencies:
   - python>=3.8
   - asf_search
   - cartopy
+  - dem_stitcher>=2.5.0
   - gdal>=3.4.1
   - h5py
   - joblib
@@ -28,7 +29,7 @@ dependencies:
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
-  - dem_stitcher>=2.5.0
+  
   - pip:
     - rise
     - jupyter_contrib_nbextensions
