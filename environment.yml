@@ -29,6 +29,7 @@ dependencies:
   - shapely
   #for ARIA-tools-docs
   - jupyterlab
-  - jupyter_contrib_nbextensions
+  
   - pip:
     - rise
+    - jupyter_contrib_nbextensions
