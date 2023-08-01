@@ -268,16 +268,23 @@ class Downloader(object):
         """Get the scenes from ASF"""
         bbox = make_bbox(self.inps.bbox)
         bbox = bbox.wkt if bbox is not None else None
+        if self.inps.flightdir == 'a':
+            flight_direction = 'ascending'
+        elif self.inps.flightdir == 'd':
+            flight_direction = 'descending'
+        else:
+            flight_direction = self.inps.flightdir
 
         if self.inps.track is not None:
             tracks = self.inps.track.split(',')
             tracks = [int(track) for track in tracks]
         else:
             tracks = self.inps.track
+
         dct_kw = dict(platform=asf.constants.SENTINEL1,
                       processingLevel=asf.constants.GUNW_STD,
                       relativeOrbit=tracks,
-                      lookDirection=self.inps.flightdir,
+                      flightDirection=flight_direction,
                       intersectsWith=bbox)
         scenes = asf.geo_search(**dct_kw)
 
