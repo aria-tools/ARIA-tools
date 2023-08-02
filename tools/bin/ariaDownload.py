@@ -268,12 +268,13 @@ class Downloader(object):
         """Get the scenes from ASF"""
         bbox = make_bbox(self.inps.bbox)
         bbox = bbox.wkt if bbox is not None else None
-        if self.inps.flightdir == 'a':
-            flight_direction = 'ascending'
-        elif self.inps.flightdir == 'd':
-            flight_direction = 'descending'
+        if self.inps.flightdir is not None:
+            if self.inps.flightdir.lower()[0] == 'a':
+                flight_direction = 'ascending'
+            elif self.inps.flightdir == 'd':
+                self.inps.flightdir.lower()[0]  = 'descending'
         else:
-            flight_direction = self.inps.flightdir
+            flight_direction = None
 
         if self.inps.track is not None:
             tracks = self.inps.track.split(',')
