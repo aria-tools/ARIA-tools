@@ -102,6 +102,8 @@ class ARIA_standardproduct:
         if num_threads == 'all':
             import multiprocessing
             self.num_threads = multiprocessing.cpu_count()
+        else:
+            self.num_threads = int(num_threads)
 
         # Determine if file input is single file, a list, or wildcard
         # If list of files
