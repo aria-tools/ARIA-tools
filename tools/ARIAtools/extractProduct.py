@@ -1295,7 +1295,12 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     from scipy.interpolate import RegularGridInterpolator
 
     # get final shape
-    arrres = gdal.Open(dem.GetDescription())
+    # MG: add option to pass dem path as string
+    if isinstance(dem, str):
+        arrres = gdal.Open(dem)
+    else:
+        # for gdal instance
+        arrres = gdal.Open(dem.GetDescription())
     arrshape = [arrres.RasterYSize, arrres.RasterXSize]
     ref_geotrans = arrres.GetGeoTransform()
     arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
