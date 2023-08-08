@@ -28,7 +28,7 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, \
     product_stitch_2stage
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
-    get_basic_attrs, ancillaryLooks, dim_check
+    get_basic_attrs, dim_check
 from ARIAtools.sequential_stitching import product_stitch_sequential
 import pyproj
 from pyproj import CRS, Transformer
@@ -366,7 +366,8 @@ class metadata_qualitycheck:
 
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
              proj, arrres=None, workdir='./',
-             outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90'):
+             outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
+             multilooking=None, rankedResampling=False):
     """Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
@@ -421,6 +422,14 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         del update_file
         ds_aria = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
         log.info('Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
+
+    # Apply multilooking, if specified
+    if multilooking is not None:
+        resampleRaster(aria_dem, multilooking,
+                       bounds, prods_TOTbbox, rankedResampling,
+                       outputFormat=outputFormat,
+                       num_threads=num_threads)
+        ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
@@ -936,11 +945,6 @@ def handle_epoch_layers(layers,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
                                   prod_ver_list, mask, outputFormat,
                                   verbose=verbose)
-                # If necessary, resample raster
-                if multilooking is not None:
-                    resampleRaster(j[1][:-4], multilooking, bounds,
-                                   prods_TOTbbox, rankedResampling,
-                                   outputFormat=outputFormat, num_threads=num_threads)
 
                 # Track consistency of dimensions
                 if j[0] == 0:
@@ -1149,7 +1153,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     in s for s in i[1]):
                 # make VRT pointing to metadata layers in standard product
                 hgt_field, model_name, outname = prep_metadatalayers(outname,
-                                                                     i[1], dem, key, layers)
+                                                      i[1], dem, key, layers)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds,
@@ -1179,14 +1183,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     gdal.Translate(outname+'.vrt', outname,
                                    options=gdal.TranslateOptions(format="VRT"))
 
-                    # Apply mask (if specified).
-                    if mask is not None:
-                        update_file = gdal.Open(outname, gdal.GA_Update)
-                        mask_arr = mask.ReadAsArray() * \
-                            gdal.Open(outname + '.vrt').ReadAsArray()
-                        update_file.GetRasterBand(1).WriteArray(mask_arr)
-                        del update_file, mask_arr
-
             # Extract/crop phs and conn_comp layers
             else:
                 # get connected component input files
@@ -1209,7 +1205,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                prods_TOTbbox,
                                                outFileUnw=outFilePhs,
                                                outFileConnComp=outFileConnComp,
-                                               mask=mask,
+                                               #mask=mask,
                                                outputFormat=outputFormatPhys,
                                                verbose=verbose)
 
@@ -1221,7 +1217,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               prods_TOTbbox,
                                               outFileUnw=outFilePhs,
                                               outFileConnComp=outFileConnComp,
-                                              mask=mask,
+                                              #mask=mask,
                                               outputFormat=outputFormatPhys,
                                               verbose=verbose)
 
@@ -1233,7 +1229,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                   clip_json=prods_TOTbbox,
                                                   output_unw=outFilePhs,
                                                   output_conn=outFileConnComp,
-                                                  mask_file=mask,  # str filename
+                                                  #mask_file=mask,  # str filename
                                                   output_format=outputFormatPhys,
                                                   range_correction=True,
                                                   save_fig=False,
@@ -1246,15 +1242,35 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                        prods_TOTbbox, rankedResampling,
                                        outputFormat=outputFormatPhys,
                                        num_threads=num_threads)
+                    # Apply mask (if specified)
+                    if mask is not None:
+                        for j in [outFileConnComp, outFilePhs]:
+                            update_file = gdal.Open(j, gdal.GA_Update)
+                            mask_arr = mask.ReadAsArray() * \
+                                gdal.Open(j + '.vrt').ReadAsArray()
+                            update_file.GetRasterBand(1).WriteArray(mask_arr)
+                            del update_file, mask_arr
 
-            # If necessary, resample raster
-            if multilooking is not None and \
-                    key != 'unwrappedPhase' and \
-                    key != 'connectedComponents':
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                               rankedResampling,
-                               outputFormat=outputFormatPhys,
-                               num_threads=num_threads)
+            if key != 'unwrappedPhase' and \
+                    key != 'connectedComponents' and \
+                    not any(":/science/grids/imagingGeometry"
+                       in s for s in i[1]) and \
+                    not any(":/science/grids/corrections"
+                       in s for s in i[1]):
+                # If necessary, resample raster
+                if multilooking is not None:
+                    resampleRaster(outname, multilooking, bounds,
+                                   prods_TOTbbox,
+                                   rankedResampling,
+                                   outputFormat=outputFormatPhys,
+                                   num_threads=num_threads)
+                # Apply mask (if specified)
+                if mask is not None:
+                    update_file = gdal.Open(outname, gdal.GA_Update)
+                    mask_arr = mask.ReadAsArray() * \
+                        gdal.Open(outname + '.vrt').ReadAsArray()
+                    update_file.GetRasterBand(1).WriteArray(mask_arr)
+                    del update_file, mask_arr
 
             # Track consistency of dimensions
             if key_ind == 0:
@@ -1880,24 +1896,43 @@ def main(inps=None):
             if 'amplitude' in d:
                 for item in list(set(d['amplitude'])):
                     amplitude_products.append(item)
-        inps.mask = prep_mask(amplitude_products, inps.mask,
-                              standardproduct_info.bbox_file,
-                              prods_TOTbbox, proj, amp_thresh=inps.amp_thresh,
-                              arrres=arrres,
-                              workdir=inps.workdir,
-                              outputFormat=inps.outputFormat,
-                              num_threads=inps.num_threads)
+        # mask parms
+        mask_dict = {
+        'product_dict': amplitude_products,
+        'maskfilename': inps.mask,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'proj': proj,
+        'amp_thresh': inps.amp_thresh,
+        'arrres': arrres,
+        'workdir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'rankedResampling': inps.rankedResampling
+        }
+        inps.mask = prep_mask(**mask_dict)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
     if inps.demfile is not None:
         print('Download/cropping DEM')
+        # DEM parms
+        dem_dict = {
+        'demfilename': inps.demfile,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+        'proj': proj,
+        'arrres': arrres,
+        'workdir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'rankedResampling': inps.rankedResampling
+        }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(
-            inps.demfile, standardproduct_info.bbox_file,
-            prods_TOTbbox, prods_TOTbbox_metadatalyr, proj,
-            arrres=arrres, workdir=inps.workdir,
-            outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(**dem_dict)
     else:
         demfile, Latitude, Longitude = None, None, None
 
@@ -1926,20 +1961,6 @@ def main(inps=None):
 
     # Extract user expected layers
     arrshape = export_products(**export_dict)
-
-    # If necessary, resample DEM/mask AFTER they have been used to extract
-    ancillary_dict = {
-        'mask': inps.mask,
-        'dem': demfile,
-        'arrshape': arrshape,
-        'standardproduct_info': standardproduct_info,
-        'multilooking': inps.multilooking,
-        'prods_TOTbbox': prods_TOTbbox,
-        'rankedResampling': inps.rankedResampling,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads
-    }
-    ancillaryLooks(**ancillary_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.gacos_products:

@@ -263,44 +263,6 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
     return
 
 
-###Check ancillary layers'
-def ancillaryLooks(mask, dem, arrshape, standardproduct_info, multilooking,
-                   prods_TOTbbox, rankedResampling, outputFormat='ENVI',
-                   num_threads='2'):
-    """Check and apply looks on ancillary layers, if necessary"""
-    # Cannot proceed with VRT format. Defaulting to ENVI format.
-    if outputFormat=='VRT':
-        outputFormat='ENVI'
-
-    # If necessary, resample DEM/mask AFTER they have been used to extract
-    # metadata layers and mask output layers, respectively
-    if multilooking is not None:
-        ref_height = arrshape[0]
-        ref_wid = arrshape[1]
-        bounds = open_shapefile(standardproduct_info.bbox_file, 0, 0).bounds
-        # Resample mask
-        if mask is not None:
-            prod_wid, prod_height, ref_geotrans, \
-                _, _ = get_basic_attrs(mask.GetDescription())
-            if (ref_wid != prod_wid) or (ref_height != prod_height):
-                resampleRaster(mask.GetDescription(), multilooking,
-                           bounds, prods_TOTbbox, rankedResampling,
-                           outputFormat=outputFormat,
-                           num_threads=num_threads)
-        # Resample DEM
-        if dem is not None:
-            prod_wid, prod_height, prod_geotrans, \
-                _, _ = get_basic_attrs(dem.GetDescription())
-            if (ref_wid != prod_wid) or (ref_height != prod_height) or \
-                (ref_geotrans != prod_geotrans):
-                resampleRaster(dem.GetDescription(), multilooking,
-                           bounds, prods_TOTbbox, rankedResampling,
-                           outputFormat=outputFormat,
-                           num_threads=num_threads)
-
-    return
-
-
 ###Average rasters
 def rasterAverage(outname, product_dict, bounds, prods_TOTbbox, arrres,
                   outputFormat='ENVI', thresh=None):
