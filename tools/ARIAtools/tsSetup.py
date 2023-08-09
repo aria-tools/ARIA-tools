@@ -96,7 +96,7 @@ def create_parser():
                                                     'By default "2". Can also specify "All" to use all '
                                                     'available threads.')
     parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
-                        type=str, default='overlap', help='Method applied to '
+                        type=str, default='sequential', help='Method applied to '
                                                           'stitch the unwrapped data. Allowed methods are: '
                                                           '"overlap", "2stage", and "sequential". "overlap" - '
                                                           'product overlap is minimized, "2stage" - '
