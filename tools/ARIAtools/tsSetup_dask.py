@@ -16,9 +16,10 @@ from dask.distributed import progress, Client
 
 from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.tsSetup import generate_stack
+from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.sequential_stitching import product_stitch_sequential
-from ARIAtools.extractProduct import merged_productbbox, prep_mask, prep_dem, prep_metadatalayers, finalize_metadata
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_metadatalayers, finalize_metadata
 
 
 gdal.UseExceptions()
