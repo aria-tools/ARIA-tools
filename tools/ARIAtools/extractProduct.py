@@ -726,11 +726,11 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
                     da.rio.to_raster(i, driver=driver)
                     da.close()
     else:
-        if not os.path.exists(outname+'.vrt'):
-            gdal.BuildVRT(outname+'.vrt', metadata_arr)
+        if not os.path.exists(outname+'_merged.vrt'):
+            gdal.BuildVRT(outname+'_merged.vrt', metadata_arr)
             # write height layers
-            gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field,
-                                                      gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
+            gdal.Open(outname+'_merged.vrt').SetMetadataItem(hgt_field,
+                                                             gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
 
     return hgt_field, model_name, ref_outname
 
@@ -1295,17 +1295,19 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     from scipy.interpolate import RegularGridInterpolator
 
     # get final shape
-    # MG: add option to pass dem path as string
+    # MG: replace string with gdal instance
     if isinstance(dem, str):
-        arrres = gdal.Open(dem)
+        dem = gdal.Open(dem)
     else:
-        # for gdal instance
-        arrres = gdal.Open(dem.GetDescription())
+        dem_bounds = dem.GetGeoTransform()
+
+    arrres = gdal.Open(dem.GetDescription())
     arrshape = [arrres.RasterYSize, arrres.RasterXSize]
-    ref_geotrans = arrres.GetGeoTransform()
+    ref_geotrans = dem.GetGeoTransform()
     arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
+
     # load layered metadata array
-    tmp_name = outname+'.vrt'
+    tmp_name = outname+'_merged.vrt'
     data_array = gdal.Warp('', tmp_name,
                            options=gdal.WarpOptions(format="MEM",
                                                     options=['NUM_THREADS=%s' % (num_threads)]))
@@ -1338,12 +1340,16 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
         if len(os.listdir(plots_subdir)) == 0:
             shutil.rmtree(plots_subdir)
 
+    # Get data nodata
+    data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
+    data_fmt = data_array.ReadAsArray().dtype.name
+
     # only perform DEM intersection for rasters with valid height levels
     nohgt_lyrs = ['ionosphere']
     if metadatalyr_name not in nohgt_lyrs:
         tmp_name = outname+'_temp'
         # Define lat/lon/height arrays for metadata layers
-        heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem(
+        heightsMeta = np.array(gdal.Open(outname+'_merged.vrt').GetMetadataItem(
             hgt_field)[1:-1].split(','), dtype='float32')
 
         latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
@@ -1362,13 +1368,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
         # interpolate the DEM to the GUNW lat/lon
         da_dem1 = da_dem.interp(x=lon[0, :],
-                                y=lat[:, 0]).fillna(dem.GetRasterBand(1).GetNoDataValue())
+                                y=lat[:, 0]).fillna(np.nan)
 
         # hack to get an stack of coordinates for the interpolator
         # to interpolate in the right shape
         pnts = transformPoints(lat, lon, da_dem1.data,
                                'EPSG:4326', 'EPSG:4326')
-
+        del da_dem, da_dem1
         # set up the interpolator with the GUNW cube
         data_array_inp = data_array.ReadAsArray().astype('float32')
         interper = RegularGridInterpolator((latitudeMeta, longitudeMeta,
@@ -1379,19 +1385,23 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
         out_interpolated = interper(pnts.transpose(2, 1, 0))
 
         # Save file
+        # MG: dem_bounds are not in use, so add small fix solution when
+        # pass dem as string
         renderVRT(tmp_name, out_interpolated,
-                  geotrans=dem.GetGeoTransform(),
+                  geotrans=dem_bounds,
                   drivername=outputFormat,
-                  gdal_fmt=data_array.ReadAsArray().dtype.name,
+                  gdal_fmt=data_fmt,
                   proj=dem.GetProjection(),
-                  nodata=data_array.GetRasterBand(1).GetNoDataValue())
-        del out_interpolated
+                  nodata=data_array_nodata)
+        del out_interpolated, interper, pnts, latitudeMeta, longitudeMeta, heightsMeta, data_array_inp
 
+    dem, data_array = None, None
+    del dem, data_array
     # Since metadata layer extends at least one grid node
     # outside of the expected track bounds,
     # it must be cut to conform with these bounds.
     # Crop to track extents
-    data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
+
     gdal_warp_kwargs = {'format': outputFormat,
                         'cutlineDSName': prods_TOTbbox,
                         'outputBounds': bbox_bounds,
@@ -1401,9 +1411,11 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
                         'targetAlignedPixels': True,
                         'multithread': True,
                         'options': [f'NUM_THREADS={num_threads}']}
+
     gdal.Warp(tmp_name+'_temp',
               tmp_name,
               options=gdal.WarpOptions(**gdal_warp_kwargs))
+
     # Adjust shape
     gdal_warp_kwargs = {'format': outputFormat,
                         'height': arrshape[0],
@@ -1412,8 +1424,11 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     gdal.Warp(outname,
               tmp_name+'_temp',
               options=gdal.WarpOptions(**gdal_warp_kwargs))
+
     # remove temp files
     for i in glob.glob(outname+'*_temp*'):
+        os.remove(i)
+    for i in glob.glob(outname+'*_merged*'):
         os.remove(i)
 
     # Update VRT
@@ -1423,14 +1438,21 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
     # Apply mask (if specified)
     if mask is not None:
+        # MG if input is gdal object, turn it to string
+        if not isinstance(mask, str):
+            mask = mask.GetDescription()
+
+        # for gdal instance
+        maskfile = gdal.Open(mask)
         out_interpolated = gdal.Open(outname).ReadAsArray()
-        out_interpolated = mask.ReadAsArray()*out_interpolated
+        out_interpolated = maskfile.ReadAsArray()*out_interpolated
         # Update VRT with new raster
         update_file = gdal.Open(outname, gdal.GA_Update)
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
-        del update_file, out_interpolated
+        del update_file, out_interpolated, maskfile
 
-    del data_array
+    # Clean up variable
+    del mask, outname, outputFormat, tmp_name, gdal_warp_kwargs,
 
 
 def gacos_correction(full_product_dict, gacos_products, bbox_file,
