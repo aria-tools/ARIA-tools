@@ -504,6 +504,7 @@ def main(inps=None):
     # Take a lot of RAM memory per worker, 9GB per scene
     # Dask reports leak - functions need restructuring
     # This would be around solution, not perfect but ..
+    # Maybe something useful is here: https://github.com/dask/distributed/issues/4571
 
     for layer in layers[:-1]:
         max_jobs = len(product_dict)
