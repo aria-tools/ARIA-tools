@@ -493,7 +493,8 @@ def main(inps=None):
     exportCoherenceAmplitude(product_dict,
                              bbox_file,
                              prods_TOTbbox, arrres, inps.workdir,
-                             mask=inps.mask, n_threads=inps.num_threads, n_jobs=inps.n_jobs)
+                             mask=inps.mask, n_threads=inps.num_threads,
+                             n_jobs=inps.n_jobs)
 
     # Export Imaging Geometry
     # Note sure do we need lookAngle here
@@ -511,11 +512,11 @@ def main(inps=None):
         # Hack solution to stop leaking, run dask Client in loop
         # restart cluster/Client after every iteration
         for n in range(0, max_jobs, inps.n_jobs):
-            if n + n_jobs > len(product_dict):
+            if n + inps.n_jobs > len(product_dict):
                 print('Loop:', [n, max_jobs])
                 product_subset = product_dict[n:max_jobs]
             else:
-                print('Loop:', [n, n + n_jobs])
+                print('Loop:', [n, n + inps.n_jobs])
                 product_subset = product_dict[n:n+inps.n_jobs]
 
         exportImagingGeometry(product_subset,
