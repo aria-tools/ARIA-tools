@@ -1303,7 +1303,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
     arrres = gdal.Open(dem.GetDescription())
     arrshape = [arrres.RasterYSize, arrres.RasterXSize]
-    ref_geotrans = dem.GetGeoTransform()
+    ref_geotrans = arrres.GetGeoTransform()
     arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
 
     # load layered metadata array
