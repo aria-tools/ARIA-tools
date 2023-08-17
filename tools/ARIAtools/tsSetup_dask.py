@@ -443,18 +443,16 @@ def main(inps=None):
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
     # but user may specify union), and expected shape for DEM.
-    (standardproduct_info.products[0], standardproduct_info.products[1],
-     standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres,
-     proj) = merged_productbbox(standardproduct_info.products[0],
-                                standardproduct_info.products[1],
-                                os.path.join(inps.workdir,
-                                             'productBoundingBox'),
-                                standardproduct_info.bbox_file,
-                                inps.croptounion,
-                                num_threads=inps.num_threads,
-                                minimumOverlap=inps.minimumOverlap,
-                                verbose=inps.verbose)
+    (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
+     prods_TOTbbox_metadatalyr, arrres, proj) = merged_productbbox(standardproduct_info.products[0],
+                                                                   standardproduct_info.products[1],
+                                                                   os.path.join(inps.workdir,
+                                                                                'productBoundingBox'),
+                                                                   standardproduct_info.bbox_file,
+                                                                   inps.croptounion,
+                                                                   num_threads=inps.num_threads,
+                                                                   minimumOverlap=inps.minimumOverlap,
+                                                                   verbose=inps.verbose)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
@@ -505,22 +503,27 @@ def main(inps=None):
 
     # Take a lot of RAM memory per worker, 9GB per scene
     # Dask reports leak - functions need restructuring
-    # MG set n_jobs to 1
-    exportImagingGeometry(product_dict,
-                          bbox_file,
-                          prods_TOTbbox,
-                          demfile, Latitude, Longitude,
-                          inps.workdir, layer='incidenceAngle',
-                          mask=inps.mask,
-                          n_threads=inps.num_threads, n_jobs=1)
+    # This would be around solution, not perfect but ..
 
-    exportImagingGeometry(product_dict,
-                          bbox_file,
-                          prods_TOTbbox,
-                          demfile, Latitude, Longitude,
-                          inps.workdir, layer='azimuthAngle',
-                          mask=inps.mask,
-                          n_threads=inps.num_threads, n_jobs=1)
+    for layer in layers[:-1]:
+        max_jobs = len(product_dict)
+        # Hack solution to stop leaking, run dask Client in loop
+        # restart cluster/Client after every iteration
+        for n in range(0, max_jobs, inps.n_jobs):
+            if n + n_jobs > len(product_dict):
+                print('Loop:', [n, max_jobs])
+                product_subset = product_dict[n:max_jobs]
+            else:
+                print('Loop:', [n, n + n_jobs])
+                product_subset = product_dict[n:n+inps.n_jobs]
+
+        exportImagingGeometry(product_subset,
+                              bbox_file,
+                              prods_TOTbbox,
+                              demfile, Latitude, Longitude,
+                              inps.workdir, layer=layer,
+                              mask=inps.mask,
+                              n_threads=inps.num_threads, n_jobs=inps.jobs)
 
     # MG did not test how it works on bPerp
     print('\nExtracting perpendicular baseline grids for each '
