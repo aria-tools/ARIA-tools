@@ -57,6 +57,7 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
                             correction_method: Optional[str] = 'cycle2pi',
                             range_correction: Optional[bool] = True,
                             direction_N_S: Optional[bool] = False,
+                            mask_zero_component: Optional[bool] = False,
                             verbose: Optional[bool] = False):
 
     # Get raster attributes [SNWE, latlon_spacing, length, width, nodata]
@@ -137,6 +138,9 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
                 frame2_conn_array,
                 unw_attr_dicts[ix2],
                 **stitching_dict)
+
+    if mask_zero_component:
+        corr_unw[corr_conn==0] = np.nan
 
     # replace nan with 0.0
     corr_unw = np.nan_to_num(corr_unw.data, nan=0.0)
@@ -466,12 +470,14 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
     correction2pi = 2. * np.pi * num_jump
 
     # Get range_correction if selected
+    # TODO: test when range correction is done and applied before
+    #       2pi jumps estimation, will it remove the issue below
     if range_correction:
         range_corr = _range_correction(unw1[idx], unw2[idx])
     else:
         range_corr = 0
 
-    # Note: range correctio sometimes gives oposite sign of
+    # Note: range correction sometimes gives oposite sign of
     #        correction, and add half or one cycle more.
     #        not sure, why that happens?? below is a hardcoded solution
     if np.abs(median_diff - (correction2pi + range_corr)) > 3.14:
@@ -632,6 +638,7 @@ def product_stitch_sequential(input_unw_files: List[str],
                               # [meandiff, cycle2pi]
                               correction_method: Optional[str] = 'cycle2pi',
                               range_correction: Optional[bool] = True,
+                              mask_zero_component: Optional[bool] = False,
                               verbose: Optional[bool] = False,
                               save_fig: Optional[bool] = False,
                               overwrite: Optional[bool] = True) -> None:
@@ -675,6 +682,10 @@ def product_stitch_sequential(input_unw_files: List[str],
     range_correction : bool
         use correction for non 2-pi shift in overlapping components
         [True/False]
+    mask_zero_component: bool
+        mask unwrapped Phase within connected component 0
+        (that snaphu consider to be unreliable)
+        [True/False] 
     verbose : bool
         print info messages [True/False]
     save_fig : bool
@@ -714,6 +725,7 @@ def product_stitch_sequential(input_unw_files: List[str],
             correction_method=correction_method,
             range_correction=range_correction,
             direction_N_S=True,
+            mask_zero_component=mask_zero_component,
             verbose=verbose)
 
         # Write
