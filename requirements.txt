@@ -1,6 +1,7 @@
 python>=3.8
 asf_search
 cartopy
+dem_stitcher>=2.5.0
 gdal>=3.4.1
 h5py
 joblib
@@ -15,7 +16,7 @@ pyproj
 requests
 scipy>1.10.0
 shapely
-jupyterlab
-jupyter_contrib_nbextensions
-dem_stitcher>=2.5.0
-rise
+## notebook dependencies, keep commented out for better compatiability with other codes
+#jupyterlab
+#jupyter_contrib_nbextensions
+#rise
