@@ -7,6 +7,7 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import dask
+import logging
 from pathlib import Path
 from itertools import compress
 from osgeo import gdal
@@ -137,7 +138,7 @@ def cmd_line_parse(iargs=None):
 
 def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
                           work_dir, outputFormat='ISCE', correction_method='cycle2pi',
-                          verbose=True, mask=None, multilook=None, n_jobs=1):
+                          mask_zero_component=False, verbose=True, mask=None, multilook=None, n_jobs=1):
 
     # verbose printing
     def vprint(x): return print(x) if verbose == True else None
@@ -148,6 +149,7 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
         client = Client(threads_per_worker=1,
                         n_workers=n_jobs,
                         memory_limit='10GB')
+        vprint(f'Link: {client.dashboard_link}')
     else:
         client = None
 
@@ -182,7 +184,7 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
     export_dict = dict(
         input_unw_files=None,
         input_conncomp_files=None,
-        arrres=arrres,
+        arrres=arres,
         output_unw=None,
         output_conn=None,
         output_format=outputFormat,
@@ -191,6 +193,7 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
         mask_file=mask,
         correction_method=correction_method,
         range_correction=True,
+        mask_zero_component=mask_zero_component,
         verbose=False,
         save_fig=False,
         overwrite=True,
@@ -266,6 +269,7 @@ def exportCoherenceAmplitude(product_dict, bbox_file, prods_TOTbbox, arrres,
         client = Client(threads_per_worker=1,
                         n_workers=n_jobs,
                         memory_limit='10GB')
+        vprint(f'Link: {client.dashboard_link}')
     else:
         client = None
 
@@ -343,7 +347,7 @@ def exportImagingGeometry(product_dict, bbox_file, prods_TOTbbox, dem, Latitude,
     def vprint(x): return print(x) if verbose == True else None
 
     # Check
-    available_layers = ['perpendicularBaseline', 'parallelBaseline',
+    available_layers = ['bPerpendicular', 'bParallel',
                         'incidenceAngle', 'lookAngle', 'azimuthAngle']
     if layer not in available_layers:
         raise ValueError(f'Selected layer: {layer} is wrong'
@@ -405,7 +409,7 @@ def exportImagingGeometry(product_dict, bbox_file, prods_TOTbbox, dem, Latitude,
     # Run export jobs
     vprint(f'Run number of jobs: {len(jobs)} with {n_jobs} workers')
     out = dask.compute(*jobs)
-    progress(out)  # need to check how to make dask progress bar with dask
+
     # close dask
     if client:
         client.close()
@@ -508,18 +512,7 @@ def main(inps=None):
     # Maybe something useful is here: https://github.com/dask/distributed/issues/4571
 
     for layer in layers[:-1]:
-        max_jobs = len(product_dict)
-        # Hack solution to stop leaking, run dask Client in loop
-        # restart cluster/Client after every iteration
-        for n in range(0, max_jobs, inps.n_jobs):
-            if n + inps.n_jobs > len(product_dict):
-                print('Loop:', [n, max_jobs])
-                product_subset = product_dict[n:max_jobs]
-            else:
-                print('Loop:', [n, n + inps.n_jobs])
-                product_subset = product_dict[n:n+inps.n_jobs]
-
-        exportImagingGeometry(product_subset,
+        exportImagingGeometry(product_dict[:1],
                               bbox_file,
                               prods_TOTbbox,
                               demfile, Latitude, Longitude,
@@ -530,13 +523,24 @@ def main(inps=None):
     # MG did not test how it works on bPerp
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
-    exportImagingGeometry(product_dict,
-                          bbox_file,
-                          prods_TOTbbox,
-                          demfile, Latitude, Longitude,
-                          inps.workdir, layer='bPerpendicular',
-                          mask=inps.mask,
-                          n_threads=inps.num_threads, n_jobs=1)
+    max_jobs = len(product_dict)
+    # Hack solution to stop leaking, run dask Client in loop
+    # restart cluster/Client after every iteration
+    for n in range(0, max_jobs, inps.n_jobs):
+        if n + inps.n_jobs > len(product_dict):
+            print('Loop:', [n, max_jobs])
+            product_subset = product_dict[n:max_jobs]
+        else:
+            print('Loop:', [n, n + inps.n_jobs])
+            product_subset = product_dict[n:n+inps.n_jobs]
+
+        exportImagingGeometry(product_subset,
+                              bbox_file,
+                              prods_TOTbbox,
+                              demfile, Latitude, Longitude,
+                              inps.workdir, layer='bPerpendicular',
+                              mask=inps.mask,
+                              n_threads=inps.num_threads, n_jobs=inps.n_jobs)
 
     # TODO missing anxiliary products
 
