@@ -162,7 +162,7 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
 
 ## MAIN
 
-def export_ionosphere(input_ionp_files: List[str],
+def export_ionosphere(input_iono_files: List[str],
                       arrres: List[float],
                       output_iono: Optional[str] = './ionosphere',
                       output_format: Optional[str] = 'ISCE',
