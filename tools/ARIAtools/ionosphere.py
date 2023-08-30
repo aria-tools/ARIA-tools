@@ -183,17 +183,21 @@ def export_ionosphere(input_iono_files: List[str],
 
         # Create VRT and exit early if only one frame passed,
         # and therefore no stitching needed
-        if len(input_ionp_files) == 1:
+        if len(input_iono_files) == 1:
             gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
-                          input_ionp_files)
+                          input_iono_files[0])
         
         else:
             (combined_iono, 
-            snwe, latlon_spacing) = stitch_ionosphere_frames(input_ionp_files,
+            snwe, latlon_spacing) = stitch_ionosphere_frames(input_iono_files,
                                                              direction_N_S=True)
 
-            # Write
             # write stitched ionosphere
+            # outputformat
+            # vrt is not support for stitched
+            if output_format=='VRT':
+                output_format = 'ISCE' 
+
             write_GUNW_array(
                 temp_iono_out, combined_iono, snwe,
                 format=output_format, verbose=verbose,
