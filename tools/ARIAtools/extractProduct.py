@@ -12,6 +12,8 @@ If no layer is specified, extract product bounding box shapefile(s)
 """
 
 import os
+os.environ['USE_PYGEOS'] = '0'
+
 import numpy as np
 from copy import deepcopy
 import glob
