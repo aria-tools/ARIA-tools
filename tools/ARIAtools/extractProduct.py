@@ -1143,19 +1143,19 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                        prefix='Generating: '+key+' - ')
 
 
-        lyr_input_dict = dict(input_ionp_files = None,
+        lyr_input_dict = dict(input_iono_files = None,
                               arrres = arrres,
                               output_iono = None,
                               output_format =  outputFormat, 
                               bounds = bounds,
                               clip_json = prods_TOTbbox,
-                              mask_file = mask.GetDescription(),
+                              mask_file = mask,
                               verbose = verbose,
                               overwrite = True)
 
         for i, layer in enumerate(product_dict[0]):
-            outname = os.path.abspath(os.path.join(workdir, product_dict[1][i]))
-            lyr_input_dict['input_ionp_files'] = layer
+            outname = os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
+            lyr_input_dict['input_iono_files'] = layer
             lyr_input_dict['output_iono'] = outname
             export_ionosphere(**lyr_input_dict)
 
