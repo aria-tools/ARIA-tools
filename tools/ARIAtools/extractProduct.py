@@ -12,6 +12,8 @@ If no layer is specified, extract product bounding box shapefile(s)
 """
 
 import os
+os.environ['USE_PYGEOS'] = '0'
+
 import numpy as np
 from copy import deepcopy
 import glob
@@ -30,6 +32,7 @@ from ARIAtools.unwrapStitching import product_stitch_overlap, \
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
     get_basic_attrs, dim_check
 from ARIAtools.sequential_stitching import product_stitch_sequential
+from ARIAtools.ionosphere import export_ionosphere
 import pyproj
 from pyproj import CRS, Transformer
 from rioxarray import open_rasterio
@@ -1123,6 +1126,40 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         ref_arr = [ref_wid, ref_hgt, ref_geotrans,
                    prev_outname]
 
+    # If specified, extract ionosphere long wavelength
+    ext_corr_lyrs += ['ionosphere']
+
+    if list(set.intersection(*map(set,
+                                  [layers, ['ionosphere']]))) != []:
+        lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
+        key = 'ionosphere'
+        product_dict = \
+            [[j[key] for j in full_product_dict if key in j.keys()],
+             [j["pair_name"] for j in full_product_dict if key in j.keys()]]
+
+        workdir = os.path.join(outDir, key)
+        prev_outname = deepcopy(workdir)
+        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
+                                       prefix='Generating: '+key+' - ')
+
+
+        lyr_input_dict = dict(input_iono_files = None,
+                              arrres = arrres,
+                              output_iono = None,
+                              output_format =  outputFormat, 
+                              bounds = bounds,
+                              clip_json = prods_TOTbbox,
+                              mask_file = mask,
+                              verbose = verbose,
+                              overwrite = True)
+
+        for i, layer in enumerate(product_dict[0]):
+            outname = os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
+            lyr_input_dict['input_iono_files'] = layer
+            lyr_input_dict['output_iono'] = outname
+            export_ionosphere(**lyr_input_dict)
+
+
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
     for key_ind, key in enumerate(layers):
@@ -1148,9 +1185,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry"
-                   in s for s in i[1]) or \
-                any(":/science/grids/corrections"
-                    in s for s in i[1]):
+                   in s for s in i[1]):
                 # make VRT pointing to metadata layers in standard product
                 hgt_field, model_name, outname = prep_metadatalayers(outname,
                                                       i[1], dem, key, layers)

@@ -6,6 +6,7 @@ tools/ARIAtools/ARIA_global_variables.py
 tools/ARIAtools/__init__.py
 tools/ARIAtools/computeMisclosure.py
 tools/ARIAtools/extractProduct.py
+tools/ARIAtools/ionosphere.py
 tools/ARIAtools/kml2box.py
 tools/ARIAtools/logger.py
 tools/ARIAtools/mask_util.py
@@ -14,6 +15,7 @@ tools/ARIAtools/productPlot.py
 tools/ARIAtools/progBar.py
 tools/ARIAtools/sequential_stitching.py
 tools/ARIAtools/shapefile_util.py
+tools/ARIAtools/stitiching_util.py
 tools/ARIAtools/tsSetup.py
 tools/ARIAtools/unwrapStitching.py
 tools/ARIAtools/url_manager.py
