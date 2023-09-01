@@ -955,7 +955,7 @@ def handle_epoch_layers(layers,
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(j[1][:-4], bounds, dem_bounds,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  prod_ver_list, mask, outputFormat,
+                                  prod_ver_list, mask, outputFormat)
                 # If necessary, resample raster
                 if multilooking is not None:
                     resampleRaster(j[1][:-4], multilooking, bounds,
@@ -1161,7 +1161,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         lyr_input_dict = dict(input_iono_files = None,
                               arrres = arrres,
                               output_iono = None,
-                              output_format =  outputFormat, 
+                              output_format =  outputFormat,
                               bounds = bounds,
                               clip_json = prods_TOTbbox,
                               mask_file = mask,
@@ -1176,7 +1176,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
 
     # Loop through other user expected layers
->>>>>>> dev
     layers = [i for i in layers if i not in ext_corr_lyrs]
     for key_ind, key in enumerate(layers):
         product_dict = [[j[key] for j in full_product_dict],
@@ -1225,12 +1224,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     gdal.BuildVRT(outname + "_uncropped" + '.vrt', prod_layers)
                     # building the cropped vrt
                     gdal.Warp(outname+'.vrt', outname+'_uncropped.vrt', **gdal_warp_kwargs)
-                              
+
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname + '.vrt', prod_layers)
                     gdal.Warp(outname, outname+'.vrt', **gdal_warp_kwargs)
-                              
+
                     # Update VRT
                     gdal.Translate(outname+'.vrt', outname, format='VRT')
 
