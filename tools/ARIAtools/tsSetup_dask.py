@@ -370,115 +370,6 @@ def exportImagingGeometry(product_dict, bbox_file, prods_TOTbbox, dem, Latitude,
         client.close()
 
 
-def exportTropoSET(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude, workdir,
-                   wmodel='HRRR', layer='troposphereTotal',  mask=None,
-                   n_threads=1, n_jobs=1, verbose=True, debug=False):
-    """ Export Tropo and SET corrections.
-
-    Set debug to True and use 'assert None' with %pdb on in associated notebook
-    """
-    outputFormat = 'GTiff'
-
-     # verbose printing
-    def vprint(x): return print(x) if verbose == True else None
-
-    # Check
-    available_layers = ['troposphereWet', 'troposphereHydrostatic', 'troposphereTotal', 'SET']
-    if layer not in available_layers:
-        raise ValueError(f'Selected layer: {layer} is wrong, '
-                        f'available choices: {available_layers}')
-
-
-    # initalize multiprocessing
-    if debug:
-        client = None
-
-    elif n_jobs > 1 or len(product_dict) > 1:
-        vprint(f'Running GUNW {layer} in parallel!')
-        client = Client(processes=True,
-                        threads_per_worker=1,
-                        n_workers=n_jobs, memory_limit='20GB')
-        vprint(f'Link: {client.dashboard_link}')
-    else:
-        client = None
-
-    # Check if output files exist
-    out_dir = Path(workdir) / wmodel / layer
-    outNames = [ix['pair_name'][0] for ix in product_dict]
-    outFiles = [out_dir / name for name in outNames]
-    export_list = [not (outFile.exists()) for outFile in outFiles]
-
-    # Get only the pairs we need to run
-    product_dict = compress(product_dict, export_list)
-    outNames = compress(outNames, export_list)
-
-
-    # Get bounds of bbox and dem
-    bounds = open_shapefile(bbox_file, 0, 0).bounds
-    dem_gt = dem.GetGeoTransform()
-    dem_bounds = [dem_gt[0],
-                dem_gt[3]+(dem_gt[-1]*dem.RasterYSize),
-                dem_gt[0]+(dem_gt[1]*dem.RasterXSize),
-                dem_gt[3]]
-
-    job_dict = dict(
-        mask=mask,
-        dem=dem.GetDescription(),
-        dem_bounds=dem_bounds,
-        bounds=bounds,
-        prods_TOTbbox=prods_TOTbbox,
-        outputFormat=outputFormat,
-        verbose=verbose,
-        num_threads=n_threads,
-        lon=Longitude,
-        lat=Latitude,
-        multilooking=None,
-        rankedResampling=None
-    )
-
-    jobs  = []
-    for i, (product, name) in enumerate(zip(product_dict, outNames)):
-        if 'tropo' in layer:
-            ## the function always extracts them all
-            if i == 0:
-                print ('Extracting: troposphereWet, troposphereHydrostatic, and troposphereTotal')
-
-            job_dict = {**job_dict, 'product_dict': [[product[f'{layer}_{wmodel.upper()}']]],
-                    'lyr_path':'/science/grids/corrections/external/troposphere/',
-                    'key':'troposphereTotal',
-                    'workdir': Path(workdir, 'troposphereTotal'),
-                    'layers': 'troposphereWet troposphereHydrostatic troposphereTotal'.split()
-                    }
-
-            job_dict['wet_key'] = 'troposphereWet'
-            job_dict['dry_key'] = 'troposphereHydrostatic'
-            job_dict['tropo_total'] = True
-
-            # prog_bar = progBar.progressBar(maxValue=len(inputfiles[0]),
-                                                #    prefix=f'Generating: {model} {key} - ')
-            prog_bar = None
-            job_dict['prog_bar'] = prog_bar
-
-            job = dask.delayed(handle_epoch_layers)(**job_dict, dask_key_name=name)
-            jobs.append(job)
-            # assert None
-
-        elif 'SET' in layer:
-            pass
-
-        if debug:
-            break
-
-
-    # Run export jobs
-    vprint(f'Run number of jobs: {len(jobs)} with {n_jobs} workers')
-    out = dask.compute(*jobs)
-    # progress(out)  # need to check how to make dask progress bar with dask
-    # close dask
-    if client:
-        client.close()
-
-
 def exportTropo(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude, workdir,
                    wmodel='HRRR', layer='troposphereWet',  mask=None,
                    n_threads=1, n_jobs=1, verbose=True, debug=False):
@@ -594,6 +485,7 @@ def _export_tropo(prods, layer, wmodel, workdir, bounds, prods_TOTbbox,
                     prods_TOTbbox, dem, lat, lon, hgt_field,
                     prods, mask, 'GTiff', verbose, num_threads)
 
+
 def _export_metadata(inputfiles, outname, demfile, aria_dem_dict,
                      bounds, prods_TOTbbox, mask=None, outputFormat='ISCE',
                      n_threads=2, verbose=True):
@@ -612,7 +504,6 @@ def _export_metadata(inputfiles, outname, demfile, aria_dem_dict,
                       prods_TOTbbox, demfile, aria_dem_dict['Latitude'],
                       aria_dem_dict['Longitude'], hgt_field, inputfiles,
                       mask, outputFormat, verbose=verbose, num_threads=n_threads)
-
 
 
 def _gdal_export(inputfiles, outname, gdal_warp_kwargs, mask=None, outputFormat='ISCE'):
@@ -646,7 +537,6 @@ def _gdal_export(inputfiles, outname, gdal_warp_kwargs, mask=None, outputFormat=
                 gdal.Open(outname + '.vrt').ReadAsArray()
             update_file.GetRasterBand(1).WriteArray(mask_arr)
             del update_file, mask_arr
-
 
 
 def main(inps=None):
