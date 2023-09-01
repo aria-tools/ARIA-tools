@@ -12,6 +12,8 @@ If no layer is specified, extract product bounding box shapefile(s)
 """
 
 import os
+os.environ['USE_PYGEOS'] = '0'
+
 import numpy as np
 from copy import deepcopy
 import glob
@@ -28,8 +30,9 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.unwrapStitching import product_stitch_overlap, \
     product_stitch_2stage
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
-    get_basic_attrs, ancillaryLooks, dim_check
+    get_basic_attrs, dim_check
 from ARIAtools.sequential_stitching import product_stitch_sequential
+from ARIAtools.ionosphere import export_ionosphere
 import pyproj
 from pyproj import CRS, Transformer
 from rioxarray import open_rasterio
@@ -82,7 +85,7 @@ def createParser():
                         help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
                         help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='overlap',
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='sequential',
                         help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequential' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
                         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
@@ -366,7 +369,8 @@ class metadata_qualitycheck:
 
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
              proj, arrres=None, workdir='./',
-             outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90'):
+             outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
+             multilooking=None, rankedResampling=False):
     """Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
@@ -421,6 +425,14 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         del update_file
         ds_aria = gdal.Translate(f'{aria_dem}.vrt', aria_dem, format='VRT')
         log.info('Applied cutline to produce 3 arc-sec Copernicus GLO90 DEM: %s', aria_dem)
+
+    # Apply multilooking, if specified
+    if multilooking is not None:
+        resampleRaster(aria_dem, multilooking,
+                       bounds, prods_TOTbbox, rankedResampling,
+                       outputFormat=outputFormat,
+                       num_threads=num_threads)
+        ds_aria = gdal.Open(aria_dem, gdal.GA_ReadOnly)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
@@ -944,15 +956,11 @@ def handle_epoch_layers(layers,
                 finalize_metadata(j[1][:-4], bounds, dem_bounds,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
                                   prod_ver_list, mask, outputFormat,
-                                  verbose=verbose)
-                # BZ continue
-                # continue
                 # If necessary, resample raster
                 if multilooking is not None:
                     resampleRaster(j[1][:-4], multilooking, bounds,
                                    prods_TOTbbox, rankedResampling,
                                    outputFormat=outputFormat, num_threads=num_threads)
-
                 # Track consistency of dimensions
                 if j[0] == 0:
                     ref_wid, ref_hgt, ref_geotrans, \
@@ -1133,6 +1141,42 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                    prev_outname]
 
     # Loop through other (non tropo/SET) user expected layers
+    # If specified, extract ionosphere long wavelength
+    ext_corr_lyrs += ['ionosphere']
+
+    if list(set.intersection(*map(set,
+                                  [layers, ['ionosphere']]))) != []:
+        lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
+        key = 'ionosphere'
+        product_dict = \
+            [[j[key] for j in full_product_dict if key in j.keys()],
+             [j["pair_name"] for j in full_product_dict if key in j.keys()]]
+
+        workdir = os.path.join(outDir, key)
+        prev_outname = deepcopy(workdir)
+        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
+                                       prefix='Generating: '+key+' - ')
+
+
+        lyr_input_dict = dict(input_iono_files = None,
+                              arrres = arrres,
+                              output_iono = None,
+                              output_format =  outputFormat, 
+                              bounds = bounds,
+                              clip_json = prods_TOTbbox,
+                              mask_file = mask,
+                              verbose = verbose,
+                              overwrite = True)
+
+        for i, layer in enumerate(product_dict[0]):
+            outname = os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
+            lyr_input_dict['input_iono_files'] = layer
+            lyr_input_dict['output_iono'] = outname
+            export_ionosphere(**lyr_input_dict)
+
+
+    # Loop through other user expected layers
+>>>>>>> dev
     layers = [i for i in layers if i not in ext_corr_lyrs]
     for key_ind, key in enumerate(layers):
         product_dict = [[j[key] for j in full_product_dict],
@@ -1149,26 +1193,27 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         # Iterate through all IFGs
         # TODO can we wrap this into funtion and run it
         # with multiprocessing, to gain speed up
-        for i in enumerate(product_dict[0]):
-            ifg = product_dict[1][i[0]][0]
+        # prod_layers = list of paths to  specified layer in all gunws
+        for i, prod_layers in enumerate(product_dict[0]):
+            ifg = product_dict[1][i][0]
             outname = os.path.abspath(os.path.join(workdir, ifg))
             # Update progress bar
-            prog_bar.update(i[0]+1, suffix=ifg)
+            prog_bar.update(i+1, suffix=ifg)
 
             # Extract/crop metadata layers
-            prod_layers = i[1] # list of paths to  specified layer in all gunws
             if any(":/science/grids/imagingGeometry"
                    in s for s in prod_layers) or \
                 any(":/science/grids/corrections/derived/ionosphere/ionosphere"
                     in s for s in prod_layers):
+
                 # make VRT pointing to metadata layers in standard product
                 hgt_field, model_name, outname = prep_metadatalayers(outname,
-                                                                     i[1], dem, key, layers)
+                                                  prod_layers, dem, key, layers)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  i[1], mask, outputFormatPhys,
+                                  prod_layers, mask, outputFormatPhys,
                                   verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp"
@@ -1177,36 +1222,24 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     key != 'connectedComponents':
                 if outputFormat == 'VRT':
                     # building the virtual vrt
-                    gdal.BuildVRT(outname + "_uncropped" + '.vrt', i[1])
+                    gdal.BuildVRT(outname + "_uncropped" + '.vrt', prod_layers)
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt',
-                              outname+'_uncropped.vrt',
-                              options=gdal.WarpOptions(**gdal_warp_kwargs))
+                    gdal.Warp(outname+'.vrt', outname+'_uncropped.vrt', **gdal_warp_kwargs)
+                              
                 else:
                     # building the VRT
-                    gdal.BuildVRT(outname + '.vrt', i[1])
-                    gdal.Warp(outname,
-                              outname+'.vrt',
-                              options=gdal.WarpOptions(**gdal_warp_kwargs))
-
+                    gdal.BuildVRT(outname + '.vrt', prod_layers)
+                    gdal.Warp(outname, outname+'.vrt', **gdal_warp_kwargs)
+                              
                     # Update VRT
-                    gdal.Translate(outname+'.vrt', outname,
-                                   options=gdal.TranslateOptions(format="VRT"))
-
-                    # Apply mask (if specified).
-                    if mask is not None:
-                        update_file = gdal.Open(outname, gdal.GA_Update)
-                        mask_arr = mask.ReadAsArray() * \
-                            gdal.Open(outname + '.vrt').ReadAsArray()
-                        update_file.GetRasterBand(1).WriteArray(mask_arr)
-                        del update_file, mask_arr
+                    gdal.Translate(outname+'.vrt', outname, format='VRT')
 
             # Extract/crop phs and conn_comp layers
             else:
                 # get connected component input files
-                conn_files = full_product_dict[i[0]]['connectedComponents']
+                conn_files = full_product_dict[i]['connectedComponents']
                 prod_bbox_files = \
-                    full_product_dict[i[0]]['productBoundingBoxFrames']
+                    full_product_dict[i]['productBoundingBoxFrames']
                 outFileConnComp = \
                     os.path.join(outDir, 'connectedComponents', ifg)
 
@@ -1214,7 +1247,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                 outFilePhs = os.path.join(outDir, 'unwrappedPhase', ifg)
                 if not os.path.exists(outFilePhs) or not \
                         os.path.exists(outFileConnComp):
-                    phs_files = full_product_dict[i[0]]['unwrappedPhase']
+                    phs_files = full_product_dict[i]['unwrappedPhase']
                     # calling the stitching methods
                     if stitchMethodType == 'overlap':
                         product_stitch_overlap(phs_files, conn_files,
@@ -1223,7 +1256,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                prods_TOTbbox,
                                                outFileUnw=outFilePhs,
                                                outFileConnComp=outFileConnComp,
-                                               mask=mask,
+                                               #mask=mask,
                                                outputFormat=outputFormatPhys,
                                                verbose=verbose)
 
@@ -1235,7 +1268,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               prods_TOTbbox,
                                               outFileUnw=outFilePhs,
                                               outFileConnComp=outFileConnComp,
-                                              mask=mask,
+                                              #mask=mask,
                                               outputFormat=outputFormatPhys,
                                               verbose=verbose)
 
@@ -1247,7 +1280,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                   clip_json=prods_TOTbbox,
                                                   output_unw=outFilePhs,
                                                   output_conn=outFileConnComp,
-                                                  mask_file=mask,  # str filename
+                                                  #mask_file=mask,  # str filename
                                                   output_format=outputFormatPhys,
                                                   range_correction=True,
                                                   save_fig=False,
@@ -1260,15 +1293,35 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                        prods_TOTbbox, rankedResampling,
                                        outputFormat=outputFormatPhys,
                                        num_threads=num_threads)
+                    # Apply mask (if specified)
+                    if mask is not None:
+                        for j in [outFileConnComp, outFilePhs]:
+                            update_file = gdal.Open(j, gdal.GA_Update)
+                            mask_arr = mask.ReadAsArray() * \
+                                gdal.Open(j + '.vrt').ReadAsArray()
+                            update_file.GetRasterBand(1).WriteArray(mask_arr)
+                            del update_file, mask_arr
 
-            # If necessary, resample raster
-            if multilooking is not None and \
-                    key != 'unwrappedPhase' and \
-                    key != 'connectedComponents':
-                resampleRaster(outname, multilooking, bounds, prods_TOTbbox,
-                               rankedResampling,
-                               outputFormat=outputFormatPhys,
-                               num_threads=num_threads)
+            if key != 'unwrappedPhase' and \
+                    key != 'connectedComponents' and \
+                    not any(":/science/grids/imagingGeometry"
+                       in s for s in prod_layers) and \
+                    not any(":/science/grids/corrections"
+                       in s for s in prod_layers):
+                # If necessary, resample raster
+                if multilooking is not None:
+                    resampleRaster(outname, multilooking, bounds,
+                                   prods_TOTbbox,
+                                   rankedResampling,
+                                   outputFormat=outputFormatPhys,
+                                   num_threads=num_threads)
+                # Apply mask (if specified)
+                if mask is not None:
+                    update_file = gdal.Open(outname, gdal.GA_Update)
+                    mask_arr = mask.ReadAsArray() * \
+                        gdal.Open(outname + '.vrt').ReadAsArray()
+                    update_file.GetRasterBand(1).WriteArray(mask_arr)
+                    del update_file, mask_arr
 
             # Track consistency of dimensions
             if key_ind == 0:
@@ -1916,24 +1969,43 @@ def main(inps=None):
             if 'amplitude' in d:
                 for item in list(set(d['amplitude'])):
                     amplitude_products.append(item)
-        inps.mask = prep_mask(amplitude_products, inps.mask,
-                              standardproduct_info.bbox_file,
-                              prods_TOTbbox, proj, amp_thresh=inps.amp_thresh,
-                              arrres=arrres,
-                              workdir=inps.workdir,
-                              outputFormat=inps.outputFormat,
-                              num_threads=inps.num_threads)
+        # mask parms
+        mask_dict = {
+        'product_dict': amplitude_products,
+        'maskfilename': inps.mask,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'proj': proj,
+        'amp_thresh': inps.amp_thresh,
+        'arrres': arrres,
+        'workdir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'rankedResampling': inps.rankedResampling
+        }
+        inps.mask = prep_mask(**mask_dict)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
     if inps.demfile is not None:
         print('Download/cropping DEM')
+        # DEM parms
+        dem_dict = {
+        'demfilename': inps.demfile,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+        'proj': proj,
+        'arrres': arrres,
+        'workdir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'rankedResampling': inps.rankedResampling
+        }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(
-            inps.demfile, standardproduct_info.bbox_file,
-            prods_TOTbbox, prods_TOTbbox_metadatalyr, proj,
-            arrres=arrres, workdir=inps.workdir,
-            outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(**dem_dict)
     else:
         demfile, Latitude, Longitude = None, None, None
 
@@ -1962,20 +2034,6 @@ def main(inps=None):
 
     # Extract user expected layers
     arrshape = export_products(**export_dict)
-
-    # If necessary, resample DEM/mask AFTER they have been used to extract
-    ancillary_dict = {
-        'mask': inps.mask,
-        'dem': demfile,
-        'arrshape': arrshape,
-        'standardproduct_info': standardproduct_info,
-        'multilooking': inps.multilooking,
-        'prods_TOTbbox': prods_TOTbbox,
-        'rankedResampling': inps.rankedResampling,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads
-    }
-    ancillaryLooks(**ancillary_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.gacos_products:

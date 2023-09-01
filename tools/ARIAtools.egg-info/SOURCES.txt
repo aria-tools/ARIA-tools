@@ -6,6 +6,7 @@ tools/ARIAtools/ARIA_global_variables.py
 tools/ARIAtools/__init__.py
 tools/ARIAtools/computeMisclosure.py
 tools/ARIAtools/extractProduct.py
+tools/ARIAtools/ionosphere.py
 tools/ARIAtools/kml2box.py
 tools/ARIAtools/logger.py
 tools/ARIAtools/mask_util.py

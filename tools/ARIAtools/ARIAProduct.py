@@ -96,9 +96,14 @@ class ARIA_standardproduct:
         self.bbox_file = None
         # Pair name for layer extraction
         self.pairname = None
-        self.num_threads = int(num_threads)
         # enforced netcdf version
         self.nc_version = nc_version
+        # pass number of threads for multiprocessing computation
+        if num_threads == 'all':
+            import multiprocessing
+            self.num_threads = multiprocessing.cpu_count()
+        else:
+            self.num_threads = int(num_threads)
 
         # Determine if file input is single file, a list, or wildcard
         # If list of files

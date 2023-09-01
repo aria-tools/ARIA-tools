@@ -29,7 +29,7 @@ from ARIAtools.ARIAProduct import ARIA_standardproduct
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.vrtmanager import resampleRaster, layerCheck, \
-    get_basic_attrs, ancillaryLooks, dim_check
+    get_basic_attrs, dim_check
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, \
     export_products, gacos_correction
 
@@ -96,7 +96,7 @@ def create_parser():
                                                     'By default "2". Can also specify "All" to use all '
                                                     'available threads.')
     parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
-                        type=str, default='overlap', help='Method applied to '
+                        type=str, default='sequential', help='Method applied to '
                                                           'stitch the unwrapped data. Allowed methods are: '
                                                           '"overlap", "2stage", and "sequential". "overlap" - '
                                                           'product overlap is minimized, "2stage" - '
@@ -427,12 +427,22 @@ def main(inps=None):
     # expected DEM shape, and output dir as input.
     if inps.demfile is not None:
         print('Download/cropping DEM')
+        # DEM parms
+        dem_dict = {
+        'demfilename': inps.demfile,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+        'proj': proj,
+        'arrres': arrres,
+        'workdir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'rankedResampling': inps.rankedResampling
+        }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        inps.demfile, demfile, Latitude, Longitude = prep_dem(
-            inps.demfile, standardproduct_info.bbox_file,
-            prods_TOTbbox, prods_TOTbbox_metadatalyr, proj,
-            arrres=arrres, workdir=inps.workdir,
-            outputFormat=inps.outputFormat, num_threads=inps.num_threads)
+        inps.demfile, demfile, Latitude, Longitude = prep_dem(**dem_dict)
 
     # Load or download mask (if specified).
     if inps.mask is not None:
@@ -442,13 +452,22 @@ def main(inps=None):
             if 'amplitude' in d:
                 for item in list(set(d['amplitude'])):
                     amplitude_products.append(item)
-        inps.mask = prep_mask(amplitude_products, inps.mask,
-                              standardproduct_info.bbox_file,
-                              prods_TOTbbox, proj, amp_thresh=inps.amp_thresh,
-                              arrres=arrres,
-                              workdir=inps.workdir,
-                              outputFormat=inps.outputFormat,
-                              num_threads=inps.num_threads)
+        # mask parms
+        mask_dict = {
+        'product_dict': amplitude_products,
+        'maskfilename': inps.mask,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'proj': proj,
+        'amp_thresh': inps.amp_thresh,
+        'arrres': arrres,
+        'workdir': inps.workdir,
+        'outputFormat': inps.outputFormat,
+        'num_threads': inps.num_threads,
+        'multilooking': inps.multilooking,
+        'rankedResampling': inps.rankedResampling
+        }
+        inps.mask = prep_mask(**mask_dict)
 
     # Extract
     # aria_extract default parms
@@ -528,20 +547,6 @@ def main(inps=None):
                                           **export_dict)
         # Track consistency of dimensions
         dim_check(ref_arr_record, prod_arr_record)
-
-    # If necessary, resample DEM/mask AFTER they have been used to extract
-    ancillary_dict = {
-        'mask': inps.mask,
-        'dem': demfile,
-        'arrshape': ref_arr_record,
-        'standardproduct_info': standardproduct_info,
-        'multilooking': inps.multilooking,
-        'prods_TOTbbox': prods_TOTbbox,
-        'rankedResampling': inps.rankedResampling,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads
-    }
-    ancillaryLooks(**ancillary_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if inps.gacos_products:

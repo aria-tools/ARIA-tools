@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, gdalconst
 
 from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import rasterAverage
+from ARIAtools.vrtmanager import rasterAverage, resampleRaster
 from ARIAtools.logger import logger
 
 log = logging.getLogger(__name__)
@@ -26,8 +26,9 @@ logger.setLevel(logging.DEBUG)
 
 
 def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
-                    amp_thresh=None, arrres=None, workdir='./',
-                    outputFormat='ENVI', num_threads='2'):
+              amp_thresh=None, arrres=None, workdir='./',
+              outputFormat='ENVI', num_threads='2',
+              multilooking=None, rankedResampling=False):
     """Function to load and export mask file.
     If "Download" flag, GSHHS water mask will be donwloaded on the fly.
     If full resolution NLCD landcover data is given (NLCD...img) it gets cropped
@@ -168,6 +169,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
               xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
               multithread=True,
               options=[f'NUM_THREADS={num_threads} -overwrite'])
+
     mask = gdal.Open(maskfilename, gdal.GA_Update)
     mask.SetProjection(proj)
     mask.SetDescription(maskfilename)
@@ -178,6 +180,13 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     # Update VRT
     gdal.Translate(maskfilename+'.vrt', maskfilename,
                    options=gdal.TranslateOptions(format="VRT"))
+
+    # Apply multilooking, if specified
+    if multilooking is not None:
+        resampleRaster(maskfilename, multilooking,
+                       bounds, prods_TOTbbox, rankedResampling,
+                       outputFormat=outputFormat,
+                       num_threads=num_threads)
 
     # pass maskfile object
     mask = gdal.Open(maskfilename)
