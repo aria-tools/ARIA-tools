@@ -526,22 +526,22 @@ def main(inps=None):
     dim_check(ref_arr_record, prod_arr_record)
 
     # Extracting other layers, if specified
-    layers, inps.tropo_total, \
+    layers, tropo_total, \
         model_names = layerCheck(standardproduct_info.products[1],
                                  inps.layers,
                                  inps.nc_version,
                                  inps.gacos_products,
                                  inps.tropo_models,
                                  extract_or_ts='tssetup')
-    if layers != [] or inps.tropo_total is True:
+    if layers != [] or tropo_total is True:
         if layers != []:
             print('\nExtracting optional, user-specified layers %s for each '
                   'interferogram pair' % (layers))
-        if inps.tropo_total is True:
+        if tropo_total is True:
             print('\nExtracting, %s for each applicable '
                   'interferogram pair' % ('troposphereTotal'))
         prod_arr_record = export_products(standardproduct_info.products[1],
-                                          tropo_total=inps.tropo_total,
+                                          tropo_total=tropo_total,
                                           model_names=model_names,
                                           layers=layers,
                                           **export_dict)
@@ -569,7 +569,7 @@ def main(inps=None):
             if i in layers:
                 remove_lyrs.append(i)
     layers = [i for i in layers if i not in remove_lyrs]
-    if inps.tropo_total is False:
+    if tropo_total is False:
         if 'troposphereTotal' in layers:
             layers.remove('troposphereTotal')
     if inps.gacos_products:

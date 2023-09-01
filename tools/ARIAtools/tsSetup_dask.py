@@ -7,6 +7,8 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import dask
+import logging
+import os.path as op
 from pathlib import Path
 from itertools import compress
 from osgeo import gdal
@@ -19,7 +21,9 @@ from ARIAtools.tsSetup import generate_stack
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.sequential_stitching import product_stitch_sequential
-from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_metadatalayers, finalize_metadata
+from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_metadatalayers, finalize_metadata, handle_epoch_layers
+from ARIAtools import progBar
+import logging
 
 
 gdal.UseExceptions()
@@ -137,7 +141,7 @@ def cmd_line_parse(iargs=None):
 
 def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
                           work_dir, outputFormat='ISCE', correction_method='cycle2pi',
-                          verbose=True, mask=None, multilook=None, n_jobs=1):
+                          mask_zero_component=False, verbose=True, mask=None, multilook=None, n_jobs=1):
 
     # verbose printing
     def vprint(x): return print(x) if verbose == True else None
@@ -148,6 +152,7 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
         client = Client(threads_per_worker=1,
                         n_workers=n_jobs,
                         memory_limit='10GB')
+        vprint(f'Link: {client.dashboard_link}')
     else:
         client = None
 
@@ -182,7 +187,7 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
     export_dict = dict(
         input_unw_files=None,
         input_conncomp_files=None,
-        arrres=arrres,
+        arrres=arres,
         output_unw=None,
         output_conn=None,
         output_format=outputFormat,
@@ -191,6 +196,7 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
         mask_file=mask,
         correction_method=correction_method,
         range_correction=True,
+        mask_zero_component=mask_zero_component,
         verbose=False,
         save_fig=False,
         overwrite=True,
@@ -209,43 +215,10 @@ def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
     # Run export jobs
     vprint(f'Run number of jobs: {len(jobs)}')
     out = dask.compute(*jobs)
-    progress(out)  # need to check how to make dask progress bar with dask
+    # progress(out)  # need to check how to make dask progress bar with dask
     # close dask
     if client:
         client.close()
-
-
-def _gdal_export(inputfiles, outname, gdal_warp_kwargs, mask=None, outputFormat='ISCE'):
-    if outputFormat == 'VRT':
-        # building the virtual vrt
-        gdal.BuildVRT(outname + "_uncropped" + '.vrt', inputfiles)
-        # building the cropped vrt
-        gdal.Warp(outname+'.vrt',
-                  outname+'_uncropped.vrt',
-                  options=gdal.WarpOptions(**gdal_warp_kwargs))
-    else:
-        # building the VRT
-        gdal.BuildVRT(outname + '.vrt', inputfiles)
-        gdal.Warp(outname,
-                  outname+'.vrt',
-                  options=gdal.WarpOptions(**gdal_warp_kwargs))
-
-        # Update VRT
-        gdal.Translate(outname+'.vrt', outname,
-                       options=gdal.TranslateOptions(format="VRT"))
-
-        # Apply mask (if specified).
-        if mask is not None:
-            if isinstance(mask, str):
-                mask_file = gdal.Open(mask)
-            else:
-                # for gdal instance, from prep_mask
-                mask_file = mask
-            update_file = gdal.Open(outname, gdal.GA_Update)
-            mask_arr = mask_file.ReadAsArray() * \
-                gdal.Open(outname + '.vrt').ReadAsArray()
-            update_file.GetRasterBand(1).WriteArray(mask_arr)
-            del update_file, mask_arr
 
 
 def exportCoherenceAmplitude(product_dict, bbox_file, prods_TOTbbox, arrres,
@@ -266,6 +239,7 @@ def exportCoherenceAmplitude(product_dict, bbox_file, prods_TOTbbox, arrres,
         client = Client(threads_per_worker=1,
                         n_workers=n_jobs,
                         memory_limit='10GB')
+        vprint(f'Link: {client.dashboard_link}')
     else:
         client = None
 
@@ -313,37 +287,21 @@ def exportCoherenceAmplitude(product_dict, bbox_file, prods_TOTbbox, arrres,
     # Run export jobs
     vprint(f'Run number of jobs: {len(jobs)}')
     out = dask.compute(*jobs)
-    progress(out)  # need to check how to make dask progress bar with dask
+    # progress(out)  # need to check how to make dask progress bar with dask
     # close dask
     if client:
         client.close()
 
 
-def _export_metadata(inputfiles, outname, demfile, aria_dem_dict,
-                     bounds, prods_TOTbbox, mask=None, outputFormat='ISCE',
-                     n_threads=2, verbose=True):
-
-    layer = inputfiles[0].split('/')[-1]
-
-    # make VRT pointing to metadata layers in standard product
-    hgt_field = prep_metadatalayers(outname, inputfiles,
-                                    demfile, layer, layer)[0]
-
-    # Interpolate/intersect with DEM before cropping
-    finalize_metadata(outname, bounds, aria_dem_dict['dem_bounds'],
-                      prods_TOTbbox, demfile, aria_dem_dict['Latitude'],
-                      aria_dem_dict['Longitude'], hgt_field, inputfiles,
-                      mask, outputFormat, verbose=verbose, num_threads=n_threads)
-
-
 def exportImagingGeometry(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude,
-                          work_dir, layer='incidenceAngle', mask=None, outputFormat='ISCE',
-                          n_threads=1, n_jobs=1, verbose=True):
+                          work_dir, layer='incidenceAngle', mask=None,
+                          outputFormat='ISCE', n_threads=1, n_jobs=1, verbose=True):
+
     # verbose printing
     def vprint(x): return print(x) if verbose == True else None
 
     # Check
-    available_layers = ['perpendicularBaseline', 'parallelBaseline',
+    available_layers = ['bPerpendicular', 'bParallel',
                         'incidenceAngle', 'lookAngle', 'azimuthAngle']
     if layer not in available_layers:
         raise ValueError(f'Selected layer: {layer} is wrong'
@@ -396,19 +354,189 @@ def exportImagingGeometry(product_dict, bbox_file, prods_TOTbbox, dem, Latitude,
         n_threads=n_threads
     )
 
-    jobs = []
+    jobs  = []
     for product, name, outFile in zipped_jobs:
         job_dict['inputfiles'] = product[layer]
         job_dict['outname'] = str(outFile)
         job = dask.delayed(_export_metadata)(**job_dict, dask_key_name=name)
         jobs.append(job)
+
     # Run export jobs
     vprint(f'Run number of jobs: {len(jobs)} with {n_jobs} workers')
     out = dask.compute(*jobs)
-    progress(out)  # need to check how to make dask progress bar with dask
+    # progress(out)  # need to check how to make dask progress bar with dask
     # close dask
     if client:
         client.close()
+
+
+def exportTropo(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude, workdir,
+                   wmodel='HRRR', layer='troposphereWet',  mask=None,
+                   n_threads=1, n_jobs=1, verbose=True, debug=False):
+
+    assert layer in 'troposphereWet troposphereHydrostatic'.split(), 'Wrong layer'
+    def vprint(x): return print(x) if verbose == True else None
+
+    # Get bounds of bbox and dem
+    bounds = open_shapefile(bbox_file, 0, 0).bounds
+    dem_gt = dem.GetGeoTransform()
+    dem_bounds = [dem_gt[0],
+                dem_gt[3]+(dem_gt[-1]*dem.RasterYSize),
+                dem_gt[0]+(dem_gt[1]*dem.RasterXSize),
+                dem_gt[3]]
+
+    # initalize multiprocessing
+    if debug:
+        client = None
+
+    elif n_jobs > 1 or len(product_dict) > 1:
+        vprint(f'Running GUNW {layer} in parallel!')
+        client = Client(processes=True,
+                        threads_per_worker=1,
+                        n_workers=n_jobs, memory_limit='20GB')
+        vprint(f'Link: {client.dashboard_link}')
+    else:
+        client = None
+
+    # Check if output files exist
+    out_dir = Path(workdir) / wmodel / layer
+    outNames = [ix['pair_name'][0] for ix in product_dict]
+    outFiles = [out_dir / name for name in outNames]
+    export_list = [not (outFile.exists()) for outFile in outFiles]
+
+    # Get only the pairs we need to run
+    # product_dict = compress(product_dict, export_list)
+    # outNames     = compress(outNames, export_list)
+
+    job_dict = dict(
+        mask=mask,
+        dem=dem.GetDescription(),
+        dem_bounds=dem_bounds,
+        bounds=bounds,
+        prods_TOTbbox=prods_TOTbbox,
+        verbose=verbose,
+        num_threads=n_threads,
+        lon=Longitude,
+        lat=Latitude,
+        layer=layer,
+        wmodel=wmodel,
+        workdir=workdir
+    )
+
+    ref_jobs, sec_jobs  = [], []
+    for i, (prod_dict, name) in enumerate(zip(product_dict, outNames)):
+        job_dict['prods'] = prod_dict[f'{layer}_{wmodel.upper()}'] # all tropo ifgs
+
+        # this will just export ref/sec and intersect ref with dem
+        job_r = dask.delayed(_export_tropo)(**job_dict, dask_key_name=name)
+        ref_jobs.append(job_r)
+
+        # this will just intersect the secondary with dem
+        job_s = dask.delayed(_export_tropo)(**job_dict, dask_key_name=name)
+        sec_jobs.append(job_s)
+
+        if debug:
+            break
+
+    # Run export jobs
+    vprint(f'Run number of reference jobs: {len(ref_jobs)} with {n_jobs} workers')
+    out = dask.compute(*ref_jobs)
+
+    ## then do secondary
+    vprint(f'Run number of secondary jobs: {len(sec_jobs)} with {n_jobs} workers')
+    out = dask.compute(*sec_jobs)
+
+    ## rename the files
+    # src_dir = op.join(hyd_workdir, ifg)
+    # dst_dir = op.join(hyd_workdir)
+    # os.rename(src_dir, dst_dir)
+
+    # close dask
+    if client:
+        client.close()
+
+
+def _export_tropo(prods, layer, wmodel, workdir, bounds, prods_TOTbbox,
+                    dem, dem_bounds, lat, lon, num_threads, mask=None, verbose=False):
+    ifg         = op.basename(prods[0].split(':')[1]).split('-')[6]
+    ref, sec    = ifg.split('_')
+    hyd_workdir = op.join(workdir, layer)
+    ## double up the ifg so that files dont get reused
+    ifg_outname = op.abspath(op.join(hyd_workdir, ifg, ifg))
+    ref_outname = op.join(hyd_workdir, ifg, wmodel, 'dates', ref)
+
+    # generate the differential and ref/sec date wet delay for this ifg
+    # this overwrites ref and sec; if sec is ref for another, there is a problem
+    # not intersected with DEM
+    if not op.exists(ref_outname):
+        hgt_field, model_name, hyd_outname = \
+            prep_metadatalayers(ifg_outname, prods, dem,
+                                layer, layer, 'GTiff')
+        print ('Finalizing reference:', hyd_outname)
+
+    ## for secondary image
+    else:
+        hgt_field   = 'NETCDF_DIM_heightsMeta_VALUES'
+        hyd_outname = op.join(hyd_workdir, ifg, wmodel, 'dates', sec)
+        print ('Finalizing secondary:', hyd_outname)
+
+    # intersect with DEM
+    finalize_metadata(hyd_outname, bounds, dem_bounds,
+                    prods_TOTbbox, dem, lat, lon, hgt_field,
+                    prods, mask, 'GTiff', verbose, num_threads)
+
+
+def _export_metadata(inputfiles, outname, demfile, aria_dem_dict,
+                     bounds, prods_TOTbbox, mask=None, outputFormat='ISCE',
+                     n_threads=2, verbose=True):
+
+    layer = inputfiles[0].split('/')[-1]
+
+    # make VRT pointing to metadata layers in standard product
+    hgt_field, model_name, ref_outname = prep_metadatalayers(outname, inputfiles,
+                                    demfile, layer, [layer])
+
+    if model_name:
+        outname = op.join(op.dirname(outname), model_name, op.basename(outname))
+
+    # Interpolate/intersect with DEM before cropping
+    finalize_metadata(outname, bounds, aria_dem_dict['dem_bounds'],
+                      prods_TOTbbox, demfile, aria_dem_dict['Latitude'],
+                      aria_dem_dict['Longitude'], hgt_field, inputfiles,
+                      mask, outputFormat, verbose=verbose, num_threads=n_threads)
+
+
+def _gdal_export(inputfiles, outname, gdal_warp_kwargs, mask=None, outputFormat='ISCE'):
+    if outputFormat == 'VRT':
+        # building the virtual vrt
+        gdal.BuildVRT(outname + "_uncropped" + '.vrt', inputfiles)
+        # building the cropped vrt
+        gdal.Warp(outname+'.vrt',
+                  outname+'_uncropped.vrt',
+                  options=gdal.WarpOptions(**gdal_warp_kwargs))
+    else:
+        # building the VRT
+        gdal.BuildVRT(outname + '.vrt', inputfiles)
+        gdal.Warp(outname,
+                  outname+'.vrt',
+                  options=gdal.WarpOptions(**gdal_warp_kwargs))
+
+        # Update VRT
+        gdal.Translate(outname+'.vrt', outname,
+                       options=gdal.TranslateOptions(format="VRT"))
+
+        # Apply mask (if specified).
+        if mask is not None:
+            if isinstance(mask, str):
+                mask_file = gdal.Open(mask)
+            else:
+                # for gdal instance, from prep_mask
+                mask_file = mask
+            update_file = gdal.Open(outname, gdal.GA_Update)
+            mask_arr = mask_file.ReadAsArray() * \
+                gdal.Open(outname + '.vrt').ReadAsArray()
+            update_file.GetRasterBand(1).WriteArray(mask_arr)
+            del update_file, mask_arr
 
 
 def main(inps=None):
@@ -508,18 +636,7 @@ def main(inps=None):
     # Maybe something useful is here: https://github.com/dask/distributed/issues/4571
 
     for layer in layers[:-1]:
-        max_jobs = len(product_dict)
-        # Hack solution to stop leaking, run dask Client in loop
-        # restart cluster/Client after every iteration
-        for n in range(0, max_jobs, inps.n_jobs):
-            if n + inps.n_jobs > len(product_dict):
-                print('Loop:', [n, max_jobs])
-                product_subset = product_dict[n:max_jobs]
-            else:
-                print('Loop:', [n, n + inps.n_jobs])
-                product_subset = product_dict[n:n+inps.n_jobs]
-
-        exportImagingGeometry(product_subset,
+        exportImagingGeometry(product_dict[:1],
                               bbox_file,
                               prods_TOTbbox,
                               demfile, Latitude, Longitude,
@@ -530,13 +647,24 @@ def main(inps=None):
     # MG did not test how it works on bPerp
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
-    exportImagingGeometry(product_dict,
-                          bbox_file,
-                          prods_TOTbbox,
-                          demfile, Latitude, Longitude,
-                          inps.workdir, layer='bPerpendicular',
-                          mask=inps.mask,
-                          n_threads=inps.num_threads, n_jobs=1)
+    max_jobs = len(product_dict)
+    # Hack solution to stop leaking, run dask Client in loop
+    # restart cluster/Client after every iteration
+    for n in range(0, max_jobs, inps.n_jobs):
+        if n + inps.n_jobs > len(product_dict):
+            print('Loop:', [n, max_jobs])
+            product_subset = product_dict[n:max_jobs]
+        else:
+            print('Loop:', [n, n + inps.n_jobs])
+            product_subset = product_dict[n:n+inps.n_jobs]
+
+        exportImagingGeometry(product_subset,
+                              bbox_file,
+                              prods_TOTbbox,
+                              demfile, Latitude, Longitude,
+                              inps.workdir, layer='bPerpendicular',
+                              mask=inps.mask,
+                              n_threads=inps.num_threads, n_jobs=inps.n_jobs)
 
     # TODO missing anxiliary products
 
