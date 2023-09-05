@@ -21,6 +21,7 @@ from ARIAtools.tsSetup import generate_stack
 from ARIAtools.mask_util import prep_mask
 from ARIAtools.shapefile_util import open_shapefile
 from ARIAtools.sequential_stitching import product_stitch_sequential
+from ARIAtools.ionosphere import export_ionosphere
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, prep_metadatalayers, finalize_metadata, handle_epoch_layers
 from ARIAtools import progBar
 import logging
@@ -139,7 +140,7 @@ def cmd_line_parse(iargs=None):
     return parser.parse_args(args=iargs)
 
 
-def export_unwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
+def exportUnwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
                           work_dir, outputFormat='ISCE', correction_method='cycle2pi',
                           mask_zero_component=False, verbose=True, mask=None, multilook=None, n_jobs=1):
 
@@ -456,6 +457,71 @@ def exportTropo(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude
         client.close()
 
 
+def exportIono(product_dict,  bbox_file, prods_TOTbbox, arres,
+                work_dir, outputFormat='ISCE', verbose=True,
+                mask=None, multilook=None, n_jobs=1):
+    
+    # verbose printing
+    vprint = lambda x: print(x) if verbose == True else None
+
+    # initalize multiprocessing
+    if n_jobs>1 or len(product_dict)>1:
+        vprint('Running GUNW ionosphere in parallel!')
+        client = Client(threads_per_worker=1, 
+                        n_workers=n_jobs,
+                        memory_limit='10GB')
+        vprint(f'Link: {client.dashboard_link}')
+    else:
+        client = None
+    
+    # Create output directories
+    iono_dir = Path(work_dir) / 'ionosphere'
+    iono_dir.mkdir(parents=True, exist_ok=True)
+
+    outNames = [ix['pair_name'][0] for ix in product_dict]
+    outFileIono = [iono_dir / name for name in outNames]
+
+    export_list = [not(outIono.exists()) for outIono in outFileIono]
+
+    # Get only the pairs we need to run
+    product_dict = compress(product_dict, export_list)
+    outNames = compress(outNames, export_list)
+    outFileIono = compress(outFileIono, export_list) 
+
+    zipped_jobs = zip(product_dict, outNames, outFileIono)
+
+    # Get bounds
+    bounds = open_shapefile(bbox_file, 0, 0).bounds
+
+    # Run exporting and stitching
+    export_dict = dict(
+                    input_iono_files = None,
+                    arrres = arrres,
+                    output_iono = None,
+                    output_format = outputFormat, 
+                    bounds = bounds,
+                    clip_json = prods_TOTbbox,
+                    mask_file = mask,
+                    verbose = verbose,
+                    overwrite = True)
+
+    jobs = []
+    for product, name, outIono in zipped_jobs:
+        export_dict['input_iono_files'] = product['ionosphere'] 
+        export_dict['output_iono'] = outIono
+
+        job = dask.delayed(export_ionosphere)(**export_dict, dask_key_name=name)
+        jobs.append(job)
+
+    # Run export jobs
+    vprint(f'Run number of jobs: {len(jobs)}')
+    out = dask.compute(*jobs)
+    progress(out) # need to check how to make dask progress bar with dask
+    # close dask
+    if client:
+        client.close()
+
+
 def _export_tropo(prods, layer, wmodel, workdir, bounds, prods_TOTbbox,
                     dem, dem_bounds, lat, lon, num_threads, mask=None, verbose=False):
     ifg         = op.basename(prods[0].split(':')[1]).split('-')[6]
@@ -609,6 +675,9 @@ def main(inps=None):
                               outputFormat=inps.outputFormat,
                               num_threads=inps.num_threads)
 
+    # NOTE we should store variable above in PICKLE so we can skip 
+    # preparing inputs every time if not otherwise specify
+    
     # export unwrappedPhase
     layers = ['unwrappedPhase', 'coherence']
     print('\nExtracting unwrapped phase, coherence, '
@@ -632,10 +701,9 @@ def main(inps=None):
 
     # Take a lot of RAM memory per worker, 9GB per scene
     # Dask reports leak - functions need restructuring
-    # This would be around solution, not perfect but ..
     # Maybe something useful is here: https://github.com/dask/distributed/issues/4571
 
-    for layer in layers[:-1]:
+    for layer in layers:
         exportImagingGeometry(product_dict[:1],
                               bbox_file,
                               prods_TOTbbox,
@@ -644,7 +712,7 @@ def main(inps=None):
                               mask=inps.mask,
                               n_threads=inps.num_threads, n_jobs=inps.jobs)
 
-    # MG did not test how it works on bPerp
+    
     print('\nExtracting perpendicular baseline grids for each '
           'interferogram pair')
     max_jobs = len(product_dict)
@@ -667,6 +735,12 @@ def main(inps=None):
                               n_threads=inps.num_threads, n_jobs=inps.n_jobs)
 
     # TODO missing anxiliary products
+
+    # TROPO
+
+    # SET
+
+    #IONO
 
     # Generate UNW stack
     ref_dlist = generate_stack(standardproduct_info, 'unwrappedPhase',
