@@ -398,6 +398,16 @@ class ARIA_standardproduct:
                 + basename.split('-')[7][2:4] + ':' \
                 + basename.split('-')[7][4:] + '.0'
 
+            # assign latitude to assist with sorting
+            rdrmetadata_dict['centerLatitude'] =  \
+                basename.split('-')[8].split('_')[1]
+            if rdrmetadata_dict['centerLatitude'][-1] == 'S':
+                rdrmetadata_dict['centerLatitude'] = -1 * \
+                    int(rdrmetadata_dict['centerLatitude'][:-1])
+            else:
+                rdrmetadata_dict['centerLatitude'] = \
+                    int(rdrmetadata_dict['centerLatitude'][:-1])
+
             #hardcoded keys for a given sensor
             if basename.split('-')[0] == 'S1':
                 rdrmetadata_dict['missionID'] = 'Sentinel-1'
@@ -750,10 +760,12 @@ class ARIA_standardproduct:
         else:
             self.products += self.__readproduct__(self.files[0])
 
-        # Sort by pair and start time.
+        # Sort by pair, start time, and latitude
         self.products = [i for i in self.products if i != []]
-        self.products = sorted(self.products, key=lambda k:
-                    (k[0]['pair_name'], k[0]['azimuthZeroDopplerMidTime']))
+        self.products = sorted(self.products, key=lambda i:
+                    (i[0]['pair_name'],
+                     i[0]['azimuthZeroDopplerMidTime'],
+                     i[0]['centerLatitude']))
         self.products = list(self.products)
 
         # Exit if products from different sensors were mixed
