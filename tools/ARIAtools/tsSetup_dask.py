@@ -568,7 +568,7 @@ def compute_tropo_total(path_wd, wm='HRRR'):
             if f.endswith('vrt'):
                 continue
             path_hyd = op.join(root, f)
-            path_wet = path_hyd.replace('Hydrostatic', 'wet')
+            path_wet = path_hyd.replace('Hydrostatic', 'Wet')
             path_tot = path_hyd.replace('Hydrostatic', 'Total')
             os.makedirs(op.dirname(path_tot), exist_ok=True)
 
