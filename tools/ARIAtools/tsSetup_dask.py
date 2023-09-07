@@ -10,6 +10,7 @@ import dask
 import logging
 import shutil, glob
 import os, os.path as op
+import time
 from pathlib import Path
 from itertools import compress
 from osgeo import gdal
@@ -215,7 +216,7 @@ def exportUnwrappedPhase(product_dict,  bbox_file, prods_TOTbbox, arres,
             **export_dict, dask_key_name=name)
         jobs.append(job)
     # Run export jobs
-    vprint(f'Run number of jobs: {len(jobs)}')
+    vprint(f'Run {len(jobs)} jobs with {n_jobs) workers.')
     out = dask.compute(*jobs)
     # progress(out)  # need to check how to make dask progress bar with dask
     # close dask
@@ -287,7 +288,7 @@ def exportCoherenceAmplitude(product_dict, bbox_file, prods_TOTbbox, arrres,
         job = dask.delayed(_gdal_export)(**job_dict, dask_key_name=name)
         jobs.append(job)
     # Run export jobs
-    vprint(f'Run number of jobs: {len(jobs)}')
+    vprint(f'Run {len(jobs)} jobs with {n_jobs) workers.')
     out = dask.compute(*jobs)
     # progress(out)  # need to check how to make dask progress bar with dask
     # close dask
@@ -364,7 +365,7 @@ def exportImagingGeometry(product_dict, bbox_file, prods_TOTbbox, dem, Latitude,
         jobs.append(job)
 
     # Run export jobs
-    vprint(f'Run number of jobs: {len(jobs)} with {n_jobs} workers')
+    vprint(f'Run {len(jobs)} jobs with {n_jobs) workers.')
     out = dask.compute(*jobs)
     # progress(out)  # need to check how to make dask progress bar with dask
     # close dask
@@ -429,7 +430,7 @@ def exportIono(product_dict,  bbox_file, prods_TOTbbox, arres,
         jobs.append(job)
 
     # Run export jobs
-    vprint(f'Run number of jobs: {len(jobs)}')
+    vprint(f'Run {len(jobs)} jobs with {n_jobs) workers.')
     out = dask.compute(*jobs)
     progress(out) # need to check how to make dask progress bar with dask
     # close dask
@@ -510,11 +511,14 @@ def exportTropo(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude
             break
 
     # Run export jobs
-    vprint(f'Run number of reference jobs: {len(ref_jobs)} with {n_jobs} workers')
+    vprint(f'Run {len(jobs)} reference jobs with {n_jobs) workers.')
     out = dask.compute(*ref_jobs)
 
+    vprint(f'Catching breath...')
+    time.sleep(len(ref_jobs)*2)
+
     ## then do secondary
-    vprint(f'Run number of secondary jobs: {len(sec_jobs)} with {n_jobs} workers')
+    vprint(f'Run {len(jobs)} secondary jobs with {n_jobs) workers.')
     out = dask.compute(*sec_jobs)
 
     # close dask
