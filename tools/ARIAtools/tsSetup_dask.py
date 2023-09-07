@@ -492,7 +492,11 @@ def exportTropo(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude
 
     ref_jobs, sec_jobs  = [], []
     for i, (prod_dict, name) in enumerate(zip(product_dict, outNames)):
-        job_dict['prods'] = prod_dict[f'{layer}_{wmodel.upper()}'] # all tropo ifgs
+        # not all products have tropo layer
+        try:
+            job_dict['prods'] = prod_dict[f'{layer}_{wmodel.upper()}'] # all tropo ifgs
+        except:
+            continue
 
         # this will just export ref/sec and intersect ref with dem
         job_r = dask.delayed(_export_tropo)(**job_dict, dask_key_name=name)
