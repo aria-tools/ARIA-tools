@@ -511,14 +511,14 @@ def exportTropo(product_dict, bbox_file, prods_TOTbbox, dem, Latitude, Longitude
             break
 
     # Run export jobs
-    vprint(f'Run {len(jobs)} reference jobs with {n_jobs} workers.')
+    vprint(f'Run {len(ref_jobs)} reference jobs with {n_jobs} workers.')
     out = dask.compute(*ref_jobs)
 
     vprint(f'Catching breath...')
     time.sleep(len(ref_jobs)*2)
 
     ## then do secondary
-    vprint(f'Run {len(jobs)} secondary jobs with {n_jobs} workers.')
+    vprint(f'Run {len(sec_jobs)} secondary jobs with {n_jobs} workers.')
     out = dask.compute(*sec_jobs)
 
     # close dask
