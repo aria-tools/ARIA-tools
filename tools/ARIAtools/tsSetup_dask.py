@@ -747,7 +747,7 @@ def main(inps=None):
     layers = ['unwrappedPhase', 'coherence']
     print('\nExtracting unwrapped phase, coherence, '
           'and connected components for each interferogram pair')
-    export_unwrappedPhase(product_dict,
+    exportUnwrappedPhase(product_dict,
                           bbox_file,
                           prods_TOTbbox, arrres, inps.workdir,
                           mask=inps.mask, n_jobs=inps.n_jobs)
