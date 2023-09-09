@@ -511,6 +511,11 @@ class ARIA_standardproduct:
                 log.warning(f'Expected data layer key {i} '
                     f'not found in {fname}')
 
+            # if expected layer(s) not found, must return empty list
+            # to avoid stitching issues downstream
+            if keys_reject != []:
+                return []
+
             layerkeys.extend(addkeys)
 
         # Setup datalyr_dict
