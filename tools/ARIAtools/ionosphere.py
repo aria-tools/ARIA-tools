@@ -222,7 +222,7 @@ def export_ionosphere(input_iono_files: List[str],
                        )
         ds = None
         # Update VRT
-        [print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
+        [print(f'Writing {output_iono}, {output_iono.with_suffix(".vrt")}')
          if verbose else None]
         gdal.Translate(str(output_iono.with_suffix('.vrt')),
                        str(output_iono), format="VRT")
