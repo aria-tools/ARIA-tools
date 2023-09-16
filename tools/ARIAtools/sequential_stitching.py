@@ -685,7 +685,7 @@ def product_stitch_sequential(input_unw_files: List[str],
     mask_zero_component: bool
         mask unwrapped Phase within connected component 0
         (that snaphu consider to be unreliable)
-        [True/False] 
+        [True/False]
     verbose : bool
         print info messages [True/False]
     save_fig : bool
@@ -753,8 +753,13 @@ def product_stitch_sequential(input_unw_files: List[str],
     #       Also, it looks like it is important to close gdal.Warp
     #       gdal.Warp/Translate add 6 seconds to runtime
 
-    for output, input in zip([output_unw, output_conn],
-                             [temp_unw_out, temp_conn_out]):
+    unw_nd = gdal.Info(str(temp_unw_out.with_suffix('.vrt')),
+                       format='json')['bands'][0].get('noDataValue')
+    cc_nd  = gdal.Info(str(temp_conn_out.with_suffix('.vrt')),
+                       format='json')['bands'][0].get('noDataValue')
+    nd     = [unw_nd, cc_nd]
+    for i, (output, input) in enumerate(zip([output_unw, output_conn],
+                             [temp_unw_out, temp_conn_out])):
         # Crop if selected
         ds = gdal.Warp(str(output),
                        str(input.with_suffix('.vrt')),
@@ -763,7 +768,8 @@ def product_stitch_sequential(input_unw_files: List[str],
                        xRes=arrres[0], yRes=arrres[1],
                        targetAlignedPixels=True,
                        # cropToCutline = True,
-                       outputBounds=bounds
+                       outputBounds=bounds,
+                       dstNodata=nd[i]
                        )
         ds = None
         # Update VRT
