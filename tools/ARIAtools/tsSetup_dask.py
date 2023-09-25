@@ -629,7 +629,6 @@ def _export_metadata(inputfiles, outname, demfile, aria_dem_dict,
 
     if model_name:
         outname = op.join(op.dirname(outname), model_name, op.basename(outname))
-
     # Interpolate/intersect with DEM before cropping
     finalize_metadata(outname, bounds, aria_dem_dict['dem_bounds'],
                       prods_TOTbbox, demfile, aria_dem_dict['Latitude'],

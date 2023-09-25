@@ -40,10 +40,9 @@ these unwrapped phase pixels are unreliable and will often be misaligned as
 2-pi integer cycles shift does not apply here. User is advised to mask these
 pixels for further processing.
 
-TODO: Re-enumeration of connected components in the stitched image. Due the
-merging of overlapping components, there are gaps in enumeration of connected
-component labels. This should not affect the futher processing, but for the
-sake of consistency, add function to re-enumerate components.
+TODO: after stitching loop of residuals in overlap area, if there are some more
+      than 2pi (potential unw error), find connected component, and affected 
+      segment (find edges) to re-enumerate connected component 
 
 DISCLAIMER : This is development script. Requires some additional clean-up
 and restructuring
@@ -245,9 +244,11 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         # add range correction
         if range_correction:
             correction += range_corr
-        ik = conn_data2 == np.float32(pair[0])
-        unw_data2[ik] += correction
-        conn_data2[ik] = np.float32(pair[1])
+        # skip correcting zero component
+        if np.float32(pair[0]) != 0.:
+            ik = conn_data2 == np.float32(pair[0])
+            unw_data2[ik] += correction
+            conn_data2[ik] = np.float32(pair[1])
 
     # Backward correction
     conn_reverse = get_overlapping_conn(conn_data2[box_2],
@@ -303,7 +304,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         [_nan_filled_array(unw_data1),
          _nan_filled_array(unw_data2)],
         comb_snwe, comb_latlon,
-        method='mean')
+        method='first')
     combined_conn, _, _ = combine_data_to_single(
         [_nan_filled_array(conn_data1),
          _nan_filled_array(conn_data2)],

@@ -718,6 +718,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
         # write ref and sec files
         for i in tup_outputs:
             dst = f'{i[0]}.vrt'
+            #dst = f'{i[0]}_merged.vrt'
             # delete temporary files to circumvent potential inconsistent dims
             for j in glob.glob(i[0]+'*'):
                 os.remove(j)
@@ -740,8 +741,8 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
                     da.rio.to_raster(i, driver=driver)
                     da.close()
     else:
-        # src = f'{outname}_merged.vrt'
-        src = f'{outname}.vrt'
+        src = f'{outname}_merged.vrt'
+        #src = f'{outname}.vrt'
         if not os.path.exists(src):
             gdal.BuildVRT(src, metadata_arr)
             # write height layers
@@ -1366,15 +1367,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     else:
         dem = gdal.Open(dem.GetDescription())
 
-    dem_bounds = dem.GetGeoTransform()
-
     arrshape = [dem.RasterYSize, dem.RasterXSize]
     gt       = dem.GetGeoTransform()
     arrres   = [abs(gt[1]), abs(gt[-1])]
 
     # load layered metadata array
-    # tmp_name = outname+'_merged.vrt'
-    tmp_name = outname+'.vrt'
+    tmp_name = outname+'_merged.vrt'
+    #tmp_name = outname+'.vrt'
     data_array = gdal.Warp('', tmp_name, format="MEM", options=['NUM_THREADS=%s' % (num_threads)])
 
     # get minimum version
@@ -1412,7 +1411,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
     # only perform DEM intersection for rasters with valid height levels
     nohgt_lyrs  = ['ionosphere']
-    heightsMeta = np.array(gdal.Open(f'{outname}.vrt').GetMetadataItem(
+    #heightsMeta = np.array(gdal.Open(f'{outname}.vrt').GetMetadataItem(
+    #    hgt_field)[1:-1].split(','), dtype='float32')
+    heightsMeta = np.array(gdal.Open(f'{outname}_merged.vrt').GetMetadataItem(
         hgt_field)[1:-1].split(','), dtype='float32')
 
     if metadatalyr_name not in nohgt_lyrs:
@@ -1467,7 +1468,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     # outside of the expected track bounds,
     # it must be cut to conform with these bounds.
     # Crop to track extents
-
     gdal_warp_kwargs = {'format': 'VRT',
                         'cutlineDSName': prods_TOTbbox,
                         'outputBounds': bbox_bounds,
