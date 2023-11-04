@@ -245,7 +245,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         if range_correction:
             correction += range_corr
         # skip correcting zero component
-        if np.float32(pair[0]) != 0.:
+        if pair[0] != 0:
             ik = conn_data2 == np.float32(pair[0])
             unw_data2[ik] += correction
             conn_data2[ik] = np.float32(pair[1])
@@ -288,6 +288,12 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         unw_data1[ik] -= correction
         conn_data1[ik] = np.float32(pair[1])
 
+    # Shift zero component
+    conn0_s1 = np.ma.median(unw_data1[conn_data1!=0]) - np.ma.median(unw_data1[conn_data1==0])
+    conn0_s2 = np.ma.median(unw_data2[conn_data2!=0]) - np.ma.median(unw_data2[conn_data2==0])
+    unw_data1[conn_data1==0] += conn0_s1
+    unw_data2[conn_data2==0] += conn0_s2
+
     # Update connected component frame 2 naming
     idx1 = np.max(conn_data1)
     idx = np.unique(conn_data2[conn_data2 > idx1]).compressed()
@@ -310,6 +316,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
          _nan_filled_array(conn_data2)],
         comb_snwe, comb_latlon,
         method='min')
+
     # combined dict
     combined_dict = dict(SNWE=combined_snwe,
                          LAT_SPACING=combined_latlon_spacing[0],
