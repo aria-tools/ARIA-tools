@@ -310,7 +310,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         [_nan_filled_array(unw_data1),
          _nan_filled_array(unw_data2)],
         comb_snwe, comb_latlon,
-        method='first')
+        method='top')
     combined_conn, _, _ = combine_data_to_single(
         [_nan_filled_array(conn_data1),
          _nan_filled_array(conn_data2)],

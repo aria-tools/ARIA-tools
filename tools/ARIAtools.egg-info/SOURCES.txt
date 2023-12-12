@@ -15,9 +15,8 @@ tools/ARIAtools/productPlot.py
 tools/ARIAtools/progBar.py
 tools/ARIAtools/sequential_stitching.py
 tools/ARIAtools/shapefile_util.py
-tools/ARIAtools/stitiching_util.py
+tools/ARIAtools/stitching_util.py
 tools/ARIAtools/tsSetup.py
-tools/ARIAtools/tsSetup_dask.py
 tools/ARIAtools/unwrapStitching.py
 tools/ARIAtools/url_manager.py
 tools/ARIAtools/vrtmanager.py

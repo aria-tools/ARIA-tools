@@ -378,11 +378,11 @@ def combine_data_to_single(data_list: list,
         else:
             comb_data[i, y:y+data.shape[0], x: x+data.shape[1]] = data
     
-    if method == 'first' or method == 'second':
+    if method == 'top' or method == 'bottom':
         if comb_data.shape[0] == 2:
             counts = np.count_nonzero(np.nan_to_num(comb_data.copy(), 0), axis=0)
             # mask first or second array overlap area
-            ix = 1 if method =='first' else  0
+            ix = 1 if method =='top' else  0
             comb_data[ix,:,:][counts == 2] = np.nan
         method = 'mean'
 
