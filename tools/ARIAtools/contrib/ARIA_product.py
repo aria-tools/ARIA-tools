@@ -3,8 +3,9 @@
 #
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
-#
+# 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Author: Marin Govorcin
 
 import os
 import geopandas as gpd
@@ -83,6 +84,9 @@ class ARIA_product():
         self.df_duplicates = df[df.PATH.isin(duplicates)]
         self.dataframe = df[~df.PATH.isin(duplicates)]
         self.proj = df.PROJ.iloc[0]
+        # NOTE; this should be better to set to fixed values
+        #       same as Mintpy [-0.000833334, 0.000833334]
+        #       for 90 meters
         self.arres = [-round(np.mean(df.LAT_SPACING.values), 15), 
                        round(np.mean(df.LON_SPACING.values), 15)]
 
@@ -358,3 +362,16 @@ class ARIA_product():
         # Run prep_aria
         os.chdir(str(mintpy_dir))
         os.system(cmd)
+
+    def save2pickle(self, fname):
+        import pickle 
+        pickle = Path(fname)
+        pickle.mkdir(parents=True, exist_ok=True)
+        file = open(str(pickle), 'w')
+        pickle.dump(self, file)
+
+    def load_pickle(self, fname):
+        import pickle
+        pickle = Path(fname)
+        file = open(str(pickle), 'r') 
+        self = pickle.load(file)

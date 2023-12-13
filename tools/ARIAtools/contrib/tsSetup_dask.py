@@ -5,6 +5,7 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Author: Marin Govorcin
 
 import dask
 import logging
@@ -14,6 +15,7 @@ import time
 from pathlib import Path
 from itertools import compress
 from osgeo import gdal
+import warnings
 
 from dask.diagnostics import ProgressBar
 from dask.distributed import progress, Client
@@ -32,7 +34,7 @@ import logging
 gdal.UseExceptions()
 # Suppress warnings
 gdal.PushErrorHandler('CPLQuietErrorHandler')
-
+warnings.simplefilter("ignore")
 log = logging.getLogger(__name__)
 
 # Import TS-related global variables
