@@ -18,6 +18,7 @@ from tqdm import tqdm
 from osgeo import gdal, ogr
 from shapely.wkt import loads
 from datetime import datetime as dt
+from itertools import compress
 
 # Parallel processing
 from multiprocessing import Pool
