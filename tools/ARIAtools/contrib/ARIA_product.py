@@ -87,8 +87,9 @@ class ARIA_product():
         # NOTE; this should be better to set to fixed values
         #       same as Mintpy [-0.000833334, 0.000833334]
         #       for 90 meters
-        self.arres = [-round(np.mean(df.LAT_SPACING.values), 15), 
-                       round(np.mean(df.LON_SPACING.values), 15)]
+        #self.arres = [-round(np.mean(df.LAT_SPACING.values), 15), 
+        #               round(np.mean(df.LON_SPACING.values), 15)]
+        self.arres = [0.000833334, 0.000833334] 
 
     def find_aoi_intersection(self, south, north):
         # Creat aoi polygon

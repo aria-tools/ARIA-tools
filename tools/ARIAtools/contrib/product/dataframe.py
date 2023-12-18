@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import warnings
+import logging
 
 from pathlib import Path
 from tqdm import tqdm
@@ -18,8 +19,17 @@ from osgeo import gdal, ogr
 from shapely.wkt import loads
 from datetime import datetime as dt
 
-#Parallel processing
+# Parallel processing
 from multiprocessing import Pool
+
+# Start logging
+logging.basicConfig(filename='warning.log',
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.DEBUG)
+
+logging.info("Running ARIA-Product")
 
 def get_dataframe(filename, get_stats=True):
     def _get_mean_stats(filename : str, nodata: float=None) -> np.float32: 
@@ -58,48 +68,55 @@ def get_dataframe(filename, get_stats=True):
     nc_file = f'NETCDF:"{str(filename)}"' 
 
     # Get bounding box polygon
-    boundBox_layer = nc_file + ':productBoundingBox'
-    out_dict['GEOMETRY'] = _get_boundingBox(boundBox_layer) 
+    try:
+        boundBox_layer = nc_file + ':productBoundingBox'
+        out_dict['GEOMETRY'] = _get_boundingBox(boundBox_layer) 
 
-    # Get average spatial coherence
-    coh_layer = nc_file + ':/science/grids/data/coherence'
-    out_dict['AVG_COHERENCE'] = _get_mean_stats(coh_layer, nodata=0)
+        # Get average spatial coherence
+        coh_layer = nc_file + ':/science/grids/data/coherence'
+        out_dict['AVG_COHERENCE'] = _get_mean_stats(coh_layer, nodata=0)
 
-    # Get perpendicular baseline
-    bperp_layer = nc_file
-    bperp_layer += ':/science/grids/imagingGeometry/perpendicularBaseline'
-    out_dict['BPERP'] = _get_mean_stats(bperp_layer)
+        # Get perpendicular baseline
+        bperp_layer = nc_file
+        bperp_layer += ':/science/grids/imagingGeometry/perpendicularBaseline'
+        out_dict['BPERP'] = _get_mean_stats(bperp_layer)
 
-    # Get GUNW version
-    unw_layer = nc_file
-    unw_layer += ':/science/grids/data/unwrappedPhase' 
-    ds = gdal.Open(str(unw_layer), gdal.GA_ReadOnly)
-    out_dict['VERSION'] = ds.GetMetadata()['NC_GLOBAL#version']
-    out_dict['LAT_SPACING'] = ds.GetGeoTransform()[5]
-    out_dict['LON_SPACING'] = ds.GetGeoTransform()[1]
-    out_dict['X_ORIGIN'] = ds.GetGeoTransform()[0] 
-    out_dict['Y_ORIGIN'] = ds.GetGeoTransform()[3] 
-    out_dict['WIDTH'] = ds.RasterXSize
-    out_dict['LENGTH'] = ds.RasterYSize
-    out_dict['PROJ'] = ds.GetProjectionRef()
-    ds = None
-    
-    # update dict with information
-    name = filename.name
-    out_dict['SENSOR'] = name.split('-')[0] 
-    out_dict['ORBIT'] = name.split('-')[2]
-    out_dict['TRACK'] = name.split('-')[4]
-    out_dict['DATE1_DATE2'] = name.split('-')[6]
-    midtime = dt.strptime(name.split('-')[7],'%H%M%S')
-    out_dict['AZ_DOP0_MIDTIME'] = midtime.strftime('%H:%M:%S.0') 
-    out_dict['PATH'] = str(filename)
+        # Get GUNW version
+        unw_layer = nc_file
+        unw_layer += ':/science/grids/data/unwrappedPhase' 
+        ds = gdal.Open(str(unw_layer), gdal.GA_ReadOnly)
+        out_dict['VERSION'] = ds.GetMetadata()['NC_GLOBAL#version']
+        out_dict['LAT_SPACING'] = ds.GetGeoTransform()[5]
+        out_dict['LON_SPACING'] = ds.GetGeoTransform()[1]
+        out_dict['X_ORIGIN'] = ds.GetGeoTransform()[0] 
+        out_dict['Y_ORIGIN'] = ds.GetGeoTransform()[3] 
+        out_dict['WIDTH'] = ds.RasterXSize
+        out_dict['LENGTH'] = ds.RasterYSize
+        out_dict['PROJ'] = ds.GetProjectionRef()
+        ds = None
+        
+        # update dict with information
+        name = filename.name
+        out_dict['SENSOR'] = name.split('-')[0] 
+        out_dict['ORBIT'] = name.split('-')[2]
+        out_dict['TRACK'] = name.split('-')[4]
+        out_dict['DATE1_DATE2'] = name.split('-')[6]
+        midtime = dt.strptime(name.split('-')[7],'%H%M%S')
+        out_dict['AZ_DOP0_MIDTIME'] = midtime.strftime('%H:%M:%S.0') 
+        out_dict['PATH'] = str(filename)
 
-    # Get all layers
-    ds = gdal.Info(str(filename), format='json')
-    out_dict['LAYERS'] = list(ds['metadata']['SUBDATASETS'].values())[::2]
-    ds = None
+        # Get all layers
+        ds = gdal.Info(str(filename), format='json')
+        out_dict['LAYERS'] = list(ds['metadata']['SUBDATASETS'].values())[::2]
+        ds = None
+        return out_dict
+    except Exception:
+        skipped_dir = (filename.parent / 'skipped').resolve()
+        skipped_dir.mkdir(parents=True, exist_ok=True)
+        logging.warning(f'Error reading {filename}')
+        filename.rename(skipped_dir / filename.name)
+        return None
 
-    return out_dict
 
 def get_gunws_df(work_dir, n_jobs=1, verbose=False, overwrite=False):
     def _run_getdf(filenames, n_jobs=1):
@@ -111,10 +128,12 @@ def get_gunws_df(work_dir, n_jobs=1, verbose=False, overwrite=False):
         for result in tqdm(pool.imap(func=get_dataframe, 
                                     iterable=filenames), 
                         total=len(filenames)):
-            out.append(result)
+            if result != None :
+                out.append(result)
         pool.close()
 
         # Combine dataframe in one
+        print(out)
         df = pd.DataFrame(out)
         # update Dataframe with temporal baseline
         df['DATE1'] = np.vstack(df.DATE1_DATE2.apply(get_data12))[:,0]
