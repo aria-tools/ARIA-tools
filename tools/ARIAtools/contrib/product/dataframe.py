@@ -222,3 +222,5 @@ def get_unioned_df(df):
         'geometry': unioned_geometries},
         geometry='geometry')
     return unioned_gdf
+
+    
