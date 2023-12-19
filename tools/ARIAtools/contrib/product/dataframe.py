@@ -134,7 +134,6 @@ def get_gunws_df(work_dir, n_jobs=1, verbose=False, overwrite=False):
         pool.close()
 
         # Combine dataframe in one
-        print(out)
         df = pd.DataFrame(out)
         # update Dataframe with temporal baseline
         df['DATE1'] = np.vstack(df.DATE1_DATE2.apply(get_data12))[:,0]
@@ -148,7 +147,11 @@ def get_gunws_df(work_dir, n_jobs=1, verbose=False, overwrite=False):
 
     vprint(f'GUNW directory: {work_dir}')
     gunws = list(work_dir.glob('*S1*.nc'))
-    vprint(f'Number of GUNW products: {len(gunws)}')
+    if len(gunws) == 0:
+        raise ValueError(f'Abort loading!!. There are no GUNWs in {work_dir}.')
+    else:
+        vprint(f'Number of GUNW products: {len(gunws)}')
+
 
     # Get track number and pickle filename
     track = gunws[0].name.split('-')[4]
