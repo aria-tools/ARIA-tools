@@ -25,6 +25,9 @@ from ARIAtools.mask_util import prep_mask
 from ARIAtools.tsSetup import generate_stack
 from ARIAtools.ARIA_global_variables import ARIA_STACK_OUTFILES, ARIA_STACK_DEFAULTS
 
+# NOTE: multiprocessing or joblib sometime hangs 
+# TODO: https://stackoverflow.com/questions/70465276/multiprocessing-hanging-at-join
+
 class ARIA_product():
     def __init__(self, work_dir: str, gunw_dir:str = None):
         # Initialize folder structure
