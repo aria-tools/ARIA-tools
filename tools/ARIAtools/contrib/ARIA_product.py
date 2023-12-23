@@ -100,6 +100,7 @@ class ARIA_product():
             self.df_date12 = get_df_date12(self)
         extent = get_union_extent(self.df_date12)
         aoi = box(extent[0]-0.1, south, extent[2]+0.1, north)
+
         # Convert to GeoDataframe
         aoi_gdf = gpd.GeoDataFrame([1], geometry=[aoi],
                                    crs=self.df_date12.crs)
@@ -163,6 +164,7 @@ class ARIA_product():
 
         # Get the min common area
         bbox_shp = intersection_all(unioned_gdf.geometry)
+
         # Write a new Shapefile
         geojson_dict = dict(index=0, geometry='Polygon')
         with fiona.open(self.user_json, 'w', 'GeoJSON', geojson_dict) as c:
@@ -363,7 +365,7 @@ class ARIA_product():
                             ARIA_STACK_OUTFILES[layer],
                                 **stack_dict)
 
-    def prep_mintpy(self):
+    def prep_mintpy(self, execute=False):
         # Create MIntpy directory
         mintpy_dir = self.work_dir / 'MINTPY'
         mintpy_dir.mkdir(parents=True, exist_ok=True)
@@ -373,8 +375,10 @@ class ARIA_product():
         cmd += f" -w {self.aria_dir}/mask/watermask.msk"
 
         # Run prep_aria
-        os.chdir(str(mintpy_dir))
-        os.system(cmd)
+        print(cmd)
+        if execute:
+            os.chdir(str(mintpy_dir))
+            os.system(cmd)
 
     def save2pickle(self, fname):
         import pickle 
