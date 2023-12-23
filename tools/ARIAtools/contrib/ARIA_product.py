@@ -46,9 +46,9 @@ class ARIA_product():
         self.work_dir = work_directory
         self.product_dir = products_dir
         self.aoi = None
-        self.user_json = str(work_directory / 'user_bbox.json')
+        self.user_json = str(self.aria_dir / 'user_bbox.json')
         product_json_file = 'prods_TOTbbox_metadatalyr.json'
-        self.product_json = str(work_directory / product_json_file)
+        self.product_json = str(self.aria_dir/ product_json_file)
 
         # Dataframe
         self.df = None # all 
@@ -149,23 +149,28 @@ class ARIA_product():
             print(f'    Number of rejected pairs: {gdf_rejected.shape[0]}')
         return gdf_selected, gdf_rejected
 
-    def save_aria_bbox(self):
+    def save_aria_bbox(self, overwrite=False):
         if self.dataframe_fin is None:
             raise ValueError('Final dataframe does not exist!')
         unioned_gdf = get_unioned_df(self.dataframe_fin)
+
+        if overwrite:
+            print('Overwrite aoi json files!')
+            user_json = Path(self.user_json)
+            product_json = Path(self.product_json) 
+            if user_json.exists(): user_json.unlink()
+            if product_json.exists(): product_json.unlink()
 
         # Get the min common area
         bbox_shp = intersection_all(unioned_gdf.geometry)
         # Write a new Shapefile
         geojson_dict = dict(index=0, geometry='Polygon')
         with fiona.open(self.user_json, 'w', 'GeoJSON', geojson_dict) as c:
-            ## If there are multiple geometries, put the "for" loop here
             c.write({
                 'geometry': mapping(bbox_shp),
             })
 
         with fiona.open(self.product_json, 'w', 'GeoJSON', geojson_dict) as c:
-            ## If there are multiple geometries, put the "for" loop here
             c.write({
                 'geometry': mapping(unioned_gdf.unary_union),
             })
@@ -324,6 +329,9 @@ class ARIA_product():
                 stack_stats.to_csv(str(self.aria_dir / 'stack_stats.csv'))
 
     def prepare_stack(self):
+
+        self.check_exported_products('unwrappedPhase')
+        self.check_exported_products('connectedComponents')
         ref_dlist = generate_stack(self, 'unwrappedPhase',
                                   'unwrapStack', 
                                   bperp_file='stack_stats.csv', 
@@ -349,6 +357,7 @@ class ARIA_product():
         for layer in layers:
             print('')
             if layer in ARIA_STACK_OUTFILES.keys():
+                self.check_exported_products(layer)
                 generate_stack(self,
                             layer,
                             ARIA_STACK_OUTFILES[layer],
@@ -379,3 +388,28 @@ class ARIA_product():
         pickle = Path(fname)
         file = open(str(pickle), 'r') 
         self = pickle.load(file)
+
+    def check_exported_products(self, layer):
+        # Ensure the correct number of layers:
+        int_list = (Path(self.aria_dir) / layer)
+        int_list = list(int_list.glob('[0-9]*[0-9].vrt'))
+        product_list = [p['pair_name'][0] for p in self.products[0]]
+        flag = np.array([ip.name.split('.')[0] in product_list for ip in int_list])
+
+        # remove 
+        for file in np.array(int_list)[~flag]:
+            file.unlink()
+
+    def clean_aria_directories(self):
+        import shutil
+        dir_remove_list = ['azimuthAngle', 'connectedComponents',
+                           'incidenceAngle', 'coherence', 'DEM',
+                           'mask', 'unwrappedPhase', 'stack']
+        for rdir in dir_remove_list:
+            print(f'Removing {rdir}')
+            shutil.rmtree(Path(self.aria_dir) / rdir)
+
+        for dfile in ['stack_stats.csv','user_bbox.json',
+                     'prods_TOTbbox_metadatalyr.json']:
+            print(f'Removing {dfile}')
+            (Path(self.aria_dir) / dfile).unlink()

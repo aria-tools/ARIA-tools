@@ -12,6 +12,13 @@ import pandas as pd
 import warnings
 from datetime import datetime as dt
 from shapely.geometry import box
+from pathlib import Path
+
+def extract_version(path:str):
+    fname = Path(path).name.split('.')[0]
+    version = fname.split('-')[-1]
+    version_ix = np.int16(version.split('v')[1].split('_')[0])
+    return version_ix
 
 def get_duplicates(df, threshold=80):
     def _check_duplicates(df, date12, threshold=90):
@@ -25,12 +32,22 @@ def get_duplicates(df, threshold=80):
             intersect = g12.iloc[ix+1].geometry.intersection(g12.iloc[ix].geometry)
             overlap1 = (intersect.area / g12.iloc[ix+1].geometry.area) * 100
             overlap2 = (intersect.area / g12.iloc[ix].geometry.area) * 100
-            
-            if (overlap1 > threshold) or (overlap2 > threshold):
-                if g12.iloc[ix+1].geometry.area > g12.iloc[ix].geometry.area:
+
+            v_ix1 = extract_version(g12.iloc[ix+1].PATH)
+            v_ix2 = extract_version(g12.iloc[ix].PATH)
+
+            if v_ix1 == v_ix2:
+                if (overlap1 > threshold) or (overlap2 > threshold):
+                    if g12.iloc[ix+1].geometry.area > g12.iloc[ix].geometry.area:
+                        remove_list.append(g12.PATH.iloc[ix])
+                    else:
+                        remove_list.append(g12.PATH.iloc[ix+1])
+            else:
+                if v_ix1 > v_ix2:
                     remove_list.append(g12.PATH.iloc[ix])
                 else:
                     remove_list.append(g12.PATH.iloc[ix+1])
+
         return remove_list
 
     # Loop through aquisition dates to check for duplicates
