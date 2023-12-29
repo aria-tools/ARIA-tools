@@ -8,10 +8,12 @@
 # Author: Marin Govorcin
 
 import os
+import fiona
+import shutil
+import pickle
+import warnings
 import geopandas as gpd
 import numpy as np
-import fiona
-import warnings
 from pathlib import Path
 from shapely.geometry import Polygon, box, mapping
 from shapely import intersection_all
@@ -381,14 +383,12 @@ class ARIA_product():
             os.system(cmd)
 
     def save2pickle(self, fname):
-        import pickle 
         pickle = Path(fname)
         pickle.mkdir(parents=True, exist_ok=True)
         file = open(str(pickle), 'w')
         pickle.dump(self, file)
 
     def load_pickle(self, fname):
-        import pickle
         pickle = Path(fname)
         file = open(str(pickle), 'r') 
         self = pickle.load(file)
@@ -405,15 +405,16 @@ class ARIA_product():
             file.unlink()
 
     def clean_aria_directories(self):
-        import shutil
         dir_remove_list = ['azimuthAngle', 'connectedComponents',
                            'incidenceAngle', 'coherence', 'DEM',
                            'mask', 'unwrappedPhase', 'stack']
         for rdir in dir_remove_list:
-            print(f'Removing {rdir}')
-            shutil.rmtree(Path(self.aria_dir) / rdir)
+            if (Path(self.aria_dir) / rdir).exists():
+                print(f'Removing {rdir}') 
+                shutil.rmtree(Path(self.aria_dir) / rdir)
 
         for dfile in ['stack_stats.csv','user_bbox.json',
                      'prods_TOTbbox_metadatalyr.json']:
-            print(f'Removing {dfile}')
-            (Path(self.aria_dir) / dfile).unlink()
+            if (Path(self.aria_dir) / dfile).exists():
+                print(f'Removing {dfile}')
+                (Path(self.aria_dir) / dfile).unlink()
