@@ -112,11 +112,12 @@ def main(iargs=None):
     print(f'Writing referenceFile to {out}')
     out_df = df.copy()
     out_df['index'] = df.index.values
-    f = open(str(out), 'a')
+    f = open(str(out.parent / 'drop_ix.txt'), 'a')
     f.write(f'# Drop ix: {drop_df.index.values}\n')
-    out_df.to_csv(f, columns=['date12', 'index'],
-                sep=' ', header=False, index=False)
     f.close()
+    out_df.to_csv(str(out), columns=['date12', 'index'],
+                sep=' ', header=False, index=False)
+    
 
 if __name__ == '__main__':
     main(sys.argv[1:])
