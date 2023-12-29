@@ -12,6 +12,8 @@ dependencies:
   - asf_search
   - cartopy
   - dem_stitcher>=2.5.0
+  - dask
+  - distributed
   - gdal>=3.4.1
   - h5py
   - joblib

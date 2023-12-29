@@ -24,32 +24,23 @@ log = logging.getLogger(__name__)
 
 
 ###Save file with gdal
-def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32', proj=None, nodata=None, verbose=False):
+def renderVRT(fname, data_lyr, geotrans=None, drivername='ENVI', gdal_fmt='float32',
+              proj=None, nodata=None, verbose=False, test=False):
     """Exports raster and renders corresponding VRT file."""
-    gdalMap = { 'byte'   : 1,
-                'int16'  : 3,
-                'int32'    : 5,
-                'float32'  : 6,
-                'float64' : 7,
-                'cfloat32' : 10,
-                'cfloat64': 11}
+    import rasterio
 
-    gdalfile=gdal.GetDriverByName(drivername).Create(fname, data_lyr.shape[1], data_lyr.shape[0], 1, gdalMap[gdal_fmt])
-    gdalfile.GetRasterBand(1).WriteArray(data_lyr)
-    if geotrans: #If user wishes to update geotrans.
-        gdalfile.SetGeoTransform(geotrans)
-    if proj: #If user wishes to update projection.
-        gdalfile.SetProjection(proj)
-    if nodata is not None: #If user wishes to set nodata val.
-        gdalfile.GetRasterBand(1).SetNoDataValue(nodata)
-        # Finalize VRT
-        gdal.Translate(fname+'.vrt', gdalfile, options=gdal.TranslateOptions(format="VRT", noData=nodata))
-    else:
-        # Finalize VRT
-        gdal.Translate(fname+'.vrt', gdalfile, options=gdal.TranslateOptions(format="VRT"))
+    trans  = None if geotrans is None else rasterio.Affine.from_gdal(*geotrans)
+    dct_kw = dict(driver=drivername, width=data_lyr.shape[1], height=data_lyr.shape[0],
+                  dtype=data_lyr.dtype, count=1, crs=proj, nodata=nodata,
+                  transform=trans)
 
-    gdalfile = None
+    with rasterio.open(fname, 'w', **dct_kw) as dst:
+        dst.write(data_lyr, 1)
+        dst.close()
 
+    ## should replace this with rasterio
+    ds_vrt = gdal.Translate(fname+'.vrt', fname, format='VRT', noData=nodata)
+    del ds_vrt
     return
 
 
@@ -123,7 +114,7 @@ def resampleRaster(fname, multilooking, bounds, prods_TOTbbox,
     elif fname.split('/')[-2]=='connectedComponents' \
          or fname.split('/')[-2]=='unwrappedPhase':
         # Resample unw phase based off of mode of connected components
-        fnameunw = os.path.join('/'.join(fname.split('/')[:-2]), 
+        fnameunw = os.path.join('/'.join(fname.split('/')[:-2]),
             'unwrappedPhase',
             ''.join(fname.split('/')[-1]).split('.vrt')[0])
         fnameconcomp = os.path.join('/'.join(fname.split('/')[:-2]),

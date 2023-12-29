@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # import util modules
-from ARIAtools.stitiching_util import (get_GUNW_array, get_GUNW_attr,
+from ARIAtools.stitching_util import (get_GUNW_array, get_GUNW_attr,
                                        frame_overlap, combine_data_to_single,
                                        write_GUNW_array, snwe_to_extent,
                                        _nan_filled_array)
@@ -40,10 +40,9 @@ these unwrapped phase pixels are unreliable and will often be misaligned as
 2-pi integer cycles shift does not apply here. User is advised to mask these
 pixels for further processing.
 
-TODO: Re-enumeration of connected components in the stitched image. Due the
-merging of overlapping components, there are gaps in enumeration of connected
-component labels. This should not affect the futher processing, but for the
-sake of consistency, add function to re-enumerate components.
+TODO: after stitching loop of residuals in overlap area, if there are some more
+      than 2pi (potential unw error), find connected component, and affected 
+      segment (find edges) to re-enumerate connected component 
 
 DISCLAIMER : This is development script. Requires some additional clean-up
 and restructuring
@@ -57,6 +56,7 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
                             correction_method: Optional[str] = 'cycle2pi',
                             range_correction: Optional[bool] = True,
                             direction_N_S: Optional[bool] = False,
+                            mask_zero_component: Optional[bool] = False,
                             verbose: Optional[bool] = False):
 
     # Get raster attributes [SNWE, latlon_spacing, length, width, nodata]
@@ -137,6 +137,9 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
                 frame2_conn_array,
                 unw_attr_dicts[ix2],
                 **stitching_dict)
+
+    if mask_zero_component:
+        corr_unw[corr_conn==0] = np.nan
 
     # replace nan with 0.0
     corr_unw = np.nan_to_num(corr_unw.data, nan=0.0)
@@ -241,9 +244,11 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         # add range correction
         if range_correction:
             correction += range_corr
-        ik = conn_data2 == np.float32(pair[0])
-        unw_data2[ik] += correction
-        conn_data2[ik] = np.float32(pair[1])
+        # skip correcting zero component
+        if pair[0] != 0:
+            ik = conn_data2 == np.float32(pair[0])
+            unw_data2[ik] += correction
+            conn_data2[ik] = np.float32(pair[1])
 
     # Backward correction
     conn_reverse = get_overlapping_conn(conn_data2[box_2],
@@ -283,6 +288,12 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         unw_data1[ik] -= correction
         conn_data1[ik] = np.float32(pair[1])
 
+    # Shift zero component
+    conn0_s1 = np.ma.median(unw_data1[conn_data1!=0]) - np.ma.median(unw_data1[conn_data1==0])
+    conn0_s2 = np.ma.median(unw_data2[conn_data2!=0]) - np.ma.median(unw_data2[conn_data2==0])
+    unw_data1[conn_data1==0] += conn0_s1
+    unw_data2[conn_data2==0] += conn0_s2
+
     # Update connected component frame 2 naming
     idx1 = np.max(conn_data1)
     idx = np.unique(conn_data2[conn_data2 > idx1]).compressed()
@@ -299,12 +310,13 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         [_nan_filled_array(unw_data1),
          _nan_filled_array(unw_data2)],
         comb_snwe, comb_latlon,
-        method='mean')
+        method='top')
     combined_conn, _, _ = combine_data_to_single(
         [_nan_filled_array(conn_data1),
          _nan_filled_array(conn_data2)],
         comb_snwe, comb_latlon,
         method='min')
+
     # combined dict
     combined_dict = dict(SNWE=combined_snwe,
                          LAT_SPACING=combined_latlon_spacing[0],
@@ -466,12 +478,14 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
     correction2pi = 2. * np.pi * num_jump
 
     # Get range_correction if selected
+    # TODO: test when range correction is done and applied before
+    #       2pi jumps estimation, will it remove the issue below
     if range_correction:
         range_corr = _range_correction(unw1[idx], unw2[idx])
     else:
         range_corr = 0
 
-    # Note: range correctio sometimes gives oposite sign of
+    # Note: range correction sometimes gives oposite sign of
     #        correction, and add half or one cycle more.
     #        not sure, why that happens?? below is a hardcoded solution
     if np.abs(median_diff - (correction2pi + range_corr)) > 3.14:
@@ -632,6 +646,7 @@ def product_stitch_sequential(input_unw_files: List[str],
                               # [meandiff, cycle2pi]
                               correction_method: Optional[str] = 'cycle2pi',
                               range_correction: Optional[bool] = True,
+                              mask_zero_component: Optional[bool] = False,
                               verbose: Optional[bool] = False,
                               save_fig: Optional[bool] = False,
                               overwrite: Optional[bool] = True) -> None:
@@ -675,6 +690,10 @@ def product_stitch_sequential(input_unw_files: List[str],
     range_correction : bool
         use correction for non 2-pi shift in overlapping components
         [True/False]
+    mask_zero_component: bool
+        mask unwrapped Phase within connected component 0
+        (that snaphu consider to be unreliable)
+        [True/False]
     verbose : bool
         print info messages [True/False]
     save_fig : bool
@@ -714,6 +733,7 @@ def product_stitch_sequential(input_unw_files: List[str],
             correction_method=correction_method,
             range_correction=range_correction,
             direction_N_S=True,
+            mask_zero_component=mask_zero_component,
             verbose=verbose)
 
         # Write
@@ -741,8 +761,13 @@ def product_stitch_sequential(input_unw_files: List[str],
     #       Also, it looks like it is important to close gdal.Warp
     #       gdal.Warp/Translate add 6 seconds to runtime
 
-    for output, input in zip([output_unw, output_conn],
-                             [temp_unw_out, temp_conn_out]):
+    unw_nd = gdal.Info(str(temp_unw_out.with_suffix('.vrt')),
+                       format='json')['bands'][0].get('noDataValue')
+    cc_nd  = gdal.Info(str(temp_conn_out.with_suffix('.vrt')),
+                       format='json')['bands'][0].get('noDataValue')
+    nd     = [unw_nd, cc_nd]
+    for i, (output, input) in enumerate(zip([output_unw, output_conn],
+                             [temp_unw_out, temp_conn_out])):
         # Crop if selected
         ds = gdal.Warp(str(output),
                        str(input.with_suffix('.vrt')),
@@ -751,7 +776,8 @@ def product_stitch_sequential(input_unw_files: List[str],
                        xRes=arrres[0], yRes=arrres[1],
                        targetAlignedPixels=True,
                        # cropToCutline = True,
-                       outputBounds=bounds
+                       outputBounds=bounds,
+                       dstNodata=nd[i]
                        )
         ds = None
         # Update VRT

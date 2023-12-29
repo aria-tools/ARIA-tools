@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 # import util modules
-from ARIAtools.stitiching_util import (get_GUNW_array, get_GUNW_attr,
+from ARIAtools.stitching_util import (get_GUNW_array, get_GUNW_attr,
                                        frame_overlap, combine_data_to_single,
                                        write_GUNW_array, snwe_to_extent,
                                        _nan_filled_array)
@@ -222,7 +222,7 @@ def export_ionosphere(input_iono_files: List[str],
                        )
         ds = None
         # Update VRT
-        [print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
+        [print(f'Writing {output_iono}, {output_iono.with_suffix(".vrt")}')
          if verbose else None]
         gdal.Translate(str(output_iono.with_suffix('.vrt')),
                        str(output_iono), format="VRT")

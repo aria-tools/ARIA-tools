@@ -22,6 +22,8 @@ import multiprocessing
 from collections import defaultdict
 from datetime import datetime
 from osgeo import gdal
+from pathlib import Path
+import pandas as pd
 
 # Import functions
 from ARIAtools import progBar
@@ -215,7 +217,8 @@ def extract_utc_time(aria_dates, aztime_list):
 
 
 def generate_stack(aria_prod, stack_layer, output_file_name,
-                   workdir='./', ref_tropokey=None, ref_dlist=None):
+                   workdir='./', bperp_file='stack_stats.csv', 
+                   ref_tropokey=None, ref_dlist=None):
     """Generate time series stack."""
     from copy import deepcopy
 
@@ -271,7 +274,12 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         for i in aria_prod.products[0]:
             aztime_list.append(i['azimuthZeroDopplerMidTime'])
         # get bperp value
-        b_perp = extract_bperp_dict(domain_name, dlist)
+        if (Path(workdir) / bperp_file).exists():
+            # TBD to decide on txt.csv naming
+            df = pd.read_csv(str(Path(workdir) / bperp_file))
+            b_perp = df.set_index('DATE1_DATE2')['BPERP'].to_dict()
+        else:
+            b_perp = extract_bperp_dict(domain_name, dlist)
 
         # Confirm 1-to-1 match between UNW and other derived products
         if ref_dlist and new_dlist != ref_dlist:
@@ -526,22 +534,22 @@ def main(inps=None):
     dim_check(ref_arr_record, prod_arr_record)
 
     # Extracting other layers, if specified
-    layers, inps.tropo_total, \
+    layers, tropo_total, \
         model_names = layerCheck(standardproduct_info.products[1],
                                  inps.layers,
                                  inps.nc_version,
                                  inps.gacos_products,
                                  inps.tropo_models,
                                  extract_or_ts='tssetup')
-    if layers != [] or inps.tropo_total is True:
+    if layers != [] or tropo_total is True:
         if layers != []:
             print('\nExtracting optional, user-specified layers %s for each '
                   'interferogram pair' % (layers))
-        if inps.tropo_total is True:
+        if tropo_total is True:
             print('\nExtracting, %s for each applicable '
                   'interferogram pair' % ('troposphereTotal'))
         prod_arr_record = export_products(standardproduct_info.products[1],
-                                          tropo_total=inps.tropo_total,
+                                          tropo_total=tropo_total,
                                           model_names=model_names,
                                           layers=layers,
                                           **export_dict)
@@ -569,7 +577,7 @@ def main(inps=None):
             if i in layers:
                 remove_lyrs.append(i)
     layers = [i for i in layers if i not in remove_lyrs]
-    if inps.tropo_total is False:
+    if tropo_total is False:
         if 'troposphereTotal' in layers:
             layers.remove('troposphereTotal')
     if inps.gacos_products:
