@@ -158,34 +158,53 @@ class ARIA_product():
             print(f'    Number of rejected pairs: {gdf_rejected.shape[0]}')
         return gdf_selected, gdf_rejected
 
-    def save_aria_bbox(self, overwrite=False):
+    def save_aria_bbox(self, overwrite=False, verbose=True):
         if self.dataframe_fin is None:
             raise ValueError('Final dataframe does not exist!')
+        # Get unioned frames per pair
         unioned_gdf = get_unioned_df(self.dataframe_fin)
-
-        if overwrite:
-            print('Overwrite aoi json files!')
-            user_json = Path(self.user_json)
-            product_json = Path(self.product_json) 
-            if user_json.exists(): user_json.unlink()
-            if product_json.exists(): product_json.unlink()
-
+        
         # Get the min common area
         bbox_shp = intersection_all(unioned_gdf.geometry)
 
-        # Write a new Shapefile
-        geojson_dict = dict(index=0, geometry='Polygon')
-        with fiona.open(self.user_json, 'w', 'GeoJSON', geojson_dict) as c:
-            c.write({
-                'geometry': mapping(bbox_shp),
-            })
+        # Prepare paths
+        user_json = Path(self.user_json)
+        product_json = Path(self.product_json) 
 
-        with fiona.open(self.product_json, 'w', 'GeoJSON', geojson_dict) as c:
-            c.write({
-                'geometry': mapping(unioned_gdf.unary_union),
-            })
+        if user_json.exists():
+            # Load 
+            geo_bbox = gpd.read_file(user_json)
+            if not geo_bbox.geom_equals(bbox_shp)[0]:
+                msg = 'Warning: user_bbox.json exists '
+                msg += 'and is different than defined!!!'
+                msg += '\n         '
+                msg += 'Using existing one for the GUNW export '
+                msg += 'to stay consistent with previous run.'
+                if verbose: print(msg)
+                
+
+        if overwrite:
+            if verbose: print('Overwrite aoi json files!')
+            if user_json.exists(): user_json.unlink()
+            if product_json.exists(): product_json.unlink()
+
+        # Write a new Shapefile
+        if not user_json.exists():
+            geojson_dict = dict(index=0, geometry='Polygon')
+            with fiona.open(self.user_json, 'w', 'GeoJSON', geojson_dict) as c:
+                c.write({
+                    'geometry': mapping(bbox_shp),
+                })
+
+            with fiona.open(self.product_json, 'w', 'GeoJSON', geojson_dict) as c:
+                c.write({
+                    'geometry': mapping(unioned_gdf.unary_union),
+                })
+        else:
+            if verbose: print('Skip generating JSON files as they exist!')
 
     def generate_product_dict(self):
+        print('Generate product dictonary for stack generation')
         scenes = self.dataframe_fin.groupby(['DATE1_DATE2'], group_keys=True)
         scenes = scenes.apply(lambda x: x).index.levels[0]
         gdf_date12 = get_df_date12(self.dataframe_fin)
