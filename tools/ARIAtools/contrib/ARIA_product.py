@@ -80,6 +80,12 @@ class ARIA_product():
         # duplicate threshold, flag duplicate if adjacent frames have coverage
         # more than duplicate treshold as area percentage
         df = get_gunws_df(self.product_dir, n_jobs, verbose, overwrite)
+        df_gunw_dir = Path(df.PATH.iloc[0]).parent
+        if self.product_dir != df_gunw_dir:
+            print('GUNW directory is different than in the dataframe, reload!')
+            print(f' GUNW dir: {self.product_dir} !=  Dataframe {df_gunw_dir}')
+            df = get_gunws_df(self.product_dir, n_jobs, verbose, overwrite=True)
+
         if verbose is True:
             print('Get duplicates!')
             duplicates = get_duplicates(df, threshold=duplicate_thresh)
