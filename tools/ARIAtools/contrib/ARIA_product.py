@@ -95,9 +95,9 @@ class ARIA_product():
         self.df_duplicates = df[df.PATH.isin(duplicates)]
         self.dataframe = df[~df.PATH.isin(duplicates)]
         self.proj = df.PROJ.iloc[0]
-        # NOTE; this should be better to set to fixed values
-        #       same as Mintpy [-0.000833334, 0.000833334]
+        # NOTE; set to fixed values same as Mintpy [-0.000833334, 0.000833334]
         #       for 90 meters
+        # Another option is to take it from GUNW  
         #self.arres = [-round(np.mean(df.LAT_SPACING.values), 15), 
         #               round(np.mean(df.LON_SPACING.values), 15)]
         self.arres = [0.000833334, 0.000833334] 
