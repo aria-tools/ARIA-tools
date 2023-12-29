@@ -182,11 +182,12 @@ class ARIA_product():
                 msg += 'to stay consistent with previous run.'
                 msg += warning_spacing + 'Use flag #overwrite# and #clean_aria_directories#'
                 msg += ' to reset GUNW export.'
-                if verbose: print(msg)
-                
+                if verbose: print(msg)    
 
         if overwrite:
             if verbose: print('Overwrite aoi json files!')
+            # Overwrite all dirs and files in ARIA directory
+            # self.clean_aria_directories()
             if user_json.exists(): user_json.unlink()
             if product_json.exists(): product_json.unlink()
 
