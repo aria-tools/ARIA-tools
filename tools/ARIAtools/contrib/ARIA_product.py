@@ -175,11 +175,13 @@ class ARIA_product():
             # Load 
             geo_bbox = gpd.read_file(user_json)
             if not geo_bbox.geom_equals(bbox_shp)[0]:
-                msg = 'Warning: user_bbox.json exists '
+                warning_spacing = '\n         ' 
+                msg = 'WARNING: user_bbox.json exists '
                 msg += 'and is different than defined!!!'
-                msg += '\n         '
-                msg += 'Using existing one for the GUNW export '
+                msg += warning_spacing + 'Using existing one for the GUNW export '
                 msg += 'to stay consistent with previous run.'
+                msg += warning_spacing + 'Use flag #overwrite# and #clean_aria_directories#'
+                msg += ' to reset GUNW export.'
                 if verbose: print(msg)
                 
 
