@@ -459,8 +459,7 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
                                 label='Raw frame')
 
         # Format x-axis
-        dates = list(set(self.metadata['Common Datetime']))
-        dates.sort()
+        dates = sorted(set(self.metadata['Common Datetime']))
         datelabels = list(set(self.metadata['Common Date']))
         datelabels.sort()
         self.ax.set_xticks(dates)

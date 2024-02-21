@@ -7,32 +7,31 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
-   Global logging configuration
+Global logging configuration
 """
-
-import logging
 import os
 import sys
-from logging import FileHandler, Formatter, StreamHandler
-
+import logging
 
 # Inspired by
 # https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output
-class UnixColorFormatter(Formatter):
-    yellow = "\x1b[33;21m"
-    red = "\x1b[31;21m"
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
+
+
+class UnixColorFormatter(logging.Formatter):
+    YELLOW = "\x1b[33;21m"
+    RED = "\x1b[31;21m"
+    BOLD_RED = "\x1b[31;1m"
+    RESET = "\x1b[0m"
 
     COLORS = {
-        logging.WARNING: yellow,
-        logging.ERROR: red,
-        logging.CRITICAL: bold_red
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
+        logging.CRITICAL: BOLD_RED
     }
 
     def __init__(self, fmt=None, datefmt=None, style="%", use_color=True):
         """
-           Init Formatting
+        Init Formatting
         """
         super().__init__(fmt, datefmt, style)
         # Save the old function so we can call it later
@@ -44,13 +43,13 @@ class UnixColorFormatter(Formatter):
         message = self.__formatMessage(record)
         color = self.COLORS.get(record.levelno)
         if color:
-            message = "".join([color, message, self.reset])
+            message = "".join([color, message, self.RESET])
         return message
 
 
 class CustomFormatter(UnixColorFormatter):
     """
-       Adds levelname prefixes to the message on warning or above.
+    Adds levelname prefixes to the message on warning or above.
     """
 
     def formatMessage(self, record):
@@ -63,11 +62,11 @@ class CustomFormatter(UnixColorFormatter):
 logger = logging.getLogger("ARIAtools")
 logger.setLevel(logging.INFO)
 
-stdout_handler = StreamHandler(sys.stdout)
+stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setFormatter(CustomFormatter(use_color=os.name != "nt"))
 
-errorfile_handler = FileHandler("error.log")
-errorfile_handler.setFormatter(Formatter(
+errorfile_handler = logging.FileHandler("error.log")
+errorfile_handler.setFormatter(logging.Formatter(
     "[{asctime}] {funcName:>20}:{lineno:<5} {levelname:<10} {message}",
     style="{"
 ))

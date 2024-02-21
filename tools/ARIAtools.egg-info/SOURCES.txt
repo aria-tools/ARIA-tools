@@ -2,12 +2,11 @@ LICENSE
 README.md
 setup.py
 tools/ARIAtools/ARIAProduct.py
-tools/ARIAtools/ARIA_global_variables.py
+tools/ARIAtools/constants.py
 tools/ARIAtools/__init__.py
 tools/ARIAtools/computeMisclosure.py
 tools/ARIAtools/extractProduct.py
 tools/ARIAtools/ionosphere.py
-tools/ARIAtools/kml2box.py
 tools/ARIAtools/logger.py
 tools/ARIAtools/mask_util.py
 tools/ARIAtools/phaseMinimization.py

@@ -12,7 +12,7 @@ Specifically, extract unwrapped interferogram, coherence, perp baseline,
 LOS file(s), and (where available) tropospheric correction layers.
 """
 
-from ARIAtools.ARIA_global_variables import ARIA_EXTERNAL_CORRECTIONS, \
+from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES
 import os
 import glob

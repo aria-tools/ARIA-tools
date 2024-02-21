@@ -13,7 +13,7 @@ from osgeo import gdal
 import logging
 
 # Import functions
-from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
+from ARIAtools.constants import ARIA_TROPO_INTERNAL
 from ARIAtools.shapefile_util import open_shapefile
 
 gdal.UseExceptions()

@@ -9,15 +9,16 @@
 
 import os
 import re
+import glob
+import logging
 import numpy as np
 from joblib import Parallel, delayed
-import logging
 from osgeo import gdal
 
 from ARIAtools.url_manager import url_versions
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
 from ARIAtools.logger import logger
-from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
+from ARIAtools.constants import ARIA_TROPO_INTERNAL
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -30,9 +31,7 @@ log = logging.getLogger(__name__)
 # global fucntion that can be called in parallel
 def unwrap_self_readproduct(arg):
     """
-
     Arg is the self argument and the filename is of the file to be read
-
     """
     return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
 
@@ -40,7 +39,6 @@ def unwrap_self_readproduct(arg):
 def package_dict(scene, new_scene, scene_ind,
                  sorted_dict=None, dict_ind=None):
     """
-
     Strip and prep keys and values for dictionary of sorted, spatiotemporally contiguous products
 
     'scene' = specific reference product
@@ -48,9 +46,7 @@ def package_dict(scene, new_scene, scene_ind,
     'scene_ind' = pass metadata (0) vs data layer (1) values for a given scene
     'sorted_dict' = dictionary of sorted products to modify
     'dict_ind' = index of sorted products dictionary being queried
-
     """
-
     dict_keys = scene[scene_ind].keys()
     # initialize new entry for new IFG and extend dict
     if not sorted_dict:
@@ -73,19 +69,14 @@ def package_dict(scene, new_scene, scene_ind,
 # Input file(s) and bbox as either list or physical shape file.
 class ARIA_standardproduct:
     """
-    Load ARIA standard products
-
-     and split them into
-    spatiotemporally contiguous interferograms.
+    Load ARIA standard products and split them into spatiotemporally
+    contiguous interferograms.
     """
-    import glob
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', verbose=False):
         """
-
         Parse products and input bounding box (if specified)
-
         """
         # If user wants verbose mode
         # Parse through file(s)/bbox input
@@ -111,23 +102,27 @@ class ARIA_standardproduct:
         if len([str(val) for val in filearg.split(',')]) > 1:
             self.files = [str(i) for i in filearg.split(',')]
             # If wildcard
-            self.files = [os.path.abspath(item) for sublist in
-                          [self.glob.glob(os.path.expanduser(os.path.expandvars(i)))
-                           if '*' in i else [i] for i in self.files] for item in sublist]
+            self.files = [
+                os.path.abspath(item) for sublist in
+                [glob.glob(os.path.expanduser(os.path.expandvars(i)))
+                 if '*' in i else [i] for i in self.files] for item in sublist]
 
         # If list of URLs provided
         elif os.path.basename(filearg).endswith('.txt'):
             with open(filearg, 'r') as fh:
                 self.files = [f.rstrip('\n') for f in fh.readlines()]
+
         # If single file or wildcard
         else:
             # If single file
             if os.path.isfile(filearg):
                 self.files = [filearg]
+
             # If wildcard
             else:
-                self.files = self.glob.glob(os.path.expanduser(
+                self.files = glob.glob(os.path.expanduser(
                     os.path.expandvars(filearg)))
+
             # Convert relative paths to absolute paths
             self.files = [os.path.abspath(i) for i in self.files]
 
@@ -146,6 +141,7 @@ class ARIA_standardproduct:
         # If URLs, append with '/vsicurl/'
         self.files = [
             f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
+
         # check if virtual file reader is being captured as netcdf
         if any("https://" in i for i in self.files):
             # must configure gdal to load URLs
@@ -694,7 +690,7 @@ class ARIA_standardproduct:
                         if new_scene[1]['productBoundingBox'] in
                     item[1]['productBoundingBox']] == [] \
                         and new_scene[0]['pair_name'] not in \
-                track_rejected_pairs:
+                    track_rejected_pairs:
                     dict_1 = package_dict(new_scene, new_scene, 0)
                     dict_2 = package_dict(new_scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
