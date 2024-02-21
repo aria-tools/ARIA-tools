@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
@@ -7,24 +6,26 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-from osgeo import gdal, ogr
 import os
-import numpy as np
 import logging
-log = logging.getLogger(__name__)
 
-gdal.UseExceptions()
+import numpy as np
+import pyproj
+import shapely
+import shapely.wkt
+import osgeo.gdal
+
+LOGGER = logging.getLogger(__name__)
+
+osgeo.gdal.UseExceptions()
 # Suppress warnings
-gdal.PushErrorHandler('CPLQuietErrorHandler')
+osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 
-def open_shapefile(fname, lyrind, ftind):
+def open_shp(fname, lyrind=0, ftind=0):
     """Open a existing shapefile and pass the coordinates back."""
-    # import dependencies
-    from shapely.wkt import loads
-
     # opening the file
-    file_bbox = ogr.Open(fname)
+    file_bbox = osgeo.ogr.Open(fname)
 
     # If layer name provided
     if isinstance(lyrind, str):
@@ -34,45 +35,43 @@ def open_shapefile(fname, lyrind, ftind):
     else:
         file_bbox = file_bbox.GetLayerByIndex(lyrind).GetFeature(ftind)
     geom = file_bbox.GetGeometryRef()
-    file_bbox = loads(geom.ExportToWkt())
-
+    file_bbox = shapely.wkt.loads(geom.ExportToWkt())
     return file_bbox
 
 
-def save_shapefile(fname, polygon, drivername):
+def save_shp(fname, polygon, drivername='GeoJSON'):
     """Save a polygon shapefile."""
     # open file
-    ds = ogr.GetDriverByName(drivername).CreateDataSource(fname)
+    ds = osgeo.ogr.GetDriverByName(drivername).CreateDataSource(fname)
+
     # create layer
-    layer = ds.CreateLayer('', None, ogr.wkbPolygon)
-    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))  # Add 1 attribute
+    layer = ds.CreateLayer('', None, osgeo.ogr.wkbPolygon)
+
+    # Add 1 attribute
+    layer.CreateField(osgeo.ogr.FieldDefn('id', osgeo.ogr.OFTInteger))
+
     # Create a new feature (attribute and geometry)
-    feat = ogr.Feature(layer.GetLayerDefn())
+    feat = osgeo.ogr.Feature(layer.GetLayerDefn())
     feat.SetField('id', 0)
 
     # Make a geometry, from input Shapely object
-    geom = ogr.CreateGeometryFromWkb(polygon.wkb)
+    geom = osgeo.ogr.CreateGeometryFromWkb(polygon.wkb)
     feat.SetGeometry(geom)
     layer.CreateFeature(feat)
-
-    # Save/close everything
-    ds = layer = feat = geom = None
-
     return
 
 
-def shapefile_area(file_bbox, bounds=False):
+def shp_area(file_bbox, bounds=False):
     """Compute km\u00b2 area of shapefile."""
-    # import dependencies
-    from pyproj import Proj
-    from shapely.geometry import shape
-
     # loop through polygons
     shape_area = 0
+
     # pass single polygon as list
     if file_bbox.geom_type == 'Polygon':
         file_bbox = [file_bbox]
+
     for polyobj in file_bbox:
+
         # get coords
         if bounds:
             # Pass coordinates of bounds as opposed to cutline
@@ -84,45 +83,52 @@ def shapefile_area(file_bbox, bounds=False):
             lon, lat = polyobj.exterior.coords.xy
 
         # use equal area projection centered on/bracketing AOI
-        pa = Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".
-                  format(min(lat), max(lat), (max(lat) + min(lat)) / 2,
-                         (max(lon) + min(lon)) / 2))
+        pa = pyproj.Proj(
+            "+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
+                min(lat), max(lat), (max(lat) + min(lat)) / 2,
+                (max(lon) + min(lon)) / 2))
         x, y = pa(lon, lat)
         cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-        shape_area += shape(cop).area / 1e6  # area in km^2
 
+        # area in km^2
+        shape_area += shapely.geometry.shape(cop).area / 1e6
     return shape_area
 
 
 def chunk_area(WSEN):
-    """Chunk an area ~evenly pieces < 450000 km required by the
-       SRTM server."""
-    from shapely.geometry import Polygon
-    max_area = 400000  # need buffer for projections inconsistencies
+    """
+    Chunk an area ~evenly pieces < 450000 km required by the SRTM server.
+    """
+    # need buffer for projections inconsistencies
+    MAX_AREA = 400000
     W, S, E, N = WSEN
-    n = 2  # start with a 2 x 2 chunk
-    area = max_area + 1
-    while area > max_area:
+
+    # start with a 2 x 2 chunk
+    n = 2
+    area = MAX_AREA + 1
+    while area > MAX_AREA:
         cols = np.linspace(W, E, n + 1)
         rows = np.linspace(S, N, n + 1)
         Wi, Si, Ei, Ni = [cols[0], rows[0], cols[1], rows[1]]
-        poly = Polygon([(Wi, Ni), (Wi, Si), (Ei, Si), (Ei, Ni)])
-        area = shapefile_area(poly)
+        poly = shapely.geometry.Polygon(
+            [(Wi, Ni), (Wi, Si), (Ei, Si), (Ei, Ni)])
+        area = shp_area(poly)
         n += 1
         if n > 100:
-            log.error('There was a problem chunking the DEM; check input '
-                      'bounds')
-            os.sys.exit()
+            LOGGER.error(
+                'There was a problem chunking the DEM; check input bounds')
+            raise Exception(
+                "There was a problem chunking the DEM; check input bounds")
     return rows, cols
 
 
-def plot_shapefile(fname):
+def plot_shp(fname):
     import matplotlib.path as mpath
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
 
     # Extract first layer of features from shapefile using OGR
-    ds = ogr.Open(fname, gdal.GA_ReadOnly)
+    ds = osgeo.ogr.Open(fname)
     lyr = ds.GetLayer(0)
 
     # Get extent and calculate buffer size
@@ -167,15 +173,15 @@ def plot_shapefile(fname):
 
         # Add paths as patches to axes
         for path in paths:
-            patch = mpatches.PathPatch(path, fill=False, facecolor='blue',
-                                       edgecolor='black', linewidth=1)
-
+            patch = mpatches.PathPatch(
+                path, fill=False, facecolor='blue', edgecolor='black',
+                linewidth=1)
             ax.add_patch(patch)
 
         ax.set_xlabel('longitude', labelpad=15, fontsize=15)
         ax.set_ylabel('latitude', labelpad=15, fontsize=15)
-        ax.set_title(os.path.basename(os.path.splitext(fname)[0]),
-                     fontsize=15)
+        ax.set_title(
+            os.path.basename(os.path.splitext(fname)[0]), fontsize=15)
         ax.set_aspect(1.0)
         ax.grid(False)
     plt.show()

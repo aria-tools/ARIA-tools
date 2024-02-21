@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Ravi Lanka
@@ -18,10 +17,8 @@ import pulp
 import timeit as T
 
 import logging
-from ARIAtools.logger import logger
-log = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
+LOGGER = logging.getLogger(__name__)
 
 class Vertex(object):
     '''
@@ -197,8 +194,6 @@ class Edge(object):
         return Edge(self.dst, self.src)
 
 # Defines each delaunay traingle
-
-
 class Loop(object):
     '''
     Collection of edges in loop - Expects the vertices to be in sequence
@@ -319,13 +314,13 @@ class Loop(object):
 
     def printEdges(self):
         for v in self.edges:
-            log.info(v)
+            LOGGER.info(v)
 
     def printFlow(self):
         flow = []
         for edge in self.edges:
             flow.append(edge.flow)
-        log.info(flow)
+        LOGGER.info(flow)
 
     def plot(self, ax):
         if self.residue != 0:
@@ -768,16 +763,16 @@ class PhaseUnwrap(object):
 
         # Solve the objective function
         if solver == 'glpk':
-            log.info('Using GLPK MIP solver')
+            LOGGER.info('Using GLPK MIP solver')
             def MIPsolver(): return self.__prob__.solve(pulp.GLPK(msg=0))
         elif solver == 'pulp':
-            log.info('Using PuLP MIP solver')
+            LOGGER.info('Using PuLP MIP solver')
             def MIPsolver(): return self.__prob__.solve()
         elif solver == 'gurobi':
-            log.info('Using Gurobi MIP solver')
+            LOGGER.info('Using Gurobi MIP solver')
             def MIPsolver(): return self.__prob__.solve(pulp.GUROBI_CMD())
 
-        log.info(
+        LOGGER.info(
             'Time Taken (in sec) to solve: %f',
             T.timeit(
                 MIPsolver,
@@ -947,8 +942,8 @@ def main():
     compTest = args.compTest
     mcf = args.mcf
 
-    log.info("Input Type: %s", inputType)
-    log.info("Dimension: %d", dim)
+    LOGGER.info("Input Type: %s", inputType)
+    LOGGER.info("Dimension: %d", dim)
 
     # Random seeding to reapeat random numbers in case
     np.random.seed(100)
@@ -1005,7 +1000,7 @@ def main():
     if mcf is True:
         # We use redArcs to run Minimum Cost Flow
         redArcs = -1
-        log.info('Relax IV used as the solver for Minimum Cost Flow')
+        LOGGER.info('Relax IV used as the solver for Minimum Cost Flow')
         solver = None
     else:
         redArcs = args.redArcs

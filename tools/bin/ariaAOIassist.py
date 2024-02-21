@@ -7,7 +7,6 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Import modules
-from pkg_resources import get_distribution
 from shapely.geometry import Polygon, MultiPolygon
 from osgeo import ogr
 import os
@@ -459,8 +458,7 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
                                 label='Raw frame')
 
         # Format x-axis
-        dates = list(set(self.metadata['Common Datetime']))
-        dates.sort()
+        dates = sorted(set(self.metadata['Common Datetime']))
         datelabels = list(set(self.metadata['Common Date']))
         datelabels.sort()
         self.ax.set_xticks(dates)
@@ -774,11 +772,6 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
 # Main
 if __name__ == "__main__":
     """ Main workflow for extracting and visualizing meta data. """
-    try:
-        print('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except BaseException:
-        pass
-
     inps = cmdLineParse(iargs=None)
 
     # Setup

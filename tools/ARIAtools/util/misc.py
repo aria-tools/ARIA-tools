@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Emre Havazli
@@ -6,12 +5,11 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import numpy as np
-import time
 import sys
+import time
+import numpy as np
 
-
-class progressBar:
+class ProgressBar:
     """Creates a text-based progress bar. Call the object with
     the simple print command to see the progress bar, which looks
     something like this:
@@ -21,13 +19,13 @@ class progressBar:
         modified from MintPy version 1.2 (https://github.com/insarlab/MintPy/)
         Code originally from http://code.activestate.com/recipes/168639/
     example:
-        from ARIAtools import progBar
-        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),prefix='Generating: '+key+' - ')
+        from ARIAtools.util import misc
+        prog_bar = misc.ProgressBar(maxValue=len(
+            product_dict[0]),prefix='Generating: '+key+' - ')
         for i in enumerate(product_dict[0]):
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
         prog_bar.close()
     """
-
     def __init__(self, maxValue=100, prefix='', minValue=0,
                  totalWidth=70, print_msg=True):
         self.prog_bar = "[]"  # This holds the progress bar string
@@ -47,9 +45,11 @@ class progressBar:
         self.update_amount(0)  # Build progress bar string
 
     def update_amount(self, newAmount=0, suffix=''):
-        """ Update the progress bar with the new amount (with min and max
+        """
+        Update the progress bar with the new amount (with min and max
         values set at initialization; if it is over or under, it takes the
-        min or max value as a default. """
+        min or max value as a default.
+        """
         if newAmount < self.min:
             newAmount = self.min
         if newAmount > self.max:
@@ -77,27 +77,34 @@ class progressBar:
         else:
             self.prog_bar = '[%s>%s]' % (
                 '=' * (numHashes - 1), ' ' * (allFull - numHashes))
+
             # figure out where to put the percentage, roughly centered
             percentPlace = int(len(self.prog_bar) / 2 - len(str(percentDone)))
             percentString = ' ' + str(percentDone) + '% '
+
             # slice the percentage into the bar
-            self.prog_bar = ''.join([self.prog_bar[0:percentPlace],
-                                     percentString,
-                                     self.prog_bar[percentPlace + len(percentString):]])
+            self.prog_bar = ''.join([
+                self.prog_bar[0:percentPlace], percentString,
+                self.prog_bar[percentPlace + len(percentString):]])
+
             # prefix and suffix
             self.prog_bar = self.prefix + self.prog_bar
             if suffix:
                 self.prog_bar += ' %s' % (suffix)
+
             # time info - elapsed time and estimated remaining time
             if percentDone > 0:
                 elapsed_time = time.time() - self.start_time
-                self.prog_bar += '%5ds / %5ds' % (int(elapsed_time),
-                                                  int(elapsed_time * (100. / percentDone - 1)))
+                self.prog_bar += '%5ds / %5ds' % (
+                    int(elapsed_time),
+                    int(elapsed_time * (100. / percentDone - 1)))
 
     def update(self, value, every=1, suffix=''):
-        """ Updates the amount, and writes to stdout. Prints a
-         carriage return first, so it will overwrite the current
-          line in stdout."""
+        """
+        Updates the amount, and writes to stdout. Prints a
+        carriage return first, so it will overwrite the current
+        line in stdout.
+        """
         if value % every == 0 or value >= self.max:
             self.update_amount(newAmount=value, suffix=suffix)
             if self.print_msg:
