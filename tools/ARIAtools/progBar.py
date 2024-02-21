@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Emre Havazli
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import numpy as np
 import time
 import sys
+
 
 class progressBar:
     """Creates a text-based progress bar. Call the object with
@@ -27,7 +28,8 @@ class progressBar:
         prog_bar.close()
     """
 
-    def __init__(self, maxValue=100, prefix='', minValue=0, totalWidth=70, print_msg=True):
+    def __init__(self, maxValue=100, prefix='', minValue=0,
+                 totalWidth=70, print_msg=True):
         self.prog_bar = "[]"  # This holds the progress bar string
         self.min = minValue
         self.max = maxValue
@@ -67,20 +69,21 @@ class progressBar:
         # Build a progress bar with an arrow of equal signs; special cases for
         # empty and full
         if numHashes == 0:
-            self.prog_bar = '%s[>%s]' % (self.prefix, ' '*(allFull-1))
+            self.prog_bar = '%s[>%s]' % (self.prefix, ' ' * (allFull - 1))
         elif numHashes == allFull:
-            self.prog_bar = '%s[%s]' % (self.prefix, '='*allFull)
+            self.prog_bar = '%s[%s]' % (self.prefix, '=' * allFull)
             if suffix:
                 self.prog_bar += ' %s' % (suffix)
         else:
-            self.prog_bar = '[%s>%s]' % ('='*(numHashes-1), ' '*(allFull-numHashes))
+            self.prog_bar = '[%s>%s]' % (
+                '=' * (numHashes - 1), ' ' * (allFull - numHashes))
             # figure out where to put the percentage, roughly centered
-            percentPlace = int(len(self.prog_bar)/2 - len(str(percentDone)))
+            percentPlace = int(len(self.prog_bar) / 2 - len(str(percentDone)))
             percentString = ' ' + str(percentDone) + '% '
             # slice the percentage into the bar
             self.prog_bar = ''.join([self.prog_bar[0:percentPlace],
                                      percentString,
-                                     self.prog_bar[percentPlace+len(percentString):]])
+                                     self.prog_bar[percentPlace + len(percentString):]])
             # prefix and suffix
             self.prog_bar = self.prefix + self.prog_bar
             if suffix:
@@ -89,7 +92,7 @@ class progressBar:
             if percentDone > 0:
                 elapsed_time = time.time() - self.start_time
                 self.prog_bar += '%5ds / %5ds' % (int(elapsed_time),
-                                                  int(elapsed_time * (100./percentDone-1)))
+                                                  int(elapsed_time * (100. / percentDone - 1)))
 
     def update(self, value, every=1, suffix=''):
         """ Updates the amount, and writes to stdout. Prints a

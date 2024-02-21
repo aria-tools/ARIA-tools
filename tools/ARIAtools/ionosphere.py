@@ -47,13 +47,13 @@ def fit_surface(data, order=2):
     xx = np.array(xx, dtype=np.float32).reshape(-1, 1)
     yy = np.array(yy, dtype=np.float32).reshape(-1, 1)
     ones = np.ones(xx.shape, dtype=np.float32)
-    
+
     # Bilinear
-    if order==1.5:
-        G = np.hstack((yy, xx, yy*xx, ones))
-    elif order==2:
+    if order == 1.5:
+        G = np.hstack((yy, xx, yy * xx, ones))
+    elif order == 2:
         # Quadratic
-        G = np.hstack((yy**2, xx**2, yy*xx, yy, xx, ones))
+        G = np.hstack((yy**2, xx**2, yy * xx, yy, xx, ones))
 
     # estimate ramp
     X = np.dot(np.linalg.pinv(G[mask, :], rcond=1e-15), data[mask, :])
@@ -73,25 +73,30 @@ def _get_overlay(xr_ds1, xr_ds2):
 
 def _get_median_offsets2frames(xr_data_list, xr_mask_list, ix1, ix2):
     S, N, W, E = _get_overlay(xr_data_list[ix1], xr_data_list[ix2])
-    
+
     # Get overlap
-    cropped_ds1 = xr_data_list[ix1].ionosphere.sel(y=slice(N, S), x=slice(W, E)).copy()
-    cropped_mask1 = xr_mask_list[ix1].mask.sel(y=slice(N, S), x=slice(W, E)).copy()
+    cropped_ds1 = xr_data_list[ix1].ionosphere.sel(
+        y=slice(N, S), x=slice(W, E)).copy()
+    cropped_mask1 = xr_mask_list[ix1].mask.sel(
+        y=slice(N, S), x=slice(W, E)).copy()
     ds1 = np.ma.masked_array(cropped_ds1.values, mask=~cropped_mask1.values)
 
-    cropped_ds2 = xr_data_list[ix2].ionosphere.sel(y=slice(N, S), x=slice(W, E)).copy()
-    cropped_mask2 = xr_mask_list[ix2].mask.sel(y=slice(N, S), x=slice(W, E)).copy()
+    cropped_ds2 = xr_data_list[ix2].ionosphere.sel(
+        y=slice(N, S), x=slice(W, E)).copy()
+    cropped_mask2 = xr_mask_list[ix2].mask.sel(
+        y=slice(N, S), x=slice(W, E)).copy()
     ds2 = np.ma.masked_array(cropped_ds2.values, mask=~cropped_mask2.values)
 
     return np.nanmedian((ds1 - ds2).filled(fill_value=np.nan))
 
+
 def stitch_ionosphere_frames(input_iono_files: List[str],
                              direction_N_S: Optional[bool] = True):
-                             
+
     # Initalize variables for raster attributes
     iono_attr_list = []  # ionosphere raster metadata
     iono_xr_list = []
-    mask_xr_list =[]
+    mask_xr_list = []
 
     # Loop through files
     for iono_file in input_iono_files:
@@ -100,23 +105,24 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
         iono_xr = xr.open_dataset(iono_file, engine='rasterio').squeeze()
 
         # Generate mask using unwrapPhase connectedComponents
-        mask_xr = xr.open_dataset(GUNW_LAYERS['connectedComponents'] % filename, 
+        mask_xr = xr.open_dataset(GUNW_LAYERS['connectedComponents'] % filename,
                                   engine='rasterio').squeeze()
         mask = np.bool_(mask_xr.connectedComponents.data != 0)
         mask_xr['connectedComponents'].values = mask
-        mask_xr = mask_xr.rename_vars({'connectedComponents':'mask'})
+        mask_xr = mask_xr.rename_vars({'connectedComponents': 'mask'})
         # Interpolate to iono grid
         mask_xr = mask_xr.interp_like(iono_xr)
-        
+
         iono_xr_list.append(iono_xr)
         mask_xr_list.append(mask_xr)
 
     # Remove intermidate variables
     del iono_xr, mask_xr, mask
-    
+
     # Get SNWE and LATLON_SPACING
     SNWE = np.vstack([d['SNWE'] for d in iono_attr_list])
-    LATLON = np.vstack([[d['LAT_SPACING'], d['LON_SPACING']] for d in iono_attr_list])
+    LATLON = np.vstack([[d['LAT_SPACING'], d['LON_SPACING']]
+                       for d in iono_attr_list])
 
     # get sorted indices for frame bounds, from South to North
     sorted_ix = np.argsort(SNWE[:, 0], axis=0)
@@ -137,17 +143,16 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
     combined_iono = combine_data_to_single(data_list,
                                            SNWE.tolist(),
                                            LATLON.tolist(),
-                                           method = 'mean',
-                                           latlon_step=LATLON[0,:].tolist())
+                                           method='mean',
+                                           latlon_step=LATLON[0, :].tolist())
 
     combined_mask = combine_data_to_single(mask_list,
                                            SNWE.tolist(),
                                            LATLON.tolist(),
-                                           method = 'min',
-                                           latlon_step=LATLON[0,:].tolist())
+                                           method='min',
+                                           latlon_step=LATLON[0, :].tolist())
 
-
-    # Step 3: Fit quadratic surface 
+    # Step 3: Fit quadratic surface
     # Mask combined_iono before surface fitting
     combined_iono_msk = combined_iono[0].copy()
     mask = ~np.nan_to_num(combined_mask[0], 0).astype(np.bool_)
@@ -160,7 +165,8 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
 
     return surface, combined_iono[1], combined_iono[2]
 
-## MAIN
+# MAIN
+
 
 def export_ionosphere(input_iono_files: List[str],
                       arrres: List[float],
@@ -172,80 +178,76 @@ def export_ionosphere(input_iono_files: List[str],
                       verbose: Optional[bool] = False,
                       overwrite: Optional[bool] = True) -> None:
 
+    # Outputs
+    output_iono = Path(output_iono).absolute()
+    if not output_iono.parent.exists():
+        output_iono.parent.mkdir()
 
-        # Outputs
-        output_iono = Path(output_iono).absolute()
-        if not output_iono.parent.exists():
-            output_iono.parent.mkdir()
+    # create temp files
+    temp_iono_out = output_iono.parent / ('temp_' + output_iono.name)
 
-        # create temp files
-        temp_iono_out = output_iono.parent / ('temp_' + output_iono.name)
+    # Create VRT and exit early if only one frame passed,
+    # and therefore no stitching needed
+    if len(input_iono_files) == 1:
+        gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
+                      input_iono_files[0])
 
-        # Create VRT and exit early if only one frame passed,
-        # and therefore no stitching needed
-        if len(input_iono_files) == 1:
-            gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
-                          input_iono_files[0])
-        
+    else:
+        (combined_iono,
+         snwe, latlon_spacing) = stitch_ionosphere_frames(input_iono_files,
+                                                          direction_N_S=True)
+
+        # write stitched ionosphere
+        # outputformat
+        # vrt is not support for stitched
+        if output_format == 'VRT':
+            output_format = 'ISCE'
+
+        write_GUNW_array(
+            temp_iono_out, combined_iono, snwe,
+            format=output_format, verbose=verbose,
+            update_mode=overwrite, add_vrt=True, nodata=0.0)
+
+    # Crop
+    [print(f'Cropping to {bounds}') if verbose and bounds else None]
+    if overwrite:
+        [print(f'Removing {output_iono}') if verbose else None]
+        output_iono.unlink(missing_ok=True)
+
+    # Crop if selected
+    ds = gdal.Warp(str(output_iono),
+                   str(temp_iono_out.with_suffix('.vrt')),
+                   format=output_format,
+                   cutlineDSName=clip_json,
+                   xRes=arrres[0], yRes=arrres[1],
+                   targetAlignedPixels=True,
+                   # cropToCutline = True,
+                   outputBounds=bounds
+                   )
+    ds = None
+    # Update VRT
+    [print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
+     if verbose else None]
+    gdal.Translate(str(output_iono.with_suffix('.vrt')),
+                   str(output_iono), format="VRT")
+    # Remove temp files
+    [ii.unlink() for ii in [temp_iono_out, temp_iono_out.with_suffix('.vrt'),
+                            temp_iono_out.with_suffix('.xml'),
+                            temp_iono_out.with_suffix('.hdr'),
+                            temp_iono_out.with_suffix('.aux.xml')] if ii.exists()]
+
+    # Mask
+    if mask_file:
+        if isinstance(mask_file, str):
+            mask = gdal.Open(mask_file)
         else:
-            (combined_iono, 
-            snwe, latlon_spacing) = stitch_ionosphere_frames(input_iono_files,
-                                                             direction_N_S=True)
+            # for gdal instance, from prep_mask
+            mask = mask_file
 
-            # write stitched ionosphere
-            # outputformat
-            # vrt is not support for stitched
-            if output_format=='VRT':
-                output_format = 'ISCE' 
+        mask_array = mask.ReadAsArray()
+        array = get_GUNW_array(str(output_iono.with_suffix('.vrt')))
+        update_array = mask_array * array
 
-            write_GUNW_array(
-                temp_iono_out, combined_iono, snwe,
-                format=output_format, verbose=verbose,
-                update_mode=overwrite, add_vrt=True, nodata=0.0)
-        
-        # Crop
-        [print(f'Cropping to {bounds}') if verbose and bounds else None]
-        if overwrite:
-            [print(f'Removing {output_iono}') if verbose else None]
-            output_iono.unlink(missing_ok=True)
-        
-        
-        # Crop if selected
-        ds = gdal.Warp(str(output_iono),
-                       str(temp_iono_out.with_suffix('.vrt')),
-                       format=output_format,
-                       cutlineDSName=clip_json,
-                       xRes=arrres[0], yRes=arrres[1],
-                       targetAlignedPixels=True,
-                       # cropToCutline = True,
-                       outputBounds=bounds
-                       )
-        ds = None
-        # Update VRT
-        [print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
-         if verbose else None]
-        gdal.Translate(str(output_iono.with_suffix('.vrt')),
-                       str(output_iono), format="VRT")
-        # Remove temp files
-        [ii.unlink() for ii in [temp_iono_out, temp_iono_out.with_suffix('.vrt'),
-                                temp_iono_out.with_suffix('.xml'),
-                                temp_iono_out.with_suffix('.hdr'),
-                                temp_iono_out.with_suffix('.aux.xml')] if ii.exists()]
-
-        # Mask
-        if mask_file:
-            if isinstance(mask_file, str):
-                mask = gdal.Open(mask_file)
-            else:
-                # for gdal instance, from prep_mask
-                mask = mask_file
-
-            mask_array = mask.ReadAsArray()
-            array = get_GUNW_array(str(output_iono.with_suffix('.vrt')))
-            update_array = mask_array * array
-
-            update_file = gdal.Open(str(output_iono), gdal.GA_Update)
-            update_file = update_file.GetRasterBand(1).WriteArray(update_array)
-            update_file = None
-
- 
+        update_file = gdal.Open(str(output_iono), gdal.GA_Update)
+        update_file = update_file.GetRasterBand(1).WriteArray(update_array)
+        update_file = None

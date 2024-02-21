@@ -91,7 +91,7 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
-            print(50*'*')
+            print(50 * '*')
             print(
                 'Frame-1:',
                 unw_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
@@ -286,7 +286,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
     # Update connected component frame 2 naming
     idx1 = np.max(conn_data1)
     idx = np.unique(conn_data2[conn_data2 > idx1]).compressed()
-    conn_data2 = update_connect_components(conn_data2, idx, idx1+1)
+    conn_data2 = update_connect_components(conn_data2, idx, idx1 + 1)
 
     # Combine corrected unwrappedPhase and connectedComponents arrays
     comb_snwe = [rdict1['SNWE'], rdict2['SNWE']]
@@ -458,7 +458,7 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
     n_points = np.count_nonzero(diff)
 
     # Number of 2pi integer jumps
-    num_jump = (np.abs(median_diff) + np.pi) // (2.*np.pi)
+    num_jump = (np.abs(median_diff) + np.pi) // (2. * np.pi)
 
     if median_diff < 0:
         num_jump *= -1
@@ -513,13 +513,13 @@ def _range_correction(unw1: NDArray,
     """
 
     # Wrap unwrapped Phase in Frame-1 and Frame-2
-    unw1_wrapped = np.mod(unw1, (2*np.pi)) - np.pi
-    unw2_wrapped = np.mod(unw2, (2*np.pi)) - np.pi
+    unw1_wrapped = np.mod(unw1, (2 * np.pi)) - np.pi
+    unw2_wrapped = np.mod(unw2, (2 * np.pi)) - np.pi
 
     # Get the difference between wrapped images
     arr = unw1_wrapped - unw2_wrapped
-    arr -= np.round(arr/(2*np.pi))*2*np.pi
-    range_corr = np.angle(np.nanmean(np.exp(1j*arr)))
+    arr -= np.round(arr / (2 * np.pi)) * 2 * np.pi
+    range_corr = np.angle(np.nanmean(np.exp(1j * arr)))
 
     return range_corr
 
@@ -829,7 +829,7 @@ def product_stitch_sequential_metadata(
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_meta_files) == 1:
-        gdal.BuildVRT(output_meta+'.vrt', input_meta_files)
+        gdal.BuildVRT(output_meta + '.vrt', input_meta_files)
         return
 
     # Outputs
@@ -962,9 +962,9 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
     # Figure
     fig, axs = plt.subplots(1, 3, dpi=300, sharey=True)
     # Re-wrapped
-    im1 = axs[0].imshow(np.mod(stitched_unw, 4*np.pi),
+    im1 = axs[0].imshow(np.mod(stitched_unw, 4 * np.pi),
                         cmap='jet', **plot_kwargs)
-    im2 = axs[1].imshow(stitched_unw * (0.0556 / (6*np.pi)), cmap='jet',
+    im2 = axs[1].imshow(stitched_unw * (0.0556 / (6 * np.pi)), cmap='jet',
                         clim=[-0.2, 0.2], **plot_kwargs)  # Unwrapped
     # Connected Components
     im3 = axs[2].imshow(stitched_conn, cmap=cmap, norm=norm, **plot_kwargs)

@@ -182,7 +182,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
         print(f'Writing {output}')
 
     for i in range(num_bands):
-        band = out_ds.GetRasterBand(i+1)
+        band = out_ds.GetRasterBand(i + 1)
         if num_bands > 1:
             band.WriteArray(array[i])
         else:
@@ -373,10 +373,10 @@ def combine_data_to_single(data_list: list,
                               latlon_step_list[i], 'around'))
         # handle if 3D metadata layer
         if len(data.shape) > 2:
-            comb_data[i, 0:data.shape[0], y:y+data.shape[1],
-                      x: x+data.shape[2]] = data
+            comb_data[i, 0:data.shape[0], y:y + data.shape[1],
+                      x: x + data.shape[2]] = data
         else:
-            comb_data[i, y:y+data.shape[0], x: x+data.shape[1]] = data
+            comb_data[i, y:y + data.shape[0], x: x + data.shape[1]] = data
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -390,4 +390,4 @@ def combine_data_to_single(data_list: list,
         elif method == 'max':
             comb_data = np.nanmax(comb_data, axis=0)
 
-    return comb_data, SNWE,  latlon_step
+    return comb_data, SNWE, latlon_step

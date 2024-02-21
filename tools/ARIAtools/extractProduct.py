@@ -11,32 +11,31 @@ Extract and organize specified layer(s).
 If no layer is specified, extract product bounding box shapefile(s)
 """
 
+import rasterio as rio
+from rioxarray import open_rasterio
+from pyproj import CRS, Transformer
+import pyproj
+from ARIAtools.ionosphere import export_ionosphere
+from ARIAtools.sequential_stitching import product_stitch_sequential
+from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
+    get_basic_attrs, dim_check
+from ARIAtools.unwrapStitching import product_stitch_overlap, \
+    product_stitch_2stage
+from ARIAtools.mask_util import prep_mask
+from ARIAtools.shapefile_util import open_shapefile, chunk_area
+from ARIAtools.logger import logger
+import shutil
+import requests
+import logging
+from osgeo import gdal, osr
+from dem_stitcher import get_dem_tile_paths
+from dem_stitcher.datasets import DATASETS
+import glob
+from copy import deepcopy
+import numpy as np
 import os
 os.environ['USE_PYGEOS'] = '0'
 
-import numpy as np
-from copy import deepcopy
-import glob
-from dem_stitcher.datasets import DATASETS
-from dem_stitcher import get_dem_tile_paths
-from osgeo import gdal, osr
-import logging
-import requests
-import shutil
-from ARIAtools.logger import logger
-
-from ARIAtools.shapefile_util import open_shapefile, chunk_area
-from ARIAtools.mask_util import prep_mask
-from ARIAtools.unwrapStitching import product_stitch_overlap, \
-    product_stitch_2stage
-from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
-    get_basic_attrs, dim_check
-from ARIAtools.sequential_stitching import product_stitch_sequential
-from ARIAtools.ionosphere import export_ionosphere
-import pyproj
-from pyproj import CRS, Transformer
-from rioxarray import open_rasterio
-import rasterio as rio
 
 gdal.UseExceptions()
 # Suppress warnings
@@ -85,7 +84,7 @@ def createParser():
                         help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
                         help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='sequential',
+    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType', type=str, default='sequential',
                         help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequential' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
                         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
@@ -97,10 +96,10 @@ def createParser():
                         help="If turned on, IFGs resampled based off of the average of pixels in a given resampling window corresponding to the connected component mode (if multilooking specified). Program defaults to lanczos resampling algorithm through gdal (if multilooking specified).")
     parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081,
                         help='Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single pixel at standard 90m resolution"')
-    parser.add_argument('--version', dest='version',  default=None,
+    parser.add_argument('--version', dest='version', default=None,
                         help='Specify version as str, e.g. 2_0_4 or all prods; '
                         'default: all')
-    parser.add_argument('--nc_version', dest='nc_version',  default='1b',
+    parser.add_argument('--nc_version', dest='nc_version', default='1b',
                         help='Specify netcdf version as str, '
                         'e.g. 1c or all prods;'
                         'default: 1b')
@@ -135,7 +134,7 @@ class InterpCube(object):
         self.offset = np.mean(self.data)
         for i in range(len(self.hgts)):
             self.interp.append(RectBivariateSpline(self.latobj, self.lonobj,
-                                                   self.data[i]-self.offset))
+                                                   self.data[i] - self.offset))
 
     def __call__(self, line, pix, h):
         """Interpolate at a single point."""
@@ -219,9 +218,10 @@ class metadata_qualitycheck:
             chunk_size = 4
 
             for j in range(0, len(mid_line.tolist()), chunk_size):
-                chunk = mid_line.tolist()[j:j+chunk_size]
-                xarr_chunk = xarr[j:j+chunk_size]
-                # make sure each iteration contains at least minimum number of elements
+                chunk = mid_line.tolist()[j:j + chunk_size]
+                xarr_chunk = xarr[j:j + chunk_size]
+                # make sure each iteration contains at least minimum number of
+                # elements
                 if j == range(0, len(mid_line.tolist()), chunk_size)[-2] and \
                         len(mid_line.tolist()) % chunk_size != 0:
                     chunk = mid_line.tolist()[j:]
@@ -235,16 +235,17 @@ class metadata_qualitycheck:
                 if len(chunk) > chunk_size:
                     break
 
-            # exit loop/make plots in verbose mode if R^2 and standard error anomalous, or if on last iteration
+            # exit loop/make plots in verbose mode if R^2 and standard error
+            # anomalous, or if on last iteration
             if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or \
-                    (i[0] == (len(eval('self.data_array_band%s' % (arrT)))-1)):
+                    (i[0] == (len(eval('self.data_array_band%s' % (arrT))) - 1)):
                 if self.verbose:
                     # Make quality-control plots
                     import matplotlib.pyplot as plt
                     ax0 = plt.figure().add_subplot(111)
                     ax0.scatter(xarr, mid_line, c='k', s=7)
                     refline = np.linspace(min(xarr), max(xarr), 100)
-                    ax0.plot(refline, (refline*slope)+bias,
+                    ax0.plot(refline, (refline * slope) + bias,
                              linestyle='solid', color='red')
                     ax0.set_ylabel('%s array' % (self.prod_key))
                     ax0.set_xlabel('distance')
@@ -257,7 +258,7 @@ class metadata_qualitycheck:
                     plt.margins(0)
                     plt.tight_layout()
                     plt.savefig(os.path.join(os.path.dirname(os.path.dirname(self.outname)), 'metadatalyr_plots', self.prod_key,
-                                             os.path.basename(self.outname)+'_%s.eps' % (prof_direc)))
+                                             os.path.basename(self.outname) + '_%s.eps' % (prof_direc)))
                     plt.close()
                 break
 
@@ -293,13 +294,14 @@ class metadata_qualitycheck:
                                                               i).GetNoDataValue(),
                                                           self.data_array_band)
                 negs_percent = ((self.data_array_band < 0).sum()
-                                / self.data_array_band.size)*100
+                                / self.data_array_band.size) * 100
 
                 # Unique bug-fix for bPerp layers with sign-flips
                 if (self.prod_key == 'bPerpendicular' and min(rsquaredarr) < 0.8
                         and max(std_errarr) > 0.1) \
                         and (negs_percent != 100 or negs_percent != 0):
-                    # Circumvent Bperp sign-flip bug by comparing percentage of positive and negative values
+                    # Circumvent Bperp sign-flip bug by comparing percentage of
+                    # positive and negative values
                     self.data_array_band = abs(self.data_array_band)
                     if negs_percent > 50:
                         self.data_array_band *= -1
@@ -309,11 +311,12 @@ class metadata_qualitycheck:
                                        np.arange(0, self.data_array_band.shape[0], 1))
                     Xmask, Ymask = np.meshgrid(np.arange(0, self.data_array_band.shape[1], 1),
                                                np.arange(0, self.data_array_band.shape[0], 1))
-                    # best-fit linear plane: for very large artifacts, must mask array for outliers to get best fit
+                    # best-fit linear plane: for very large artifacts, must
+                    # mask array for outliers to get best fit
                     if min(rsquaredarr) < 0.85 and max(std_errarr) > 0.0015:
                         maj_percent = ((self.data_array_band <
                                         self.data_array_band.mean()).sum()
-                                       / self.data_array_band.size)*100
+                                       / self.data_array_band.size) * 100
                         # mask all values above mean
                         if maj_percent > 50:
                             self.data_array_band = np.ma.masked_where(
@@ -339,7 +342,7 @@ class metadata_qualitycheck:
                     A = np.c_[XX, YY, np.ones(len(XX))]
                     C, _, _, _ = lstsq(A, self.data_array_band.data.flatten())
                     # evaluate it on grid
-                    self.data_array_band = C[0]*X + C[1]*Y + C[2]
+                    self.data_array_band = C[0] * X + C[1] * Y + C[2]
                     # mask by nodata value
                     self.data_array_band = np.ma.masked_where(
                         self.data_array_band == self.data_array.GetRasterBand(i
@@ -350,7 +353,8 @@ class metadata_qualitycheck:
                 # update band
                 self.data_array.GetRasterBand(i).WriteArray(
                     self.data_array_band.filled())
-                # Pass warning and get R^2/standard error across range/azimuth (only do for first band)
+                # Pass warning and get R^2/standard error across range/azimuth
+                # (only do for first band)
                 if i == 1:
                     # make sure appropriate unit is passed to print statement
                     lyrunit = "\N{DEGREE SIGN}"
@@ -381,7 +385,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     bounds = open_shapefile(bbox_file, 0, 0).bounds  # bounds of user bbox
 
-    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+    # File must be physically extracted, cannot proceed with VRT format.
+    # Defaulting to ENVI format.
     outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     if demfilename.lower() == 'download':
@@ -457,9 +462,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     # Define lat/lon arrays for fullres layers
     gt, xs, ys = ds_aria.GetGeoTransform(), ds_aria.RasterXSize, ds_aria.RasterYSize
-    Latitude = np.linspace(gt[3], gt[3]+(gt[5]*(ys-1)), ys)
+    Latitude = np.linspace(gt[3], gt[3] + (gt[5] * (ys - 1)), ys)
     Latitude = np.repeat(Latitude[:, np.newaxis], xs, axis=1)
-    Longitude = np.linspace(gt[0], gt[0]+(gt[1]*(xs-1)), xs)
+    Longitude = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
     Longitude = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
 
     return aria_dem, ds_aria, Latitude, Longitude
@@ -515,7 +520,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     for scene in product_dict:
         # Get pair name, expected in dictionary
         pair_name = scene["pair_name"][0]
-        outname = os.path.join(workdir, pair_name+'.json')
+        outname = os.path.join(workdir, pair_name + '.json')
 
         # Create union of productBoundingBox layers
         for frame in scene["productBoundingBox"]:
@@ -635,7 +640,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     # Get shape of full res layers
     arrshape = [ds.RasterYSize, ds.RasterXSize]
     ds_gt = ds.GetGeoTransform()
-    new_bounds = [ds_gt[0], ds_gt[3] + (ds_gt[-1]*arrshape[0]),
+    new_bounds = [ds_gt[0], ds_gt[3] + (ds_gt[-1] * arrshape[0]),
                   ds_gt[0] + (ds_gt[1] * arrshape[1]), ds_gt[3]]
     if OG_bounds != new_bounds:
         # Use shapely to make list
@@ -717,13 +722,13 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
         # write ref and sec files
         for i in tup_outputs:
             # delete temporary files to circumvent potential inconsistent dims
-            for j in glob.glob(i[0]+'*'):
+            for j in glob.glob(i[0] + '*'):
                 os.remove(j)
-            gdal.BuildVRT(i[0]+'.vrt', i[1])
+            gdal.BuildVRT(i[0] + '.vrt', i[1])
 
             # write height layers
-            gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field,
-                                                   gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
+            gdal.Open(i[0] + '.vrt').SetMetadataItem(hgt_field,
+                                                     gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
 
         # compute differential
         generate_diff(ref_outname, sec_outname, outname, key, key, False,
@@ -738,11 +743,11 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
                     da.rio.to_raster(i, driver=driver)
                     da.close()
     else:
-        if not os.path.exists(outname+'.vrt'):
-            gdal.BuildVRT(outname+'.vrt', metadata_arr)
+        if not os.path.exists(outname + '.vrt'):
+            gdal.BuildVRT(outname + '.vrt', metadata_arr)
             # write height layers
-            gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field,
-                                                      gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
+            gdal.Open(outname + '.vrt').SetMetadataItem(hgt_field,
+                                                        gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
 
     return hgt_field, model_name, ref_outname
 
@@ -862,7 +867,7 @@ def handle_epoch_layers(layers,
                                                                  i[1], dem,
                                                                  ref_key, layers, outputFormat)
         # Update progress bar
-        prog_bar.update(i[0]+1, suffix=ifg)
+        prog_bar.update(i[0] + 1, suffix=ifg)
 
         # record output directories
         if model_name is not None:
@@ -932,7 +937,7 @@ def handle_epoch_layers(layers,
     for i in enumerate(all_outputs):
         if os.path.exists(i[1]):
             # Update progress bar
-            prog_bar.update(i[0]+1, suffix=ifg)
+            prog_bar.update(i[0] + 1, suffix=ifg)
 
             record_epochs = []
             record_epochs.extend(glob.glob(os.path.join(
@@ -1010,8 +1015,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     if dem is not None:
         dem_gt = dem.GetGeoTransform()
         dem_bounds = [dem_gt[0],
-                      dem_gt[3] + (dem_gt[-1]*dem.RasterYSize),
-                      dem_gt[0] + (dem_gt[1]*dem.RasterXSize),
+                      dem_gt[3] + (dem_gt[-1] * dem.RasterYSize),
+                      dem_gt[0] + (dem_gt[1] * dem.RasterXSize),
                       dem_gt[3]]
         lyr_input_dict['dem_bounds'] = dem_bounds
 
@@ -1103,7 +1108,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         workdir = os.path.join(outDir, key)
         prev_outname = deepcopy(workdir)
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
-                                       prefix='Generating: '+key+' - ')
+                                       prefix='Generating: ' + key + ' - ')
 
         # set input keys
         lyr_input_dict['prog_bar'] = prog_bar
@@ -1140,25 +1145,26 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         workdir = os.path.join(outDir, key)
         prev_outname = deepcopy(workdir)
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
-                                       prefix='Generating: '+key+' - ')
+                                       prefix='Generating: ' + key + ' - ')
 
-
-        lyr_input_dict = dict(input_iono_files = None,
-                              arrres = arrres,
-                              output_iono = None,
-                              output_format =  outputFormat, 
-                              bounds = bounds,
-                              clip_json = prods_TOTbbox,
-                              mask_file = mask,
-                              verbose = verbose,
-                              overwrite = True)
+        lyr_input_dict = dict(input_iono_files=None,
+                              arrres=arrres,
+                              output_iono=None,
+                              output_format=outputFormat,
+                              bounds=bounds,
+                              clip_json=prods_TOTbbox,
+                              mask_file=mask,
+                              verbose=verbose,
+                              overwrite=True)
 
         for i, layer in enumerate(product_dict[0]):
-            outname = os.path.abspath(os.path.join(workdir, product_dict[1][i][0]))
+            outname = os.path.abspath(
+                os.path.join(
+                    workdir,
+                    product_dict[1][i][0]))
             lyr_input_dict['input_iono_files'] = layer
             lyr_input_dict['output_iono'] = outname
             export_ionosphere(**lyr_input_dict)
-
 
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
@@ -1168,7 +1174,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         workdir = os.path.join(outDir, key)
 
         prog_bar = progBar.progressBar(maxValue=len(
-            product_dict[0]), prefix='Generating: '+key+' - ')
+            product_dict[0]), prefix='Generating: ' + key + ' - ')
 
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
@@ -1181,14 +1187,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             ifg = product_dict[1][i[0]][0]
             outname = os.path.abspath(os.path.join(workdir, ifg))
             # Update progress bar
-            prog_bar.update(i[0]+1, suffix=ifg)
+            prog_bar.update(i[0] + 1, suffix=ifg)
 
             # Extract/crop metadata layers
             if any(":/science/grids/imagingGeometry"
                    in s for s in i[1]):
                 # make VRT pointing to metadata layers in standard product
                 hgt_field, model_name, outname = prep_metadatalayers(outname,
-                                                      i[1], dem, key, layers)
+                                                                     i[1], dem, key, layers)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds,
@@ -1204,18 +1210,18 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     # building the virtual vrt
                     gdal.BuildVRT(outname + "_uncropped" + '.vrt', i[1])
                     # building the cropped vrt
-                    gdal.Warp(outname+'.vrt',
-                              outname+'_uncropped.vrt',
+                    gdal.Warp(outname + '.vrt',
+                              outname + '_uncropped.vrt',
                               options=gdal.WarpOptions(**gdal_warp_kwargs))
                 else:
                     # building the VRT
                     gdal.BuildVRT(outname + '.vrt', i[1])
                     gdal.Warp(outname,
-                              outname+'.vrt',
+                              outname + '.vrt',
                               options=gdal.WarpOptions(**gdal_warp_kwargs))
 
                     # Update VRT
-                    gdal.Translate(outname+'.vrt', outname,
+                    gdal.Translate(outname + '.vrt', outname,
                                    options=gdal.TranslateOptions(format="VRT"))
 
             # Extract/crop phs and conn_comp layers
@@ -1240,7 +1246,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                prods_TOTbbox,
                                                outFileUnw=outFilePhs,
                                                outFileConnComp=outFileConnComp,
-                                               #mask=mask,
+                                               # mask=mask,
                                                outputFormat=outputFormatPhys,
                                                verbose=verbose)
 
@@ -1252,7 +1258,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                               prods_TOTbbox,
                                               outFileUnw=outFilePhs,
                                               outFileConnComp=outFileConnComp,
-                                              #mask=mask,
+                                              # mask=mask,
                                               outputFormat=outputFormatPhys,
                                               verbose=verbose)
 
@@ -1264,7 +1270,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                                                   clip_json=prods_TOTbbox,
                                                   output_unw=outFilePhs,
                                                   output_conn=outFileConnComp,
-                                                  #mask_file=mask,  # str filename
+                                                  # mask_file=mask,  # str
+                                                  # filename
                                                   output_format=outputFormatPhys,
                                                   range_correction=True,
                                                   save_fig=False,
@@ -1289,9 +1296,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             if key != 'unwrappedPhase' and \
                     key != 'connectedComponents' and \
                     not any(":/science/grids/imagingGeometry"
-                       in s for s in i[1]) and \
+                            in s for s in i[1]) and \
                     not any(":/science/grids/corrections"
-                       in s for s in i[1]):
+                            in s for s in i[1]):
                 # If necessary, resample raster
                 if multilooking is not None:
                     resampleRaster(outname, multilooking, bounds,
@@ -1356,7 +1363,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     ref_geotrans = arrres.GetGeoTransform()
     arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
     # load layered metadata array
-    tmp_name = outname+'.vrt'
+    tmp_name = outname + '.vrt'
     data_array = gdal.Warp('', tmp_name,
                            options=gdal.WarpOptions(format="MEM",
                                                     options=['NUM_THREADS=%s' % (num_threads)]))
@@ -1392,20 +1399,20 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     # only perform DEM intersection for rasters with valid height levels
     nohgt_lyrs = ['ionosphere']
     if metadatalyr_name not in nohgt_lyrs:
-        tmp_name = outname+'_temp'
+        tmp_name = outname + '_temp'
         # Define lat/lon/height arrays for metadata layers
-        heightsMeta = np.array(gdal.Open(outname+'.vrt').GetMetadataItem(
+        heightsMeta = np.array(gdal.Open(outname + '.vrt').GetMetadataItem(
             hgt_field)[1:-1].split(','), dtype='float32')
 
         latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
                                    data_array.GetGeoTransform()[3] +
                                    (data_array.GetGeoTransform()[5] *
-                                    (data_array.RasterYSize-1)), data_array.RasterYSize,
+                                    (data_array.RasterYSize - 1)), data_array.RasterYSize,
                                    dtype='float32')
         longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
                                     data_array.GetGeoTransform()[0] +
                                     (data_array.GetGeoTransform()[1] *
-                                     (data_array.RasterXSize-1)), data_array.RasterXSize,
+                                     (data_array.RasterXSize - 1)), data_array.RasterXSize,
                                     dtype='float32')
 
         da_dem = open_rasterio(dem.GetDescription(),
@@ -1452,7 +1459,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
                         'targetAlignedPixels': True,
                         'multithread': True,
                         'options': [f'NUM_THREADS={num_threads}']}
-    gdal.Warp(tmp_name+'_temp',
+    gdal.Warp(tmp_name + '_temp',
               tmp_name,
               options=gdal.WarpOptions(**gdal_warp_kwargs))
     # Adjust shape
@@ -1461,21 +1468,21 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
                         'width': arrshape[1],
                         'options': [f'NUM_THREADS={num_threads}']}
     gdal.Warp(outname,
-              tmp_name+'_temp',
+              tmp_name + '_temp',
               options=gdal.WarpOptions(**gdal_warp_kwargs))
     # remove temp files
-    for i in glob.glob(outname+'*_temp*'):
+    for i in glob.glob(outname + '*_temp*'):
         os.remove(i)
 
     # Update VRT
-    gdal.Translate(outname+'.vrt',
+    gdal.Translate(outname + '.vrt',
                    outname,
                    options=gdal.TranslateOptions(format="VRT"))
 
     # Apply mask (if specified)
     if mask is not None:
         out_interpolated = gdal.Open(outname).ReadAsArray()
-        out_interpolated = mask.ReadAsArray()*out_interpolated
+        out_interpolated = mask.ReadAsArray() * out_interpolated
         # Update VRT with new raster
         update_file = gdal.Open(outname, gdal.GA_Update)
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
@@ -1499,7 +1506,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     from ARIAtools.shapefile_util import save_shapefile
     from shapely.geometry import Polygon
 
-    # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
+    # File must be physically extracted, cannot proceed with VRT format.
+    # Defaulting to ENVI format.
     outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
     user_bbox = open_shapefile(bbox_file, 0, 0)
@@ -1562,7 +1570,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     tropo_date_dict = {}
     for i in date_list:
         tropo_date_dict[i] = []
-        tropo_date_dict[i+"_UTC"] = []
+        tropo_date_dict[i + "_UTC"] = []
     for i in enumerate(gacos_products):
         if not os.path.isdir(i[1]) and not i[1].endswith('.ztd') \
                 and not i[1].endswith('.tif'):
@@ -1577,7 +1585,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      os.path.basename(i[1]), untar_dir)
             tarfile.open(i[1]).extractall(path=untar_dir)
             gacos_products[i[0]] = untar_dir
-        # Loop through each GACOS product file, differentiating between direct input list of GACOS products vs parent directory
+        # Loop through each GACOS product file, differentiating between direct
+        # input list of GACOS products vs parent directory
         if i[1].endswith('.ztd') or i[1].endswith('.tif'):
             ztd_list = [i[1]]
         else:
@@ -1593,24 +1602,24 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             ztd_basename = ztd_basename.split('.tif')[0].split('.ztd')[0]
             if ztd_basename in date_list:
                 tropo_date_dict[ztd_basename].append(k)
-                if os.path.exists(k+'.rsc'):
-                    tropo_date_dict[ztd_basename+"_UTC"].append(
+                if os.path.exists(k + '.rsc'):
+                    tropo_date_dict[ztd_basename + "_UTC"].append(
                         ztd_basename[:4] + '-'
                         + ztd_basename[4:6]
                         + '-' + ztd_basename[6:8] + '-'
-                        + open(k+'.rsc', 'r').readlines()[-1].split()[1])
+                        + open(k + '.rsc', 'r').readlines()[-1].split()[1])
                 else:
-                    tropo_date_dict[ztd_basename+"_UTC"].append(
+                    tropo_date_dict[ztd_basename + "_UTC"].append(
                         ztd_basename[:4] + '-'
                         + ztd_basename[4:6]
                         + '-' + ztd_basename[6:8] + '-'
                         + 'NoneUTC')
                 # make corresponding VRT file, if it doesn't exist
-                if not os.path.exists(k+'.vrt'):
+                if not os.path.exists(k + '.vrt'):
                     # parse metadata from RSC if it exists
-                    if os.path.exists(k+'.rsc'):
+                    if os.path.exists(k + '.rsc'):
                         tropo_rsc_dict = {}
-                        for line in open(k+'.rsc', 'r').readlines():
+                        for line in open(k + '.rsc', 'r').readlines():
                             tropo_rsc_dict[line.split()[0]] = line.split()[1]
                         gacos_prod = np.fromfile(k, dtype='float32').reshape(
                             int(tropo_rsc_dict['FILE_LENGTH']),
@@ -1618,7 +1627,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                     else:
                         tropo_rsc_dict = tifGacos(k)
                         gacos_prod = gdal.Open(k).ReadAsArray()
-                    # Save as GDAL file, using proj from first unwrappedPhase file
+                    # Save as GDAL file, using proj from first unwrappedPhase
+                    # file
                     renderVRT(k, gacos_prod,
                               geotrans=(float(tropo_rsc_dict['X_FIRST']),
                                         float(tropo_rsc_dict['X_STEP']),
@@ -1635,8 +1645,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                     log.debug('GACOS product %s successfully converted to '
                               'GDAL-readable raster', k)
                 # make corresponding RSC file, if it doesn't exist
-                if not os.path.exists(k+'.rsc'):
-                    rscGacos(os.path.join(k+'.vrt'), os.path.join(k+'.rsc'),
+                if not os.path.exists(k + '.rsc'):
+                    rscGacos(os.path.join(k + '.vrt'), os.path.join(k + '.rsc'),
                              tropo_date_dict)
 
     # If multiple GACOS directories, merge products.
@@ -1653,7 +1663,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         for i in tropo_date_dict:
             # only make rsc/vrt files if valid product
             if 'UTC' not in i and tropo_date_dict[i] != []:
-                outname = os.path.join(outDir, 'merged_GACOS', i+'.ztd.vrt')
+                outname = os.path.join(outDir, 'merged_GACOS', i + '.ztd.vrt')
                 # building the VRT
                 gdal.BuildVRT(outname, tropo_date_dict[i])
                 geotrans = gdal.Open(outname).GetGeoTransform()
@@ -1667,19 +1677,19 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         # create shapefile
         geotrans = gdal.Open(i).GetGeoTransform()
         bbox = [geotrans[3]
-                + (gdal.Open(i).ReadAsArray().shape[0]*geotrans[-1]),
+                + (gdal.Open(i).ReadAsArray().shape[0] * geotrans[-1]),
                 geotrans[3],
                 geotrans[0],
                 geotrans[0]
-                + (gdal.Open(i).ReadAsArray().shape[1]*geotrans[1])
+                + (gdal.Open(i).ReadAsArray().shape[1] * geotrans[1])
                 ]
         bbox = Polygon(np.column_stack(
                        (np.array([bbox[2], bbox[3], bbox[3], bbox[2], bbox[2]]),
                         np.array([bbox[0], bbox[0], bbox[1], bbox[1], bbox[0]]))))
-        save_shapefile(i+'.json', bbox, 'GeoJSON')
+        save_shapefile(i + '.json', bbox, 'GeoJSON')
         per_overlap = ((user_bbox.intersection(
-            open_shapefile(i+'.json', 0, 0)).area)
-            / (user_bbox.area))*100
+            open_shapefile(i + '.json', 0, 0)).area)
+            / (user_bbox.area)) * 100
         if per_overlap != 100. and per_overlap != 0.:
             log.warning('Common track extent only has %d overlap with'
                         'tropospheric product %s\n', per_overlap, i[0])
@@ -1742,19 +1752,20 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                      for m in metadata_dict[0][0]]
                 # Get tropo product UTC times
                 tropo_rsc_dict = {}
-                tropo_rsc_dict['TIME_OF_DAY'] = open(j[:-4]+'.rsc',
+                tropo_rsc_dict['TIME_OF_DAY'] = open(j[:-4] + '.rsc',
                                                      'r').readlines()[-1].split()[1].split('UTC')[:-1]
                 # If new TIF product, UTC times not available
                 if 'None' in tropo_rsc_dict['TIME_OF_DAY'][0]:
                     tropo_rsc_dict['TIME_OF_DAY'] = [
                         max(aria_rsc_dict['azimuthZeroDopplerMidTime'])]
-                # If stitched tropo product, must account for date change (if applicable)
+                # If stitched tropo product, must account for date change (if
+                # applicable)
                 elif '-' in tropo_rsc_dict['TIME_OF_DAY'][0]:
                     tropo_rsc_dict['TIME_OF_DAY'] = [datetime.strptime(m[:10]
                                                                        + '-' +
                                                                        m[11:].split('.')[
                         0] + '-'
-                        + str(round(float('0.' + m[11:].split('.')[1])*60)),
+                        + str(round(float('0.' + m[11:].split('.')[1]) * 60)),
                         "%Y-%m-%d-%H-%M")
                         for m in tropo_rsc_dict['TIME_OF_DAY']
                     ]
@@ -1769,7 +1780,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                           * 60)), "%Y-%m-%d-%H-%M")
                     ]
 
-                # Check and report if tropospheric product falls outside of standard product range
+                # Check and report if tropospheric product falls outside of
+                # standard product range
                 latest_start = max(aria_rsc_dict['azimuthZeroDopplerMidTime']
                                    + [min(tropo_rsc_dict['TIME_OF_DAY'])])
                 earliest_end = min(aria_rsc_dict['azimuthZeroDopplerMidTime']
@@ -1802,11 +1814,12 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             tropo_product = np.subtract(tropo_secondary, tropo_reference)
 
             # Convert troposphere from m to rad
-            scale = float(metadata_dict[1][i][0]) / (4*np.pi)
+            scale = float(metadata_dict[1][i][0]) / (4 * np.pi)
             tropo_product /= scale
 
             # Account for incAngle
-            # if in TS mode, only 1 incfile would be generated, so check for this
+            # if in TS mode, only 1 incfile would be generated, so check for
+            # this
             path_inc = os.path.join(outDir, 'incidenceAngle', ifg)
             if os.path.exists(path_inc):
                 da = rio.open(path_inc)
@@ -1885,7 +1898,8 @@ def main(inps=None):
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
+    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
+    # bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile,
                                                 bbox=inps.bbox,
                                                 workdir=inps.workdir,
@@ -1938,18 +1952,18 @@ def main(inps=None):
                     amplitude_products.append(item)
         # mask parms
         mask_dict = {
-        'product_dict': amplitude_products,
-        'maskfilename': inps.mask,
-        'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_TOTbbox,
-        'proj': proj,
-        'amp_thresh': inps.amp_thresh,
-        'arrres': arrres,
-        'workdir': inps.workdir,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads,
-        'multilooking': inps.multilooking,
-        'rankedResampling': inps.rankedResampling
+            'product_dict': amplitude_products,
+            'maskfilename': inps.mask,
+            'bbox_file': standardproduct_info.bbox_file,
+            'prods_TOTbbox': prods_TOTbbox,
+            'proj': proj,
+            'amp_thresh': inps.amp_thresh,
+            'arrres': arrres,
+            'workdir': inps.workdir,
+            'outputFormat': inps.outputFormat,
+            'num_threads': inps.num_threads,
+            'multilooking': inps.multilooking,
+            'rankedResampling': inps.rankedResampling
         }
         inps.mask = prep_mask(**mask_dict)
 
@@ -1959,17 +1973,17 @@ def main(inps=None):
         print('Download/cropping DEM')
         # DEM parms
         dem_dict = {
-        'demfilename': inps.demfile,
-        'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_TOTbbox,
-        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
-        'proj': proj,
-        'arrres': arrres,
-        'workdir': inps.workdir,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads,
-        'multilooking': inps.multilooking,
-        'rankedResampling': inps.rankedResampling
+            'demfilename': inps.demfile,
+            'bbox_file': standardproduct_info.bbox_file,
+            'prods_TOTbbox': prods_TOTbbox,
+            'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+            'proj': proj,
+            'arrres': arrres,
+            'workdir': inps.workdir,
+            'outputFormat': inps.outputFormat,
+            'num_threads': inps.num_threads,
+            'multilooking': inps.multilooking,
+            'rankedResampling': inps.rankedResampling
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         inps.demfile, demfile, Latitude, Longitude = prep_dem(**dem_dict)
@@ -2010,7 +2024,8 @@ def main(inps=None):
                          verbose=inps.verbose, num_threads=inps.num_threads)
 
 
-def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray, old_proj: CRS, new_proj: CRS) -> np.ndarray:
+def transformPoints(lats: np.ndarray, lons: np.ndarray,
+                    hgts: np.ndarray, old_proj: CRS, new_proj: CRS) -> np.ndarray:
     '''
     Transform lat/lon/hgt data to an array of points in a new
     projection

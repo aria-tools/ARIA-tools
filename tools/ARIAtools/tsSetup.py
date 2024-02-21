@@ -97,13 +97,13 @@ def create_parser():
                                                     'available threads.')
     parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
                         type=str, default='sequential', help='Method applied to '
-                                                          'stitch the unwrapped data. Allowed methods are: '
-                                                          '"overlap", "2stage", and "sequential". "overlap" - '
-                                                          'product overlap is minimized, "2stage" - '
-                                                          'minimization is done on connected components, '
-                                                          '"sequential" - sequential minimization of all '
-                                                          'overlapping connected components. '
-                                                          'Default is "overlap".')
+                        'stitch the unwrapped data. Allowed methods are: '
+                        '"overlap", "2stage", and "sequential". "overlap" - '
+                        'product overlap is minimized, "2stage" - '
+                        'minimization is done on connected components, '
+                        '"sequential" - sequential minimization of all '
+                        'overlapping connected components. '
+                        'Default is "overlap".')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str,
                         default='VRT', help='GDAL compatible output format '
                                             '(e.g., "ENVI", "GTiff"). By default files are '
@@ -327,7 +327,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
             try:
                 acq = utc_time[dates]
-            except:
+            except BaseException:
                 log.debug('Skipping %s; it likely exists in the %s, '
                           'but was not specified in the product list',
                           dates, os.path.dirname(data[1]))
@@ -429,17 +429,17 @@ def main(inps=None):
         print('Download/cropping DEM')
         # DEM parms
         dem_dict = {
-        'demfilename': inps.demfile,
-        'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_TOTbbox,
-        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
-        'proj': proj,
-        'arrres': arrres,
-        'workdir': inps.workdir,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads,
-        'multilooking': inps.multilooking,
-        'rankedResampling': inps.rankedResampling
+            'demfilename': inps.demfile,
+            'bbox_file': standardproduct_info.bbox_file,
+            'prods_TOTbbox': prods_TOTbbox,
+            'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+            'proj': proj,
+            'arrres': arrres,
+            'workdir': inps.workdir,
+            'outputFormat': inps.outputFormat,
+            'num_threads': inps.num_threads,
+            'multilooking': inps.multilooking,
+            'rankedResampling': inps.rankedResampling
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         inps.demfile, demfile, Latitude, Longitude = prep_dem(**dem_dict)
@@ -454,18 +454,18 @@ def main(inps=None):
                     amplitude_products.append(item)
         # mask parms
         mask_dict = {
-        'product_dict': amplitude_products,
-        'maskfilename': inps.mask,
-        'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_TOTbbox,
-        'proj': proj,
-        'amp_thresh': inps.amp_thresh,
-        'arrres': arrres,
-        'workdir': inps.workdir,
-        'outputFormat': inps.outputFormat,
-        'num_threads': inps.num_threads,
-        'multilooking': inps.multilooking,
-        'rankedResampling': inps.rankedResampling
+            'product_dict': amplitude_products,
+            'maskfilename': inps.mask,
+            'bbox_file': standardproduct_info.bbox_file,
+            'prods_TOTbbox': prods_TOTbbox,
+            'proj': proj,
+            'amp_thresh': inps.amp_thresh,
+            'arrres': arrres,
+            'workdir': inps.workdir,
+            'outputFormat': inps.outputFormat,
+            'num_threads': inps.num_threads,
+            'multilooking': inps.multilooking,
+            'rankedResampling': inps.rankedResampling
         }
         inps.mask = prep_mask(**mask_dict)
 

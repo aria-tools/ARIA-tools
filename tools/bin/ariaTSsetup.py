@@ -11,8 +11,8 @@ from pkg_resources import get_distribution
 
 if __name__ == '__main__':
     try:
-        print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except:
+        print('ARIA-tools Version:', get_distribution('ARIAtools').version)
+    except BaseException:
         pass
     inps = cmd_line_parse()
     main(inps)
