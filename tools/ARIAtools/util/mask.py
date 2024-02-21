@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & Brett Buzzanga & David Bekaert
@@ -17,9 +16,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, gdalconst
 
-from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import rasterAverage, resampleRaster
-from ARIAtools.logger import logger
+from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.vrt import rasterAverage, resampleRaster
+from ARIAtools.util.logger import logger
 
 log = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -35,7 +34,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     """
 
     # Import functions
-    from ARIAtools.vrtmanager import renderOGRVRT
+    from ARIAtools.util.vrt import renderOGRVRT
     _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/'
                         f'gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp'
                         for i in range(1, 5)]

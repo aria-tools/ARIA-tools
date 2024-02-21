@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author(s): Simran Sangha, David Bekaert, & Emre Havazli
@@ -24,11 +23,11 @@ from datetime import datetime
 from osgeo import gdal
 
 # Import functions
-from ARIAtools import progBar
-from ARIAtools.ARIAProduct import ARIA_standardproduct
-from ARIAtools.mask_util import prep_mask
-from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.vrtmanager import resampleRaster, layerCheck, \
+import ARIAtools.product
+from ARIAtools.util import misc
+from ARIAtools.util.mask import prep_mask
+from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.vrt import resampleRaster, layerCheck, \
     get_basic_attrs, dim_check
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, \
     export_products, gacos_correction
@@ -222,7 +221,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
-    prog_bar = progBar.progressBar(maxValue=len(aria_prod.products[1]),
+    prog_bar = misc.progressBar(maxValue=len(aria_prod.products[1]),
                                    print_msg='Creating stack: ')
 
     # Set up single stack file
@@ -391,13 +390,10 @@ def main(inps=None):
     # standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file']
     # (if bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile,
-                                                bbox=inps.bbox,
-                                                workdir=inps.workdir,
-                                                num_threads=inps.num_threads,
-                                                url_version=inps.version,
-                                                nc_version=inps.nc_version,
-                                                verbose=inps.verbose)
+    standardproduct_info = ARIAtools.product.Product(
+        inps.imgfile, bbox=inps.bbox, workdir=inps.workdir,
+        num_threads=inps.num_threads, url_version=inps.version,
+        nc_version=inps.nc_version, verbose=inps.verbose)
 
     # pass number of threads for gdal multiprocessing computation
     if inps.num_threads.lower() == 'all':

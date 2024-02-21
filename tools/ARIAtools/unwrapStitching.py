@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: David Bekaert
@@ -28,8 +27,8 @@ import random
 import glob
 import collections
 
-from ARIAtools.logger import logger
-from ARIAtools.shapefile_util import open_shapefile, save_shapefile
+from ARIAtools.util.logger import logger
+from ARIAtools.util.shp import open_shapefile, save_shapefile
 
 log = logging.getLogger(__name__)
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
@@ -21,10 +20,10 @@ import pandas as pd
 import warnings
 import logging
 
-from ARIAtools.logger import logger
-
-from ARIAtools.shapefile_util import open_shapefile
-from ARIAtools.mask_util import prep_mask
+import ARIAtools.product
+from ARIAtools.util.logger import logger
+from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.mask import prep_mask
 
 gdal.UseExceptions()
 
@@ -445,7 +444,7 @@ class PlotClass(object):
 
     def plot_avgcoherence(self):
         """ Generate average coherence raster. """
-        from ARIAtools.vrtmanager import rasterAverage
+        from ARIAtools.util.vrt import rasterAverage
         outname = os.path.join(self.workdir, f'avgcoherence{self.mask_ext}')
 
         # Make average coherence raster
@@ -634,7 +633,6 @@ def get_extent(path_ds, shrink=None):
 
 
 def main(inps=None):
-    from ARIAtools.ARIAProduct import ARIA_standardproduct
     logger.setLevel(logging.INFO)
     print('*****************************************************************')
     print('*** Plotting Function ***')
@@ -643,13 +641,10 @@ def main(inps=None):
     # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
     # bbox specified)
-    standardproduct_info = ARIA_standardproduct(inps.imgfile,
-                                                bbox=inps.bbox,
-                                                workdir=inps.workdir,
-                                                num_threads=inps.num_threads,
-                                                url_version=inps.version,
-                                                nc_version=inps.nc_version,
-                                                verbose=inps.verbose)
+    standardproduct_info = ARIAtools.product.Product(
+        inps.imgfile, bbox=inps.bbox, workdir=inps.workdir,
+        num_threads=inps.num_threads, url_version=inps.version,
+        nc_version=inps.nc_version, verbose=inps.verbose)
 
     # If user requests to generate all plots.
     if inps.plotall:

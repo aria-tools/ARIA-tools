@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Marin Govorcin
@@ -17,10 +16,10 @@ from pathlib import Path
 
 
 # import util modules
-from ARIAtools.stitiching_util import (get_GUNW_array, get_GUNW_attr,
-                                       frame_overlap, combine_data_to_single,
-                                       write_GUNW_array, snwe_to_extent,
-                                       _nan_filled_array)
+from ARIAtools.util.stitch import (get_GUNW_array, get_GUNW_attr,
+                                   frame_overlap, combine_data_to_single,
+                                   write_GUNW_array, snwe_to_extent,
+                                   _nan_filled_array)
 
 
 GUNW_LAYERS = {'unwrappedPhase': 'NETCDF:"%s":/science/grids/data/unwrappedPhase',

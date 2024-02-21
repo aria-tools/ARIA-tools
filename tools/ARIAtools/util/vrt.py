@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
@@ -14,7 +13,7 @@ import logging
 
 # Import functions
 from ARIAtools.constants import ARIA_TROPO_INTERNAL
-from ARIAtools.shapefile_util import open_shapefile
+from ARIAtools.util.shp import open_shapefile
 
 gdal.UseExceptions()
 # Suppress warnings

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Ravi Lanka
@@ -18,7 +17,7 @@ import pulp
 import timeit as T
 
 import logging
-from ARIAtools.logger import logger
+from ARIAtools.util.logger import logger
 log = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

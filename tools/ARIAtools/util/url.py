@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha
@@ -6,13 +5,9 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 import os
-import os.path as op
 
 # Grab older version products if specified.
-
-
 def url_versions(urls, user_version, wd):
     """ For duplicate products (other than version number)
 
@@ -33,10 +28,9 @@ def url_versions(urls, user_version, wd):
 
     return urls_final
 
-# Currently does not work as expected, as lat/lon coords of newer versions do not match older
-# Will only support specific versions or 'all'
 
-
+# Currently does not work as expected, as lat/lon coords of newer versions
+# do not match older. Will only support specific versions or 'all'
 def url_versions_full(urls, user_version, wd):
     """For duplicate products (other than version number)
     Uses the the latest if user_version is None else use specified ver."""
@@ -71,7 +65,7 @@ def url_versions_full(urls, user_version, wd):
             urls_final.append(f'{url_base}-{version}')
 
             # move duplicates to a different folder
-            dupe_folder = op.join(wd, 'duplicated_products')
+            dupe_folder = os.path.join(wd, 'duplicated_products')
             os.makedirs(dupe_folder, exist_ok=True)
             for dupe in duplicates:
                 dupe_path = os.path.join(dupe_folder, os.path.basename(dupe))

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Emre Havazli
@@ -6,10 +5,9 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import numpy as np
-import time
 import sys
-
+import time
+import numpy as np
 
 class progressBar:
     """Creates a text-based progress bar. Call the object with
@@ -21,8 +19,9 @@ class progressBar:
         modified from MintPy version 1.2 (https://github.com/insarlab/MintPy/)
         Code originally from http://code.activestate.com/recipes/168639/
     example:
-        from ARIAtools import progBar
-        prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),prefix='Generating: '+key+' - ')
+        from ARIAtools.util import misc
+        prog_bar = misc.progressBar(maxValue=len(
+            product_dict[0]),prefix='Generating: '+key+' - ')
         for i in enumerate(product_dict[0]):
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
         prog_bar.close()

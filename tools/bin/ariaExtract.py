@@ -12,9 +12,9 @@ import logging
 from pkg_resources import get_distribution
 
 import ARIAtools.extractProduct
-import ARIAtools.vrtmanager
-import ARIAtools.mask_util
-import ARIAtools.ARIAProduct
+import ARIAtools.util.vrt
+import ARIAtools.util.mask
+import ARIAtools.product
 
 
 LOGGER = logging.getLogger('ariaExtract.py')
@@ -156,14 +156,14 @@ def main():
     # standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
     # bbox specified)
-    standardproduct_info = ARIAtools.ARIAProduct.ARIA_standardproduct(
+    standardproduct_info = ARIAtools.product.Product(
         args.imgfile, bbox=args.bbox, workdir=args.workdir,
         num_threads=args.num_threads, url_version=args.version,
         nc_version=args.nc_version, verbose=args.verbose)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
-        model_names = ARIAtools.vrtmanager.layerCheck(
+        model_names = ARIAtools.util.vrt.layerCheck(
             standardproduct_info.products[1], args.layers, args.nc_version,
             args.gacos_products, args.tropo_models, extract_or_ts='extract')
 
@@ -215,7 +215,7 @@ def main():
             'multilooking': args.multilooking,
             'rankedResampling': args.rankedResampling
         }
-        args.mask = ARIAtools.mask_util.prep_mask(**mask_dict)
+        args.mask = ARIAtools.util.mask.prep_mask(**mask_dict)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.

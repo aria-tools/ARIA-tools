@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # For a given set of interferograms, compute the cumulative phase
 #  misclosure.
@@ -20,7 +19,7 @@ from osgeo import gdal
 from scipy.stats import mode
 
 import logging
-from ARIAtools.logger import logger
+from ARIAtools.util.logger import logger
 
 register_matplotlib_converters()
 log = logging.getLogger(__name__)

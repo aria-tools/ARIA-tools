@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Simran Sangha & David Bekaert
@@ -15,16 +14,17 @@ import numpy as np
 from joblib import Parallel, delayed
 from osgeo import gdal
 
-from ARIAtools.url_manager import url_versions
-from ARIAtools.shapefile_util import open_shapefile, save_shapefile
-from ARIAtools.logger import logger
-from ARIAtools.constants import ARIA_TROPO_INTERNAL
+import ARIAtools.constants
+
+from ARIAtools.util.url import url_versions
+from ARIAtools.util.shp import open_shapefile, save_shapefile
+from ARIAtools.util.logger import logger
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
 # gdal.SetConfigOption('CPL_VSIL_CURL_USE_HEAD', 'NO')
 
-log = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 
 # Unpacking class fuction of readproduct to become
@@ -33,13 +33,14 @@ def unwrap_self_readproduct(arg):
     """
     Arg is the self argument and the filename is of the file to be read
     """
-    return ARIA_standardproduct.__readproduct__(arg[0], arg[1])[0]
+    return Product.__readproduct__(arg[0], arg[1])[0]
 
 
 def package_dict(scene, new_scene, scene_ind,
                  sorted_dict=None, dict_ind=None):
     """
-    Strip and prep keys and values for dictionary of sorted, spatiotemporally contiguous products
+    Strip and prep keys and values for dictionary of sorted, spatiotemporally
+    contiguous products
 
     'scene' = specific reference product
     'new_scene' = specific secondary product (same as above if appending scenes)
@@ -67,12 +68,11 @@ def package_dict(scene, new_scene, scene_ind,
 
 
 # Input file(s) and bbox as either list or physical shape file.
-class ARIA_standardproduct:
+class Product:
     """
     Load ARIA standard products and split them into spatiotemporally
     contiguous interferograms.
     """
-
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', verbose=False):
         """
@@ -136,7 +136,7 @@ class ARIA_standardproduct:
             ext = os.path.splitext(f)[1].lower()
             if not ext == '.nc':
                 self.files.remove(f)
-                log.warning('%s is not a supported NetCDF... skipping', f)
+                LOGGER.warning('%s is not a supported NetCDF... skipping', f)
 
         # If URLs, append with '/vsicurl/'
         self.files = [
@@ -193,7 +193,7 @@ class ARIA_standardproduct:
                 save_shapefile(os.path.join(workdir, 'user_bbox.json'),
                                self.bbox, 'GeoJSON')
                 self.bbox_file = os.path.join(workdir, 'user_bbox.json')
-                log.info('Shapefile %s created for input user bounds',
+                LOGGER.info('Shapefile %s created for input user bounds',
                          os.path.join(workdir, 'user_bbox.json'))
             # If shapefile
             elif os.path.isfile(bbox):
@@ -222,7 +222,7 @@ class ARIA_standardproduct:
             version = str(
                 gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
         except BaseException:
-            log.warning('%s is not a supported file type... skipping', fname)
+            LOGGER.warning('%s is not a supported file type... skipping', fname)
             return []
 
         # Enforce forward-compatibility of netcdf versions
@@ -234,7 +234,7 @@ class ARIA_standardproduct:
             nc_version_check = ['1c']
 
         if version not in nc_version_check:
-            log.warning('input nc_version = %s, file %s rejected because '
+            LOGGER.warning('input nc_version = %s, file %s rejected because '
                         'it is a version %s product',
                         self.nc_version, fname, version)
             return []
@@ -310,7 +310,7 @@ class ARIA_standardproduct:
         Output and group together 2 dictionaries containing the
         “radarmetadata info” and “data layer keys+paths”, respectively
         The order of the dictionary keys below needs to be consistent with
-        the keys in the __mappingVersion__ function of the ARIA_standardproduct
+        the keys in the __mappingVersion__ function of the Product
         class (see instructions on how to appropriately add new keys there).
 
         """
@@ -345,7 +345,7 @@ class ARIA_standardproduct:
                 rdrmetadata_dict[radarkeys[rmdkeys.index(
                     i)]] = rdrmetadata[i][0]
             except BaseException:  # If new, unaccounted layer not expected in rdrmetakeys
-                log.warning("Radarmetadata key %s not expected in rmdkeys", i)
+                LOGGER.warning("Radarmetadata key %s not expected in rmdkeys", i)
         rdrmetadata_dict['pair_name'] = self.pairname
 
         # Setup datalyr_dict
@@ -356,7 +356,7 @@ class ARIA_standardproduct:
                     i[1].split(':')[-1].split('/')[-1])]] = i[1]
             # If new, unaccounted layer not expected in layerkeys
             except BaseException:
-                log.warning("Data layer key %s not expected in sdskeys", i[1])
+                LOGGER.warning("Data layer key %s not expected in sdskeys", i[1])
         datalyr_dict['pair_name'] = self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
@@ -477,16 +477,14 @@ class ARIA_standardproduct:
 
     def __mappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
         """
-
         Pass product record of metadata and layers
 
         Output and group together 2 dictionaries containing the
         “radarmetadata info” and “data layer keys+paths”, respectively
         The order of the dictionary keys below needs to be consistent with the
-        keys in the __mappingVersion__ function of the ARIA_standardproduct
+        keys in the __mappingVersion__ function of the Product
         class (see instructions on how to appropriately add new
         keys there).
-
         """
         # Expected layers
         layerkeys = ['productBoundingBox', 'unwrappedPhase',
@@ -501,14 +499,14 @@ class ARIA_standardproduct:
 
             # check for tropo layers for each model
             tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-            for i in ARIA_TROPO_INTERNAL:
+            for i in ARIAtools.constants.ARIA_TROPO_INTERNAL:
                 if i in ''.join(sdskeys):
                     addkeys.append(f'{tropo_lyrs[0]}_' + i)
                     addkeys.append(f'{tropo_lyrs[1]}_' + i)
             keys_reject.extend([i for i in tropo_lyrs
                                 if i not in ''.join(addkeys)])
             for i in keys_reject:
-                log.warning(f'Expected data layer key {i} '
+                LOGGER.warning(f'Expected data layer key {i} '
                             f'not found in {fname}')
 
             layerkeys.extend(addkeys)
@@ -528,7 +526,6 @@ class ARIA_standardproduct:
 
     def __continuous_time__(self):
         """
-
         Split the products into spatiotemporally continuous groups.
 
         Split products by individual, continuous interferograms.
@@ -540,7 +537,6 @@ class ARIA_standardproduct:
         overlap in time and are therefore spatially contiguous,
         and rejects/reports cases for which there is no temporal overlap
         and therefore a spatial gap.
-
         """
         # import dependencies
         from datetime import datetime, timedelta
@@ -592,14 +588,14 @@ class ARIA_standardproduct:
                 self.products[i[0] + 1] = use_scene
                 num_dups.append(i[0])
 
-                log.debug("Duplicate product captured. Rejecting scene %s",
+                LOGGER.debug("Duplicate product captured. Rejecting scene %s",
                           os.path.basename(scenes[0][1]['unwrappedPhase'].split(':')[1]))
 
         # Delete duplicate products
         self.products = list(self.products for self.products, _ in
                              itertools.groupby(self.products))
         if num_dups:
-            log.warning("%d products rejected since they are duplicates",
+            LOGGER.warning("%d products rejected since they are duplicates",
                         len(num_dups))
 
         # If only one pair in list, add it to list.
@@ -669,7 +665,7 @@ class ARIA_standardproduct:
                     abs(new_scene_t_ref - scene_t_ref) <= timedelta(days=1):
                 track_rejected_pairs.extend((scene[0]['pair_name'],
                                              new_scene[0]['pair_name']))
-                log.debug("Gap for interferogram %s \n", scene[0]['pair_name'])
+                LOGGER.debug("Gap for interferogram %s \n", scene[0]['pair_name'])
 
             # If prods correspond to different orbits entirely
             else:
@@ -699,12 +695,12 @@ class ARIA_standardproduct:
         # Remove duplicate dates
         track_rejected_pairs = list(set(track_rejected_pairs))
         if len(track_rejected_pairs) > 0:
-            log.warning('%d out of %d interferograms rejected since '
+            LOGGER.warning('%d out of %d interferograms rejected since '
                         'stitched interferogram would have gaps',
                         len(track_rejected_pairs),
                         len([item[0] for item in sorted_products]))
             # Provide report of which files were kept vs. which were not
-            log.debug('Specifically, gaps were found between the '
+            LOGGER.debug('Specifically, gaps were found between the '
                       'following interferograms:')
             record_rejected_scenes = []
             for item in self.products:
@@ -715,9 +711,9 @@ class ARIA_standardproduct:
             record_rejected_scenes = [os.path.basename(i)
                                       for i in record_rejected_scenes]
             for i in record_rejected_scenes:
-                log.debug(i)
+                LOGGER.debug(i)
         else:
-            log.info('All (%d) interferograms are spatially continuous.',
+            LOGGER.info('All (%d) interferograms are spatially continuous.',
                      len(sorted_products))
 
         sorted_products = [[item[0] for item in sorted_products
@@ -743,15 +739,15 @@ class ARIA_standardproduct:
         if len(self.files) > 1:
             if self.num_threads > 1:
                 try:
-                    log.info('Multi-core version')
+                    LOGGER.info('Multi-core version')
                     # would probably be better not to write to the same self,
                     # and concatenate at completion.
                     self.products += Parallel(n_jobs=-1, max_nbytes=1e6)(
                         delayed(unwrap_self_readproduct)(i) for i in
                         zip([self] * len(self.files), self.files))
                 except Exception as E:
-                    log.warning('Multi-core version failed with error: %s', E)
-                    log.info('Will try single loop')
+                    LOGGER.warning('Multi-core version failed with error: %s', E)
+                    LOGGER.info('Will try single loop')
 
                     for f in self.files:
                         self.products += self.__readproduct__(f)
@@ -780,20 +776,20 @@ class ARIA_standardproduct:
             raise Exception('No valid pairs meet spatial criteria, nothing '
                             'to export.')
         if len(self.products) != len(self.files):
-            log.warning('%d out of %d GUNW products rejected',
+            LOGGER.warning('%d out of %d GUNW products rejected',
                         len(self.files) - len(self.products), len(self.files))
             # Provide report of which files were kept vs. which weren't
-            log.debug('Specifically, the following GUNW products '
+            LOGGER.debug('Specifically, the following GUNW products '
                       'were rejected:')
-            log.debug([os.path.basename(i) for i in self.files if i not in
+            LOGGER.debug([os.path.basename(i) for i in self.files if i not in
                        [i[1]['productBoundingBox'].split('"')[1]
                         for i in self.products]])
         else:
-            log.info('All (%d) GUNW products meet spatial bbox criteria.',
+            LOGGER.info('All (%d) GUNW products meet spatial bbox criteria.',
                      len(self.files))
 
         # Split products in spatiotemporally continuous groups
-        log.info('Group GUNW products into spatiotemporally '
+        LOGGER.info('Group GUNW products into spatiotemporally '
                  'continuous interferograms.')
         self.products = self.__continuous_time__()
 

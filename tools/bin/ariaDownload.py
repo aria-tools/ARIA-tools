@@ -15,8 +15,8 @@ import re
 from datetime import datetime
 import logging
 import asf_search as asf
-from ARIAtools.logger import logger
-from ARIAtools.url_manager import url_versions
+from ARIAtools.util.logger import logger
+from ARIAtools.util.url import url_versions
 from pkg_resources import get_distribution
 
 log = logging.getLogger('ARIAtools')
@@ -115,7 +115,7 @@ def make_bbox(inp_bbox):
         return None
     from shapely.geometry import Polygon
     if op.exists(op.abspath(inps.bbox)):
-        from ARIAtools.shapefile_util import open_shapefile
+        from ARIAtools.util.shp import open_shapefile
         ring = open_shapefile(inps.bbox, 0, 0).exterior
         poly = Polygon(ring)
     else:
