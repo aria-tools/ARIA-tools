@@ -1244,7 +1244,7 @@ def polygonizeConn(ccFile):
         poly_unique.append(polylist)
 
     # track the projection and geotransform
-    data = gdal.Open(ccFile, gdal.GA_ReadOnly)
+    data = gdal.Open(ccFile)
     geoTrans = data.GetGeoTransform()
     proj = data.GetProjection()
     cols = data.RasterXSize
@@ -1263,7 +1263,7 @@ def GDALread(filename, data_band=1, loadData=True):
 
     # open the GDAL file and get typical data information
     try:
-        data = gdal.Open(filename, gdal.GA_ReadOnly)
+        data = gdal.Open(filename)
     except BaseException:
         raise Exception(filename + " is not a GDAL supported")
 
@@ -1459,7 +1459,7 @@ def build2PiScaleVRT(output, File, width=False, length=False):
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
     if not width or not length:
-        ds = gdal.Open(File, gdal.GA_ReadOnly)
+        ds = gdal.Open(File)
         width = ds.RasterXSize
         ysize = ds.RasterYSize
         ds = None
@@ -1500,7 +1500,7 @@ def buildScaleOffsetVRT(output, File1, proj, geoTrans, File1_offset=0, File1_sca
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
     if not width or not length:
-        ds = gdal.Open(File1, gdal.GA_ReadOnly)
+        ds = gdal.Open(File1)
         width = ds.RasterXSize
         ysize = ds.RasterYSize
         ds = None
@@ -1552,7 +1552,7 @@ def buildSumVRT(output, File1, File2, proj, geoTrans,
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
     if not width or not length:
-        ds = gdal.Open(File1, gdal.GA_ReadOnly)
+        ds = gdal.Open(File1)
         width = ds.RasterXSize
         ysize = ds.RasterYSize
         ds = None
@@ -1608,13 +1608,13 @@ def point2unwPhase(inputs):
         yoff = 0
 
     # loading a chunk of the connected component data
-    ds_connFile = gdal.Open(connFile, gdal.GA_ReadOnly)
+    ds_connFile = gdal.Open(connFil)
     connData = ds_connFile.ReadAsArray(
         xoff=xoff, yoff=yoff, xsize=region, ysize=region)
     ds_connFile = None
 
     # loading a chunk of the unwrapped phase data
-    ds_unwFile = gdal.Open(unwFile, gdal.GA_ReadOnly)
+    ds_unwFile = gdal.Open(unwFile)
     unwData = ds_unwFile.ReadAsArray(
         xoff=xoff, yoff=yoff, xsize=region, ysize=region)
     ds_unwFile = None
@@ -1650,7 +1650,7 @@ def gdalTest(file):
     file_success = None
     # check first if the file is GDAL compatible
     try:
-        ds = gdal.Open(file, gdal.GA_ReadOnly)
+        ds = gdal.Open(file)
         ds = None
     except BaseException:
         log.debug('%s is not GDAL compatible', file)
@@ -1669,7 +1669,7 @@ def gdalTest(file):
         # will first check if file exist, as for a netcdf file one will modify
         # the variable and gdal will give a warning not and error
         if os.path.isfile(filetest):
-            ds = gdal.Open(filetest, gdal.GA_ReadOnly)
+            ds = gdal.Open(filetest)
             ds = None
             return filetest
         else:

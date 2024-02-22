@@ -218,7 +218,7 @@ class stack:
             Load data from unwrapStack.vrt file.
         '''
         # Open dataset
-        self.IFGs = gdal.Open(self.imgfile, gdal.GA_ReadOnly)
+        self.IFGs = gdal.Open(self.imgfile)
 
         # Format extent
         N = self.IFGs.RasterXSize
@@ -585,7 +585,7 @@ class stack:
         '''
         # Load coherence data from cohStack.vrt
         cohfile = os.path.join(self.imgdir, 'cohStack.vrt')
-        cohDS = gdal.Open(cohfile, gdal.GA_ReadOnly)
+        cohDS = gdal.Open(cohfile)
         cohMap = np.zeros((cohDS.RasterYSize, cohDS.RasterXSize))
         coh_min = 0.7
 

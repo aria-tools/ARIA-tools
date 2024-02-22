@@ -196,8 +196,6 @@ class Edge(object):
         return Edge(self.dst, self.src)
 
 # Defines each delaunay traingle
-
-
 class Loop(object):
     '''
     Collection of edges in loop - Expects the vertices to be in sequence

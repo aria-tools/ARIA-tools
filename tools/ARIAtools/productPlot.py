@@ -462,7 +462,7 @@ class PlotClass(object):
 
         del coh_file
 
-        ds = gdal.Open(f'{outname}.vrt', gdal.GA_ReadOnly)
+        ds = gdal.Open(f'{outname}.vrt')
         # for making ~water pixels white
         arr = np.where(ds.ReadAsArray() < 0.01, np.nan, ds.ReadAsArray())
 
@@ -612,7 +612,7 @@ class PlotClass(object):
 def get_extent(path_ds, shrink=None):
     """ Get the bbox of path_ds; optionally zoom in with WESN degrees """
     if isinstance(path_ds, str):
-        ds = gdal.Open(path_ds, gdal.GA_ReadOnly)
+        ds = gdal.Open(path_ds)
     else:
         ds = path_ds
 

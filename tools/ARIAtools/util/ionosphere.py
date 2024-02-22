@@ -5,27 +5,22 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import typing
+import pathlib
 
 import numpy as np
 import xarray as xr
-from numpy.typing import NDArray
+import osgeo
 
-from typing import List, Optional, Tuple
-from osgeo import gdal
-from pathlib import Path
+import ARIAtools.util.stitch
 
-
-# import util modules
-from ARIAtools.util.stitch import (get_GUNW_array, get_GUNW_attr,
-                                   frame_overlap, combine_data_to_single,
-                                   write_GUNW_array, snwe_to_extent,
-                                   _nan_filled_array)
-
-
-GUNW_LAYERS = {'unwrappedPhase': 'NETCDF:"%s":/science/grids/data/unwrappedPhase',
-               'coherence': 'NETCDF:"%s":/science/grids/data/coherence',
-               'connectedComponents': 'NETCDF:"%s":/science/grids/data/connectedComponents',
-               'ionosphere': 'NETCDF:"%s":/science/grids/corrections/derived/ionosphere/ionosphere'}
+GUNW_LAYERS = {
+    'unwrappedPhase': 'NETCDF:"%s":/science/grids/data/unwrappedPhase',
+    'coherence': 'NETCDF:"%s":/science/grids/data/coherence',
+    'connectedComponents': \
+        'NETCDF:"%s":/science/grids/data/connectedComponents',
+    'ionosphere': \
+        'NETCDF:"%s":/science/grids/corrections/derived/ionosphere/ionosphere'}
 
 
 def fit_surface(data, order=2):
@@ -89,8 +84,9 @@ def _get_median_offsets2frames(xr_data_list, xr_mask_list, ix1, ix2):
     return np.nanmedian((ds1 - ds2).filled(fill_value=np.nan))
 
 
-def stitch_ionosphere_frames(input_iono_files: List[str],
-                             direction_N_S: Optional[bool] = True):
+def stitch_ionosphere_frames(
+        input_iono_files: typing.List[str],
+        direction_N_S: typing.Optional[bool] = True):
 
     # Initalize variables for raster attributes
     iono_attr_list = []  # ionosphere raster metadata
@@ -100,7 +96,7 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
     # Loop through files
     for iono_file in input_iono_files:
         filename = iono_file.split(':')[1]
-        iono_attr_list.append(get_GUNW_attr(iono_file))
+        iono_attr_list.append(ARIAtools.util.stitch.get_GUNW_attr(iono_file))
         iono_xr = xr.open_dataset(iono_file, engine='rasterio').squeeze()
 
         # Generate mask using unwrapPhase connectedComponents
@@ -139,17 +135,13 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
     data_list = [d.ionosphere.data for d in iono_xr_list]
     mask_list = [d.mask.data for d in mask_xr_list]
 
-    combined_iono = combine_data_to_single(data_list,
-                                           SNWE.tolist(),
-                                           LATLON.tolist(),
-                                           method='mean',
-                                           latlon_step=LATLON[0, :].tolist())
+    combined_iono = ARIAtools.util.stitch.combine_data_to_single(
+        data_list, SNWE.tolist(), LATLON.tolist(), method='mean',
+        latlon_step=LATLON[0, :].tolist())
 
-    combined_mask = combine_data_to_single(mask_list,
-                                           SNWE.tolist(),
-                                           LATLON.tolist(),
-                                           method='min',
-                                           latlon_step=LATLON[0, :].tolist())
+    combined_mask = ARIAtools.util.stitch.combine_data_to_single(
+        mask_list, SNWE.tolist(), LATLON.tolist(), method='min',
+        latlon_step=LATLON[0, :].tolist())
 
     # Step 3: Fit quadratic surface
     # Mask combined_iono before surface fitting
@@ -165,20 +157,18 @@ def stitch_ionosphere_frames(input_iono_files: List[str],
     return surface, combined_iono[1], combined_iono[2]
 
 # MAIN
-
-
-def export_ionosphere(input_iono_files: List[str],
-                      arrres: List[float],
-                      output_iono: Optional[str] = './ionosphere',
-                      output_format: Optional[str] = 'ISCE',
-                      bounds: Optional[tuple] = None,
-                      clip_json: Optional[str] = None,
-                      mask_file: Optional[str] = None,
-                      verbose: Optional[bool] = False,
-                      overwrite: Optional[bool] = True) -> None:
+def export_ionosphere(input_iono_files: typing.List[str],
+                      arrres: typing.List[float],
+                      output_iono: typing.Optional[str] = './ionosphere',
+                      output_format: typing.Optional[str] = 'ISCE',
+                      bounds: typing.Optional[tuple] = None,
+                      clip_json: typing.Optional[str] = None,
+                      mask_file: typing.Optional[str] = None,
+                      verbose: typing.Optional[bool] = False,
+                      overwrite: typing.Optional[bool] = True) -> None:
 
     # Outputs
-    output_iono = Path(output_iono).absolute()
+    output_iono = pathlib.Path(output_iono).absolute()
     if not output_iono.parent.exists():
         output_iono.parent.mkdir()
 
@@ -188,13 +178,12 @@ def export_ionosphere(input_iono_files: List[str],
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_iono_files) == 1:
-        gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
+        osgeo.gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
                       input_iono_files[0])
 
     else:
-        (combined_iono,
-         snwe, latlon_spacing) = stitch_ionosphere_frames(input_iono_files,
-                                                          direction_N_S=True)
+        (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(
+            input_iono_files, direction_N_S=True)
 
         # write stitched ionosphere
         # outputformat
@@ -202,51 +191,52 @@ def export_ionosphere(input_iono_files: List[str],
         if output_format == 'VRT':
             output_format = 'ISCE'
 
-        write_GUNW_array(
-            temp_iono_out, combined_iono, snwe,
-            format=output_format, verbose=verbose,
-            update_mode=overwrite, add_vrt=True, nodata=0.0)
+        ARIAtools.util.stitch.write_GUNW_array(
+            temp_iono_out, combined_iono, snwe, format=output_format,
+            verbose=verbose, update_mode=overwrite, add_vrt=True, nodata=0.0)
 
     # Crop
-    [print(f'Cropping to {bounds}') if verbose and bounds else None]
+    if verbose:
+        print(f'Cropping to {bounds}')
+
     if overwrite:
-        [print(f'Removing {output_iono}') if verbose else None]
+        if verbose:
+            print(f'Removing {output_iono}')
         output_iono.unlink(missing_ok=True)
 
     # Crop if selected
-    ds = gdal.Warp(str(output_iono),
-                   str(temp_iono_out.with_suffix('.vrt')),
-                   format=output_format,
-                   cutlineDSName=clip_json,
-                   xRes=arrres[0], yRes=arrres[1],
-                   targetAlignedPixels=True,
-                   # cropToCutline = True,
-                   outputBounds=bounds
-                   )
+    ds = osgeo.gdal.Warp(
+        str(output_iono), str(temp_iono_out.with_suffix('.vrt')),
+        format=output_format, cutlineDSName=clip_json, xRes=arrres[0],
+        yRes=arrres[1], targetAlignedPixels=True, outputBounds=bounds)
     ds = None
+
     # Update VRT
-    [print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
-     if verbose else None]
-    gdal.Translate(str(output_iono.with_suffix('.vrt')),
-                   str(output_iono), format="VRT")
+    if verbose:
+        print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
+    osgeo.gdal.Translate(
+        str(output_iono.with_suffix('.vrt')), str(output_iono), format="VRT")
+
     # Remove temp files
-    [ii.unlink() for ii in [temp_iono_out, temp_iono_out.with_suffix('.vrt'),
-                            temp_iono_out.with_suffix('.xml'),
-                            temp_iono_out.with_suffix('.hdr'),
-                            temp_iono_out.with_suffix('.aux.xml')] if ii.exists()]
+    for suffix in [None, '.vrt', '.xml', '.hdr', '.aux.xml']:
+        target = (temp_iono_out if suffix is None else
+                  temp_iono_out.with_suffix(suffix))
+        if target.exists():
+            target.unlink()
 
     # Mask
-    if mask_file:
+    if mask_file is not None:
         if isinstance(mask_file, str):
-            mask = gdal.Open(mask_file)
+            mask = osgeo.gdal.Open(mask_file)
         else:
-            # for gdal instance, from prep_mask
+            # for osgeo.gdal instance, from prep_mask
             mask = mask_file
 
         mask_array = mask.ReadAsArray()
-        array = get_GUNW_array(str(output_iono.with_suffix('.vrt')))
+        array = ARIAtools.util.stitch.get_GUNW_array(
+            str(output_iono.with_suffix('.vrt')))
         update_array = mask_array * array
 
-        update_file = gdal.Open(str(output_iono), gdal.GA_Update)
+        update_file = osgeo.gdal.Open(str(output_iono), osgeo.gdal.GA_Update)
         update_file = update_file.GetRasterBand(1).WriteArray(update_array)
         update_file = None

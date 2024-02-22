@@ -26,7 +26,7 @@ def get_GUNW_attr(filename: Union[str, Path]) -> dict:
     """
 
     # Use GDAL to read GUNW netcdf
-    ds = gdal.Open(filename, gdal.GA_ReadOnly)
+    ds = gdal.Open(filename)
 
     # Get GUNW Raster attributes
     nodata = ds.GetRasterBand(1).GetNoDataValue()
@@ -79,7 +79,7 @@ def get_GUNW_array(filename: Union[str, Path],
     """
 
     # Use GDAL to read GUNW netcdf
-    ds = gdal.Open(filename, gdal.GA_ReadOnly)
+    ds = gdal.Open(filename)
 
     data = ds.ReadAsArray()
     # close

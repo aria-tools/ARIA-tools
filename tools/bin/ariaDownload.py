@@ -14,80 +14,97 @@ import math
 import re
 from datetime import datetime
 import logging
+import shapely
 import asf_search as asf
+
+
 from ARIAtools.util.logger import logger
 from ARIAtools.util.url import url_versions
 from pkg_resources import get_distribution
 
-log = logging.getLogger('ARIAtools')
+log = logging.getLogger('ariaDownload.py')
 
 
 def createParser():
-    """Download ARIA products using asf_search
+    """
+    Download ARIA products using asf_search
 
     see: https://github.com/asfadmin/Discovery-asf_search
     """
-    parser = argparse.ArgumentParser(description='Command line interface to download GUNW products from the ASF DAAC. '
-                                     'GUNW products are hosted at the NASA ASF DAAC.\nDownloading them '
-                                     'requires a NASA Earthdata URS user login and requires users to add '
-                                     '"GRFN Door (PROD)" and "ASF Datapool Products" to their URS '
-                                     'approved applications.',
-                                     epilog='Examples of use:\n\t ariaDownload.py --track 004 '
-                                     '--output count'
-                                     '\n\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"'
-                                     '\n\t ariaDownload.py -t 004,077 --start 20190101 -o count',
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-o', '--output', default='Download', type=str.title,
-                        choices=('Download', 'Count', 'Url'), help='Output type. '
-                        'Default="Download". Use "Url" for ingestion to aria*.py')
-    parser.add_argument('-t', '--track', default=None, type=str,
-                        help='track to download; single number (including leading zeros) or '
-                        'comma separated')
-    parser.add_argument('-b', '--bbox', default=None, type=str,
-                        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
-                        'POLYGON geometry.')
-    parser.add_argument('-w', '--workdir', dest='wd', default='./products',
-                        type=str,
-                        help='Specify directory to deposit all outputs. Default is '
-                        '"products" in local directory where script is launched.')
-    parser.add_argument('-s', '--start', default='20140101', type=str,
-                        help='Start date as YYYYMMDD; If none provided, starts at beginning '
-                        'of Sentinel record (2014).')
-    parser.add_argument('-e', '--end', default='21000101', type=str,
-                        help='End date as YYYYMMDD. If none provided, ends today.')
-    parser.add_argument('-u', '--user', default=None, type=str,
-                        help='NASA Earthdata URS user login. Users must add "GRFN Door '
-                        '(PROD)" and "ASF Datapool Products" to their URS approved '
-                        'applications.')
-    parser.add_argument('-p', '--pass', dest='passw', default=None, type=str,
-                        help='NASA Earthdata URS user password. Users must add "GRFN Door '
-                        '(PROD)" and "ASF Datapool Products" to their URS approved '
-                        'applications.')
-    parser.add_argument('-l', '--daysless', dest='dayslt', default=math.inf,
-                        type=int,
-                        help='Take pairs with a temporal baseline -- days less than this '
-                        'value.')
-    parser.add_argument('-m', '--daysmore', dest='daysgt', default=0,
-                        type=int,
-                        help='Take pairs with a temporal baseline -- days greater than this '
-                        'value. Example, annual pairs: ariaDownload.py -t 004 '
-                        '--daysmore 364.')
-    parser.add_argument('-nt', '--num_threads', default='1', type=str,
-                        help='Specify number of threads for multiprocessing '
-                        'download. By default "1". Can also specify "All" to use all '
-                        'available threads.')
-    parser.add_argument('-i', '--ifg', default=None, type=str,
-                        help='Retrieve one interferogram by its start/end date, specified as '
-                        'YYYYMMDD_YYYYMMDD (order independent)')
-    parser.add_argument('-d', '--direction', dest='flightdir', default=None,
-                        type=str,
-                        help='Flight direction, options: ascending, a, descending, d')
-    parser.add_argument('--version', default=None,
-                        help='Specify version as str, e.g. 2_0_4 or all prods.'
-                        'All products are downloaded by default. If version is specified, '
-                        'only products which match that version are downloaded.')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Print products to be downloaded to stdout')
+    parser = argparse.ArgumentParser(
+        description='Command line interface to download GUNW products from '
+                    'the ASF DAAC. GUNW products are hosted at the NASA ASF '
+                     'DAAC.\nDownloading them requires a NASA Earthdata URS '
+                     'user login and requires users to add "GRFN Door (PROD)" '
+                     'and "ASF Datapool Products" to their URS approved '
+                     'applications.',
+        epilog='Examples of use:\n'
+                '\t ariaDownload.py --track 004 --output count\n'
+                '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
+                '\t ariaDownload.py -t 004,077 --start 20190101 -o count',
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    parser.add_argument(
+        '-o', '--output', default='Download', type=str.title,
+        choices=('Download', 'Count', 'Url'),
+        help='Output type. Default="Download". Use "Url" for ingestion to '
+             'aria*.py')
+    parser.add_argument(
+        '-t', '--track', default=None, type=str,
+        help='track to download; single number (including leading zeros) or '
+             'comma separated')
+    parser.add_argument(
+        '-b', '--bbox', default=None, type=str,
+        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON '
+             'geometry.')
+    parser.add_argument(
+        '-w', '--workdir', dest='wd', default='./products', type=str,
+        help='Specify directory to deposit all outputs. Default is "products" '
+             'in local directory where script is launched.')
+    parser.add_argument(
+        '-s', '--start', default='20140101', type=str,
+        help='Start date as YYYYMMDD; If none provided, starts at beginning '
+             'of Sentinel record (2014).')
+    parser.add_argument(
+        '-e', '--end', default='21000101', type=str,
+        help='End date as YYYYMMDD. If none provided, ends today.')
+    parser.add_argument(
+        '-u', '--user', default=None, type=str,
+        help='NASA Earthdata URS user login. Users must add "GRFN Door (PROD)" '
+             'and "ASF Datapool Products" to their URS approved applications.')
+    parser.add_argument(
+        '-p', '--pass', dest='passw', default=None, type=str,
+        help='NASA Earthdata URS user password. Users must add "GRFN Door '
+             '(PROD)" and "ASF Datapool Products" to their URS approved '
+             'applications.')
+    parser.add_argument(
+        '-l', '--daysless', dest='dayslt', default=math.inf, type=int,
+        help='Take pairs with a temporal baseline -- days less than this value.')
+    parser.add_argument(
+        '-m', '--daysmore', dest='daysgt', default=0, type=int,
+        help='Take pairs with a temporal baseline -- days greater than this '
+             'value. Example, annual pairs: ariaDownload.py -t 004 '
+             '--daysmore 364.')
+    parser.add_argument(
+        '-nt', '--num_threads', default='1', type=str,
+        help='Specify number of threads for multiprocessing download. By '
+              'default "1". Can also specify "All" to use all available '
+              'threads.')
+    parser.add_argument(
+        '-i', '--ifg', default=None, type=str,
+        help='Retrieve one interferogram by its start/end date, specified as '
+             'YYYYMMDD_YYYYMMDD (order independent)')
+    parser.add_argument(
+        '-d', '--direction', dest='flightdir', default=None, type=str,
+        help='Flight direction, options: ascending, a, descending, d')
+    parser.add_argument(
+        '--version', default=None,
+        help='Specify version as str, e.g. 2_0_4 or all prods. All products '
+             'are downloaded by default. If version is specified, only '
+             'products which match that version are downloaded.')
+    parser.add_argument(
+        '-v', '--verbose', action='store_true',
+        help='Print products to be downloaded to stdout')
     return parser
 
 
@@ -105,7 +122,6 @@ def cmdLineParse(iargs=None):
 
     if not inps.track and not inps.bbox:
         raise Exception('Must specify either a bbox or track')
-
     return inps
 
 
@@ -113,32 +129,36 @@ def make_bbox(inp_bbox):
     """Make a WKT from SNWE or a shapefile"""
     if inp_bbox is None:
         return None
-    from shapely.geometry import Polygon
+
     if op.exists(op.abspath(inps.bbox)):
         from ARIAtools.util.shp import open_shp
         ring = open_shp(inps.bbox, 0, 0).exterior
-        poly = Polygon(ring)
+        poly = shapely.geometry.Polygon(ring)
+
     else:
         try:
             S, N, W, E = [float(i) for i in inps.bbox.split()]
+
             # adjust for degrees easting / northing (0 - 360 / 0:180)
             if W > 180:
                 W -= 360
                 print('AdjustedW')
+
             if E > 180:
                 E -= 360
                 print('AdjustedE')
+
             if N > 90:
                 N -= 90
                 S -= 90
                 print('Adjusted N/S')
+
         except BaseException:
             raise Exception('Cannot understand the --bbox argument. '
                             'Input string was entered incorrectly or path does not '
                             'exist.')
 
-        poly = Polygon([(W, N), (W, S), (E, S), (E, N)])
-    return poly
+    return shapely.geometry.Polygon([(W, N), (W, S), (E, S), (E, N)])
 
 
 def get_url_ifg(scenes):

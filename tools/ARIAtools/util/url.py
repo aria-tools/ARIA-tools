@@ -25,7 +25,6 @@ def url_versions(urls, user_version, wd):
                 f'No products with user specified version: {urls_final}')
     else:
         urls_final = urls
-
     return urls_final
 
 

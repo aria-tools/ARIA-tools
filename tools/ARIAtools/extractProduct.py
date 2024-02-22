@@ -332,43 +332,41 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         if dem_name not in dem_stitcher.datasets.DATASETS:
             raise ValueError(
                 '%s must be in %s' % (dem_name, ', '.join(
-                    dem_stitcher.datasets.DATASETS)))
+                dem_stitcher.datasets.DATASETS)))
+
         LOGGER.info("Downloading DEM...")
         demfilename = download_dem(
             aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name)
 
     else:  # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
-        assert os.path.exists(
-            demfilename), f'Cannot open DEM at: {demfilename}'
-        ds_u = osgeo.gdal.Open(demfilename, osgeo.gdal.GA_ReadOnly)
+        assert os.path.exists(demfilename), (
+            f'Cannot open DEM at: {demfilename}')
+
+        ds_u = osgeo.gdal.Open(demfilename)
         epsg = osgeo.osr.SpatialReference(
             wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY', 1)
-        assert epsg is not None, f'No projection information in DEM: {demfilename}'
+        assert epsg is not None, (
+            f'No projection information in DEM: {demfilename}')
 
     # write cropped DEM
     if demfilename == os.path.abspath(aria_dem):
         LOGGER.warning('The DEM you specified already exists in %s, '
                        'using the existing one...', os.path.dirname(aria_dem))
-        ds_aria = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_ReadOnly)
+        ds_aria = osgeo.gdal.Open(aria_dem)
 
     else:
-        gdal_warp_kwargs = {'format': outputFormat,
-                            'cutlineDSName': prods_TOTbbox,
-                            'outputBounds': bounds,
-                            'outputType': osgeo.gdal.GDT_Int16,
-                            'xRes': arrres[0],
-                            'yRes': arrres[1],
-                            'targetAlignedPixels': True,
-                            'multithread': True,
-                            'options': [f'NUM_THREADS={num_threads}']}
+        gdal_warp_kwargs = {
+            'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+            'outputBounds': bounds, 'outputType': osgeo.gdal.GDT_Int16,
+            'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
+            'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
         osgeo.gdal.Warp(
             aria_dem, demfilename,
             options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
         update_file = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_Update)
         update_file.SetProjection(proj)
-        del update_file
         ds_aria = osgeo.gdal.Translate(
             f'{aria_dem}.vrt', aria_dem, format='VRT')
         LOGGER.info(
@@ -380,21 +378,18 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         ARIAtools.util.vrt.resampleRaster(
             aria_dem, multilooking, bounds, prods_TOTbbox, rankedResampling,
             outputFormat=outputFormat, num_threads=num_threads)
-        ds_aria = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_ReadOnly)
+        ds_aria = osgeo.gdal.Open(aria_dem)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
-    bounds = list(ARIAtools.util.shp.open_shp(
-            prods_TOTbbox_metadatalyr).bounds)
+    bounds = list(
+        ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr).bounds)
 
     gt = ds_aria.GetGeoTransform()
-    gdal_warp_kwargs = {'format': 'MEM',
-                        'outputBounds': bounds,
-                        'xRes': abs(gt[1]),
-                        'yRes': abs(gt[-1]),
-                        'targetAlignedPixels': True,
-                        'multithread': True,
-                        'options': [f'NUM_THREADS={num_threads}']}
+    gdal_warp_kwargs = {
+        'format': 'MEM', 'outputBounds': bounds, 'xRes': abs(gt[1]),
+        'yRes': abs(gt[-1]), 'targetAlignedPixels': True, 'multithread': True,
+        'options': [f'NUM_THREADS={num_threads}']}
     ds_aria = osgeo.gdal.Warp(
         '', aria_dem, options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
     ds_aria.SetProjection(proj)
@@ -435,9 +430,10 @@ def download_dem(
     return vrt_path
 
 
-def merged_productbbox(metadata_dict, product_dict, workdir='./',
-                       bbox_file=None, croptounion=False, num_threads='2',
-                       minimumOverlap=0.0081, verbose=None):
+def merged_productbbox(
+        metadata_dict, product_dict, workdir='./', bbox_file=None,
+        croptounion=False, num_threads='2', minimumOverlap=0.0081,
+        verbose=None):
     """
     Extract/merge productBoundingBox layers for each pair.
     Also update dict, report common track bbox
@@ -511,14 +507,17 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
             # Get union
             total_bbox = total_bbox.union(prods_bbox)
             total_bbox_metadatalyr = total_bbox_metadatalyr.union(prods_bbox)
+
             # Save to file
             ARIAtools.util.shp.save_shp(prods_TOTbbox, total_bbox)
             ARIAtools.util.shp.save_shp(
                 prods_TOTbbox_metadatalyr, total_bbox_metadatalyr)
+
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
             prods_bbox = prods_bbox.intersection(total_bbox)
+
             # Estimate percentage of overlap with bbox
             if prods_bbox.geom_type == 'MultiPolygon':
                 LOGGER.debug(
@@ -526,21 +525,26 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene_obj)
                 continue
+
             if prods_bbox.bounds == () or prods_bbox.is_empty:
                 LOGGER.debug(f'Rejected scene {scene_obj} '
                              f'has no common overlap with bbox')
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene_obj)
+
             else:
                 overlap_area = ARIAtools.util.shp.shp_area(prods_bbox)
+
                 # Kick out scenes below specified overlap threshold
                 if overlap_area < minimumOverlap:
                     LOGGER.debug(f'Rejected scene {scene_obj} has only '
                                  f'{overlap_area}km\u00b2 overlap with bbox')
                     rejected_scenes.append(product_dict.index(scene))
                     os.remove(scene_obj)
+
                 else:
                     ARIAtools.util.shp.save_shp(prods_TOTbbox, prods_bbox)
+
                     # Need to track bounds of max extent
                     # to avoid metadata interpolation issues
                     total_bbox_metadatalyr = total_bbox_metadatalyr.union(
@@ -552,12 +556,12 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes != []:
         LOGGER.info(("%d out of %d interferograms rejected for not meeting "
-                    "specified spatial thresholds"),
-                    len(rejected_scenes), len(product_dict))
-    metadata_dict = [i for j, i in enumerate(
-        metadata_dict) if j not in rejected_scenes]
-    product_dict = [i for j, i in enumerate(
-        product_dict) if j not in rejected_scenes]
+                     "specified spatial thresholds"),
+                     len(rejected_scenes), len(product_dict))
+    metadata_dict = [
+        i for j, i in enumerate(metadata_dict) if j not in rejected_scenes]
+    product_dict = [
+        i for j, i in enumerate(product_dict) if j not in rejected_scenes]
     if product_dict == []:
         raise Exception(
             'No common track overlap, footprints cannot be generated.')
@@ -568,6 +572,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
         total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
         user_bbox = user_bbox.intersection(total_bbox)
         ARIAtools.util.shp.save_shp(prods_TOTbbox, user_bbox)
+
     else:
         bbox_file = prods_TOTbbox
 
@@ -579,17 +584,13 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     arrres = osgeo.gdal.Open(product_dict[0]['unwrappedPhase'][0])
     arrres = [abs(arrres.GetGeoTransform()[1]),
               abs(arrres.GetGeoTransform()[-1])]
-    gdal_warp_kwargs = {'format': 'MEM',
-                        'outputBounds': OG_bounds,
-                        'xRes': arrres[0],
-                        'yRes': arrres[1],
-                        'targetAlignedPixels': True,
-                        'multithread': True,
-                        'options': [f'NUM_THREADS={num_threads}']}
-    ds = osgeo.gdal.Warp('',
-                         osgeo.gdal.BuildVRT(
-                             '', product_dict[0]['unwrappedPhase'][0]),
-                         options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+    gdal_warp_kwargs = {
+        'format': 'MEM', 'outputBounds': OG_bounds, 'xRes': arrres[0],
+        'yRes': arrres[1], 'targetAlignedPixels': True, 'multithread': True,
+        'options': [f'NUM_THREADS={num_threads}']}
+    vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
+    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+    ds = osgeo.gdal.Warp('', vrt, options=warp_options)
 
     # Get shape of full res layers
     arrshape = [ds.RasterYSize, ds.RasterXSize]
@@ -599,11 +600,12 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 
     if OG_bounds != new_bounds:
         # Use shapely to make list
-        user_bbox = shapely.geometry.Polygon(np.column_stack((np.array(
-                            [new_bounds[0], new_bounds[2], new_bounds[2],
-                             new_bounds[0], new_bounds[0]]),
-            np.array([new_bounds[1], new_bounds[1],
-                      new_bounds[3], new_bounds[3], new_bounds[1]]))))
+        user_bbox = shapely.geometry.Polygon(np.column_stack((
+            np.array([new_bounds[0], new_bounds[2], new_bounds[2],
+                      new_bounds[0], new_bounds[0]]),
+            np.array([new_bounds[1], new_bounds[1], new_bounds[3],
+                      new_bounds[3], new_bounds[1]]))))
+
         # Save polygon in shapefile
         bbox_file = os.path.join(os.path.dirname(workdir), 'user_bbox.json')
         ARIAtools.util.shp.save_shp(bbox_file, user_bbox)
@@ -613,7 +615,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 
     # Get projection of full res layers
     proj = ds.GetProjection()
-    del ds
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj)
@@ -622,7 +623,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
                         driver='ENVI'):
     """Wrapper to prep metadata layer for extraction"""
-
     if dem is None:
         raise Exception('No DEM input specified. '
                         'Cannot extract 3D imaging geometry '
@@ -631,6 +631,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
     ifg = os.path.basename(outname)
     out_dir = os.path.dirname(outname)
     ref_outname = copy.deepcopy(outname)
+
     # ionosphere layer, heights do not exist to exit
     if metadata_arr[0].split('/')[-1] == 'ionosphere':
         osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
@@ -649,42 +650,41 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
     zdim = osgeo.gdal.Open(metadata_arr[0]).GetMetadataItem(
         'NETCDF_DIM_EXTRA')[1:-1]
     hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
+
     # Check if height layers are consistent
     if not os.path.exists(outname + '.vrt') and \
         not len(set([osgeo.gdal.Open(i).GetMetadataItem(hgt_field)
                      for i in metadata_arr])) == 1:
-        raise Exception('Inconsistent heights for '
-                        'metadata layer(s) ', metadata_arr,
-                        ' corresponding heights: ',
-                        [osgeo.gdal.Open(i).GetMetadataItem(
-                            hgt_field)
-                            for i in metadata_arr])
+        raise Exception(
+            'Inconsistent heights for metadata layer(s) ', metadata_arr,
+            ' corresponding heights: ', [osgeo.gdal.Open(i).GetMetadataItem(
+                hgt_field) for i in metadata_arr])
 
     if 'tropo' in key or key == 'solidEarthTide':
         # get ref and sec paths
         date_dir = os.path.join(out_dir, 'dates')
         if not os.path.exists(date_dir):
             os.mkdir(date_dir)
+
         ref_outname = os.path.join(date_dir, ifg.split('_')[0])
         sec_outname = os.path.join(date_dir, ifg.split('_')[1])
         ref_str = 'reference/' + key
         sec_str = 'secondary/' + key
         sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
         tup_outputs = [
-            (ref_outname, metadata_arr),
-            (sec_outname, sec_metadata_arr)
-        ]
+            (ref_outname, metadata_arr), (sec_outname, sec_metadata_arr)]
 
         # write ref and sec files
         for i in tup_outputs:
+
             # delete temporary files to circumvent potential inconsistent dims
             for j in glob.glob(i[0] + '*'):
                 os.remove(j)
             osgeo.gdal.BuildVRT(i[0] + '.vrt', i[1])
 
             # write height layers
-            osgeo.gdal.Open(i[0] + '.vrt').SetMetadataItem(hgt_field,
-                                                           osgeo.gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
+            osgeo.gdal.Open(i[0] + '.vrt').SetMetadataItem(
+                hgt_field, osgeo.gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
 
         # compute differential
         generate_diff(ref_outname, sec_outname, outname, key, key, False,
@@ -698,12 +698,15 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
                     da = rioxarray.open_rasterio(i + '.vrt')
                     da.rio.to_raster(i, driver=driver)
                     da.close()
+
     else:
         if not os.path.exists(outname + '.vrt'):
             osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
+
             # write height layers
-            osgeo.gdal.Open(outname + '.vrt').SetMetadataItem(hgt_field,
-                                                              osgeo.gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
+            osgeo.gdal.Open(outname + '.vrt').SetMetadataItem(
+                hgt_field, osgeo.gdal.Open(
+                    metadata_arr[0]).GetMetadataItem(hgt_field))
 
     return hgt_field, model_name, ref_outname
 
@@ -762,11 +765,11 @@ def handle_epoch_layers(
         workdir, prog_bar, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon,
         mask, outputFormat, verbose, multilooking, rankedResampling,
         num_threads):
-    """Manage reference/secondary components for correction layers.
+    """
+    Manage reference/secondary components for correction layers.
     Specifically record reference/secondary components within a `dates` subdir
     and deposit the differential fields in the level above.
     """
-
     # Depending on type, set sec/ref output dirs
     if key == 'troposphereTotal':
         layers.append(key)
@@ -774,9 +777,11 @@ def handle_epoch_layers(
                                    sec_key)
         ref_workdir = os.path.join(os.path.dirname(workdir),
                                    ref_key)
+
     else:
         sec_workdir = copy.deepcopy(workdir)
         ref_workdir = copy.deepcopy(workdir)
+
     # If specified workdir doesn't exist, create it
     all_workdirs = [workdir, sec_workdir, ref_workdir]
     all_workdirs = list(set(all_workdirs))
@@ -784,15 +789,16 @@ def handle_epoch_layers(
     for i in all_workdirs:
         if not os.path.exists(i):
             os.mkdir(i)
+
         # for dedup, record previous outputs to avoid reprocessing
-        existing_outputs.extend(glob.glob(os.path.join(
-            i, '*/*[0-9].vrt')))
-        existing_outputs.extend(glob.glob(os.path.join(
-            i, '*/dates/*[0-9].vrt')))
-        existing_outputs.extend(glob.glob(os.path.join(
-            i, '*[0-9].vrt')))
-        existing_outputs.extend(glob.glob(os.path.join(
-            i, 'dates/*[0-9].vrt')))
+        existing_outputs.extend(
+            glob.glob(os.path.join(i, '*/*[0-9].vrt')))
+        existing_outputs.extend(
+            glob.glob(os.path.join(i, '*/dates/*[0-9].vrt')))
+        existing_outputs.extend(
+            glob.glob(os.path.join(i, '*[0-9].vrt')))
+        existing_outputs.extend(
+            glob.glob(os.path.join(i, 'dates/*[0-9].vrt')))
     existing_outputs = list(set(existing_outputs))
 
     # Iterate through all IFGs
@@ -822,19 +828,21 @@ def handle_epoch_layers(
         # capture if tropo and separate distinct wet and hydro layers
         if 'tropo' in key:
             sec_outname = os.path.abspath(os.path.join(sec_workdir, ifg))
-            wet_path = os.path.join(lyr_path, model_name,
-                                    'reference', ref_key)
-            dry_path = os.path.join(lyr_path, model_name,
-                                    'reference', sec_key)
-            sec_comp = [j.replace(wet_path, dry_path)
-                        for j in i[1]]
+            wet_path = os.path.join(
+                lyr_path, model_name, 'reference', ref_key)
+            dry_path = os.path.join(
+                lyr_path, model_name, 'reference', sec_key)
+            sec_comp = [
+                j.replace(wet_path, dry_path) for j in i[1]]
 
             hgt_field, model_name, sec_outname = prep_metadatalayers(
                 sec_outname, sec_comp, dem, sec_key, layers, outputFormat)
+
             # if specified, compute total delay
             if tropo_total:
                 model_dir = os.path.abspath(os.path.join(workdir, model_name))
                 outname = os.path.join(model_dir, ifg)
+
                 # compute reference diff
                 ref_diff = ref_outname
                 sec_diff = sec_outname
@@ -844,25 +852,31 @@ def handle_epoch_layers(
                 if not os.path.exists(outname_diff):
                     generate_diff(ref_diff, sec_diff, outname_diff, key,
                                   sec_key, tropo_total, hgt_field, outputFormat)
+
                 # compute secondary diff
-                ref_diff = os.path.join(os.path.dirname(ref_outname),
-                                        ifg.split('_')[1])
-                sec_diff = os.path.join(os.path.dirname(sec_outname),
-                                        ifg.split('_')[1])
-                outname_diff = os.path.join(model_dir, 'dates',
-                                            os.path.basename(ref_diff))
+                ref_diff = os.path.join(
+                    os.path.dirname(ref_outname), ifg.split('_')[1])
+                sec_diff = os.path.join(
+                    os.path.dirname(sec_outname), ifg.split('_')[1])
+                outname_diff = os.path.join(
+                    model_dir, 'dates', os.path.basename(ref_diff))
+
                 if not os.path.exists(outname_diff):
-                    generate_diff(ref_diff, sec_diff, outname_diff, key,
-                                  sec_key, tropo_total, hgt_field, outputFormat)
+                    generate_diff(
+                        ref_diff, sec_diff, outname_diff, key, sec_key,
+                        tropo_total, hgt_field, outputFormat)
+
                 # compute total diff
                 ref_diff = os.path.join(ref_workdir, model_name, ifg)
                 sec_diff = os.path.join(sec_workdir, model_name, ifg)
-                generate_diff(ref_diff, sec_diff, outname, key,
-                              sec_key, tropo_total, hgt_field, outputFormat)
+                generate_diff(
+                    ref_diff, sec_diff, outname, key, sec_key, tropo_total,
+                    hgt_field, outputFormat)
+
         else:
             sec_outname = os.path.dirname(ref_outname)
-            sec_outname = os.path.abspath(os.path.join(sec_outname,
-                                                       ifg.split('_')[0]))
+            sec_outname = os.path.abspath(
+                os.path.join(sec_outname, ifg.split('_')[0]))
 
     # delete temporary files if layers not requested
     prod_ver_list = i[1]
@@ -880,28 +894,30 @@ def handle_epoch_layers(
             prog_bar.update(i[0] + 1, suffix=ifg)
 
             record_epochs = []
-            record_epochs.extend(glob.glob(os.path.join(
-                i[1], '*[0-9].vrt')))
-            record_epochs.extend(glob.glob(os.path.join(
-                i[1], 'dates/*[0-9].vrt')))
+            record_epochs.extend(
+                glob.glob(os.path.join(i[1], '*[0-9].vrt')))
+            record_epochs.extend(
+                glob.glob(os.path.join(i[1], 'dates/*[0-9].vrt')))
+
             # dedup check for interpolating only new files
-            record_epochs = [j for j in record_epochs
-                             if j not in existing_outputs]
+            record_epochs = [
+                j for j in record_epochs if j not in existing_outputs]
+
             for j in enumerate(record_epochs):
                 # Interpolate/intersect with DEM before cropping
-                finalize_metadata(j[1][:-4], bounds, dem_bounds,
-                                  prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  prod_ver_list, mask, outputFormat,
-                                  verbose=verbose)
+                finalize_metadata(
+                    j[1][:-4], bounds, dem_bounds, prods_TOTbbox, dem, lat,
+                    lon, hgt_field, prod_ver_list, mask, outputFormat,
+                    verbose=verbose)
 
                 # Track consistency of dimensions
                 if j[0] == 0:
-                    ref_wid, ref_hgt, ref_geotrans, \
-                        _, _ = ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
+                    ref_wid, ref_hgt, ref_geotrans, _, _ = \
+                        ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
                     ref_arr = [ref_wid, ref_hgt, ref_geotrans, j[1][:-4]]
                 else:
-                    prod_wid, prod_hgt, prod_geotrans, \
-                        _, _ = ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
+                    prod_wid, prod_hgt, prod_geotrans, _, _ = \
+                        ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
                     prod_arr = [prod_wid, prod_hgt, prod_geotrans, j[1][:-4]]
                     ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
                 prev_outname = j[1][:-4]
@@ -915,7 +931,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     lon=None, mask=None, outDir='./', outputFormat='VRT',
                     stitchMethodType='overlap', verbose=None, num_threads='2',
                     multilooking=None, tropo_total=False, model_names=[]):
-    """Export layer and 2D meta-data layers (at the product resolution).
+    """
+    Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
     Dem/lat/lon arrays must be passed for this process.
     The keys specify which layer to extract from the dictionary.
@@ -934,27 +951,19 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
-        'layers': layers,
-        'prods_TOTbbox': prods_TOTbbox,
-        'dem': dem,
-        'lat': lat,
-        'lon': lon,
-        'mask': mask,
-        'verbose': verbose,
-        'multilooking': multilooking,
-        'rankedResampling': rankedResampling,
-        'num_threads': num_threads
-    }
+        'layers': layers, 'prods_TOTbbox': prods_TOTbbox, 'dem': dem,
+        'lat': lat, 'lon': lon, 'mask': mask, 'verbose': verbose,
+        'multilooking': multilooking, 'rankedResampling': rankedResampling,
+        'num_threads': num_threads}
 
     # get bounds
     bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
     lyr_input_dict['bounds'] = bounds
     if dem is not None:
         dem_gt = dem.GetGeoTransform()
-        dem_bounds = [dem_gt[0],
-                      dem_gt[3] + (dem_gt[-1] * dem.RasterYSize),
-                      dem_gt[0] + (dem_gt[1] * dem.RasterXSize),
-                      dem_gt[3]]
+        dem_bounds = [
+            dem_gt[0], dem_gt[3] + (dem_gt[-1] * dem.RasterYSize),
+            dem_gt[0] + (dem_gt[1] * dem.RasterXSize), dem_gt[3]]
         lyr_input_dict['dem_bounds'] = dem_bounds
 
     # Mask specified, so file must be physically extracted,
@@ -962,6 +971,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     if (outputFormat == 'VRT' and mask is not None) or \
             (outputFormat == 'VRT' and multilooking is not None):
         outputFormat = 'ENVI'
+
     # Set output format layers that must always be physically extracted
     outputFormatPhys = 'ENVI'
     if outputFormat != 'VRT':
@@ -969,19 +979,17 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     lyr_input_dict['outputFormat'] = outputFormatPhys
 
     # Initialize warp dict
-    gdal_warp_kwargs = {'format': outputFormat,
-                        'cutlineDSName': prods_TOTbbox,
-                        'outputBounds': bounds,
-                        'xRes': arrres[0],
-                        'yRes': arrres[1],
-                        'targetAlignedPixels': True,
-                        'multithread': True,
-                        'options': [f'NUM_THREADS={num_threads}']}
+    gdal_warp_kwargs = {
+        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+        'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
+        'targetAlignedPixels': True, 'multithread': True,
+        'options': [f'NUM_THREADS={num_threads}']}
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-    if tropo_total or list(set.intersection(*map(set,
-                                                 [layers, tropo_lyrs]))) != []:
+    if tropo_total or list(
+            set.intersection(*map(set, [layers, tropo_lyrs]))) != []:
+
         # set input keys
         lyr_prefix = '/science/grids/corrections/external/troposphere/'
         key = 'troposphereTotal'
@@ -1003,12 +1011,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             product_dict = [
                 [j[model] for j in full_product_dict if model in j.keys()],
                 [j["pair_name"]
-                    for j in full_product_dict if model in j.keys()]
-            ]
+                    for j in full_product_dict if model in j.keys()]]
 
             # set iterative keys
             prev_outname = os.path.abspath(os.path.join(workdir, i))
-            prog_bar = ARIAtools.util.misc.progressBar(
+            prog_bar = ARIAtools.util.misc.ProgressBar(
                 maxValue=len(product_dict[0]),
                 prefix=f'Generating: {model} {key} - ')
             lyr_input_dict['prog_bar'] = prog_bar
@@ -1018,35 +1025,32 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             handle_epoch_layers(**lyr_input_dict)
 
             # track valid files
-            prev_outname = os.path.abspath(os.path.join(workdir, i,
-                                                        product_dict[1][0][0]))
+            prev_outname = os.path.abspath(
+                os.path.join(workdir, i, product_dict[1][0][0]))
             if os.path.exists(prev_outname + '.vrt'):
                 prev_outname_check = copy.deepcopy(prev_outname)
 
         # track consistency of dimensions
         if 'prev_outname_check' in locals():
-            ref_wid, ref_hgt, ref_geotrans, \
-                _, _ = ARIAtools.util.vrt.get_basic_attrs(
-                    prev_outname_check + '.vrt')
-            ref_arr = [ref_wid, ref_hgt, ref_geotrans,
-                       prev_outname]
+            ref_wid, ref_hgt, ref_geotrans, _, _ = \
+                ARIAtools.util.vrt.get_basic_attrs(prev_outname_check + '.vrt')
+            ref_arr = [ref_wid, ref_hgt, ref_geotrans, prev_outname]
 
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
-    if list(set.intersection(*map(set,
-                                  [layers, ['solidEarthTide']]))) != []:
+    if list(set.intersection(*map(set, [layers, ['solidEarthTide']]))) != []:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
         key = 'solidEarthTide'
         ref_key = key
         sec_key = key
-        product_dict = \
-            [[j[key] for j in full_product_dict if key in j.keys()],
-             [j["pair_name"] for j in full_product_dict if key in j.keys()]]
+        product_dict = [
+            [j[key] for j in full_product_dict if key in j.keys()],
+            [j["pair_name"] for j in full_product_dict if key in j.keys()]]
 
         workdir = os.path.join(outDir, key)
         prev_outname = copy.deepcopy(workdir)
-        prog_bar = ARIAtools.util.misc.progressBar(
+        prog_bar = ARIAtools.util.misc.ProgressBar(
             maxValue=len(product_dict[0]), prefix='Generating: ' + key + ' - ')
 
         # set input keys
@@ -1083,7 +1087,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
         workdir = os.path.join(outDir, key)
         prev_outname = copy.deepcopy(workdir)
-        prog_bar = ARIAtools.util.misc.progressBar(
+        prog_bar = ARIAtools.util.misc.ProgressBar(
             maxValue=len(product_dict[0]), prefix='Generating: ' + key + ' - ')
 
         lyr_input_dict = dict(input_iono_files=None,
@@ -1112,7 +1116,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                         [j["pair_name"] for j in full_product_dict]]
         workdir = os.path.join(outDir, key)
 
-        prog_bar = ARIAtools.util.misc.progressBar(
+        prog_bar = ARIAtools.util.misc.ProgressBar(
             maxValue=len(product_dict[0]), prefix='Generating: ' + key + ' - ')
 
         # If specified workdir doesn't exist, create it

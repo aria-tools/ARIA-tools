@@ -221,7 +221,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
 
     # Progress bar
-    prog_bar = misc.progressBar(maxValue=len(aria_prod.products[1]),
+    prog_bar = misc.ProgressBar(maxValue=len(aria_prod.products[1]),
                                    print_msg='Creating stack: ')
 
     # Set up single stack file
