@@ -115,8 +115,8 @@ def make_bbox(inp_bbox):
         return None
     from shapely.geometry import Polygon
     if op.exists(op.abspath(inps.bbox)):
-        from ARIAtools.util.shp import open_shapefile
-        ring = open_shapefile(inps.bbox, 0, 0).exterior
+        from ARIAtools.util.shp import open_shp
+        ring = open_shp(inps.bbox, 0, 0).exterior
         poly = Polygon(ring)
     else:
         try:

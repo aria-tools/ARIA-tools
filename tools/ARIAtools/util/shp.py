@@ -6,24 +6,27 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-from osgeo import gdal, ogr
 import os
-import numpy as np
 import logging
-log = logging.getLogger(__name__)
+import numpy as np
 
-gdal.UseExceptions()
+import osgeo
+import shapely
+
+LOGGER = logging.getLogger(__name__)
+
+osgeo.gdal.UseExceptions()
 # Suppress warnings
-gdal.PushErrorHandler('CPLQuietErrorHandler')
+osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 
-def open_shapefile(fname, lyrind, ftind):
+def open_shp(fname, lyrind=0, ftind=0):
     """Open a existing shapefile and pass the coordinates back."""
     # import dependencies
     from shapely.wkt import loads
 
     # opening the file
-    file_bbox = ogr.Open(fname)
+    file_bbox = osgeo.ogr.Open(fname)
 
     # If layer name provided
     if isinstance(lyrind, str):
@@ -38,29 +41,26 @@ def open_shapefile(fname, lyrind, ftind):
     return file_bbox
 
 
-def save_shapefile(fname, polygon, drivername):
+def save_shp(fname, polygon, drivername='GeoJSON'):
     """Save a polygon shapefile."""
     # open file
-    ds = ogr.GetDriverByName(drivername).CreateDataSource(fname)
+    ds = osgeo.ogr.GetDriverByName(drivername).CreateDataSource(fname)
     # create layer
-    layer = ds.CreateLayer('', None, ogr.wkbPolygon)
-    layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))  # Add 1 attribute
+    layer = ds.CreateLayer('', None, osgeo.ogr.wkbPolygon)
+    layer.CreateField(osgeo.ogr.FieldDefn('id', osgeo.ogr.OFTInteger))  # Add 1 attribute
     # Create a new feature (attribute and geometry)
-    feat = ogr.Feature(layer.GetLayerDefn())
+    feat = osgeo.ogr.Feature(layer.GetLayerDefn())
     feat.SetField('id', 0)
 
     # Make a geometry, from input Shapely object
-    geom = ogr.CreateGeometryFromWkb(polygon.wkb)
+    geom = osgeo.ogr.CreateGeometryFromWkb(polygon.wkb)
     feat.SetGeometry(geom)
     layer.CreateFeature(feat)
-
-    # Save/close everything
-    ds = layer = feat = geom = None
 
     return
 
 
-def shapefile_area(file_bbox, bounds=False):
+def shp_area(file_bbox, bounds=False):
     """Compute km\u00b2 area of shapefile."""
     # import dependencies
     from pyproj import Proj
@@ -106,22 +106,23 @@ def chunk_area(WSEN):
         rows = np.linspace(S, N, n + 1)
         Wi, Si, Ei, Ni = [cols[0], rows[0], cols[1], rows[1]]
         poly = Polygon([(Wi, Ni), (Wi, Si), (Ei, Si), (Ei, Ni)])
-        area = shapefile_area(poly)
+        area = shp_area(poly)
         n += 1
         if n > 100:
-            log.error('There was a problem chunking the DEM; check input '
-                      'bounds')
-            os.sys.exit()
+            LOGGER.error(
+                'There was a problem chunking the DEM; check input bounds')
+            raise Exception(
+                "There was a problem chunking the DEM; check input bounds")
     return rows, cols
 
 
-def plot_shapefile(fname):
+def plot_shp(fname):
     import matplotlib.path as mpath
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
 
     # Extract first layer of features from shapefile using OGR
-    ds = ogr.Open(fname, gdal.GA_ReadOnly)
+    ds = osgeo.ogr.Open(fname, osgeo.gdal.GA_ReadOnly)
     lyr = ds.GetLayer(0)
 
     # Get extent and calculate buffer size

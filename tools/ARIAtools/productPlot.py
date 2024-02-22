@@ -22,7 +22,7 @@ import logging
 
 import ARIAtools.product
 from ARIAtools.util.logger import logger
-from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.shp import open_shp
 from ARIAtools.util.mask import prep_mask
 
 gdal.UseExceptions()
@@ -112,7 +112,7 @@ class PlotClass(object):
         self.mask_ext = '_mask' if self.mask is not None else ''
 
         if self.bbox_file:
-            self.bbox_file = open_shapefile(bbox_file, 0, 0).bounds
+            self.bbox_file = open_shp(bbox_file, 0, 0).bounds
 
         if self.outputFormat.upper() == 'VRT':
             self.outputFormat = 'ENVI'
@@ -293,7 +293,7 @@ class PlotClass(object):
         S_extent = []
         N_extent = []
         for i in enumerate(self.product_dict[0]):
-            prods_bbox = open_shapefile(i[1][0], 0, 0).bounds
+            prods_bbox = open_shp(i[1][0], 0, 0).bounds
             S_extent.append(prods_bbox[1])
             N_extent.append(prods_bbox[3])
             # Plot IFG extent bounds in latitude

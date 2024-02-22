@@ -28,7 +28,7 @@ import glob
 import collections
 
 from ARIAtools.util.logger import logger
-from ARIAtools.util.shp import open_shapefile, save_shapefile
+from ARIAtools.util.shp import open_shp, save_shp
 
 log = logging.getLogger(__name__)
 
@@ -178,7 +178,7 @@ class Stitching:
             ccFile_temp = gdalTest(ccFile)
             # check if it exist and well-formed and pass back shapefile of it
             if self.stitchMethodType == "overlap":
-                bbox_temp = open_shapefile(
+                bbox_temp = open_shp(
                     prodbboxFile, 'productBoundingBox', 1)
                 prodbboxFile_temp = prodbboxFile
             else:
@@ -420,7 +420,7 @@ class UnwrapOverlap(Stitching):
                 tmfile.close()
                 tmfile = None
                 # saving the temp geojson
-                save_shapefile(outname, polyOverlap, 'GeoJSON')
+                save_shp(outname, polyOverlap)
 
                 # calculate the mean of the phase for each product in the overlap region alone
                 # will first attempt to mask out connected component 0, and default to complete overlap if this fails.

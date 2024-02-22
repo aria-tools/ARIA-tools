@@ -26,7 +26,7 @@ from osgeo import gdal
 import ARIAtools.product
 from ARIAtools.util import misc
 from ARIAtools.util.mask import prep_mask
-from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.shp import open_shp
 from ARIAtools.util.vrt import resampleRaster, layerCheck, \
     get_basic_attrs, dim_check
 from ARIAtools.extractProduct import merged_productbbox, prep_dem, \

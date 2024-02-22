@@ -17,7 +17,7 @@ from osgeo import gdal
 import ARIAtools.constants
 
 from ARIAtools.util.url import url_versions
-from ARIAtools.util.shp import open_shapefile, save_shapefile
+from ARIAtools.util.shp import open_shp, save_shp
 from ARIAtools.util.logger import logger
 
 gdal.UseExceptions()
@@ -190,14 +190,13 @@ class Product:
                     [bbox[2], bbox[3], bbox[3], bbox[2], bbox[2]]), np.array(
                     [bbox[0], bbox[0], bbox[1], bbox[1], bbox[0]]))))
                 # Save polygon in shapefile
-                save_shapefile(os.path.join(workdir, 'user_bbox.json'),
-                               self.bbox, 'GeoJSON')
+                save_shp(os.path.join(workdir, 'user_bbox.json'), self.bbox)
                 self.bbox_file = os.path.join(workdir, 'user_bbox.json')
                 LOGGER.info('Shapefile %s created for input user bounds',
                          os.path.join(workdir, 'user_bbox.json'))
             # If shapefile
             elif os.path.isfile(bbox):
-                self.bbox = open_shapefile(bbox, 0, 0)
+                self.bbox = open_shp(bbox, 0, 0)
                 self.bbox_file = bbox
             else:
                 raise Exception('bbox input neither valid list nor file')
@@ -245,7 +244,7 @@ class Product:
 
         # Open standard product bbox
         if self.bbox is not None:
-            file_bbox = open_shapefile(fname + '":' + sdskeys[0],
+            file_bbox = open_shp(fname + '":' + sdskeys[0],
                                        'productBoundingBox', 1)
             # Only generate dictionaries if there is spatial overlap
             # with user bbox
@@ -557,9 +556,9 @@ class Product:
                          scene[0]['pair_name'][9:]) and \
                 (new_scene[0]['pair_name'][:8] ==
                  scene[0]['pair_name'][:8])
-            scene_shape = open_shapefile(
+            scene_shape = open_shp(
                 scene[1]['productBoundingBox'], 'productBoundingBox', 1)
-            new_scene_shape = open_shapefile(
+            new_scene_shape = open_shp(
                 new_scene[1]['productBoundingBox'], 'productBoundingBox', 1)
             same_area = new_scene_shape.intersection(scene_shape).area \
                 / scene_shape.area
@@ -619,10 +618,10 @@ class Product:
                                         "%Y%m%d")
             new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
                                             "%Y%m%d")
-            scene_area = open_shapefile(
+            scene_area = open_shp(
                 scene[1]['productBoundingBox'],
                 'productBoundingBox', 1)
-            new_scene_area = open_shapefile(
+            new_scene_area = open_shp(
                 new_scene[1]['productBoundingBox'],
                 'productBoundingBox', 1)
 

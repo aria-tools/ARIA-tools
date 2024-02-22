@@ -13,7 +13,7 @@ import logging
 
 # Import functions
 from ARIAtools.constants import ARIA_TROPO_INTERNAL
-from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.shp import open_shp
 
 gdal.UseExceptions()
 # Suppress warnings

@@ -37,8 +37,9 @@ from ARIAtools.util.logger import logger
 
 LOGGER = logging.getLogger(__name__)
 
-class metadata_qualitycheck:
-    """Metadata quality control function.
+class MetadataQualityCheck:
+    """
+    Metadata quality control function.
     Artifacts recognized based off of covariance of cross-profiles.
     Bug-fix varies based off of layer of interest.
     Verbose mode generates a series of quality control plots with
@@ -143,9 +144,9 @@ class metadata_qualitycheck:
                     ax0.set_xlabel('distance')
                     ax0.set_title('Profile along %s' % (prof_direc))
                     ax0.annotate(
-                        'R\u00b2 = %f\nStd error= %f' % (min(rsquaredarr),
-                                                         max(std_errarr)), (0, 1), xytext=(4, -4),
-                        xycoords='axes fraction',
+                        'R\u00b2 = %f\nStd error= %f' % (
+                            min(rsquaredarr), max(std_errarr)),
+                        (0, 1), xytext=(4, -4), xycoords='axes fraction',
                         textcoords='offset points', fontweight='bold',
                         ha='left', va='top')
 
@@ -318,11 +319,13 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     os.makedirs(workdir, exist_ok=True)
 
     # bounds of user bbox
-    bounds = ARIAtools.util.shp.open_shapefile(bbox_file, 0, 0).bounds
+    bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
 
     # File must be physically extracted, cannot proceed with VRT format.
     # Defaulting to ENVI format.
     if outputFormat == 'VRT':
+        LOGGER.warning(
+            "Cannot proceed with VRT format, using ENVI format instead")
         outputFormat = 'ENVI'
 
     if demfilename.lower() == 'download':
@@ -330,6 +333,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
             raise ValueError(
                 '%s must be in %s' % (dem_name, ', '.join(
                     dem_stitcher.datasets.DATASETS)))
+        LOGGER.info("Downloading DEM...")
         demfilename = download_dem(
             aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name)
 
@@ -341,7 +345,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         epsg = osgeo.osr.SpatialReference(
             wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY', 1)
         assert epsg is not None, f'No projection information in DEM: {demfilename}'
-        del ds_u
 
     # write cropped DEM
     if demfilename == os.path.abspath(aria_dem):
@@ -359,9 +362,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                             'targetAlignedPixels': True,
                             'multithread': True,
                             'options': [f'NUM_THREADS={num_threads}']}
-        osgeo.gdal.Warp(aria_dem,
-                        demfilename,
-                        options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+        osgeo.gdal.Warp(
+            aria_dem, demfilename,
+            options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
         update_file = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_Update)
         update_file.SetProjection(proj)
@@ -374,17 +377,15 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     # Apply multilooking, if specified
     if multilooking is not None:
-        ARIAtools.util.vrt.resampleRaster(aria_dem, multilooking,
-                                            bounds, prods_TOTbbox, rankedResampling,
-                                            outputFormat=outputFormat,
-                                            num_threads=num_threads)
+        ARIAtools.util.vrt.resampleRaster(
+            aria_dem, multilooking, bounds, prods_TOTbbox, rankedResampling,
+            outputFormat=outputFormat, num_threads=num_threads)
         ds_aria = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_ReadOnly)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
-    bounds = list(
-        ARIAtools.util.shp.open_shapefile(
-            prods_TOTbbox_metadatalyr, 0, 0).bounds)
+    bounds = list(ARIAtools.util.shp.open_shp(
+            prods_TOTbbox_metadatalyr).bounds)
 
     gt = ds_aria.GetGeoTransform()
     gdal_warp_kwargs = {'format': 'MEM',
@@ -394,9 +395,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                         'targetAlignedPixels': True,
                         'multithread': True,
                         'options': [f'NUM_THREADS={num_threads}']}
-    ds_aria = osgeo.gdal.Warp('',
-                              aria_dem,
-                              options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+    ds_aria = osgeo.gdal.Warp(
+        '', aria_dem, options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
     ds_aria.SetProjection(proj)
     ds_aria.SetDescription(aria_dem)
 
@@ -421,8 +421,7 @@ def download_dem(
     """Download the DEM over product bbox union."""
 
     root = os.path.splitext(path_dem)[0]
-    prod_shapefile = ARIAtools.util.shp.open_shapefile(
-        path_prod_union, 0, 0)
+    prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
     extent = prod_shapefile.bounds
 
     localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
@@ -433,15 +432,14 @@ def download_dem(
 
     vrt_path = f'{root}_uncropped.vrt'
     ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
-    ds = None
-
     return vrt_path
 
 
 def merged_productbbox(metadata_dict, product_dict, workdir='./',
                        bbox_file=None, croptounion=False, num_threads='2',
                        minimumOverlap=0.0081, verbose=None):
-    """Extract/merge productBoundingBox layers for each pair.
+    """
+    Extract/merge productBoundingBox layers for each pair.
     Also update dict, report common track bbox
     (default is to take common intersection, but user may specify union),
     report common track union to accurately interpolate metadata fields,
@@ -452,8 +450,8 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 
     # If specified, check if user's bounding box meets minimum threshold area
     if bbox_file is not None:
-        user_bbox = ARIAtools.util.shp.open_shapefile(bbox_file, 0, 0)
-        overlap_area = ARIAtools.util.shp.shapefile_area(user_bbox)
+        user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
+        overlap_area = ARIAtools.util.shp.shp_area(user_bbox)
         if overlap_area < minimumOverlap:
             raise Exception(f'User bound box {bbox_file} has an area of only '
                             f'{overlap_area}km\u00b2, below specified '
@@ -462,57 +460,61 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
+
         # Get pair name, expected in dictionary
         pair_name = scene["pair_name"][0]
         outname = os.path.join(workdir, pair_name + '.json')
 
         # Create union of productBoundingBox layers
         for frame in scene["productBoundingBox"]:
-            prods_bbox = ARIAtools.util.shp.open_shapefile(
+            prods_bbox = ARIAtools.util.shp.open_shp(
                 frame, 'productBoundingBox', 1)
             if os.path.exists(outname):
-                union_bbox = ARIAtools.util.shp.open_shapefile(
-                    outname, 0, 0)
+                union_bbox = ARIAtools.util.shp.open_shp(outname)
                 prods_bbox = prods_bbox.union(union_bbox)
-            ARIAtools.util.shp.save_shapefile(outname, prods_bbox, 'GeoJSON')
+            ARIAtools.util.shp.save_shp(outname, prods_bbox)
         scene["productBoundingBox"] = [outname]
 
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
+
     # Need to track bounds of max extent
     # to avoid metadata interpolation issues
     prods_TOTbbox_metadatalyr = os.path.join(
         workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
-    sceneareas = [ARIAtools.util.shp.open_shapefile(i['productBoundingBox'][0], 0, 0).area
-                  for i in product_dict]
-    ARIAtools.util.shp.save_shapefile(prods_TOTbbox_metadatalyr,
-                   ARIAtools.util.shp.open_shapefile(product_dict[sceneareas.index(max(
-                       sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+    sceneareas = [
+        ARIAtools.util.shp.open_shp(i['productBoundingBox'][0]).area
+        for i in product_dict]
+    ind_max_area = sceneareas.index(max(sceneareas))
+    product_bbox = product_dict[ind_max_area]['productBoundingBox'][0]
+    ARIAtools.util.shp.save_shp(
+        prods_TOTbbox_metadatalyr, ARIAtools.util.shp.open_shp(product_bbox))
+
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
-        ARIAtools.util.shp.save_shapefile(prods_TOTbbox, ARIAtools.util.shp.open_shapefile(bbox_file, 0, 0),
-                       'GeoJSON')
-    # Intiate intersection with largest scene, if bbox NOT specified
+        ARIAtools.util.shp.save_shp(
+            prods_TOTbbox, ARIAtools.util.shp.open_shp(bbox_file))
+
+    # Initiate intersection with largest scene, if bbox NOT specified
     else:
-        ARIAtools.util.shp.save_shapefile(prods_TOTbbox, ARIAtools.util.shp.open_shapefile(
-            product_dict[sceneareas.index(max(
-                sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+        ARIAtools.util.shp.save_shp(
+            prods_TOTbbox, ARIAtools.util.shp.open_shp(product_bbox))
+
     rejected_scenes = []
     for scene in product_dict:
         scene_obj = scene['productBoundingBox'][0]
-        prods_bbox = ARIAtools.util.shp.open_shapefile(scene_obj, 0, 0)
-        total_bbox = ARIAtools.util.shp.open_shapefile(
-            prods_TOTbbox, 0, 0)
-        total_bbox_metadatalyr = ARIAtools.util.shp.open_shapefile(
-            prods_TOTbbox_metadatalyr, 0, 0)
+        prods_bbox = ARIAtools.util.shp.open_shp(scene_obj)
+        total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        total_bbox_metadatalyr = ARIAtools.util.shp.open_shp(
+            prods_TOTbbox_metadatalyr)
         # Generate footprint for the union of all products
         if croptounion:
             # Get union
             total_bbox = total_bbox.union(prods_bbox)
             total_bbox_metadatalyr = total_bbox_metadatalyr.union(prods_bbox)
             # Save to file
-            ARIAtools.util.shp.save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON')
-            ARIAtools.util.shp.save_shapefile(prods_TOTbbox_metadatalyr,
-                           total_bbox_metadatalyr, 'GeoJSON')
+            ARIAtools.util.shp.save_shp(prods_TOTbbox, total_bbox)
+            ARIAtools.util.shp.save_shp(
+                prods_TOTbbox_metadatalyr, total_bbox_metadatalyr)
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
@@ -530,7 +532,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene_obj)
             else:
-                overlap_area = ARIAtools.util.shp.shapefile_area(prods_bbox)
+                overlap_area = ARIAtools.util.shp.shp_area(prods_bbox)
                 # Kick out scenes below specified overlap threshold
                 if overlap_area < minimumOverlap:
                     LOGGER.debug(f'Rejected scene {scene_obj} has only '
@@ -538,14 +540,14 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                     rejected_scenes.append(product_dict.index(scene))
                     os.remove(scene_obj)
                 else:
-                    ARIAtools.util.shp.save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
+                    ARIAtools.util.shp.save_shp(prods_TOTbbox, prods_bbox)
                     # Need to track bounds of max extent
                     # to avoid metadata interpolation issues
                     total_bbox_metadatalyr = total_bbox_metadatalyr.union(
-                        ARIAtools.util.shp.open_shapefile(scene['productBoundingBox'][0],
-                                                                0, 0))
-                    ARIAtools.util.shp.save_shapefile(prods_TOTbbox_metadatalyr,
-                                   total_bbox_metadatalyr, 'GeoJSON')
+                        ARIAtools.util.shp.open_shp(
+                            scene['productBoundingBox'][0]))
+                    ARIAtools.util.shp.save_shp(
+                        prods_TOTbbox_metadatalyr, total_bbox_metadatalyr)
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes != []:
@@ -562,11 +564,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 
     # If bbox specified, intersect with common track intersection/union
     if bbox_file is not None:
-        user_bbox = ARIAtools.util.shp.open_shapefile(bbox_file, 0, 0)
-        total_bbox = ARIAtools.util.shp.open_shapefile(
-            prods_TOTbbox, 0, 0)
+        user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
+        total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
         user_bbox = user_bbox.intersection(total_bbox)
-        ARIAtools.util.shp.save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
+        ARIAtools.util.shp.save_shp(prods_TOTbbox, user_bbox)
     else:
         bbox_file = prods_TOTbbox
 
@@ -574,8 +575,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     # ensure output-bounds are an integer multiple of interferometric grid
     # and adjust if necessary
     OG_bounds = list(
-        ARIAtools.util.shp.open_shapefile(
-            bbox_file, 0, 0).bounds)
+        ARIAtools.util.shp.open_shp(bbox_file).bounds)
     arrres = osgeo.gdal.Open(product_dict[0]['unwrappedPhase'][0])
     arrres = [abs(arrres.GetGeoTransform()[1]),
               abs(arrres.GetGeoTransform()[-1])]
@@ -606,11 +606,10 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                       new_bounds[3], new_bounds[3], new_bounds[1]]))))
         # Save polygon in shapefile
         bbox_file = os.path.join(os.path.dirname(workdir), 'user_bbox.json')
-        ARIAtools.util.shp.save_shapefile(bbox_file, user_bbox, 'GeoJSON')
-        total_bbox = ARIAtools.util.shp.open_shapefile(
-            prods_TOTbbox, 0, 0)
+        ARIAtools.util.shp.save_shp(bbox_file, user_bbox)
+        total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
         user_bbox = user_bbox.intersection(total_bbox)
-        ARIAtools.util.shp.save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
+        ARIAtools.util.shp.save_shp(prods_TOTbbox, user_bbox)
 
     # Get projection of full res layers
     proj = ds.GetProjection()
@@ -948,7 +947,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     }
 
     # get bounds
-    bounds = ARIAtools.util.shp.open_shapefile(bbox_file, 0, 0).bounds
+    bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
     lyr_input_dict['bounds'] = bounds
     if dem is not None:
         dem_gt = dem.GetGeoTransform()
@@ -1330,7 +1329,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
                                        'metadatalyr_plots', metadatalyr_name))
         if not os.path.exists(plots_subdir):
             os.makedirs(plots_subdir)
-        data_array = metadata_qualitycheck(
+        data_array = MetadataQualityCheck(
             data_array,
             os.path.basename(os.path.dirname(outname)),
             outname,
@@ -1448,7 +1447,7 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     # Defaulting to ENVI format.
     outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
 
-    user_bbox = ARIAtools.util.shp.open_shapefile(bbox_file, 0, 0)
+    user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
     bounds = user_bbox.bounds
 
     product_dict = [[j['unwrappedPhase'] for j in full_product_dict[1]],
@@ -1624,9 +1623,9 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         bbox = shapely.geometry.Polygon(np.column_stack((
             np.array([bbox[2], bbox[3], bbox[3], bbox[2], bbox[2]]),
             np.array([bbox[0], bbox[0], bbox[1], bbox[1], bbox[0]]))))
-        ARIAtools.util.shp.save_shapefile(i + '.json', bbox, 'GeoJSON')
+        ARIAtools.util.shp.save_shp(i + '.json', bbox)
         per_overlap = ((user_bbox.intersection(
-            ARIAtools.util.shp.open_shapefile(i + '.json', 0, 0)).area)
+            ARIAtools.util.shp.open_shp(i + '.json')).area)
             / (user_bbox.area)) * 100
         if per_overlap != 100. and per_overlap != 0.:
             LOGGER.warning('Common track extent only has %d overlap with'

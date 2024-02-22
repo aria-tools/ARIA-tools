@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, gdalconst
 
-from ARIAtools.util.shp import open_shapefile
+from ARIAtools.util.shp import open_shp
 from ARIAtools.util.vrt import rasterAverage, resampleRaster
 from ARIAtools.util.logger import logger
 
@@ -46,7 +46,7 @@ def prep_mask(product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
     os.makedirs(workdir, exist_ok=True)
 
     # Get bounds of user bbox_file
-    bounds = open_shapefile(bbox_file, 0, 0).bounds
+    bounds = open_shp(bbox_file, 0, 0).bounds
 
     # File must be physically extracted, cannot proceed with VRT format.
     # Defaulting to ENVI format.
