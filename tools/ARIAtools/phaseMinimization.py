@@ -17,7 +17,7 @@ import pulp
 import timeit as T
 
 import logging
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 log = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

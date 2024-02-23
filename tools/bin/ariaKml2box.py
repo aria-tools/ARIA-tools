@@ -11,7 +11,7 @@ import logging
 import argparse
 
 from osgeo import gdal
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 
 gdal.UseExceptions()
 

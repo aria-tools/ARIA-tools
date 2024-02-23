@@ -18,7 +18,7 @@ import shapely
 import asf_search as asf
 
 
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 from ARIAtools.util.url import url_versions
 from pkg_resources import get_distribution
 

@@ -21,7 +21,7 @@ import warnings
 import logging
 
 import ARIAtools.product
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 from ARIAtools.util.shp import open_shp
 from ARIAtools.util.mask import prep_mask
 

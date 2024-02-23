@@ -33,7 +33,7 @@ import ARIAtools.util.shp
 import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
 
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 
 LOGGER = logging.getLogger(__name__)
 

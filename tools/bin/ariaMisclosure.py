@@ -11,7 +11,7 @@ import argparse
 import logging
 
 import ARIAtools.computeMisclosure
-import ARIAtools.util.logger
+import ARIAtools.util.log
 
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
@@ -160,7 +160,7 @@ def main(inps=None):
     args = parser.parse_args()
 
     if args.verbose:
-        ARIAtools.util.logger.logger.setLevel(logging.DEBUG)
+        ARIAtools.util.log.logger.setLevel(logging.DEBUG)
 
     # Load data based on data type
     dataStack = ARIATools.stack.Stack(

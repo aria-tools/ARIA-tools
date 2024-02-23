@@ -27,7 +27,7 @@ import random
 import glob
 import collections
 
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 from ARIAtools.util.shp import open_shp, save_shp
 
 log = logging.getLogger(__name__)

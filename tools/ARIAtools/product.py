@@ -21,7 +21,7 @@ import shapely.geometry
 import ARIAtools.constants
 import ARIAtools.util.url
 import ARIAtools.util.shp
-from ARIAtools.util.logger import logger
+from ARIAtools.util.log import logger
 
 osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
