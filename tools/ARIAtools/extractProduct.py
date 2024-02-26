@@ -1000,9 +1000,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-    if tropo_total or list(
-            set.intersection(*map(set, [layers, tropo_lyrs]))) != []:
-
+    if tropo_total or any([layer in tropo_lyrs for layer in layers]):
         # set input keys
         lyr_prefix = '/science/grids/corrections/external/troposphere/'
         key = 'troposphereTotal'
@@ -1052,7 +1050,8 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
-    if list(set.intersection(*map(set, [layers, ['solidEarthTide']]))) != []:
+
+    if 'solidEarthTide' in layers:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
         key = 'solidEarthTide'
         ref_key = key
@@ -1089,9 +1088,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     # If specified, extract ionosphere long wavelength
     ext_corr_lyrs += ['ionosphere']
-
-    if list(set.intersection(*map(set,
-                                  [layers, ['ionosphere']]))) != []:
+    if 'ionosphere' in layers:
         lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
         key = 'ionosphere'
         product_dict = \

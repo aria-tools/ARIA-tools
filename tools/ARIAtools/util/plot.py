@@ -458,7 +458,8 @@ class PlotClass(object):
                                  outputBounds=self.bbox_file, resampleAlg='average',
                                  targetAlignedPixels=True,
                                  xRes=self.arrres[0], yRes=self.arrres[1],
-                                 multithread=True, options=[f'NUM_THREADS={self.num_threads}'])
+                                 multithread=True,
+                                 options=[f'NUM_THREADS={self.num_threads}'])
 
             # Apply mask (if specified).
             if self.mask is not None:

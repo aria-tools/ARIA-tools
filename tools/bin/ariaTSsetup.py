@@ -473,6 +473,7 @@ def main():
             'multilooking': args.multilooking,
             'rankedResampling': args.rankedResampling
         }
+        LOGGER.info('Download/cropping mask')
         args.mask = ARIAtools.util.mask.prep_mask(**mask_dict)
 
     # Extract
