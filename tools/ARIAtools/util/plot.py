@@ -19,7 +19,7 @@ from dateutil.relativedelta import relativedelta
 
 from ARIAtools.util.shp import open_shp
 
-log = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 class PlotClass(object):
     """ Class to generate standard plots for ARIA products. """
@@ -142,8 +142,9 @@ class PlotClass(object):
         # residual = L-np.dot(B,dS)
         # RMSE = np.sqrt(np.sum(residual**2)/len(residual))
         if np.linalg.matrix_rank(B1) != len(list(dateDict.keys())) - 1:
-            log.warning('Design matrix is rank deficient. Network is disconnected. '
-                        'Using a fully connected network is recommended.')
+            LOGGER.warning(
+                'Design matrix is rank deficient. Network is disconnected. '
+                'Using a fully connected network is recommended.')
 
         offset_dict = {}
         # Plot dot for each date
@@ -431,8 +432,9 @@ class PlotClass(object):
         zero = np.array([0.], np.float32)
         S = np.concatenate((zero, np.cumsum([dS * dtbase])))
         if np.linalg.matrix_rank(B1) != len(list(dateDict.keys())) - 1:
-            log.warning('Design matrix is rank deficient. Network is disconnected. '
-                        'Using a fully connected network is recommended.')
+            LOGGER.warning(
+                'Design matrix is rank deficient. Network is disconnected. '
+                'Using a fully connected network is recommended.')
 
         offset_dict = {}
         # Plot dot for each date
