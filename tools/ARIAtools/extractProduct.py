@@ -949,8 +949,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     for layer in layers:
         if layer in GEOM_LYRS:
             target = os.path.join(outDir, layer)
-            LOGGER.warning('Deleting %s to avoid VRT header bug!' % target)
-            shutil.rmtree(target)
+            if os.path.isdir(target):
+                LOGGER.warning('Deleting %s to avoid VRT header bug!' % target)
+                shutil.rmtree(target)
 
     # Progress bar
     if not layers and not tropo_total:
