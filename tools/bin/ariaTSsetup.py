@@ -142,7 +142,7 @@ def create_parser():
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
-        '--log-level', default=logging.WARNING, help='Logger log level')
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 
