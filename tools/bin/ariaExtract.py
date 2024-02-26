@@ -130,6 +130,8 @@ def createParser():
     parser.add_argument(
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
+    parser.add_argument(
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 
@@ -139,9 +141,13 @@ def main():
     parser = createParser()
     args = parser.parse_args()
 
-    print('*****************************************************************')
-    print('*** Extract Product Function ***')
-    print('*****************************************************************')
+    log_level = {
+        'debug': logging.DEBUG, 'info': logging.INFO,
+        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+
+    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=log_level, format=format)
+    LOGGER.info('Extract Product Function')
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria
     # are rejected.
@@ -163,18 +169,16 @@ def main():
 
     # pass number of threads for gdal multiprocessing computation
     if args.num_threads.lower() == 'all':
-        import multiprocessing
-        LOGGER.info(
-            'User specified use of all %s threads for gdal multiprocessing',
-            str(multiprocessing.cpu_count()))
         args.num_threads = 'ALL_CPUS'
 
     LOGGER.info(
-        'Thread count specified for gdal multiprocessing = %s' % args.num_threads)
+        'Thread count specified for gdal multiprocessing = %s' % (
+            args.num_threads))
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
     # but user may specify union), and expected shape for DEM.
+    LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
      prods_TOTbbox_metadatalyr, arrres,
@@ -209,13 +213,12 @@ def main():
             'multilooking': args.multilooking,
             'rankedResampling': args.rankedResampling
         }
+        LOGGER.info('Download/cropping mask')
         args.mask = ARIAtools.util.mask.prep_mask(**mask_dict)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
     if args.demfile is not None:
-        print('Download/cropping DEM')
-        # DEM parms
         dem_dict = {
             'demfilename': args.demfile,
             'bbox_file': standardproduct_info.bbox_file,
@@ -230,6 +233,7 @@ def main():
             'rankedResampling': args.rankedResampling
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
+        LOGGER.info('Download/cropping DEM')
         args.demfile, demfile, Latitude, Longitude = \
             ARIAtools.extractProduct.prep_dem(**dem_dict)
     else:
@@ -259,10 +263,12 @@ def main():
     }
 
     # Extract user expected layers
+    LOGGER.info('Extracting products')
     arrshape = ARIAtools.extractProduct.export_products(**export_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if args.gacos_products:
+        LOGGER.info('Applying gacos_correction')
         ARIAtools.extractProduct.gacos_correction(
             standardproduct_info.products, args.gacos_products,
             standardproduct_info.bbox_file, prods_TOTbbox,

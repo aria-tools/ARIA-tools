@@ -119,17 +119,19 @@ def createParser():
     parser.add_argument(
         '-v', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
+    parser.add_argument(
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 def main(inps=None):
     parser = createParser()
     args = parser.parse_args()
 
+    log_level = {
+        'debug': logging.DEBUG, 'info': logging.INFO,
+        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+
     format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    if inps.verbose:
-        log_level = logging.INFO
-    else:
-        log_level = logging.WARNING
     logging.basicConfig(level=log_level, format=format)
     print('*****************************************************************')
     print('*** Plotting Function ***')

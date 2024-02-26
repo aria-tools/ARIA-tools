@@ -103,6 +103,8 @@ def createParser():
     parser.add_argument(
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
+    parser.add_argument(
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 def make_bbox(inp_bbox):
@@ -310,11 +312,14 @@ class Downloader(object):
 
 def main():
     parser = createParser()
-    if len(os.sys.argv) < 2:
-        parser.print_help()
-        os.sys.exit(2)
-
     args = parser.parse_args()
+
+    log_level = {
+        'debug': logging.DEBUG, 'info': logging.INFO,
+        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+
+    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=log_level, format=format)
 
     # format dates
     args.start = datetime.datetime.strptime(args.start, '%Y%m%d')

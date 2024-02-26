@@ -14,7 +14,7 @@ from osgeo import gdal
 
 gdal.UseExceptions()
 
-log = logging.getLogger(__name__)
+LOGGER = logging.getLogger('ariaKml2box.py')
 
 def createParser():
     '''
@@ -35,17 +35,25 @@ def createParser():
     parser.add_argument(
         '-o', '--outfile', dest='outFile', type=str, required=True,
         help='Output file name')
+    parser.add_argument(
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 def main():
     parser = createParser()
     args = parser.parse_args()
+    log_level = {
+        'debug': logging.DEBUG, 'info': logging.INFO,
+        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+
+    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=log_level, format=format)
 
     if not os.path.exists(args.workdir):
-        log.info('Creating directory: %s', args.workdir)
+        LOGGER.info('Creating directory: %s', args.workdir)
         os.makedirs(args.workdir)
     else:
-        log.info('Directory %s already exists.', args.workdir)
+        LOGGER.info('Directory %s already exists.', args.workdir)
 
     srcDS = gdal.OpenEx(args.inFile)
     outfile = os.path.join(args.workdir, args.outFile)

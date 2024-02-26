@@ -144,6 +144,8 @@ def create_parser():
     parser.add_argument(
         '--plot-time-intervals', dest='plotTimeIntervals', action='store_true',
         help='Plot triplet intervals in misclosure analysis figure.')
+    parser.add_argument(
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 
@@ -152,11 +154,11 @@ def main(inps=None):
     parser = createParser()
     args = parser.parse_args()
 
+    log_level = {
+        'debug': logging.DEBUG, 'info': logging.INFO,
+        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+
     format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    if args.verbose:
-        log_level = logging.INFO
-    else:
-        log_level = logging.WARNING
     logging.basicConfig(level=log_level, format=format)
 
     # Load data based on data type
