@@ -106,7 +106,7 @@ def prep_mask(
 
     # Use NLCD Mask
     elif os.path.basename(maskfilename).lower().startswith('nlcd'):
-        LOGGER.info("***Accessing and cropping the NLCD mask...***")
+        LOGGER.info("Accessing and cropping the NLCD mask.")
         maskfilename = NLCDMasker(os.path.dirname(workdir), product_dict)(
             proj, bounds, arrres, outputFormat)
 
@@ -226,7 +226,7 @@ def resamp(src, proj, bounds, arrres, view=False):
                                                   osgeo.gdalconst.GDT_Float32)
 
     else:
-        print('width, height', width, height)
+        LOGGER.info('width, height', width, height)
         dst = osgeo.gdal.GetDriverByName('MEM').Create(
             '', width, height, 1, osgeo.gdalconst.GDT_Int16)
 

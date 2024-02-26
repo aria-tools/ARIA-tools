@@ -9,7 +9,6 @@
 import os
 import argparse
 import logging
-from pkg_resources import get_distribution
 
 import ARIAtools.extractProduct
 import ARIAtools.util.vrt
@@ -136,11 +135,6 @@ def createParser():
 
 def main():
     """Main workflow for extracting layers from ARIA products."""
-    try:
-        print('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except BaseException:
-        pass
-
     # Parse command line args
     parser = createParser()
     args = parser.parse_args()

@@ -11,12 +11,10 @@ import logging
 import argparse
 
 from osgeo import gdal
-from ARIAtools.util.log import logger
 
 gdal.UseExceptions()
 
 log = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 def createParser():
     '''

@@ -33,9 +33,12 @@ import ARIAtools.util.shp
 import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
 
-from ARIAtools.util.log import logger
-
 LOGGER = logging.getLogger(__name__)
+
+# metadata layer quality check, correction applied if necessary
+# only apply to geometry layers and prods derived from older ISCE versions
+GEOM_LYRS = ['bPerpendicular', 'bParallel', 'incidenceAngle',
+             'lookAngle', 'azimuthAngle']
 
 class MetadataQualityCheck:
     """
@@ -915,6 +918,7 @@ def handle_epoch_layers(
                     ref_wid, ref_hgt, ref_geotrans, _, _ = \
                         ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
                     ref_arr = [ref_wid, ref_hgt, ref_geotrans, j[1][:-4]]
+
                 else:
                     prod_wid, prod_hgt, prod_geotrans, _, _ = \
                         ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
@@ -940,6 +944,14 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     and clipped to the track extent denoted by the input prods_TOTbbox.
     Optionally, a user may pass a mask-file.
     """
+    # Remove these directories to avoid state dependent VRT parsing bug
+    # with pre-existing files (TODO to fix this)
+    for layer in layers:
+        if layer in GEOM_LYRS:
+            target = os.path.join(outDir, layer)
+            LOGGER.warning('Deleting %s to avoid VRT header bug!' % target)
+            shutil.rmtree(target)
+
     # Progress bar
     if not layers and not tropo_total:
         return  # only bbox
@@ -1139,10 +1151,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                     outname, i[1], dem, key, layers)
 
                 # Interpolate/intersect with DEM before cropping
-                finalize_metadata(outname, bounds, dem_bounds,
-                                  prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  i[1], mask, outputFormatPhys,
-                                  verbose=verbose)
+                finalize_metadata(
+                    outname, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon,
+                    hgt_field, i[1], mask, outputFormatPhys, verbose=verbose)
 
             # Extract/crop full res layers, except for "unw" and "conn_comp"
             # which requires advanced stitching
@@ -1151,15 +1162,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                 if outputFormat == 'VRT':
                     # building the virtual vrt
                     osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', i[1])
+
                     # building the cropped vrt
-                    osgeo.gdal.Warp(outname + '.vrt',
-                                    outname + '_uncropped.vrt',
-                                    options=warp_options)
+                    osgeo.gdal.Warp(
+                        outname + '.vrt', outname + '_uncropped.vrt',
+                        options=warp_options)
                 else:
                     # building the VRT
                     osgeo.gdal.BuildVRT(outname + '.vrt', i[1])
-                    osgeo.gdal.Warp(outname, outname + '.vrt',
-                                    options=warp_options)
+                    osgeo.gdal.Warp(
+                        outname, outname + '.vrt', options=warp_options)
 
                     # Update VRT
                     osgeo.gdal.Translate(
@@ -1299,6 +1311,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     # MG: add option to pass dem path as string
     if isinstance(dem, str):
         arrres = osgeo.gdal.Open(dem)
+
     else:
         # for gdal instance
         arrres = osgeo.gdal.Open(dem.GetDescription())
@@ -1321,11 +1334,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
         version_check.append(v_num)
     version_check = min(version_check)
 
-    # metadata layer quality check, correction applied if necessary
-    # only apply to geometry layers and prods derived from older ISCE versions
-    GEOM_LYRS = ['bPerpendicular', 'bParallel', 'incidenceAngle',
-                 'lookAngle', 'azimuthAngle']
-
     metadatalyr_name = outname.split('/')[-2]
     if metadatalyr_name in GEOM_LYRS and version_check < '2_0_4':
         # create directory for quality control plots
@@ -1333,11 +1341,13 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
                                        'metadatalyr_plots', metadatalyr_name))
         if not os.path.exists(plots_subdir):
             os.makedirs(plots_subdir)
+
         data_array = MetadataQualityCheck(
             data_array,
             os.path.basename(os.path.dirname(outname)),
             outname,
             verbose).data_array
+
         # delete directory if empty
         if len(os.listdir(plots_subdir)) == 0:
             shutil.rmtree(plots_subdir)
@@ -1346,20 +1356,23 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     NOHGT_LYRS = ['ionosphere']
     if metadatalyr_name not in NOHGT_LYRS:
         tmp_name = outname + '_temp'
-        # Define lat/lon/height arrays for metadata layers
-        heightsMeta = np.array(osgeo.gdal.Open(outname + '.vrt').GetMetadataItem(
-            hgt_field)[1:-1].split(','), dtype='float32')
 
-        latitudeMeta = np.linspace(data_array.GetGeoTransform()[3],
-                                   data_array.GetGeoTransform()[3] +
-                                   (data_array.GetGeoTransform()[5] *
-                                    (data_array.RasterYSize - 1)), data_array.RasterYSize,
-                                   dtype='float32')
-        longitudeMeta = np.linspace(data_array.GetGeoTransform()[0],
-                                    data_array.GetGeoTransform()[0] +
-                                    (data_array.GetGeoTransform()[1] *
-                                     (data_array.RasterXSize - 1)), data_array.RasterXSize,
-                                    dtype='float32')
+        # Define lat/lon/height arrays for metadata layers
+        heightsMeta = np.array(
+            osgeo.gdal.Open(outname + '.vrt').GetMetadataItem(
+                hgt_field)[1:-1].split(','), dtype='float32')
+
+        latitudeMeta = np.linspace(
+            data_array.GetGeoTransform()[3],
+            data_array.GetGeoTransform()[3] + (
+                data_array.GetGeoTransform()[5] * (data_array.RasterYSize - 1)),
+                data_array.RasterYSize, dtype='float32')
+
+        longitudeMeta = np.linspace(
+            data_array.GetGeoTransform()[0],
+            data_array.GetGeoTransform()[0] + (
+                data_array.GetGeoTransform()[1] * (data_array.RasterXSize - 1)),
+                data_array.RasterXSize, dtype='float32')
 
         da_dem = rioxarray.open_rasterio(
             dem.GetDescription(), band_as_variable=True)['band_1']

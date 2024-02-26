@@ -27,7 +27,6 @@ import random
 import glob
 import collections
 
-from ARIAtools.util.log import logger
 from ARIAtools.util.shp import open_shp, save_shp
 
 log = logging.getLogger(__name__)
@@ -149,7 +148,6 @@ class Stitching:
 
     def setVerboseMode(self, verbose):
         """ Set verbose output mode"""
-        logger.setLevel(logging.DEBUG)
 
     def __verifyInputs__(self):
         '''
@@ -1625,9 +1623,9 @@ def point2unwPhase(inputs):
         np.where(connData == connCompID)
     except BaseException:
         log.error(
-            "Looks like the region is not large enough, cannot find your connected component: %s. Entering debug mode.",
-            connCompID)
-        print(connData)
+            'Looks like the region is not large enough, cannot find your '
+            'connected component: %s. Entering debug mode.', connCompID)
+        log.error(connData)
         pdb.set_trace()
 
     # return back the phase value

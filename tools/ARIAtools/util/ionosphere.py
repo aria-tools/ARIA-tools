@@ -7,6 +7,7 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import typing
 import pathlib
+import logging
 
 import numpy as np
 import xarray as xr
@@ -22,6 +23,7 @@ GUNW_LAYERS = {
     'ionosphere': \
         'NETCDF:"%s":/science/grids/corrections/derived/ionosphere/ionosphere'}
 
+LOGGER = logging.getLogger(__name__)
 
 def fit_surface(data, order=2):
     dshape = data.shape
@@ -197,11 +199,11 @@ def export_ionosphere(input_iono_files: typing.List[str],
 
     # Crop
     if verbose:
-        print(f'Cropping to {bounds}')
+        LOGGER.info(f'Cropping to {bounds}')
 
     if overwrite:
         if verbose:
-            print(f'Removing {output_iono}')
+            LOGGER.info(f'Removing {output_iono}')
         output_iono.unlink(missing_ok=True)
 
     # Crop if selected
@@ -213,7 +215,7 @@ def export_ionosphere(input_iono_files: typing.List[str],
 
     # Update VRT
     if verbose:
-        print(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
+        LOGGER.info(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
     osgeo.gdal.Translate(
         str(output_iono.with_suffix('.vrt')), str(output_iono), format="VRT")
 

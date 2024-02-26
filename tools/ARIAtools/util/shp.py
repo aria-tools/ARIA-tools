@@ -8,11 +8,12 @@
 
 import os
 import logging
+
 import numpy as np
-import osgeo
+import pyproj
 import shapely
 import shapely.wkt
-import pyproj
+import osgeo.gdal
 
 LOGGER = logging.getLogger(__name__)
 

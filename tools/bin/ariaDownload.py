@@ -8,22 +8,20 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-import os.path as op
-import argparse
-import math
 import re
-from datetime import datetime
+import math
+import datetime
+import argparse
 import logging
 import shapely
-import asf_search as asf
+import warnings
+import asf_search
 
-
-from ARIAtools.util.log import logger
+from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
 from pkg_resources import get_distribution
 
-log = logging.getLogger('ariaDownload.py')
-
+LOGGER = logging.getLogger('ariaDownload.py')
 
 def createParser():
     """
@@ -107,51 +105,32 @@ def createParser():
         help='Print products to be downloaded to stdout')
     return parser
 
-
-def cmdLineParse(iargs=None):
-    parser = createParser()
-    if len(os.sys.argv) < 2:
-        parser.print_help()
-        os.sys.exit(2)
-
-    inps = parser.parse_args(args=iargs)
-
-    # format dates
-    inps.start = datetime.strptime(inps.start, '%Y%m%d')
-    inps.end = datetime.strptime(inps.end, '%Y%m%d')
-
-    if not inps.track and not inps.bbox:
-        raise Exception('Must specify either a bbox or track')
-    return inps
-
-
 def make_bbox(inp_bbox):
     """Make a WKT from SNWE or a shapefile"""
     if inp_bbox is None:
         return None
 
-    if op.exists(op.abspath(inps.bbox)):
-        from ARIAtools.util.shp import open_shp
-        ring = open_shp(inps.bbox, 0, 0).exterior
+    if os.path.exists(os.path.abspath(inp_bbox)):
+        ring = open_shp(inp_bbox, 0, 0).exterior
         poly = shapely.geometry.Polygon(ring)
 
     else:
         try:
-            S, N, W, E = [float(i) for i in inps.bbox.split()]
+            S, N, W, E = [float(i) for i in inp_bbox.split()]
 
             # adjust for degrees easting / northing (0 - 360 / 0:180)
             if W > 180:
                 W -= 360
-                print('AdjustedW')
+                LOGGER.info('AdjustedW')
 
             if E > 180:
                 E -= 360
-                print('AdjustedE')
+                LOGGER.info('AdjustedE')
 
             if N > 90:
                 N -= 90
                 S -= 90
-                print('Adjusted N/S')
+                LOGGER.info('Adjusted N/S')
 
         except BaseException:
             raise Exception('Cannot understand the --bbox argument. '
@@ -175,15 +154,15 @@ def get_url_ifg(scenes):
 
 def fmt_dst(inps):
     """Format the save name"""
-    ext = '.kmz' if inps.output == 'Kml' else '.txt'
+    ext = '.kmz' if args.output == 'Kml' else '.txt'
 
-    if inps.track is not None:
-        fn_track = f'track{inps.track}'.replace(',', '-')
+    if args.track is not None:
+        fn_track = f'track{args.track}'.replace(',', '-')
     else:
         fn_track = ''
 
-    if inps.bbox is not None:
-        WSEN = make_bbox(inps.bbox).bounds
+    if args.bbox is not None:
+        WSEN = make_bbox(args.bbox).bounds
         WSEN_fmt = []
         for i, coord in enumerate(WSEN):
             if i < 2:
@@ -194,33 +173,33 @@ def fmt_dst(inps):
     else:
         fn_bbox = ''
 
-    dst = op.join(inps.wd, f'{fn_track}{fn_bbox}_0{ext}'.lstrip('_'))
+    dst = os.path.join(args.wd, f'{fn_track}{fn_bbox}_0{ext}'.lstrip('_'))
     count = 1  # don't overwrite if already exists
-    while op.exists(dst):
-        basen = f'{re.split(str(count-1)+ext, op.basename(dst))[0]}' \
-            f'{count}{ext}'
-        dst = op.join(op.dirname(dst), basen)
+    while os.path.exists(dst):
+        basen = f'{re.split(str(count-1)+ext, os.path.basename(dst))[0]}' \
+                f'{count}{ext}'
+        dst = os.path.join(os.path.dirname(dst), basen)
         count += 1
     return dst
 
 
 class Downloader(object):
-    def __init__(self, inps):
-        self.inps = inps
-        self.inps.output = self.inps.output.title()
-        self.inps.wd = op.abspath(self.inps.wd)
-        os.makedirs(self.inps.wd, exist_ok=True)
-        if self.inps.verbose:
-            log.setLevel('DEBUG')
+    def __init__(self, args):
+        self.args = args
+        self.args.output = self.args.output.title()
+        self.args.wd = os.path.abspath(self.args.wd)
+        os.makedirs(self.args.wd, exist_ok=True)
+        if self.args.verbose:
+            LOGGER.setLevel('DEBUG')
         else:
-            log.setLevel('INFO')
+            LOGGER.setLevel('INFO')
 
     def __call__(self):
         scenes = self.query_asf()
         urls, ifgs = get_url_ifg(scenes)
 
         # subset everything by version
-        urls_new = url_versions(urls, self.inps.version, self.inps.wd)
+        urls_new = url_versions(urls, self.args.version, self.args.wd)
         idx = [urls.index(url) for url in urls_new]
         scenes = [scenes[i] for i in idx]
         urls = [urls[i] for i in idx]
@@ -229,11 +208,13 @@ class Downloader(object):
         # loop over ifgs to check for subset options
         idx = []
         for i, ifg in enumerate(ifgs):
-            eni, sti = [datetime.strptime(d, '%Y%m%d') for d in ifg.split('_')]
+            eni, sti = [datetime.datetime.strptime(
+                d, '%Y%m%d') for d in ifg.split('_')]
+
             # optionally match a single ifg
-            if self.inps.ifg is not None:
-                dates1 = [datetime.strptime(i, '%Y%m%d').date() for
-                          i in self.inps.ifg.split('_')]
+            if self.args.ifg is not None:
+                dates1 = [datetime.datetime.strptime(i, '%Y%m%d').date() for
+                          i in self.args.ifg.split('_')]
                 st1, en1 = sorted(dates1)
                 if st1 == sti.date() and en1 == eni.date():
                     idx.append(i)
@@ -242,9 +223,9 @@ class Downloader(object):
 
             # optionally match other conditions (st/end date, elapsed time)
             else:
-                sten_chk = sti >= self.inps.start and eni <= self.inps.end
+                sten_chk = sti >= self.args.start and eni <= self.args.end
                 elap = (eni - sti).days
-                elap_chk = elap >= self.inps.daysgt and elap <= self.inps.dayslt
+                elap_chk = elap >= self.args.daysgt and elap <= self.args.dayslt
                 if sten_chk and elap_chk:
                     idx.append(i)
                 else:
@@ -254,76 +235,94 @@ class Downloader(object):
         urls = [urls[i] for i in idx]
         ifgs = [ifgs[i] for i in idx]
 
-        if self.inps.output == 'Count':
-            log.info('Found -- %d -- products', len(scenes))
+        if self.args.output == 'Count':
+            LOGGER.info('Found -- %d -- products', len(scenes))
 
-        # elif self.inps.output == 'Kml':
+        # elif self.args.output == 'Kml':
         #     dst    = fmt_dst(inps)
-        #     log.error('Kml option is not yet supported. '\
+        #     LOGGER.error('Kml option is not yet supported. '\
         #                    'Revert to an older version of ARIAtools')
 
-        elif self.inps.output == 'Url':
+        elif self.args.output == 'Url':
             dst = fmt_dst(inps)
             with open(dst, 'w') as fh:
-                [print(url, sep='\n', file=fh)
-                 for url in urls]
-            log.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
+                for url in urls:
+                    print(url, sep='\n', file=fh)
+            LOGGER.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
 
-        elif self.inps.output == 'Download':
+        elif self.args.output == 'Download':
             # turn the list back into an ASF object
-            scenes = asf.ASFSearchResults(scenes)
-            nt = int(self.inps.num_threads)  # so legacy works
+            scenes = asf_search.ASFSearchResults(scenes)
+            nt = int(self.args.num_threads)  # so legacy works
             # allow a user to specify username / password
-            log.info(f'Downloading {len(scenes)} products...')
-            if self.inps.user is not None:
-                session = asf.ASFSession()
-                session.auth_with_creds(self.inps.user, self.inps.passw)
-                scenes.download(self.inps.wd, processes=nt, session=session)
+            LOGGER.info(f'Downloading {len(scenes)} products...')
+            if self.args.user is not None:
+                session = asf_search.ASFSession()
+                session.auth_with_creds(self.args.user, self.args.passw)
+
+                # Suppress warnings on files already downloaded
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    scenes.download(self.args.wd, processes=nt, session=session)
 
             else:
-                scenes.download(self.inps.wd, processes=nt)
-            log.info(
-                f'Download complete. Wrote -- {len(scenes)} -- products to: {self.inps.wd}')
+                # Suppress warnings on files already downloaded
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    scenes.download(self.args.wd, processes=nt)
 
-        if inps.verbose:
+            LOGGER.info(
+                f'Download complete. Wrote -- {len(scenes)} -- products to: '
+                '{self.args.wd}')
+
+        if self.args.verbose:
             for scene in scenes:
-                print(scene.geojson()['properties']['sceneName'])
+                LOGGER.info(scene.geojson()['properties']['sceneName'])
 
         return
 
     def query_asf(self):
         """Get the scenes from ASF"""
-        bbox = make_bbox(self.inps.bbox)
+        bbox = make_bbox(self.args.bbox)
         bbox = bbox.wkt if bbox is not None else None
-        if self.inps.flightdir is not None:
-            if self.inps.flightdir.lower()[0] == 'a':
+        if self.args.flightdir is not None:
+            if self.args.flightdir.lower()[0] == 'a':
                 flight_direction = 'ascending'
-            elif self.inps.flightdir == 'd':
-                self.inps.flightdir.lower()[0] = 'descending'
+            elif self.args.flightdir == 'd':
+                self.args.flightdir.lower()[0] = 'descending'
         else:
             flight_direction = None
 
-        if self.inps.track is not None:
-            tracks = self.inps.track.split(',')
+        if self.args.track is not None:
+            tracks = self.args.track.split(',')
             tracks = [int(track) for track in tracks]
         else:
-            tracks = self.inps.track
+            tracks = self.args.track
 
-        dct_kw = dict(platform=asf.constants.SENTINEL1,
-                      processingLevel=asf.constants.GUNW_STD,
+        dct_kw = dict(platform=asf_search.constants.SENTINEL1,
+                      processingLevel=asf_search.constants.GUNW_STD,
                       relativeOrbit=tracks,
                       flightDirection=flight_direction,
                       intersectsWith=bbox)
-        scenes = asf.geo_search(**dct_kw)
+        scenes = asf_search.geo_search(**dct_kw)
 
         return scenes
 
+def main():
+    parser = createParser()
+    if len(os.sys.argv) < 2:
+        parser.print_help()
+        os.sys.exit(2)
+
+    args = parser.parse_args()
+
+    # format dates
+    args.start = datetime.datetime.strptime(args.start, '%Y%m%d')
+    args.end = datetime.datetime.strptime(args.end, '%Y%m%d')
+
+    if not args.track and not args.bbox:
+        raise Exception('Must specify either a bbox or track')
+    Downloader(args)()
 
 if __name__ == '__main__':
-    try:
-        print('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except BaseException:
-        pass
-
-    inps = cmdLineParse()
-    Downloader(inps)()
+    main()

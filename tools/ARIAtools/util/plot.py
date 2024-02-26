@@ -5,91 +5,21 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 import os
 import numpy as np
+import pandas as pd
 from osgeo import gdal
-import time
-from datetime import datetime, date
-from dateutil.relativedelta import relativedelta
+import logging
+import warnings
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import pandas as pd
-import warnings
-import logging
+from dateutil.relativedelta import relativedelta
 
-import ARIAtools.product
-from ARIAtools.util.log import logger
 from ARIAtools.util.shp import open_shp
-from ARIAtools.util.mask import prep_mask
-
-gdal.UseExceptions()
-
-# Suppress warnings
-gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 log = logging.getLogger(__name__)
-
-
-def createParser():
-    '''
-        Make any of the following specified plot(s): ⊥ baseline + histogram, coherence + histogram + average coherence raster, ⊥ baseline & coherence combo, and track extents. The default is to generate all of these.
-    '''
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description='Function to generate various quality control and baseline figures of the spatial-temporal network of products.')
-    parser.add_argument('-f', '--file', dest='imgfile', type=str,
-                        required=True, help='ARIA file')
-    parser.add_argument('-w', '--workdir', dest='workdir', default='./',
-                        help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None,
-                        help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
-    parser.add_argument('-m', '--mask', dest='mask', type=str, default=None,
-                        help="Path to mask file or 'Download'. File needs to be GDAL compatabile, contain spatial reference information, and have invalid/valid data represented by 0/1, respectively. If 'Download', will use GSHHS water mask. If 'NLCD', will mask classes 11, 12, 90, 95; see: https://www.mrlc.gov/national-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover-database-nlcd-2016")
-    parser.add_argument('-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
-                        help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
-    parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
-                        help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-    parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='ENVI',
-                        help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated with ENVI format.')
-    parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion',
-                        help="If turned on, IFGs cropped to bounds based off of union and bbox (if specified). Program defaults to crop all IFGs to bounds based off of common intersection and bbox (if specified).")
-    parser.add_argument('-plottracks', '--plottracks', action='store_true', dest='plottracks',
-                        help="Make plot of track latitude extents vs bounding bbox/common track extent.")
-    parser.add_argument('-plotbperp', '--plotbperp', action='store_true', dest='plotbperp',
-                        help="Make a baseline plot, and a histogram of perpendicular baseline.")
-    parser.add_argument('-plotbperpcoh', '--plotbperpcoh', action='store_true', dest='plotbperpcoh',
-                        help="Make a baseline plot that is color-coded based on average IFG coherence.")
-    parser.add_argument('-plotcoh', '--plotcoh', action='store_true', dest='plotcoh',
-                        help="Make an average IFG coherence plot in time, and histogram of IFG average coherence.")
-    parser.add_argument('-makeavgoh', '--makeavgoh', action='store_true', dest='makeavgoh',
-                        help="Generate a 2D raster of average IFG coherence.")
-    parser.add_argument('-plotall', '--plotall', action='store_true', dest='plotall',
-                        help="Generate all above plots.")
-    parser.add_argument('-mo', '--minimumOverlap', dest='minimumOverlap', type=float, default=0.0081,
-                        help="Minimum km\u00b2 area of overlap of scenes wrt specified bounding box. " +
-                        "Default 0.0081 = 0.0081km\u00b2=area of single pixel at standard 90m resolution")
-    parser.add_argument('--figwidth', dest='figwidth', type=str, default='standard',
-                        help='Width of lat extents figure in inches. Default is \"standard\", i.e., the 6.4-inch-wide standard figure size. Optionally, theuser may define the width manually, e.g,. 8 [inches] or set the parameter to \"wide\" format, i.e., the width of the figure automatically scales with the number of interferograms. Other options include')
-    parser.add_argument('--version', dest='version', default=None,
-                        help='Specify version as str, e.g. 2_0_4 or all prods; '
-                        'default: all')
-    parser.add_argument('--nc_version', dest='nc_version', default='1b',
-                        help='Specify netcdf version as str, '
-                        'e.g. 1c or all prods;'
-                        'default: 1b')
-    parser.add_argument('-verbose', '--verbose', action='store_true', dest='verbose',
-                        help="Toggle verbose mode on.")
-    return parser
-
-
-def cmdLineParse(iargs=None):
-    parser = createParser()
-    return parser.parse_args(args=iargs)
-
 
 class PlotClass(object):
     """ Class to generate standard plots for ARIA products. """
@@ -630,129 +560,3 @@ def get_extent(path_ds, shrink=None):
 
     del ds
     return extent
-
-
-def main(inps=None):
-    logger.setLevel(logging.INFO)
-    print('*****************************************************************')
-    print('*** Plotting Function ***')
-    print('*****************************************************************')
-    # if user bbox was specified, file(s) not meeting imposed spatial criteria are rejected.
-    # Outputs = arrays ['standardproduct_info.products'] containing grouped “radarmetadata info” and “data layer keys+paths” dictionaries for each standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
-    # bbox specified)
-    standardproduct_info = ARIAtools.product.Product(
-        inps.imgfile, bbox=inps.bbox, workdir=inps.workdir,
-        num_threads=inps.num_threads, url_version=inps.version,
-        nc_version=inps.nc_version, verbose=inps.verbose)
-
-    # If user requests to generate all plots.
-    if inps.plotall:
-        log.info('"-plotall"==True. All plots will be made.')
-        inps.plottracks = True
-        inps.plotbperp = True
-        inps.plotcoh = True
-        inps.plotbperpcoh = True
-        inps.makeavgoh = True
-
-    # pass number of threads for gdal multiprocessing computation
-    if inps.num_threads.lower() == 'all':
-        import multiprocessing
-        log.info('User specified use of all %s threads for gdal multiprocessing',
-                 multiprocessing.cpu_count())
-        inps.num_threads = 'ALL_CPUS'
-    log.info(
-        'Thread count specified for gdal multiprocessing = %s',
-        inps.num_threads)
-
-    if inps.plottracks or inps.plotcoh or inps.makeavgoh or inps.plotbperpcoh:
-        from ARIAtools.extractProduct import merged_productbbox
-
-        # extract/merge productBoundingBox layers for each pair and update dict,
-        # report common track bbox (default is to take common intersection, but
-        # user may specify union), and expected shape for DEM.
-        standardproduct_info.products[0], standardproduct_info.products[1], \
-            standardproduct_info.bbox_file, prods_TOTbbox, \
-            prods_TOTbbox_metadatalyr, arrres, proj = merged_productbbox(
-            standardproduct_info.products[0], standardproduct_info.products[1],
-            os.path.join(inps.workdir, 'productBoundingBox'),
-            standardproduct_info.bbox_file, inps.croptounion,
-            num_threads=inps.num_threads,
-            minimumOverlap=inps.minimumOverlap, verbose=inps.verbose)
-
-        # Load or download mask (if specified).
-        if inps.mask is not None:
-            inps.mask = prep_mask([[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist],
-                                   [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]],
-                                  inps.mask,
-                                  standardproduct_info.bbox_file,
-                                  prods_TOTbbox,
-                                  proj,
-                                  amp_thresh=inps.amp_thresh,
-                                  arrres=arrres,
-                                  workdir=inps.workdir,
-                                  outputFormat=inps.outputFormat,
-                                  num_threads=inps.num_threads)
-
-    # Make spatial extent plot
-    if inps.plottracks:
-        log.info(
-            "- Make plot of track latitude extents vs bounding bbox/common track extent.")
-        make_plot = PlotClass([[j['productBoundingBox'] for j in standardproduct_info.products[1]],
-                               [j["pair_name"] for j in standardproduct_info.products[1]]],
-                              workdir=inps.workdir,
-                              bbox_file=standardproduct_info.bbox_file,
-                              prods_TOTbbox=prods_TOTbbox,
-                              arrres=arrres,
-                              croptounion=inps.croptounion)
-        make_plot.plot_extents(figwidth=inps.figwidth)
-
-    # Make pbaseline plot
-    if inps.plotbperp:
-        log.info("- Make baseline plot and histogram.")
-        make_plot = PlotClass([[j['bPerpendicular'] for j in standardproduct_info.products[1]], [
-                              j["pair_name"] for j in standardproduct_info.products[1]]], arrres=arrres, workdir=inps.workdir)
-        make_plot.plot_pbaselines()
-
-    # Make average land coherence plot
-    if inps.plotcoh:
-        log.info(
-            "- Make average IFG coherence plot in time, and histogram of average IFG coherence.")
-        make_plot = PlotClass([[j['coherence'] for j in standardproduct_info.products[1]],
-                               [j["pair_name"] for j in standardproduct_info.products[1]]],
-                              workdir=inps.workdir,
-                              bbox_file=standardproduct_info.bbox_file,
-                              prods_TOTbbox=prods_TOTbbox,
-                              arrres=arrres,
-                              mask=inps.mask,
-                              num_threads=inps.num_threads)
-        make_plot.plot_coherence()
-
-    # Generate average land coherence raster
-    if inps.makeavgoh:
-        log.info("- Generate 2D raster of average coherence.")
-        make_plot = PlotClass([[j['coherence'] for j in standardproduct_info.products[1]],
-                               [j["pair_name"] for j in standardproduct_info.products[1]]],
-                              workdir=inps.workdir,
-                              bbox_file=standardproduct_info.bbox_file,
-                              prods_TOTbbox=prods_TOTbbox,
-                              arrres=arrres,
-                              mask=inps.mask,
-                              outputFormat=inps.outputFormat,
-                              num_threads=inps.num_threads)
-        make_plot.plot_avgcoherence()
-
-    # Make pbaseline/coherence combo plot
-    if inps.plotbperpcoh:
-        log.info(
-            "- Make baseline plot that is color-coded with respect to mean IFG coherence.")
-        make_plot = PlotClass([[j['bPerpendicular'] for j in standardproduct_info.products[1]],
-                               [j["pair_name"]
-                                   for j in standardproduct_info.products[1]],
-                               [j['coherence'] for j in standardproduct_info.products[1]]],
-                              workdir=inps.workdir,
-                              bbox_file=standardproduct_info.bbox_file,
-                              prods_TOTbbox=prods_TOTbbox,
-                              arrres=arrres,
-                              mask=inps.mask)
-        make_plot.plotbperpcoh()

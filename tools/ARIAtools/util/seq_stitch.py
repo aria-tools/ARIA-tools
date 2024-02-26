@@ -29,11 +29,14 @@ and restructuring
 '''
 import osgeo
 import pathlib
+import logging
 import numpy as np
 from numpy.typing import NDArray
 from typing import List, Optional, Tuple
 
 import ARIAtools.util.stitch
+
+LOGGER = logging.getLogger(__name__)
 
 #  STITCHING SUBROUTINES
 def stitch_unwrapped_frames(input_unw_files: List[str],
@@ -77,11 +80,11 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
-            print(50 * '*')
-            print(
+            LOGGER.info(50 * '*')
+            LOGGER.info(
                 'Frame-1:',
                 unw_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
-            print(
+            LOGGER.info(
                 'Frame-2:',
                 unw_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
 
@@ -185,7 +188,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
     # LOOP OVER COMPONENTS WITHIN THE OVERLAP
     # Get connected component pairs
     if verbose:
-        print('Getting overlapping components')
+        LOGGER.info('Getting overlapping components')
 
     # Forward correction
     conn_pairs = get_overlapping_conn(conn_data1[box_1], conn_data2[box_2])
@@ -225,7 +228,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
 
     for pair in conn_reverse:
         if verbose:
-            print('Going backward!')
+            LOGGER.info('Going backward!')
 
         diff, cycles2pi, range_corr = _integer_2pi_cycles(
             unw1=unw_data1[box_1], concom1=conn_data1[box_1],
@@ -692,11 +695,11 @@ def product_stitch_sequential(input_unw_files: List[str],
 
     # Crop
     if verbose:
-        print(f'Cropping to {bounds}')
+        LOGGER.info(f'Cropping to {bounds}')
 
     if overwrite:
         if verbose:
-            print(f'Removing {output_unw}, {output_conn}')
+            LOGGER.info(f'Removing {output_unw}, {output_conn}')
 
         output_unw.unlink(missing_ok=True)
         output_conn.unlink(missing_ok=True)
@@ -717,7 +720,7 @@ def product_stitch_sequential(input_unw_files: List[str],
 
         # Update VRT
         if verbose:
-            print(f'Writing {output}, {output.with_suffix(".vrt")}')
+            LOGGER.info(f'Writing {output}, {output.with_suffix(".vrt")}')
 
         osgeo.gdal.Translate(
             str(output.with_suffix('.vrt')), str(output), format="VRT")
@@ -828,10 +831,12 @@ def product_stitch_sequential_metadata(
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
-            print('Frame-1:',
-                  meta_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
-            print('Frame-2:',
-                  meta_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
+            LOGGER.info(
+                'Frame-1:',
+                meta_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
+            LOGGER.info(
+                'Frame-2:',
+                meta_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
 
         # Frame1
         frame1_meta_array = ARIAtools.util.stitch.get_GUNW_array(

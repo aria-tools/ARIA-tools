@@ -16,8 +16,6 @@ import ARIAtools.util.log
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
-from pkg_resources import get_distribution
-
 LOGGER = logging.getLogger('ariaMisclosure.py')
 
 DESCRIPTION = '''
@@ -150,17 +148,16 @@ def create_parser():
 
 
 def main(inps=None):
-    try:
-        print('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except BaseException:
-        pass
-
     # Gather arguments
     parser = createParser()
     args = parser.parse_args()
 
+    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     if args.verbose:
-        ARIAtools.util.log.logger.setLevel(logging.DEBUG)
+        log_level = logging.INFO
+    else:
+        log_level = logging.WARNING
+    logging.basicConfig(level=log_level, format=format)
 
     # Load data based on data type
     dataStack = ARIATools.stack.Stack(
