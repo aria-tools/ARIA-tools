@@ -446,7 +446,7 @@ def main():
 
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')
-        args.demfile, demfile, Latitude, Longitude = \
+        demfile, Latitude, Longitude = \
             ARIAtools.extractProduct.prep_dem(**dem_dict)
 
     # Load or download mask (if specified).
@@ -474,17 +474,17 @@ def main():
             'rankedResampling': args.rankedResampling
         }
         LOGGER.info('Download/cropping mask')
-        args.mask = ARIAtools.util.mask.prep_mask(**mask_dict)
+        ARIAtools.util.mask.prep_mask(**mask_dict)
 
     # Extract
     export_dict = {
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
-        'dem': demfile,
+        'demfile': demfile,
         'arrres': arrres,
         'lat': Latitude,
         'lon': Longitude,
-        'mask': args.mask,
+        'maskfile': args.mask,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
         'stitchMethodType': args.stitchMethodType,
