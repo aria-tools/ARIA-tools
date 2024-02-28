@@ -390,9 +390,7 @@ def main():
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
 
-    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=log_level, format=format)
-
+    logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
     LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
     LOGGER.info('Time-series Preparation Function')
 

@@ -157,9 +157,7 @@ def main(inps=None):
     log_level = {
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
-
-    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=log_level, format=format)
+    logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
 
     # Load data based on data type
     dataStack = ARIATools.stack.Stack(

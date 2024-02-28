@@ -144,9 +144,7 @@ def main():
     log_level = {
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
-
-    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=log_level, format=format)
+    logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
     LOGGER.info('Extract Product Function')
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria

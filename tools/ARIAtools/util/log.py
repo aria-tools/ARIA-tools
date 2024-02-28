@@ -10,6 +10,9 @@ Global logging configuration
 """
 import logging
 
+FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+
 # Set log level to warning for some third party packages
 for logger in ['botocore', 'urllib3', 'rasterio']:
     logging.getLogger(logger).setLevel(logging.WARNING)
