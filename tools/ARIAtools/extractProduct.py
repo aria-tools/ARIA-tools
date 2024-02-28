@@ -394,34 +394,27 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         'format': outputFormat, 'outputBounds': bounds, 'xRes': abs(gt[1]),
         'yRes': abs(gt[-1]), 'targetAlignedPixels': True, 'multithread': True,
         'options': ['NUM_THREADS=%s' % (num_threads) + ' -overwrite']}
-    aria_dem_final = aria_dem.replace('.dem', '_final.dem')
-    ds_aria_final = osgeo.gdal.Warp(
-        aria_dem_final, aria_dem,
+    demfile_expanded = aria_dem.replace('.dem', '_expanded.dem')
+    ds_aria_expanded = osgeo.gdal.Warp(
+        demfile_expanded, aria_dem,
         options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
-
-    ds_aria_final.SetProjection(proj)
-    ds_aria_final.SetDescription(aria_dem)
-    vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
-    osgeo.gdal.BuildVRT(aria_dem_final+'.vrt', aria_dem_final, options=vrt_options)
 
     # Delete temporary dem-stitcher directory
     if os.path.exists(f'{dem_name}_tiles'):
         shutil.rmtree(f'{dem_name}_tiles')
 
     # Define lat/lon arrays for fullres layers
-    gt = ds_aria_final.GetGeoTransform()
-    xs, ys = ds_aria_final.RasterXSize, ds_aria_final.RasterYSize
+    gt = ds_aria_expanded.GetGeoTransform()
+    xs, ys = ds_aria_expanded.RasterXSize, ds_aria_expanded.RasterYSize
 
-    Latitude = np.linspace(gt[3], gt[3] + (gt[5] * (ys - 1)), ys)
-    Latitude = np.repeat(Latitude[:, np.newaxis], xs, axis=1)
-    Longitude = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
-    Longitude = np.repeat(Longitude[:, np.newaxis], ys, axis=1).T
+    lat = np.linspace(gt[3], gt[3] + (gt[5] * (ys - 1)), ys)
+    lat = np.repeat(lat[:, np.newaxis], xs, axis=1)
+    lon = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
+    lon = np.repeat(lon[:, np.newaxis], ys, axis=1).T
 
-    from IPython import embed; embed()
+    ds_aria_expanded = None
 
-    ds_aria_final = None
-
-    return aria_dem_final, Latitude, Longitude
+    return demfile_expanded, lat, lon
 
 
 def download_dem(
@@ -942,23 +935,22 @@ def handle_epoch_layers(
 
 
 def export_product_worker_helper(args):
+    """Calls export_product_worker with * expanded args"""
     return export_product_worker(*args)
 
 def export_product_worker(
         ii, product, product_dict, full_product_dict, layers, workdir, bounds,
-        dem_bounds, prods_TOTbbox, demfile, lat, lon, maskfile,
-        outputFormat, outputFormatPhys, layer, gdal_warp_kwargs, outDir,
-        stitchMethodType, arrres, num_threads, multilooking, verbose):
-
-    if maskfile is not None:
-        mask = osgeo.gdal.Open(maskfile)
-    else:
-        mask = None
-
-    if demfile is not None:
-        dem = osgeo.gdal.Open(demfile)
-    else:
-        dem = None
+        dem_bounds, prods_TOTbbox, demfile, demfile_expanded, lat, lon,
+        maskfile, outputFormat, outputFormatPhys, layer, gdal_warp_kwargs,
+        outDir, stitchMethodType, arrres, num_threads, multilooking, verbose):
+    """
+    Worker function for export_products for parallel execution with
+    multiprocessing package.
+    """
+    mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
+    dem = None if demfile is None else osgeo.gdal.Open(demfile)
+    dem_expanded = (
+        None if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
 
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
@@ -967,12 +959,13 @@ def export_product_worker(
     if any(":/science/grids/imagingGeometry" in s for s in product):
         # make VRT pointing to metadata layers in standard product
         hgt_field, model_name, outname = prep_metadatalayers(
-            outname, product, dem, layer, layers)
+            outname, product, dem_expanded, layer, layers)
 
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
-            outname, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon,
-            hgt_field, product, mask, outputFormatPhys, verbose=verbose)
+            outname, bounds, dem_bounds, prods_TOTbbox, dem, dem_expanded,
+            lat, lon, hgt_field, product, mask, outputFormatPhys,
+            verbose=verbose)
 
     # Extract/crop full res layers, except for "unw" and "conn_comp"
     # which requires advanced stitching
@@ -1084,11 +1077,12 @@ def export_product_worker(
     return ii, prev_outname, prod_arr
 
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
-                    arrres, rankedResampling=False, demfile=None, lat=None,
-                    lon=None, maskfile=None, outDir='./', outputFormat='VRT',
-                    stitchMethodType='overlap', verbose=None, num_threads='2',
-                    multilooking=None, tropo_total=False, model_names=[]):
+def export_products(
+        full_product_dict, bbox_file, prods_TOTbbox, layers, arrres,
+        rankedResampling=False, demfile=None, demfile_expanded=None, lat=None,
+        lon=None, maskfile=None, outDir='./', outputFormat='VRT',
+        stitchMethodType='overlap', verbose=None, num_threads='2',
+        multilooking=None, tropo_total=False, model_names=[]):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
@@ -1117,10 +1111,12 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
+    dem_expanded = (
+        None if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
 
     # create dictionary of all inputs needed for correction lyr extraction
     lyr_input_dict = {
-        'layers': layers, 'prods_TOTbbox': prods_TOTbbox, 'dem': dem,
+        'layers': layers, 'prods_TOTbbox': prods_TOTbbox, 'dem': dem_expanded,
         'lat': lat, 'lon': lon, 'mask': mask, 'verbose': verbose,
         'multilooking': multilooking, 'rankedResampling': rankedResampling,
         'num_threads': num_threads}
@@ -1128,11 +1124,11 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     # get bounds
     bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
     lyr_input_dict['bounds'] = bounds
-    if demfile is not None:
-        dem_gt = dem.GetGeoTransform()
+    if dem_expanded is not None:
+        dem_gt = dem_expanded.GetGeoTransform()
         dem_bounds = [
-            dem_gt[0], dem_gt[3] + (dem_gt[-1] * dem.RasterYSize),
-            dem_gt[0] + (dem_gt[1] * dem.RasterXSize), dem_gt[3]]
+            dem_gt[0], dem_gt[3] + (dem_gt[-1] * dem_expanded.RasterYSize),
+            dem_gt[0] + (dem_gt[1] * dem_expanded.RasterXSize), dem_gt[3]]
         lyr_input_dict['dem_bounds'] = dem_bounds
 
     # Mask specified, so file must be physically extracted,
@@ -1282,9 +1278,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                         [j["pair_name"] for j in full_product_dict]]
         workdir = os.path.join(outDir, layer)
 
-        prog_bar = ARIAtools.util.misc.ProgressBar(
-            maxValue=len(product_dict[0]), prefix='Generating: ' + layer + ' - ')
-
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
@@ -1296,9 +1289,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         for ii, product in enumerate(product_dict[0]):
             mp_args.append((
                 ii, product, product_dict, full_product_dict, layers, workdir,
-                bounds, dem_bounds, prods_TOTbbox, demfile, lat, lon, maskfile,
-                outputFormat, outputFormatPhys, layer, gdal_warp_kwargs, outDir,
-                stitchMethodType, arrres, num_threads, multilooking, verbose))
+                bounds, dem_bounds, prods_TOTbbox, demfile, demfile_expanded,
+                lat, lon, maskfile, outputFormat, outputFormatPhys, layer,
+                gdal_warp_kwargs, outDir, stitchMethodType, arrres, num_threads,
+                multilooking, verbose))
 
         if int(num_threads) == 1:
             outputs = map(export_product_worker_helper, mp_args)
@@ -1314,8 +1308,6 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                 ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
             prev_outname = outname
 
-        prog_bar.close()
-
         # check directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outDir,
                                        'metadatalyr_plots'))
@@ -1328,24 +1320,15 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
-                      lat, lon, hgt_field, prod_list, mask=None,
+                      dem_expanded, lat, lon, hgt_field, prod_list, mask=None,
                       outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
     3D layers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
-    # get final shape
-    # MG: add option to pass dem path as string
-    if isinstance(dem, str):
-        arrres = osgeo.gdal.Open(dem)
-
-    else:
-        # for gdal instance
-        arrres = osgeo.gdal.Open(dem.GetDescription())
-
-    arrshape = [arrres.RasterYSize, arrres.RasterXSize]
-    ref_geotrans = arrres.GetGeoTransform()
+    arrshape = [dem.RasterYSize, dem.RasterXSize]
+    ref_geotrans = dem.GetGeoTransform()
     arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
 
     # load layered metadata array
@@ -1426,12 +1409,11 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
         out_interpolated = interper(pnts.transpose(2, 1, 0))
 
         # Save file
-        ARIAtools.util.vrt.renderVRT(tmp_name, out_interpolated,
-                                     geotrans=dem.GetGeoTransform(),
-                                     drivername=outputFormat,
-                                     gdal_fmt=data_array.ReadAsArray().dtype.name,
-                                     proj=dem.GetProjection(),
-                                     nodata=nodata)
+        ARIAtools.util.vrt.renderVRT(
+            tmp_name, out_interpolated, geotrans=dem.GetGeoTransform(),
+            drivername=outputFormat,
+            gdal_fmt=data_array.ReadAsArray().dtype.name,
+            proj=dem.GetProjection(), nodata=nodata)
         del out_interpolated
 
     # Since metadata layer extends at least one grid node
@@ -1439,23 +1421,19 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     # it must be cut to conform with these bounds.
     # Crop to track extents
     data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
-    gdal_warp_kwargs = {'format': outputFormat,
-                        'cutlineDSName': prods_TOTbbox,
-                        'outputBounds': bbox_bounds,
-                        'dstNodata': data_array_nodata,
-                        'xRes': arrres[0],
-                        'yRes': arrres[1],
-                        'targetAlignedPixels': True,
-                        'multithread': True,
-                        'options': [f'NUM_THREADS={num_threads}']}
-    osgeo.gdal.Warp(tmp_name + '_temp',
-                    tmp_name,
-                    options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+    gdal_warp_kwargs = {
+        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+        'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
+        'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
+        'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
+    osgeo.gdal.Warp(
+        tmp_name + '_temp', tmp_name,
+        options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+
     # Adjust shape
-    gdal_warp_kwargs = {'format': outputFormat,
-                        'height': arrshape[0],
-                        'width': arrshape[1],
-                        'options': [f'NUM_THREADS={num_threads}']}
+    gdal_warp_kwargs = {
+        'format': outputFormat, 'height': arrshape[0], 'width': arrshape[1],
+        'options': [f'NUM_THREADS={num_threads}']}
     warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
     osgeo.gdal.Warp(outname, tmp_name + '_temp', options=warp_options)
 
@@ -1470,9 +1448,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
     # Apply mask (if specified)
     if mask is not None:
-        from IPython import embed; embed()
-        out_interpolated = osgeo.gdal.Open(outname).ReadAsArray()
-        out_interpolated = mask.ReadAsArray() * out_interpolated
+        out_interpolated = (
+            mask.ReadAsArray() * osgeo.gdal.Open(outname).ReadAsArray())
+
         # Update VRT with new raster
         update_file = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
         update_file.GetRasterBand(1).WriteArray(out_interpolated)

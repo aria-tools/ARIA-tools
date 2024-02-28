@@ -187,7 +187,6 @@ def prep_mask(
 
     # pass maskfile object
     mask = osgeo.gdal.Open(maskfilename)
-    from IPython import embed; embed()
     return mask
 
 

@@ -446,8 +446,10 @@ def main():
 
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')
-        demfile, Latitude, Longitude = \
+        demfile_expanded, lat, lon = \
             ARIAtools.extractProduct.prep_dem(**dem_dict)
+    else:
+        demfile_expanded, lat, lon = None, None, None
 
     # Load or download mask (if specified).
     if args.mask is not None:
@@ -480,10 +482,11 @@ def main():
     export_dict = {
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
-        'demfile': demfile,
+        'demfile': args.demfile,
+        'demfile_expanded': demfile_expanded,
         'arrres': arrres,
-        'lat': Latitude,
-        'lon': Longitude,
+        'lat': lat,
+        'lon': lon,
         'maskfile': args.mask,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
