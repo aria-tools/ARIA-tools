@@ -391,6 +391,8 @@ def main():
 
     format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=log_level, format=format)
+
+    LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
     LOGGER.info('Time-series Preparation Function')
 
     # if user bbox was specified, file(s) not meeting imposed spatial
@@ -446,10 +448,10 @@ def main():
 
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')
-        demfile_expanded, lat, lon = \
+        demfile, demfile_expanded, lat, lon = \
             ARIAtools.extractProduct.prep_dem(**dem_dict)
     else:
-        demfile_expanded, lat, lon = None, None, None
+        demfile, demfile_expanded, lat, lon = None, None, None
 
     # Load or download mask (if specified).
     if args.mask is not None:
@@ -476,18 +478,20 @@ def main():
             'rankedResampling': args.rankedResampling
         }
         LOGGER.info('Download/cropping mask')
-        ARIAtools.util.mask.prep_mask(**mask_dict)
+        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
+    else:
+        maskfilename = None
 
     # Extract
     export_dict = {
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
-        'demfile': args.demfile,
+        'demfile': demfile,
         'demfile_expanded': demfile_expanded,
         'arrres': arrres,
         'lat': lat,
         'lon': lon,
-        'maskfile': args.mask,
+        'maskfile': maskfilename,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
         'stitchMethodType': args.stitchMethodType,

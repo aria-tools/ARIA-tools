@@ -22,7 +22,8 @@ def prep_mask(
         product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         amp_thresh=None, arrres=None, workdir='./', outputFormat='ENVI',
         num_threads='2', multilooking=None, rankedResampling=False):
-    """Function to load and export mask file.
+    """
+    Function to load and export mask file.
     If "Download" flag, GSHHS water mask will be donwloaded on the fly.
     If full resolution NLCD landcover data is given (NLCD...img) it gets cropped
     """
@@ -185,9 +186,8 @@ def prep_mask(
             maskfilename, multilooking, bounds, prods_TOTbbox, rankedResampling,
             outputFormat=outputFormat, num_threads=num_threads)
 
-    # pass maskfile object
-    mask = osgeo.gdal.Open(maskfilename)
-    return mask
+    # return filename of mask
+    return maskfilename
 
 
 def make_mask(ds_crop, lc):

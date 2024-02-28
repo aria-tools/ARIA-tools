@@ -414,7 +414,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     ds_aria_expanded = None
 
-    return demfile_expanded, lat, lon
+    return aria_dem, demfile_expanded, lat, lon
 
 
 def download_dem(
