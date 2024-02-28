@@ -626,8 +626,8 @@ def merged_productbbox(
             prods_TOTbbox_metadatalyr, arrres, proj)
 
 
-def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
-                        driver='ENVI'):
+def prep_metadatalayers(
+        outname, metadata_arr, dem, layer, layers, driver='ENVI'):
     """Wrapper to prep metadata layer for extraction"""
     if dem is None:
         raise Exception('No DEM input specified. '
@@ -645,7 +645,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
 
     # capture model if tropo product
     model_name = None
-    if 'tropo' in key:
+    if 'tropo' in layer:
         model_name = metadata_arr[0].split('/')[-3]
         out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
@@ -666,7 +666,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
             ' corresponding heights: ', [osgeo.gdal.Open(i).GetMetadataItem(
                 hgt_field) for i in metadata_arr])
 
-    if 'tropo' in key or key == 'solidEarthTide':
+    if 'tropo' in layer or layer == 'solidEarthTide':
         # get ref and sec paths
         date_dir = os.path.join(out_dir, 'dates')
         if not os.path.exists(date_dir):
@@ -674,8 +674,8 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
 
         ref_outname = os.path.join(date_dir, ifg.split('_')[0])
         sec_outname = os.path.join(date_dir, ifg.split('_')[1])
-        ref_str = 'reference/' + key
-        sec_str = 'secondary/' + key
+        ref_str = 'reference/' + layer
+        sec_str = 'secondary/' + layer
         sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
         tup_outputs = [
             (ref_outname, metadata_arr), (sec_outname, sec_metadata_arr)]
@@ -693,11 +693,11 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
                 hgt_field, osgeo.gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
 
         # compute differential
-        generate_diff(ref_outname, sec_outname, outname, key, key, False,
+        generate_diff(ref_outname, sec_outname, outname, layer, layer, False,
                       hgt_field, driver)
 
         # write raster to file if it does not exist
-        if key in layers:
+        if layer in layers:
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
                     # write to file
@@ -1410,7 +1410,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
         # Save file
         ARIAtools.util.vrt.renderVRT(
-            tmp_name, out_interpolated, geotrans=dem.GetGeoTransform(),
+            tmp_name, out_interpolated, geotrans=dem_expanded.GetGeoTransform(),
             drivername=outputFormat,
             gdal_fmt=data_array.ReadAsArray().dtype.name,
             proj=dem.GetProjection(), nodata=nodata)
@@ -1426,9 +1426,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
         'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
         'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
         'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
-    osgeo.gdal.Warp(
-        tmp_name + '_temp', tmp_name,
-        options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+    osgeo.gdal.Warp(tmp_name + '_temp', tmp_name, options=warp_options)
 
     # Adjust shape
     gdal_warp_kwargs = {
