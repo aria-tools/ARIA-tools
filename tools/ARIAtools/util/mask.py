@@ -27,6 +27,7 @@ def prep_mask(
     If "Download" flag, GSHHS water mask will be donwloaded on the fly.
     If full resolution NLCD landcover data is given (NLCD...img) it gets cropped
     """
+    LOGGER.debug("prep_mask")
     _world_watermask = [f' /vsizip/vsicurl/http://www.soest.hawaii.edu/pwessel/'
                         f'gshhg/gshhg-shp-2.3.7.zip/GSHHS_shp/f/GSHHS_f_L{i}.shp'
                         for i in range(1, 5)]
@@ -49,7 +50,7 @@ def prep_mask(
 
     # Download mask
     if maskfilename.lower() == 'download':
-        LOGGER.info("Downloading water mask...")
+        LOGGER.debug("Downloading water mask...")
         maskfilename = os.path.join(workdir, 'watermask' + '.msk')
         os.environ['CPL_ZIP_ENCODING'] = 'UTF-8'
 
@@ -107,19 +108,20 @@ def prep_mask(
 
     # Use NLCD Mask
     elif os.path.basename(maskfilename).lower().startswith('nlcd'):
-        LOGGER.info("Accessing and cropping the NLCD mask.")
+        LOGGER.debug("Using NCLD mask; accessing and cropping the NLCD mask.")
         maskfilename = NLCDMasker(os.path.dirname(workdir), product_dict)(
             proj, bounds, arrres, outputFormat)
 
     # User specified mask
     else:
+        LOGGER.debug("Using user specified mask %s" % maskfilename)
         # Path to local version of user specified mask
         user_mask = maskfilename  # for clarity
         user_mask_n = os.path.basename(os.path.splitext(user_mask)[0])
         local_mask = os.path.join(workdir, f'{user_mask_n}.msk')
         local_mask_unc = os.path.join(workdir, f'{user_mask_n}_uncropped.msk')
         if user_mask == local_mask:
-            LOGGER.warning(
+            LOGGER.debug(
                 'The mask you specified already exists in %s, '
                 'using the existing one...' % os.path.dirname(local_mask))
             ds = osgeo.gdal.Open(local_mask)

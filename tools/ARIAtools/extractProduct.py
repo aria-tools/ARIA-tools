@@ -317,6 +317,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
+    LOGGER.debug('prep_dem')
     # If specified DEM subdirectory exists, delete contents
     workdir = os.path.join(workdir, 'DEM')
     aria_dem = os.path.join(workdir, f'{dem_name}.dem')
@@ -420,7 +421,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 def download_dem(
         path_dem, path_prod_union, num_threads, dem_name: str = 'glo_90'):
     """Download the DEM over product bbox union."""
-
+    LOGGER.debug('download_dem')
     root = os.path.splitext(path_dem)[0]
     prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
     extent = prod_shapefile.bounds
@@ -1092,6 +1093,7 @@ def export_products(
     and clipped to the track extent denoted by the input prods_TOTbbox.
     Optionally, a user may pass a mask-file.
     """
+    LOGGER.debug('export_products, layers: {}'.format(layers))
     # Remove these directories to avoid state dependent VRT parsing bug
     # with pre-existing files (TODO to fix this)
     for layer in layers:

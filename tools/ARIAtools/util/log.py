@@ -8,14 +8,15 @@
 """
 Global logging configuration
 """
-import os
-import sys
 import logging
+
+# Set log level to warning for some third party packages
+for logger in ['botocore', 'urllib3', 'rasterio']:
+    logging.getLogger(logger).setLevel(logging.WARNING)
+
 
 # Inspired by
 # https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output
-
-
 class UnixColorFormatter(logging.Formatter):
     YELLOW = "\x1b[33;21m"
     RED = "\x1b[31;21m"
@@ -50,26 +51,23 @@ class CustomFormatter(UnixColorFormatter):
     """
     Adds levelname prefixes to the message on warning or above.
     """
-
     def formatMessage(self, record):
         message = super().formatMessage(record)
         if record.levelno >= logging.WARNING:
             message = ": ".join((record.levelname, message))
         return message
 
-
-# logger = logging.getLogger("ARIAtools")
-# logger.setLevel(logging.INFO)
-# 
+# TODO decide to keep or remove this older code
 # stdout_handler = logging.StreamHandler(sys.stdout)
 # stdout_handler.setFormatter(CustomFormatter(use_color=os.name != "nt"))
 # 
 # errorfile_handler = logging.FileHandler("error.log")
 # errorfile_handler.setFormatter(logging.Formatter(
 #     "[{asctime}] {funcName:>20}:{lineno:<5} {levelname:<10} {message}",
-#     style="{"
-# ))
+#     style="{"))
 # errorfile_handler.setLevel(logging.WARNING)
 # 
 # logger.addHandler(stdout_handler)
 # logger.addHandler(errorfile_handler)
+# logger = logging.getLogger("ARIAtools")
+# logger.setLevel(logging.INFO)

@@ -17,6 +17,7 @@ import shapely
 import warnings
 import asf_search
 
+import ARIAtools.util.log
 from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
 from pkg_resources import get_distribution

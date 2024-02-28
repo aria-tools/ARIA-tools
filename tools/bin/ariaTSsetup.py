@@ -26,6 +26,7 @@ import ARIAtools.product
 import ARIAtools.util.vrt
 import ARIAtools.util.misc
 import ARIAtools.util.mask
+import ARIAtools.util.log
 import ARIAtools.extractProduct
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
