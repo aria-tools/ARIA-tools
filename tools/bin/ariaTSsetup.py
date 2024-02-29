@@ -223,7 +223,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     # Set up single stack file
     stack_dir = os.path.join(workdir, 'stack')
     if not os.path.exists(stack_dir):
-        LOGGER.info('Creating directory: ', stack_dir)
+        LOGGER.info('Creating directory: %s' % stack_dir)
         os.makedirs(stack_dir)
 
     domain_name = copy.deepcopy(stack_layer)
@@ -239,7 +239,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         stack_layer = f'{ref_tropokey}/' + stack_layer
         stack_dir = os.path.join(stack_dir, ref_tropokey)
         if not os.path.exists(stack_dir):
-            LOGGER.info('Creating directory: ', stack_dir)
+            LOGGER.info('Creating directory: %s' % stack_dir)
             os.makedirs(stack_dir)
 
     # handle individual epochs if external correction layer

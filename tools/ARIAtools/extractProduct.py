@@ -11,6 +11,7 @@ If no layer is specified, extract product bounding box shapefile(s)
 """
 import os
 import glob
+import time
 import copy
 import shutil
 import requests
@@ -21,7 +22,7 @@ import osgeo
 import pyproj
 import datetime
 import tarfile
-import multiprocessing
+import dask
 import scipy.interpolate
 import numpy as np
 import dem_stitcher
@@ -35,7 +36,6 @@ import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
 
 LOGGER = logging.getLogger(__name__)
-
 # metadata layer quality check, correction applied if necessary
 # only apply to geometry layers and prods derived from older ISCE versions
 GEOM_LYRS = ['bPerpendicular', 'bParallel', 'incidenceAngle',
@@ -167,7 +167,7 @@ class MetadataQualityCheck:
                     plt.savefig(os.path.join(
                         os.path.dirname(os.path.dirname(self.outname)),
                         'metadatalyr_plots', self.prod_key,
-                        os.path.basename(self.outname) + '_%s.eps' % (
+                        os.path.basename(self.outname) + '_%s.png' % (
                             prof_direc)))
                     plt.close()
                 break
@@ -777,6 +777,7 @@ def handle_epoch_layers(
     Specifically record reference/secondary components within a `dates` subdir
     and deposit the differential fields in the level above.
     """
+    LOGGER.debug('handle_epoch_layers %s' % key)
     # Depending on type, set sec/ref output dirs
     if key == 'troposphereTotal':
         layers.append(key)
@@ -940,8 +941,8 @@ def export_product_worker_helper(args):
     return export_product_worker(*args)
 
 def export_product_worker(
-        ii, product, product_dict, full_product_dict, layers, workdir, bounds,
-        dem_bounds, prods_TOTbbox, demfile, demfile_expanded, lat, lon,
+        ii, ilayer, product, product_dict, full_product_dict, layers, workdir,
+        bounds, dem_bounds, prods_TOTbbox, demfile, demfile_expanded, lat, lon,
         maskfile, outputFormat, outputFormatPhys, layer, gdal_warp_kwargs,
         outDir, stitchMethodType, arrres, num_threads, multilooking, verbose):
     """
@@ -1073,9 +1074,10 @@ def export_product_worker(
     prod_wid, prod_hgt, prod_geotrans, _, _ = \
         ARIAtools.util.vrt.get_basic_attrs(outname + '.vrt')
     prev_outname = os.path.abspath(os.path.join(workdir, ifg_tag))
-    prod_arr = [prod_wid, prod_hgt, prod_geotrans, os.path.join(workdir, ifg_tag)]
+    prod_arr = [
+        prod_wid, prod_hgt, prod_geotrans, os.path.join(workdir, ifg_tag)]
 
-    return ii, prev_outname, prod_arr
+    return ii, ilayer, prev_outname, prod_arr
 
 
 def export_products(
@@ -1275,48 +1277,55 @@ def export_products(
 
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
+
+    mp_args = []
     for ilayer, layer in enumerate(layers):
         product_dict = [[j[layer] for j in full_product_dict],
                         [j["pair_name"] for j in full_product_dict]]
-        workdir = os.path.join(outDir, layer)
 
         # If specified workdir doesn't exist, create it
+        workdir = os.path.join(outDir, layer)
         if not os.path.exists(workdir):
             os.mkdir(workdir)
 
         # Iterate through all IFGs
         # TODO can we wrap this into funtion and run it
         # with multiprocessing, to gain speed up
-        mp_args = []
         for ii, product in enumerate(product_dict[0]):
             mp_args.append((
-                ii, product, product_dict, full_product_dict, layers, workdir,
-                bounds, dem_bounds, prods_TOTbbox, demfile, demfile_expanded,
-                lat, lon, maskfile, outputFormat, outputFormatPhys, layer,
-                gdal_warp_kwargs, outDir, stitchMethodType, arrres, num_threads,
-                multilooking, verbose))
+                ii, ilayer, product, product_dict, full_product_dict, layers,
+                workdir, bounds, dem_bounds, prods_TOTbbox, demfile,
+                demfile_expanded, lat, lon, maskfile, outputFormat,
+                outputFormatPhys, layer, gdal_warp_kwargs, outDir,
+                stitchMethodType, arrres, num_threads, multilooking, verbose))
 
-        if int(num_threads) == 1:
-            outputs = map(export_product_worker_helper, mp_args)
+    start_time = time.time()
+    if int(num_threads) == 1:
+        outputs = [export_product_worker_helper(arg) for arg in mp_args]
 
+    else:
+        jobs = []
+        for arg in mp_args:
+            job = dask.delayed(export_product_worker)(*arg)
+            jobs.append(job)
+        outputs = dask.compute(jobs, num_workers=int(num_threads))[0]
+    end_time = time.time()
+    LOGGER.debug(
+        "export_product_worker took %f seconds" % (end_time-start_time))
+
+    for ii, ilayer, outname, prod_arr in outputs:
+        if ii == 0 and ilayer == 0:
+            ref_arr = copy.deepcopy(prod_arr)
         else:
-            pool = multiprocessing.Pool(processes=int(num_threads))
-            outputs = pool.starmap(export_product_worker, mp_args)
+            ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
+        prev_outname = outname
+    end_time = time.time()
 
-        for ii, outname, prod_arr in outputs:
-            if ii == 0 and ilayer == 0:
-                ref_arr = copy.deepcopy(prod_arr)
-            else:
-                ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
-            prev_outname = outname
-
-        # check directory for quality control plots
-        plots_subdir = os.path.abspath(os.path.join(outDir,
-                                       'metadatalyr_plots'))
-        # delete directory if empty
-        if os.path.exists(plots_subdir):
-            if len(os.listdir(plots_subdir)) == 0:
-                shutil.rmtree(plots_subdir)
+    # delete directory for quality control plots if empty
+    plots_subdir = os.path.abspath(
+        os.path.join(outDir, 'metadatalyr_plots'))
+    if os.path.exists(plots_subdir) and len(os.listdir(plots_subdir)) == 0:
+        shutil.rmtree(plots_subdir)
 
     return [ref_hgt, ref_wid, ref_geotrans, prev_outname]
 
@@ -1360,10 +1369,6 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
             os.path.basename(os.path.dirname(outname)),
             outname,
             verbose).data_array
-
-        # delete directory if empty
-        if len(os.listdir(plots_subdir)) == 0:
-            shutil.rmtree(plots_subdir)
 
     # only perform DEM intersection for rasters with valid height levels
     NOHGT_LYRS = ['ionosphere']
