@@ -450,7 +450,7 @@ def main():
         demfile, demfile_expanded, lat, lon = \
             ARIAtools.extractProduct.prep_dem(**dem_dict)
     else:
-        demfile, demfile_expanded, lat, lon = None, None, None
+        demfile, demfile_expanded, lat, lon = None, None, None, None
 
     # Load or download mask (if specified).
     if args.mask is not None:
