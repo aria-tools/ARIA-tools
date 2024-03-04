@@ -95,14 +95,15 @@ class MetadataQualityCheck:
         # append prefix for plot names
         prof_direc = profprefix + prof_direc
 
-        # iterate through transpose of matrix if looking in azimuth
-        arrT = ''
-        if 'azimuth' in prof_direc:
-            arrT = '.T'
         # Cycle between range and azimuth profiles
         rsquaredarr = []
         std_errarr = []
-        for i in enumerate(eval('self.data_array_band%s' % (arrT))):
+
+        # iterate through transpose of matrix if looking in azimuth
+        data_array_band = (
+            self.data_array_band.T if 'azimuth' in prof_direc else
+            self.data_array_band)
+        for i in enumerate(data_array_band):
             mid_line = i[1]
             xarr = np.array(range(len(mid_line)))
             # remove masked values from slice
@@ -135,7 +136,7 @@ class MetadataQualityCheck:
             # exit loop/make plots in verbose mode if R^2 and standard error
             # anomalous, or if on last iteration
             if (min(rsquaredarr) < 0.9 and max(std_errarr) > 0.01) or \
-                    (i[0] == (len(eval('self.data_array_band%s' % (arrT))) - 1)):
+                    (i[0] == (len(data_array_band) - 1)):
                 if self.verbose:
                     # Make quality-control plots
                     import matplotlib.pyplot as plt
