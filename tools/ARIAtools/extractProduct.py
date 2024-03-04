@@ -943,7 +943,7 @@ def export_product_worker_helper(args):
 
 def export_product_worker(
         ii, ilayer, product, product_dict, full_product_dict, layers, workdir,
-        bounds, dem_bounds, prods_TOTbbox, demfile, demfile_expanded, lat, lon,
+        bounds, dem_bounds, prods_TOTbbox, demfile, demfile_expanded,
         maskfile, outputFormat, outputFormatPhys, layer, gdal_warp_kwargs,
         outDir, stitchMethodType, arrres, num_threads, multilooking, verbose):
     """
@@ -954,6 +954,14 @@ def export_product_worker(
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
         None if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
+
+    gt = dem_expanded.GetGeoTransform()
+    xs, ys = dem_expanded.RasterXSize, dem_expanded.RasterYSize
+
+    lat = np.linspace(gt[3], gt[3] + (gt[5] * (ys - 1)), ys)
+    lat = np.repeat(lat[:, np.newaxis], xs, axis=1)
+    lon = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
+    lon = np.repeat(lon[:, np.newaxis], ys, axis=1).T
 
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
@@ -1296,7 +1304,7 @@ def export_products(
             mp_args.append((
                 ii, ilayer, product, product_dict, full_product_dict, layers,
                 workdir, bounds, dem_bounds, prods_TOTbbox, demfile,
-                demfile_expanded, lat, lon, maskfile, outputFormat,
+                demfile_expanded, maskfile, outputFormat,
                 outputFormatPhys, layer, gdal_warp_kwargs, outDir,
                 stitchMethodType, arrres, num_threads, multilooking, verbose))
 
