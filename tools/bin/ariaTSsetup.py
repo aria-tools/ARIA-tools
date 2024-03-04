@@ -495,7 +495,7 @@ def main():
         'outputFormat': args.outputFormat,
         'stitchMethodType': args.stitchMethodType,
         'verbose': args.verbose,
-        'num_threads': args.num_threads,
+        'num_threads': 4,
         'multilooking': args.multilooking
     }
 
@@ -506,7 +506,8 @@ def main():
         'each interferogram pair')
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
-        rankedResampling=args.rankedResampling, **export_dict)
+        rankedResampling=args.rankedResampling, multiproc_method='threads',
+        **export_dict)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = collections.defaultdict(list)

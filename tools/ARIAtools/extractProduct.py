@@ -1114,7 +1114,8 @@ def export_products(
         rankedResampling=False, demfile=None, demfile_expanded=None, lat=None,
         lon=None, maskfile=None, outDir='./', outputFormat='VRT',
         stitchMethodType='overlap', verbose=None, num_threads='2',
-        multilooking=None, tropo_total=False, model_names=[]):
+        multilooking=None, tropo_total=False, model_names=[],
+        multiproc_method='gnu_parallel'):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
@@ -1327,8 +1328,19 @@ def export_products(
                 multilooking, verbose))
 
     start_time = time.time()
-    if int(num_threads) == 1:
-        outputs = [export_product_worker_helper(arg) for arg in mp_args]
+    if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
+        if multiproc_method == 'single':
+            outputs = [export_product_worker_helper(arg) for arg in mp_args]
+
+        else:
+            LOGGER.debug('Running %d total jobs in with threads' % len(mp_args))
+            jobs = []
+            for arg in mp_args:
+                job = dask.delayed(export_product_worker)(*arg)
+                jobs.append(job)
+            outputs = dask.compute(
+                jobs, num_workers=int(num_threads), scheduler='threads')[0]
+
         for ii, ilayer, outname, prod_arr in outputs:
             if ii == 0 and ilayer == 0:
                 ref_arr = copy.deepcopy(prod_arr)
@@ -1336,7 +1348,7 @@ def export_products(
                 ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
             prev_outname = outname
 
-    else:
+    elif multiproc_method == 'gnu_parallel':
         export_workers_temp_dir = os.path.join(outDir, 'export_workers')
         if os.path.isdir(export_workers_temp_dir):
             shutil.rmtree(export_workers_temp_dir)
@@ -1349,6 +1361,7 @@ def export_products(
             with open(this_json_file, 'w') as ofp:
                 json.dump(args, ofp)
 
+        LOGGER.debug('Running %d total jobs in parallel' % len(mp_args))
         # Run the export worker jobs with GNU parallel
         subprocess.call((
             'find %s/export_workers -name "export_product_args_*.json" | '
@@ -1369,6 +1382,7 @@ def export_products(
                 output_dict = json.load(ifp)
             ARIAtools.util.vrt.dim_check(ref_arr, output_dict['prod_arr'])
             prev_outname = output_dict['outname']
+
     end_time = time.time()
     LOGGER.debug(
         "export_product_worker took %f seconds" % (end_time-start_time))
