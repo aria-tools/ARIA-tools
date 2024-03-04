@@ -13,6 +13,7 @@ import os
 import glob
 import time
 import copy
+import json
 import shutil
 import requests
 import logging
@@ -23,6 +24,8 @@ import pyproj
 import datetime
 import tarfile
 import dask
+import contextlib
+import subprocess
 import scipy.interpolate
 import numpy as np
 import dem_stitcher
@@ -936,20 +939,26 @@ def handle_epoch_layers(
     return
 
 
-
 def export_product_worker_helper(args):
     """Calls export_product_worker with * expanded args"""
     return export_product_worker(*args)
 
 def export_product_worker(
-        ii, ilayer, product, product_dict, full_product_dict, layers, workdir,
-        bounds, dem_bounds, prods_TOTbbox, demfile, demfile_expanded,
-        maskfile, outputFormat, outputFormatPhys, layer, gdal_warp_kwargs,
-        outDir, stitchMethodType, arrres, num_threads, multilooking, verbose):
+        ii, ilayer, product, full_product_dict_file, layers, workdir, bounds,
+        prods_TOTbbox, demfile, demfile_expanded, maskfile, outputFormat,
+        outputFormatPhys, layer, outDir, stitchMethodType, arrres, num_threads,
+        multilooking, verbose):
     """
     Worker function for export_products for parallel execution with
     multiprocessing package.
     """
+    # Initialize warp dict
+    gdal_warp_kwargs = {
+        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+        'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
+        'targetAlignedPixels': True, 'multithread': True,
+        'options': [f'NUM_THREADS={num_threads}']}
+
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
@@ -962,6 +971,17 @@ def export_product_worker(
     lat = np.repeat(lat[:, np.newaxis], xs, axis=1)
     lon = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
     lon = np.repeat(lon[:, np.newaxis], ys, axis=1).T
+
+    dem_bounds = [
+        gt[0], gt[3] + (gt[-1] * dem_expanded.RasterYSize),
+        gt[0] + (gt[1] * dem_expanded.RasterXSize), gt[3]]
+
+    # Load product dict file
+    with open(full_product_dict_file, 'r') as ifp:
+        full_product_dict = json.load(ifp)
+
+    product_dict = [[j[layers[ilayer]] for j in full_product_dict],
+                    [j["pair_name"] for j in full_product_dict]]
 
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
@@ -1156,13 +1176,6 @@ def export_products(
         outputFormatPhys = outputFormat
     lyr_input_dict['outputFormat'] = outputFormatPhys
 
-    # Initialize warp dict
-    gdal_warp_kwargs = {
-        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
-        'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True,
-        'options': [f'NUM_THREADS={num_threads}']}
-
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
     if tropo_total or any([layer in tropo_lyrs for layer in layers]):
@@ -1287,8 +1300,13 @@ def export_products(
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
 
+    full_product_dict_file = os.path.join(outDir, 'full_product_dict.json')
+    with open(full_product_dict_file, 'w') as ofp:
+        json.dump(full_product_dict, ofp)
+
     mp_args = []
     for ilayer, layer in enumerate(layers):
+
         product_dict = [[j[layer] for j in full_product_dict],
                         [j["pair_name"] for j in full_product_dict]]
 
@@ -1302,33 +1320,59 @@ def export_products(
         # with multiprocessing, to gain speed up
         for ii, product in enumerate(product_dict[0]):
             mp_args.append((
-                ii, ilayer, product, product_dict, full_product_dict, layers,
-                workdir, bounds, dem_bounds, prods_TOTbbox, demfile,
-                demfile_expanded, maskfile, outputFormat,
-                outputFormatPhys, layer, gdal_warp_kwargs, outDir,
-                stitchMethodType, arrres, num_threads, multilooking, verbose))
+                ii, ilayer, product, full_product_dict_file, layers,
+                workdir, bounds, prods_TOTbbox, demfile,
+                demfile_expanded, maskfile, outputFormat, outputFormatPhys,
+                layer, outDir, stitchMethodType, arrres, num_threads,
+                multilooking, verbose))
 
     start_time = time.time()
     if int(num_threads) == 1:
         outputs = [export_product_worker_helper(arg) for arg in mp_args]
+        for ii, ilayer, outname, prod_arr in outputs:
+            if ii == 0 and ilayer == 0:
+                ref_arr = copy.deepcopy(prod_arr)
+            else:
+                ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
+            prev_outname = outname
 
     else:
-        jobs = []
-        for arg in mp_args:
-            job = dask.delayed(export_product_worker)(*arg)
-            jobs.append(job)
-        outputs = dask.compute(jobs, num_workers=int(num_threads))[0]
+        export_workers_temp_dir = os.path.join(outDir, 'export_workers')
+        if os.path.isdir(export_workers_temp_dir):
+            shutil.rmtree(export_workers_temp_dir)
+        os.mkdir(export_workers_temp_dir)
+
+        for ii, args in enumerate(mp_args):
+            this_json_file = os.path.join(
+                outDir, 'export_workers',
+                'export_product_args_%2.2d.json' % ii)
+            with open(this_json_file, 'w') as ofp:
+                json.dump(args, ofp)
+
+        # Run the export worker jobs with GNU parallel
+        subprocess.call((
+            'find %s/export_workers -name "export_product_args_*.json" | '
+            'parallel -j %d export_product.py {}') % (
+                outDir, int(num_threads)), shell=True)
+
+        # load in output files and verify dimensions
+        output_files = glob.glob(os.path.join(
+            export_workers_temp_dir, 'outputs_*.json'))
+
+        with open(os.path.join(
+                export_workers_temp_dir, 'outputs_00_00.json')) as ifp:
+            output_dict = json.load(ifp)
+            ref_arr = copy.deepcopy(output_dict['prod_arr'])
+
+        for output_file in output_files:
+            with open(output_file) as ifp:
+                output_dict = json.load(ifp)
+            ARIAtools.util.vrt.dim_check(ref_arr, output_dict['prod_arr'])
+            prev_outname = output_dict['outname']
     end_time = time.time()
     LOGGER.debug(
         "export_product_worker took %f seconds" % (end_time-start_time))
 
-    for ii, ilayer, outname, prod_arr in outputs:
-        if ii == 0 and ilayer == 0:
-            ref_arr = copy.deepcopy(prod_arr)
-        else:
-            ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
-        prev_outname = outname
-    end_time = time.time()
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(
