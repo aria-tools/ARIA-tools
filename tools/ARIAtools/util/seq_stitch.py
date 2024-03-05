@@ -654,11 +654,11 @@ def product_stitch_sequential(input_unw_files: List[str],
     # Outputs
     output_unw = pathlib.Path(output_unw).absolute()
     if not output_unw.parent.exists():
-        output_unw.parent.mkdir()
+        output_unw.parent.mkdir(exist_ok=True)
 
     output_conn = pathlib.Path(output_conn).absolute()
     if not output_conn.parent.exists():
-        output_conn.parent.mkdir()
+        output_conn.parent.mkdir(exist_ok=True)
 
     # create temp files
     temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
