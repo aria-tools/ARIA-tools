@@ -27,6 +27,7 @@ import ARIAtools.util.vrt
 import ARIAtools.util.misc
 import ARIAtools.util.mask
 import ARIAtools.util.log
+import ARIAtools.util.dem
 import ARIAtools.extractProduct
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
@@ -450,7 +451,7 @@ def main():
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')
         demfile, demfile_expanded, lat, lon = \
-            ARIAtools.extractProduct.prep_dem(**dem_dict)
+            ARIAtools.util.dem.prep_dem(**dem_dict)
     else:
         demfile, demfile_expanded, lat, lon = None, None, None, None
 
