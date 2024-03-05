@@ -836,17 +836,18 @@ def export_product_worker(
     dem_expanded = (
         None if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
 
-    gt = dem_expanded.GetGeoTransform()
-    xs, ys = dem_expanded.RasterXSize, dem_expanded.RasterYSize
+    if dem_expanded is not None:
+        gt = dem_expanded.GetGeoTransform()
+        xs, ys = dem_expanded.RasterXSize, dem_expanded.RasterYSize
 
-    lat = np.linspace(gt[3], gt[3] + (gt[5] * (ys - 1)), ys)
-    lat = np.repeat(lat[:, np.newaxis], xs, axis=1)
-    lon = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
-    lon = np.repeat(lon[:, np.newaxis], ys, axis=1).T
+        lat = np.linspace(gt[3], gt[3] + (gt[5] * (ys - 1)), ys)
+        lat = np.repeat(lat[:, np.newaxis], xs, axis=1)
+        lon = np.linspace(gt[0], gt[0] + (gt[1] * (xs - 1)), xs)
+        lon = np.repeat(lon[:, np.newaxis], ys, axis=1).T
 
-    dem_bounds = [
-        gt[0], gt[3] + (gt[-1] * dem_expanded.RasterYSize),
-        gt[0] + (gt[1] * dem_expanded.RasterXSize), gt[3]]
+        dem_bounds = [
+            gt[0], gt[3] + (gt[-1] * dem_expanded.RasterYSize),
+            gt[0] + (gt[1] * dem_expanded.RasterXSize), gt[3]]
 
     # Load product dict file
     with open(full_product_dict_file, 'r') as ifp:
@@ -987,7 +988,7 @@ def export_products(
         lon=None, maskfile=None, outDir='./', outputFormat='VRT',
         stitchMethodType='overlap', verbose=None, num_threads='2',
         multilooking=None, tropo_total=False, model_names=[],
-        multiproc_method='gnu_parallel'):
+        multiproc_method='single'):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.

@@ -9,8 +9,10 @@
 Digital Elevation Model utilities
 """
 import os
+import shutil
 import logging
 import numpy as np
+
 import osgeo
 import dem_stitcher
 

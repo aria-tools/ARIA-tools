@@ -12,6 +12,8 @@ import logging
 
 import ARIAtools.extractProduct
 import ARIAtools.util.vrt
+import ARIAtools.util.dem
+import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.product
 
@@ -212,7 +214,9 @@ def main():
             'rankedResampling': args.rankedResampling
         }
         LOGGER.info('Download/cropping mask')
-        args.mask = ARIAtools.util.mask.prep_mask(**mask_dict)
+        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
+    else:
+        maskfilename = None
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
@@ -232,10 +236,10 @@ def main():
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')
-        args.demfile, demfile, Latitude, Longitude = \
-            ARIAtools.extractProduct.prep_dem(**dem_dict)
+        demfile, demfile_expanded, lat, lon = \
+            ARIAtools.util.dem.prep_dem(**dem_dict)
     else:
-        demfile, Latitude, Longitude = None, None, None
+        demfile, demfile_expanded, lat, lon = None, None, None, None
 
     # Extract
     # aria_extract default parms
@@ -246,10 +250,11 @@ def main():
         'layers': args.layers,
         'arrres': arrres,
         'rankedResampling': args.rankedResampling,
-        'dem': demfile,
-        'lat': Latitude,
-        'lon': Longitude,
-        'mask': args.mask,
+        'demfile': demfile,
+        'demfile_expanded': demfile_expanded,
+        'lat': lat,
+        'lon': lon,
+        'maskfile': maskfilename,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
         'stitchMethodType': args.stitchMethodType,

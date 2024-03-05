@@ -525,7 +525,8 @@ def main():
         'Extracting single incidence angle, look angle and azimuth angle '
         'files valid over common interferometric grid')
     prod_arr_record = ARIAtools.extractProduct.export_products(
-        [extract_dict], tropo_total=False, layers=layers, **export_dict)
+        [extract_dict], tropo_total=False, layers=layers,
+        multiproc_method='gnu_parallel', **export_dict)
 
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -535,7 +536,7 @@ def main():
         'Extracting perpendicular baseline grids for each interferogram pair')
     prod_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
-        **export_dict)
+        multiproc_method='gnu_parallel', **export_dict)
 
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -557,7 +558,8 @@ def main():
                 'troposphereTotal'))
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=args.tropo_total,
-            model_names=model_names, layers=layers, **export_dict)
+            model_names=model_names, layers=layers,
+             multiproc_method='gnu_parallel', **export_dict)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
