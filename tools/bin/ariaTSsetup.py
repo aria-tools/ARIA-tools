@@ -391,8 +391,16 @@ def main():
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
 
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
+
+    # pass number of threads for gdal multiprocessing computation
+    if args.num_threads.lower() == 'all':
+        args.num_threads = 'ALL_CPUS'
+
     LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
     LOGGER.info('Time-series Preparation Function')
+    LOGGER.info(
+        'Thread count specified for gdal multiprocessing = %s' % (
+            args.num_threads))
 
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
@@ -401,18 +409,12 @@ def main():
     # standard product
     # In addition, path to bbox file ['standardproduct_info.bbox_file']
     # (if bbox specified)
+    LOGGER.info('Building ARIA product instance')
     standardproduct_info = ARIAtools.product.Product(
         args.imgfile, bbox=args.bbox, workdir=args.workdir,
         num_threads=args.num_threads, url_version=args.version,
         nc_version=args.nc_version, verbose=args.verbose)
 
-    # pass number of threads for gdal multiprocessing computation
-    if args.num_threads.lower() == 'all':
-        args.num_threads = 'ALL_CPUS'
-
-    LOGGER.info(
-        'Thread count specified for gdal multiprocessing = %s' % (
-            args.num_threads))
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -495,7 +497,7 @@ def main():
         'outputFormat': args.outputFormat,
         'stitchMethodType': args.stitchMethodType,
         'verbose': args.verbose,
-        'num_threads': 4,
+        'num_threads': args.num_threads,
         'multilooking': args.multilooking
     }
 
