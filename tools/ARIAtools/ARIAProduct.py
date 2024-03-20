@@ -629,13 +629,20 @@ class ARIA_standardproduct:
 
         # assign latitude to assist with sorting
         # get product bounding box
+        # and other variables
         lyr_pref = '/science/LSAR/GUNW/grids/frequencyA' + \
                         f'/unwrappedInterferogram/{file_pol}/'
-        proj_location = lyr_pref + 'projection'
+        center_freq = '/science/LSAR/GUNW/grids/frequencyA/centerFrequency'
         with h5py.File(fname[8:], 'r') as hdf_gunw:
+            # get bbox
             latlon_file_bbox = hdf_gunw[sdskeys[0]]
             latlon_file_bbox = latlon_file_bbox[()]
             latlon_file_bbox = loads(latlon_file_bbox)
+            # get center frequency
+            center_freq_var = float(hdf_gunw[center_freq][()])
+        rdrmetadata_dict['centerFrequency'] = center_freq_var
+        rdrmetadata_dict['wavelength'] = 299792458 /  \
+            rdrmetadata_dict['centerFrequency']
         rdrmetadata_dict['centerLatitude'] =  int(latlon_file_bbox.centroid.y)
         rdrmetadata_dict['projection'] = self.projection
         pyproj_transformer = Transformer.from_crs('EPSG:4326',
@@ -646,8 +653,6 @@ class ARIA_standardproduct:
         # hardcoded keys
         rdrmetadata_dict['missionID'] = 'NISAR'
         rdrmetadata_dict['productType'] = 'UNW GEO IFG'
-        rdrmetadata_dict['wavelength'] = 0.24
-        rdrmetadata_dict['centerFrequency'] = 1.2699997500604727e+09
         rdrmetadata_dict['slantRangeSpacing'] = 4.461197291666666
         rdrmetadata_dict['slantRangeStart'] = 727415.98682514
         rdrmetadata_dict['slantRangeEnd'] = 791384.81843777
@@ -741,6 +746,9 @@ class ARIA_standardproduct:
         # indivdual frames preserved here
         datalyr_dict['productBoundingBoxFrames'] = \
             datalyr_dict['productBoundingBox']
+            
+        # Rewrite iono key
+        datalyr_dict['ionosphere'] = datalyr_dict.pop('ionospherePhaseScreen')
 
         return [rdrmetadata_dict, datalyr_dict]
 

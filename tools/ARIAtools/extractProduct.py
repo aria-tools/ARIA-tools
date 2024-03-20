@@ -501,7 +501,6 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
 
     # If specified, check if user's bounding box meets minimum threshold area
     lyr_proj = int(metadata_dict[0]['projection'][0])
-    print('lyr_proj', lyr_proj)
     if bbox_file is not None:
         user_bbox = open_shapefile(bbox_file, 0, 0)
         overlap_area = shapefile_area(user_bbox, lyr_proj)
@@ -1199,20 +1198,19 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
 
     if list(set.intersection(*map(set,
                                   [layers, ['ionosphere']]))) != []:
-        lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
+        # set input keys
         key = 'ionosphere'
         product_dict = \
             [[j[key] for j in full_product_dict if key in j.keys()],
              [j["pair_name"] for j in full_product_dict if key in j.keys()]]
-
         workdir = os.path.join(outDir, key)
         prev_outname = deepcopy(workdir)
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
                                        prefix='Generating: '+key+' - ')
 
-
         lyr_input_dict = dict(input_iono_files = None,
                               arrres = arrres,
+                              epsg = epsg_code,
                               output_iono = None,
                               output_format =  outputFormat, 
                               bounds = bounds,
