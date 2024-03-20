@@ -37,12 +37,16 @@ def open_shapefile(fname, lyrind, ftind):
 
     return file_bbox
 
-def save_shapefile(fname, polygon, drivername):
+def save_shapefile(fname, polygon, drivername, projection):
     """Save a polygon shapefile."""
+    # Define the target spatial reference system
+    target_srs = ogr.osr.SpatialReference()
+    target_srs.ImportFromEPSG(projection)
+    
     # open file
     ds = ogr.GetDriverByName(drivername).CreateDataSource(fname)
     # create layer
-    layer = ds.CreateLayer('', None, ogr.wkbPolygon)
+    layer = ds.CreateLayer('', target_srs, ogr.wkbPolygon)
     layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger)) #Add 1 attribute
     # Create a new feature (attribute and geometry)
     feat = ogr.Feature(layer.GetLayerDefn())
@@ -51,6 +55,8 @@ def save_shapefile(fname, polygon, drivername):
     # Make a geometry, from input Shapely object
     geom = ogr.CreateGeometryFromWkb(polygon.wkb)
     feat.SetGeometry(geom)
+
+    # create layer
     layer.CreateFeature(feat)
 
     # Save/close everything
@@ -58,7 +64,7 @@ def save_shapefile(fname, polygon, drivername):
 
     return
 
-def shapefile_area(file_bbox, bounds = False):
+def shapefile_area(file_bbox, projection, bounds = False):
     """Compute km\u00b2 area of shapefile."""
     # import dependencies
     from pyproj import Proj
@@ -69,23 +75,27 @@ def shapefile_area(file_bbox, bounds = False):
     # pass single polygon as list
     if file_bbox.geom_type == 'Polygon': file_bbox = [file_bbox]
     for polyobj in file_bbox:
-        # get coords
-        if bounds:
-            # Pass coordinates of bounds as opposed to cutline
-            # Necessary for estimating DEM/mask footprints
-            WSEN = polyobj.bounds
-            lon = np.array([WSEN[0],WSEN[0],WSEN[2],WSEN[2],WSEN[0]])
-            lat = np.array([WSEN[1],WSEN[3],WSEN[3],WSEN[1],WSEN[1]])
-        else:
-            lon, lat = polyobj.exterior.coords.xy
+        # need to reproject if not already in UTM
+        if projection == 4326:
+            # get coords
+            if bounds:
+                # Pass coordinates of bounds as opposed to cutline
+                # Necessary for estimating DEM/mask footprints
+                WSEN = polyobj.bounds
+                lon = np.array([WSEN[0],WSEN[0],WSEN[2],WSEN[2],WSEN[0]])
+                lat = np.array([WSEN[1],WSEN[3],WSEN[3],WSEN[1],WSEN[1]])
+            else:
+                lon, lat = polyobj.exterior.coords.xy
 
-        # use equal area projection centered on/bracketing AOI
-        pa = Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}". \
-             format(min(lat), max(lat), (max(lat)+min(lat))/2, \
-             (max(lon)+min(lon))/2))
-        x, y = pa(lon, lat)
-        cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-        shape_area += shape(cop).area/1e6  # area in km^2
+            # use equal area projection centered on/bracketing AOI
+            pa = Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}". \
+                 format(min(lat), max(lat), (max(lat)+min(lat))/2, \
+                 (max(lon)+min(lon))/2))
+            x, y = pa(lon, lat)
+            cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+            shape_area += shape(cop).area/1e6  # area in km^2
+        else:
+            shape_area = polyobj.area/1e6  # area in km^2
 
     return shape_area
 

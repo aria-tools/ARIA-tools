@@ -25,14 +25,16 @@ import requests
 import shutil
 from ARIAtools.logger import logger
 
-from ARIAtools.shapefile_util import open_shapefile, chunk_area
+from ARIAtools.shapefile_util import open_shapefile, chunk_area, \
+    save_shapefile, shapefile_area
 from ARIAtools.mask_util import prep_mask
-from ARIAtools.unwrapStitching import product_stitch_overlap, \
-    product_stitch_2stage
 from ARIAtools.vrtmanager import renderVRT, resampleRaster, layerCheck, \
     get_basic_attrs, dim_check
 from ARIAtools.sequential_stitching import product_stitch_sequential
 from ARIAtools.ionosphere import export_ionosphere
+
+from shapely.geometry import Polygon
+
 import pyproj
 from pyproj import CRS, Transformer
 from rioxarray import open_rasterio
@@ -75,8 +77,10 @@ def createParser():
                         'ARIA_TROPO_MODELS for list of supported models')
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default=None, help='DEM file. To download new DEM, specify "Download".')
-    parser.add_argument('-p', '--projection', dest='projection', default='WGS84', type=str,
-                        help='projection for DEM. By default WGS84.')
+    parser.add_argument('-p', '--projection', dest='projection', default='4326', type=str,
+                        help='EPSG projection code for DEM. By default 4326. '
+                                 'Specify "native" to pass most common '
+                                 'projection from stack.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None,
                         help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- Example : '19 20 -99.5 -98.5'")
     parser.add_argument('-m', '--mask', dest='mask', type=str, default=None,
@@ -85,8 +89,6 @@ def createParser():
                         help='Amplitude threshold below which to mask. Specify "None" to not use amplitude mask. By default "None".')
     parser.add_argument('-nt', '--num_threads', dest='num_threads', default='2', type=str,
                         help='Specify number of threads for multiprocessing operation in gdal. By default "2". Can also specify "All" to use all available threads.')
-    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',  type=str, default='sequential',
-                        help="Method applied to stitch the unwrapped data. Allowed methods are: 'overlap', '2stage', and 'sequential'. 'overlap' - product overlap is minimized, '2stage' - minimization is done on connected components, 'sequential' - sequential minimization of all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
                         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By default files are generated virtually except for "bPerpendicular", "bParallel", "incidenceAngle", "lookAngle","azimuthAngle", "unwrappedPhase" as these are require either DEM intersection or corrections to be applied')
     parser.add_argument('-croptounion', '--croptounion', action='store_true', dest='croptounion',
@@ -139,7 +141,7 @@ class InterpCube(object):
 
     def __call__(self, line, pix, h):
         """Interpolate at a single point."""
-        from scipy.interpolate import interp1d
+        from scipy.interpolate import interp1drasterio
 
         vals = np.array([x(line, pix)[0, 0] for x in self.interp])
         est = interp1d(self.hgts, vals, kind='cubic')
@@ -494,17 +496,15 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
     report common track union to accurately interpolate metadata fields,
     and expected shape for DEM.
     """
-    # Import functions
-    from ARIAtools.shapefile_util import save_shapefile, shapefile_area
-    from shapely.geometry import Polygon
-
     # If specified workdir doesn't exist, create it
     os.makedirs(workdir, exist_ok=True)
 
     # If specified, check if user's bounding box meets minimum threshold area
+    lyr_proj = int(metadata_dict[0]['projection'][0])
+    print('lyr_proj', lyr_proj)
     if bbox_file is not None:
         user_bbox = open_shapefile(bbox_file, 0, 0)
-        overlap_area = shapefile_area(user_bbox)
+        overlap_area = shapefile_area(user_bbox, lyr_proj)
         if overlap_area < minimumOverlap:
             raise Exception(f'User bound box {bbox_file} has an area of only '
                             f'{overlap_area}km\u00b2, below specified '
@@ -518,12 +518,11 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
         outname = os.path.join(workdir, pair_name+'.json')
 
         # Create union of productBoundingBox layers
-        for frame in scene["productBoundingBox"]:
-            prods_bbox = open_shapefile(frame, 'productBoundingBox', 1)
+        for prods_bbox in scene["productBoundingBox"]:
             if os.path.exists(outname):
                 union_bbox = open_shapefile(outname, 0, 0)
                 prods_bbox = prods_bbox.union(union_bbox)
-            save_shapefile(outname, prods_bbox, 'GeoJSON')
+            save_shapefile(outname, prods_bbox, 'GeoJSON', lyr_proj)
         scene["productBoundingBox"] = [outname]
 
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
@@ -535,16 +534,18 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                   for i in product_dict]
     save_shapefile(prods_TOTbbox_metadatalyr,
                    open_shapefile(product_dict[sceneareas.index(max(
-                       sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+                       sceneareas))]['productBoundingBox'][0], 0, 0),
+                       'GeoJSON', lyr_proj)
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
         save_shapefile(prods_TOTbbox, open_shapefile(bbox_file, 0, 0),
-                       'GeoJSON')
+                       'GeoJSON', lyr_proj)
     # Intiate intersection with largest scene, if bbox NOT specified
     else:
         save_shapefile(prods_TOTbbox, open_shapefile(
             product_dict[sceneareas.index(max(
-                sceneareas))]['productBoundingBox'][0], 0, 0), 'GeoJSON')
+                sceneareas))]['productBoundingBox'][0], 0, 0),
+                'GeoJSON', lyr_proj)
     rejected_scenes = []
     for scene in product_dict:
         scene_obj = scene['productBoundingBox'][0]
@@ -558,9 +559,9 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
             total_bbox = total_bbox.union(prods_bbox)
             total_bbox_metadatalyr = total_bbox_metadatalyr.union(prods_bbox)
             # Save to file
-            save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON')
+            save_shapefile(prods_TOTbbox, total_bbox, 'GeoJSON', lyr_proj)
             save_shapefile(prods_TOTbbox_metadatalyr,
-                           total_bbox_metadatalyr, 'GeoJSON')
+                           total_bbox_metadatalyr, 'GeoJSON', lyr_proj)
         # Generate footprint for the common intersection of all products
         else:
             # Now pass track intersection for cutline
@@ -577,7 +578,7 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                 rejected_scenes.append(product_dict.index(scene))
                 os.remove(scene_obj)
             else:
-                overlap_area = shapefile_area(prods_bbox)
+                overlap_area = shapefile_area(prods_bbox, lyr_proj)
                 # Kick out scenes below specified overlap threshold
                 if overlap_area < minimumOverlap:
                     log.debug(f'Rejected scene {scene_obj} has only '
@@ -585,14 +586,15 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                     rejected_scenes.append(product_dict.index(scene))
                     os.remove(scene_obj)
                 else:
-                    save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON')
+                    save_shapefile(prods_TOTbbox, prods_bbox, 'GeoJSON',
+                        lyr_proj)
                     # Need to track bounds of max extent
                     # to avoid metadata interpolation issues
                     total_bbox_metadatalyr = total_bbox_metadatalyr.union(
                         open_shapefile(scene['productBoundingBox'][0],
                                        0, 0))
                     save_shapefile(prods_TOTbbox_metadatalyr,
-                                   total_bbox_metadatalyr, 'GeoJSON')
+                        total_bbox_metadatalyr, 'GeoJSON', lyr_proj)
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes != []:
@@ -611,24 +613,30 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
         user_bbox = open_shapefile(bbox_file, 0, 0)
         total_bbox = open_shapefile(prods_TOTbbox, 0, 0)
         user_bbox = user_bbox.intersection(total_bbox)
-        save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
+        save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON', lyr_proj)
     else:
         bbox_file = prods_TOTbbox
 
     # Warp the first scene with the output-bounds defined above
     # ensure output-bounds are an integer multiple of interferometric grid
     # and adjust if necessary
+    # first assign projection
     OG_bounds = list(open_shapefile(bbox_file, 0, 0).bounds)
-    arrres = gdal.Open(product_dict[0]['unwrappedPhase'][0])
-    arrres = [abs(arrres.GetGeoTransform()[1]),
-              abs(arrres.GetGeoTransform()[-1])]
     gdal_warp_kwargs = {'format': 'MEM',
-                        'outputBounds': OG_bounds,
-                        'xRes': arrres[0],
-                        'yRes': arrres[1],
-                        'targetAlignedPixels': True,
                         'multithread': True,
+                        'dstSRS': f'EPSG:{lyr_proj}',
                         'options': [f'NUM_THREADS={num_threads}']}
+    ds = gdal.Warp('',
+                   gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]),
+                   options=gdal.WarpOptions(**gdal_warp_kwargs))
+    arrres = [abs(ds.GetGeoTransform()[1]),
+              abs(ds.GetGeoTransform()[-1])]
+    ds = None
+    # warp again with fixed transform and bounds
+    gdal_warp_kwargs['outputBounds'] = OG_bounds
+    gdal_warp_kwargs['xRes'] = arrres[0]
+    gdal_warp_kwargs['yRes'] = arrres[1]
+    gdal_warp_kwargs['targetAlignedPixels'] = True
     ds = gdal.Warp('',
                    gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0]),
                    options=gdal.WarpOptions(**gdal_warp_kwargs))
@@ -646,20 +654,41 @@ def merged_productbbox(metadata_dict, product_dict, workdir='./',
                       new_bounds[3], new_bounds[3], new_bounds[1]]))))
         # Save polygon in shapefile
         bbox_file = os.path.join(os.path.dirname(workdir), 'user_bbox.json')
-        save_shapefile(bbox_file, user_bbox, 'GeoJSON')
+        save_shapefile(bbox_file, user_bbox, 'GeoJSON', lyr_proj)
         total_bbox = open_shapefile(prods_TOTbbox, 0, 0)
         user_bbox = user_bbox.intersection(total_bbox)
-        save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON')
+        save_shapefile(prods_TOTbbox, user_bbox, 'GeoJSON', lyr_proj)
     # Get projection of full res layers
     proj = ds.GetProjection()
     del ds
 
     return metadata_dict, product_dict, bbox_file, prods_TOTbbox, \
         prods_TOTbbox_metadatalyr, arrres, proj
-
+        
+        
+def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field):
+    """ Wrapper to create raster and apply projection  """
+    gdal.BuildVRT(fname+'_temp.vrt', data_lis)
+    da = open_rasterio(fname+'_temp.vrt')
+    # Reproject the raster to the desired projection
+    reproj_da = da.rio.reproject(f'EPSG:{proj}',
+                resampling=rio.enums.Resampling.nearest)
+    reproj_da.rio.to_raster(fname, driver=driver, crs=f'EPSG:{proj}')
+    os.remove(fname+'_temp.vrt')
+    da.close()
+    reproj_da.close()
+    gdal.BuildVRT(fname+'.vrt', fname,
+        options=gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}'))
+        
+    if hgt_field is not None:
+        # write height layers
+        gdal.Open(fname+'.vrt').SetMetadataItem(hgt_field,
+            gdal.Open(data_lis[0]).GetMetadataItem(hgt_field))
+                
+    return
 
 def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
-                        driver='ENVI'):
+                        nisar_file=False, proj='4326', driver='ENVI'):
     """ Wrapper to prep metadata layer for extraction """
 
     if dem is None:
@@ -676,10 +705,11 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
         return [0], None, outname
 
     # capture model if tropo product
-    model_name = None
+    model_name = ''
     if 'tropo' in key:
-        model_name = metadata_arr[0].split('/')[-3]
-        out_dir = os.path.join(out_dir, model_name)
+        if not nisar_file:
+            model_name = metadata_arr[0].split('/')[-3]
+            out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
@@ -701,54 +731,56 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
 
     if 'tropo' in key or key == 'solidEarthTide':
         # get ref and sec paths
-        date_dir = os.path.join(out_dir, 'dates')
-        if not os.path.exists(date_dir):
-            os.mkdir(date_dir)
-        ref_outname = os.path.join(date_dir, ifg.split('_')[0])
-        sec_outname = os.path.join(date_dir, ifg.split('_')[1])
-        ref_str = 'reference/' + key
-        sec_str = 'secondary/' + key
-        sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
-        tup_outputs = [
-            (ref_outname, metadata_arr),
-            (sec_outname, sec_metadata_arr)
-        ]
+        if not nisar_file:
+            date_dir = os.path.join(out_dir, 'dates')
+            if not os.path.exists(date_dir):
+                os.mkdir(date_dir)
+            ref_outname = os.path.join(date_dir, ifg.split('_')[0])
+            sec_outname = os.path.join(date_dir, ifg.split('_')[1])
+            ref_str = 'reference/' + key
+            sec_str = 'secondary/' + key
+            sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
+            tup_outputs = [
+                (ref_outname, metadata_arr),
+                (sec_outname, sec_metadata_arr)
+            ]
+        else:
+            ref_outname = os.path.join(out_dir, ifg)
+            sec_outname = ref_outname
+            tup_outputs = [
+                (ref_outname, metadata_arr)
+            ]
 
         # write ref and sec files
         for i in tup_outputs:
             # delete temporary files to circumvent potential inconsistent dims
             for j in glob.glob(i[0]+'*'):
-                os.remove(j)
-            gdal.BuildVRT(i[0]+'.vrt', i[1])
+                if os.path.isfile(j):
+                    os.remove(j)
+            create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field)
 
-            # write height layers
-            gdal.Open(i[0]+'.vrt').SetMetadataItem(hgt_field,
-                                                   gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
-
-        # compute differential
-        generate_diff(ref_outname, sec_outname, outname, key, key, False,
-                      hgt_field, driver)
+        if not nisar_file:
+            # compute differential
+            generate_diff(ref_outname, sec_outname, outname, key, key, False,
+                hgt_field, proj, driver)
 
         # write raster to file if it does not exist
         if key in layers:
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
-                    # write to file
-                    da = open_rasterio(i + '.vrt')
-                    da.rio.to_raster(i, driver=driver)
-                    da.close()
+                    create_raster_from_gunw(i, [i], proj, driver)
     else:
         if not os.path.exists(outname+'.vrt'):
             gdal.BuildVRT(outname+'.vrt', metadata_arr)
             # write height layers
             gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field,
-                                                      gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
+                gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
 
     return hgt_field, model_name, ref_outname
 
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
-                  hgt_field, driver):
+                  hgt_field, proj, driver):
     """ Compute differential from reference and secondary scenes """
 
     # if specified workdir doesn't exist, create it
@@ -784,8 +816,9 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     da_total = da_total.assign_attrs(da_attrs)
 
     # write initial array to file
-    da_total.rio.to_raster(outname, driver=driver)
-    ds = gdal.BuildVRT(f'{outname}.vrt', outname)
+    da_total.rio.to_raster(outname, driver=driver, crs=f'EPSG:{proj}')
+    ds = gdal.BuildVRT(f'{outname}.vrt', outname,
+        options=gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}'))
     # fix if numpy array not set properly
     if not isinstance(da_attrs[hgt_field], np.ndarray):
         da_attrs[hgt_field] = np.array(da_attrs[hgt_field])
@@ -798,6 +831,7 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
 def handle_epoch_layers(layers,
                         product_dict,
+                        proj,
                         lyr_path,
                         key,
                         sec_key,
@@ -816,7 +850,8 @@ def handle_epoch_layers(layers,
                         verbose,
                         multilooking,
                         rankedResampling,
-                        num_threads):
+                        num_threads,
+                        nisar_file):
     """Manage reference/secondary components for correction layers.
     Specifically record reference/secondary components within a `dates` subdir
     and deposit the differential fields in the level above.
@@ -858,14 +893,17 @@ def handle_epoch_layers(layers,
 
         # create temp files for ref/sec components
         ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
-        hgt_field, model_name, ref_outname = prep_metadatalayers(ref_outname,
-                                                                 i[1], dem,
-                                                                 ref_key, layers, outputFormat)
+        hgt_field, model_name, ref_outname = prep_metadatalayers(
+            ref_outname, i[1],
+            dem, ref_key,
+            layers, nisar_file,
+            proj,
+            outputFormat)
         # Update progress bar
         prog_bar.update(i[0]+1, suffix=ifg)
 
         # record output directories
-        if model_name is not None:
+        if model_name != '':
             all_outputs.append(os.path.join(workdir, model_name))
             all_outputs.append(os.path.join(ref_workdir, model_name))
             all_outputs.append(os.path.join(sec_workdir, model_name))
@@ -877,47 +915,56 @@ def handle_epoch_layers(layers,
         # capture if tropo and separate distinct wet and hydro layers
         if 'tropo' in key:
             sec_outname = os.path.abspath(os.path.join(sec_workdir, ifg))
-            wet_path = os.path.join(lyr_path, model_name,
-                                    'reference', ref_key)
-            dry_path = os.path.join(lyr_path, model_name,
-                                    'reference', sec_key)
+            if not nisar_file:
+                wet_path = os.path.join(lyr_path, model_name,
+                    'reference', ref_key)
+                dry_path = os.path.join(lyr_path, model_name,
+                    'reference', sec_key)
+            else:
+                wet_path = os.path.join(lyr_path,
+                    'wetTroposphericPhaseScreen')
+                dry_path = os.path.join(lyr_path,
+                    'hydrostaticTroposphericPhaseScreen')
             sec_comp = [j.replace(wet_path, dry_path)
                         for j in i[1]]
             hgt_field, model_name, sec_outname = prep_metadatalayers(
                 sec_outname,
                 sec_comp, dem,
-                sec_key, layers, outputFormat)
+                sec_key, layers, nisar_file,
+                proj,
+                outputFormat)
             # if specified, compute total delay
             if tropo_total:
                 model_dir = os.path.abspath(os.path.join(workdir, model_name))
                 outname = os.path.join(model_dir, ifg)
-                # compute reference diff
-                ref_diff = ref_outname
-                sec_diff = sec_outname
-                outname_diff = os.path.join(model_dir, 'dates',
-                                            os.path.basename(ref_diff))
-                if not os.path.exists(outname_diff):
-                    generate_diff(ref_diff, sec_diff, outname_diff, key,
-                                  sec_key, tropo_total, hgt_field, outputFormat)
-                # compute secondary diff
-                ref_diff = os.path.join(os.path.dirname(ref_outname),
-                                        ifg.split('_')[1])
-                sec_diff = os.path.join(os.path.dirname(sec_outname),
-                                        ifg.split('_')[1])
-                outname_diff = os.path.join(model_dir, 'dates',
-                                            os.path.basename(ref_diff))
-                if not os.path.exists(outname_diff):
-                    generate_diff(ref_diff, sec_diff, outname_diff, key,
-                                  sec_key, tropo_total, hgt_field, outputFormat)
+                if not nisar_file:
+                    # compute reference diff
+                    ref_diff = ref_outname
+                    sec_diff = sec_outname
+                    outname_diff = os.path.join(model_dir, 'dates',
+                                             os.path.basename(ref_diff))
+                    if not os.path.exists(outname_diff):
+                        generate_diff(ref_diff, sec_diff, outname_diff, key,
+                            sec_key, tropo_total, hgt_field, proj, outputFormat)
+                    # compute secondary diff
+                    ref_diff = os.path.join(os.path.dirname(ref_outname),
+                                            ifg.split('_')[1])
+                    sec_diff = os.path.join(os.path.dirname(sec_outname),
+                                            ifg.split('_')[1])
+                    outname_diff = os.path.join(model_dir, 'dates',
+                                                os.path.basename(ref_diff))
+                    if not os.path.exists(outname_diff):
+                        generate_diff(ref_diff, sec_diff, outname_diff, key,
+                            sec_key, tropo_total, hgt_field, proj, outputFormat)
                 # compute total diff
                 ref_diff = os.path.join(ref_workdir, model_name, ifg)
                 sec_diff = os.path.join(sec_workdir, model_name, ifg)
                 generate_diff(ref_diff, sec_diff, outname, key,
-                              sec_key, tropo_total, hgt_field, outputFormat)
+                              sec_key, tropo_total, hgt_field, proj, outputFormat)
         else:
             sec_outname = os.path.dirname(ref_outname)
             sec_outname = os.path.abspath(os.path.join(sec_outname,
-                                                       ifg.split('_')[0]))
+                ifg.split('_')[0]))
 
     # delete temporary files if layers not requested
     prod_ver_list = i[1]
@@ -946,8 +993,8 @@ def handle_epoch_layers(layers,
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(j[1][:-4], bounds, dem_bounds,
                                   prods_TOTbbox, dem, lat, lon, hgt_field,
-                                  prod_ver_list, mask, outputFormat,
-                                  verbose=verbose)
+                                  prod_ver_list, nisar_file, mask,
+                                  outputFormat, verbose=verbose)
 
                 # Track consistency of dimensions
                 if j[0] == 0:
@@ -966,10 +1013,10 @@ def handle_epoch_layers(layers,
     return
 
 
-def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
+def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
                     arrres, rankedResampling=False, dem=None, lat=None,
                     lon=None, mask=None, outDir='./', outputFormat='VRT',
-                    stitchMethodType='overlap', verbose=None, num_threads='2',
+                    verbose=None, num_threads='2',
                     multilooking=None, tropo_total=False, model_names=[]):
     """Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
@@ -991,9 +1038,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     ref_geotrans = None
 
     # create dictionary of all inputs needed for correction lyr extraction
+    # Get the authority code (EPSG code)
+    srs = osr.SpatialReference()
+    srs.ImportFromWkt(proj)
+    srs.AutoIdentifyEPSG()
+    epsg_code =  srs.GetAuthorityCode(None)
+    srs = None
     lyr_input_dict = {
         'layers': layers,
         'prods_TOTbbox': prods_TOTbbox,
+        'proj': int(epsg_code),
         'dem': dem,
         'lat': lat,
         'lon': lon,
@@ -1003,6 +1057,16 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
         'rankedResampling': rankedResampling,
         'num_threads': num_threads
     }
+    
+    # track if product stack is NISAR GUNW or not
+    nisar_file = False
+    track_fileext = full_product_dict[0]['unwrappedPhase'][0]
+    if len(track_fileext.split('.h5')) > 1:
+        nisar_file = True
+        model_names = ['']
+    else:
+        model_names = [f'_{i}' for i in model_names]
+    lyr_input_dict['nisar_file'] = nisar_file
 
     # get bounds
     bounds = open_shapefile(bbox_file, 0, 0).bounds
@@ -1034,6 +1098,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                         'yRes': arrres[1],
                         'targetAlignedPixels': True,
                         'multithread': True,
+                        'dstSRS': proj,
                         'options': [f'NUM_THREADS={num_threads}']}
 
     # If specified, extract tropo layers
@@ -1041,7 +1106,10 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
     if tropo_total or list(set.intersection(*map(set,
                                                  [layers, tropo_lyrs]))) != []:
         # set input keys
-        lyr_prefix = '/science/grids/corrections/external/troposphere/'
+        if nisar_file:
+            lyr_prefix = '/science/LSAR/GUNW/metadata/radarGrid/'
+        else:
+            lyr_prefix = '/science/grids/corrections/external/troposphere/'
         key = 'troposphereTotal'
         wet_key = 'troposphereWet'
         dry_key = 'troposphereHydrostatic'
@@ -1055,9 +1123,9 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
         # loop through valid models
         for i in model_names:
-            model = wet_key + f'_{i}'
+            model = wet_key + f'{i}'
             tropo_lyrs.append(model)
-            tropo_lyrs.append(dry_key + f'_{i}')
+            tropo_lyrs.append(dry_key + f'{i}')
             product_dict = [
                 [j[model] for j in full_product_dict if model in j.keys()],
                 [j["pair_name"]
@@ -1184,11 +1252,13 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
             prog_bar.update(i[0]+1, suffix=ifg)
 
             # Extract/crop metadata layers
-            if any(":/science/grids/imagingGeometry"
-                   in s for s in i[1]):
+            if any(':/science/grids/imagingGeometry'
+                in s for s in i[1])or \
+                any(':/science/LSAR/GUNW/metadata/radarGrid/'
+                in s for s in i[1]):
                 # make VRT pointing to metadata layers in standard product
                 hgt_field, model_name, outname = prep_metadatalayers(outname,
-                                                      i[1], dem, key, layers)
+                                                      i[1], dem, key, layers, nisar_file, proj)
 
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(outname, bounds, dem_bounds,
@@ -1232,43 +1302,21 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
                 if not os.path.exists(outFilePhs) or not \
                         os.path.exists(outFileConnComp):
                     phs_files = full_product_dict[i[0]]['unwrappedPhase']
-                    # calling the stitching methods
-                    if stitchMethodType == 'overlap':
-                        product_stitch_overlap(phs_files, conn_files,
-                                               arrres,
-                                               prod_bbox_files, bounds,
-                                               prods_TOTbbox,
-                                               outFileUnw=outFilePhs,
-                                               outFileConnComp=outFileConnComp,
-                                               #mask=mask,
-                                               outputFormat=outputFormatPhys,
-                                               verbose=verbose)
-
-                    elif stitchMethodType == '2stage':
-                        product_stitch_2stage(phs_files,
-                                              conn_files,
-                                              arrres,
-                                              bounds,
-                                              prods_TOTbbox,
-                                              outFileUnw=outFilePhs,
-                                              outFileConnComp=outFileConnComp,
-                                              #mask=mask,
-                                              outputFormat=outputFormatPhys,
-                                              verbose=verbose)
-
-                    elif stitchMethodType == 'sequential':
-                        product_stitch_sequential(phs_files,
-                                                  conn_files,
-                                                  arrres=arrres,
-                                                  bounds=bounds,
-                                                  clip_json=prods_TOTbbox,
-                                                  output_unw=outFilePhs,
-                                                  output_conn=outFileConnComp,
-                                                  #mask_file=mask,  # str filename
-                                                  output_format=outputFormatPhys,
-                                                  range_correction=True,
-                                                  save_fig=False,
-                                                  overwrite=True)
+                    # calling the stitching method
+                    product_stitch_sequential(phs_files,
+                        conn_files,
+                        arrres=arrres,
+                        epsg=epsg_code,
+                        bounds=bounds,
+                        clip_json=prods_TOTbbox,
+                        output_unw=outFilePhs,
+                        output_conn=outFileConnComp,
+                        #mask_file=mask,  # str filename
+                        output_format=outputFormatPhys,
+                        correction_method='cycle2pi',
+                        range_correction=True,
+                        save_fig=False,
+                        overwrite=True)
                         # verbose=verbose)
 
                     # If necessary, resample phs/conn_comp file
@@ -1335,7 +1383,7 @@ def export_products(full_product_dict, bbox_file, prods_TOTbbox, layers,
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
-                      lat, lon, hgt_field, prod_list, mask=None,
+                      lat, lon, hgt_field, prod_list, nisar_file=False, mask=None,
                       outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
@@ -1359,13 +1407,18 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     tmp_name = outname+'.vrt'
     data_array = gdal.Warp('', tmp_name,
                            options=gdal.WarpOptions(format="MEM",
-                                                    options=['NUM_THREADS=%s' % (num_threads)]))
+                           options=['NUM_THREADS=%s' % (num_threads)]))
 
     # get minimum version
     version_check = []
     for i in prod_list:
-        v_num = i.split(':')[-2].split('/')[-1]
-        v_num = v_num.split('.nc')[0][-5:]
+        if not nisar_file:
+            v_num = i.split(':')[-2].split('/')[-1]
+            v_num = v_num.split('.nc')[0][-5:]
+        else:
+            basename = os.path.basename(i.split('"')[1])
+            v_num = basename.split('_')[-1][:-3]
+            v_num = '.'.join(v_num)
         version_check.append(v_num)
     version_check = min(version_check)
 
@@ -1374,7 +1427,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     geom_lyrs = ['bPerpendicular', 'bParallel', 'incidenceAngle',
                  'lookAngle', 'azimuthAngle']
     metadatalyr_name = outname.split('/')[-2]
-    if metadatalyr_name in geom_lyrs and version_check < '2_0_4':
+    if (metadatalyr_name in geom_lyrs and version_check < '2_0_4') and not nisar_file:
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))
@@ -1496,8 +1549,6 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     import tarfile
     from datetime import datetime
     from ARIAtools.vrtmanager import rscGacos, tifGacos
-    from ARIAtools.shapefile_util import save_shapefile
-    from shapely.geometry import Polygon
 
     # File must be physically extracted, cannot proceed with VRT format. Defaulting to ENVI format.
     outputFormat = 'ENVI' if outputFormat == 'VRT' else outputFormat
@@ -1888,6 +1939,7 @@ def main(inps=None):
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile,
                                                 bbox=inps.bbox,
+                                                projection=inps.projection,
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
@@ -1980,6 +2032,7 @@ def main(inps=None):
     # aria_extract default parms
     export_dict = {
         'full_product_dict': standardproduct_info.products[1],
+        'proj': proj,
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'layers': inps.layers,
@@ -1991,7 +2044,6 @@ def main(inps=None):
         'mask': inps.mask,
         'outDir': inps.workdir,
         'outputFormat': inps.outputFormat,
-        'stitchMethodType': inps.stitchMethodType,
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking,

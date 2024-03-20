@@ -11,7 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from typing import List, Optional, Tuple
-from osgeo import gdal
+from osgeo import gdal, osr
 from pathlib import Path
 
 
@@ -54,6 +54,7 @@ and restructuring
 
 def stitch_unwrapped_frames(input_unw_files: List[str],
                             input_conncomp_files: List[str],
+                            proj: Optional[str] = 'EPSG:4326',
                             correction_method: Optional[str] = 'cycle2pi',
                             range_correction: Optional[bool] = True,
                             direction_N_S: Optional[bool] = False,
@@ -71,8 +72,8 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
     temp_snwe_list = []
 
     for unw_file, conn_file in zip(input_unw_files, input_conncomp_files):
-        unw_attr_dicts.append(get_GUNW_attr(unw_file))
-        conncomp_attr_dicts.append(get_GUNW_attr(conn_file))
+        unw_attr_dicts.append(get_GUNW_attr(unw_file, proj=proj))
+        conncomp_attr_dicts.append(get_GUNW_attr(conn_file, proj=proj))
         # get frame bounds, assume are the same for unw and conncomp
         temp_snwe_list.append(unw_attr_dicts[-1]['SNWE'])
 
@@ -103,21 +104,46 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
         # Frame1
         frame1_unw_array = get_GUNW_array(
             filename=unw_attr_dicts[ix1]['PATH'],
+            proj=proj,
             nodata=unw_attr_dicts[ix1]['NODATA']
         )
         frame1_conn_array = get_GUNW_array(
             filename=conncomp_attr_dicts[ix1]['PATH'],
+            proj=proj,
             nodata=conncomp_attr_dicts[ix1]['NODATA']
         )
         # Frame2
         frame2_unw_array = get_GUNW_array(
             filename=unw_attr_dicts[ix2]['PATH'],
+            proj=proj,
             nodata=unw_attr_dicts[ix2]['NODATA']
         )
         frame2_conn_array = get_GUNW_array(
             filename=conncomp_attr_dicts[ix2]['PATH'],
+            proj=proj,
             nodata=conncomp_attr_dicts[ix2]['NODATA']
         )
+        # capture all lyr nodata values
+        conncomp_nodata_values = [0, -1, conncomp_attr_dicts[ix1]['NODATA'],
+                                                      conncomp_attr_dicts[ix2]['NODATA']]
+        conncomp_nodata_values = list(set(conncomp_nodata_values))
+        unw_nodata_values = [0, unw_attr_dicts[ix1]['NODATA'],
+                                             unw_attr_dicts[ix2]['NODATA']]
+        unw_nodata_values = list(set(unw_nodata_values))
+        # create mask field for all arrays
+        conncomp_mask_ix1 = np.isin(frame1_conn_array, conncomp_nodata_values)
+        conncomp_mask_ix2 = np.isin(frame2_conn_array, conncomp_nodata_values)
+        unw_mask_ix1 = np.isin(frame1_unw_array, conncomp_nodata_values)
+        unw_mask_ix2 = np.isin(frame2_unw_array, conncomp_nodata_values)
+        # apply mask
+        frame1_unw_array = np.ma.masked_where(unw_mask_ix1,
+            frame1_unw_array)
+        frame1_conn_array = np.ma.masked_where(conncomp_mask_ix1,
+            frame1_conn_array)
+        frame2_unw_array = np.ma.masked_where(unw_mask_ix2,
+            frame2_unw_array)
+        frame2_conn_array = np.ma.masked_where(conncomp_mask_ix2,
+            frame2_conn_array)
 
         if i == 0:
             (corr_unw, corr_conn, corr_dict) = stitch_unw2frames(
@@ -206,7 +232,8 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
     box_1, box_2 = frame_overlap(
         rdict1['SNWE'], rdict2['SNWE'],
         [rdict1['LAT_SPACING'], rdict1['LON_SPACING']],
-        [rdict2['LAT_SPACING'], rdict2['LON_SPACING']])
+        [rdict2['LAT_SPACING'], rdict2['LON_SPACING']],
+        [rdict1['LAT_SPACING'], rdict1['LON_SPACING']])
 
     # LOOP OVER COMPONENTS WITHIN THE OVERLAP
     # Get connected component pairs
@@ -299,12 +326,14 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
         [_nan_filled_array(unw_data1),
          _nan_filled_array(unw_data2)],
         comb_snwe, comb_latlon,
-        method='mean')
+        method='mean',
+        latlon_step=comb_latlon[0])
     combined_conn, _, _ = combine_data_to_single(
         [_nan_filled_array(conn_data1),
          _nan_filled_array(conn_data2)],
         comb_snwe, comb_latlon,
-        method='min')
+        method='min',
+        latlon_step=comb_latlon[0])
     # combined dict
     combined_dict = dict(SNWE=combined_snwe,
                          LAT_SPACING=combined_latlon_spacing[0],
@@ -623,6 +652,7 @@ def _metadata_offset(unw1: NDArray, unw2: NDArray,
 def product_stitch_sequential(input_unw_files: List[str],
                               input_conncomp_files: List[str],
                               arrres: List[float],
+                              epsg: Optional[str] = '4326',
                               output_unw: Optional[str] = './unwMerged',
                               output_conn: Optional[str] = './connCompMerged',
                               output_format: Optional[str] = 'ENVI',
@@ -696,6 +726,11 @@ def product_stitch_sequential(input_unw_files: List[str],
     # create temp files
     temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
     temp_conn_out = output_conn.parent / ('temp_' + output_conn.name)
+    # obtain reference epsg code to assign to intermediate outputs
+    ref_proj_str = get_GUNW_attr(input_unw_files[0])['PROJECTION']
+    srs = osr.SpatialReference(wkt=ref_proj_str)
+    srs.AutoIdentifyEPSG()
+    ref_proj = srs.GetAuthorityCode(None)
 
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
@@ -711,6 +746,7 @@ def product_stitch_sequential(input_unw_files: List[str],
          combined_snwe) = stitch_unwrapped_frames(
             input_unw_files,
             input_conncomp_files,
+            proj=f'EPSG:{ref_proj}',
             correction_method=correction_method,
             range_correction=range_correction,
             direction_N_S=True,
@@ -720,13 +756,13 @@ def product_stitch_sequential(input_unw_files: List[str],
         # write stitched unwrappedPhase
         write_GUNW_array(
             temp_unw_out, combined_unwrap, combined_snwe,
-            format=output_format, verbose=verbose,
+            format=output_format, epsg=int(ref_proj), verbose=verbose,
             update_mode=overwrite, add_vrt=True, nodata=0.0)
 
         # write stitched connectedComponents
         write_GUNW_array(
             temp_conn_out, combined_conn, combined_snwe,
-            format=output_format, verbose=verbose,
+            format=output_format, epsg=int(ref_proj), verbose=verbose,
             update_mode=overwrite, add_vrt=True, nodata=-1.0)
 
     # Crop
@@ -741,8 +777,8 @@ def product_stitch_sequential(input_unw_files: List[str],
     #       Also, it looks like it is important to close gdal.Warp
     #       gdal.Warp/Translate add 6 seconds to runtime
 
-    for output, input in zip([output_unw, output_conn],
-                             [temp_unw_out, temp_conn_out]):
+    for output, input in zip([output_conn, output_unw],
+                             [temp_conn_out, temp_unw_out]):
         # Crop if selected
         ds = gdal.Warp(str(output),
                        str(input.with_suffix('.vrt')),
@@ -751,7 +787,9 @@ def product_stitch_sequential(input_unw_files: List[str],
                        xRes=arrres[0], yRes=arrres[1],
                        targetAlignedPixels=True,
                        # cropToCutline = True,
-                       outputBounds=bounds
+                       dstSRS=f'EPSG:{epsg}',
+                       outputBounds=bounds,
+                       outputType=gdal.GDT_Float32
                        )
         ds = None
         # Update VRT
@@ -774,7 +812,8 @@ def product_stitch_sequential(input_unw_files: List[str],
                 mask = mask_file
 
             mask_array = mask.ReadAsArray()
-            array = get_GUNW_array(str(output.with_suffix('.vrt')))
+            array = get_GUNW_array(str(output.with_suffix('.vrt')),
+                proj=f'EPSG:{epsg}')
 
             if output == output_conn:
                 # Mask connected components
@@ -788,137 +827,39 @@ def product_stitch_sequential(input_unw_files: List[str],
             update_file = gdal.Open(str(output), gdal.GA_Update)
             update_file = update_file.GetRasterBand(1).WriteArray(update_array)
             update_file = None
+            
+        # mask out zeros
+        array = get_GUNW_array(str(output.with_suffix('.vrt')),
+            proj=f'EPSG:{epsg}')
+        if output == output_conn:
+            # Mask connected components
+            array[(array == -1) | (array == 0)] = np.nan
+        else:
+            concomp_array = \
+                get_GUNW_array(str(output_conn.with_suffix('.vrt')),
+                    proj=f'EPSG:{epsg}')
+            concomp_array[(concomp_array == -1) \
+                | (concomp_array == 0)] = np.nan
+            concomp_array = np.isnan(concomp_array)
+            array[array == 0] = np.nan
+            array[concomp_array] = np.nan
+        update_file = gdal.Open(str(output), gdal.GA_Update)
+        update_file = update_file.GetRasterBand(1).WriteArray(array)
+        update_file = None
 
     # Plot stitched
     # NOTE: saving output figure adds 4 seconds
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')),
-                           str(output_conn.with_suffix('.vrt')))
+            str(output_conn.with_suffix('.vrt')))
 
     # Remove temp files
     [ii.unlink() for ii in [temp_unw_out,
                             temp_unw_out] if ii.exists()]
 
 
-def product_stitch_sequential_metadata(
-        input_meta_files: List[str],
-        output_meta: Optional[str] = './tempMerged',
-        output_format: Optional[str] = 'ENVI',
-        verbose: Optional[bool] = False) -> None:
-    """
-    Sequential stitching of frames implementation from
-    `product_stitch_sequential` for metadata layers
-
-    Parameters
-    ----------
-    input_meta_files : list
-        list of files with metadata layers (multiple frames along same track)
-        GUNW:'NETCDF:"%path/S1-GUNW-*.nc":
-        /science/grids/corrections/external/tides/solidEarth/reference'
-    output_meta : str
-        str pointing to path and filename of output stitched product
-    output_format : str
-        output format used for gdal writer [Gtiff, ENVI, VRT], default is ENVI
-    verbose : bool
-        print info messages [True/False]
-
-    NOTE: Move cropping (gdal.Warp to bounds and clip_json) and masking to
-          ariaExtract.py to make this function modular for other use
-    """
-
-    # Create VRT and exit early if only one frame passed,
-    # and therefore no stitching needed
-    if len(input_meta_files) == 1:
-        gdal.BuildVRT(output_meta+'.vrt', input_meta_files)
-        return
-
-    # Outputs
-    output_meta = Path(output_meta).absolute()
-
-    # Get raster attributes [SNWE, latlon_spacing, length, width. nodata]
-    # from each input file
-
-    # Initalize variables
-    meta_attr_dicts = []  # metadata layers
-    temp_snwe_list = []
-    temp_latlon_spacing_list = []
-
-    for meta_file in input_meta_files:
-        meta_attr_dicts.append(get_GUNW_attr(meta_file))
-        temp_snwe_list.append(meta_attr_dicts[-1]['SNWE'])
-        temp_latlon_spacing_list.append([meta_attr_dicts[-1]['LAT_SPACING'],
-                                        meta_attr_dicts[-1]['LON_SPACING']])
-
-    # get sorted indices for frame bounds, from South to North
-    # Sequential stitching starts from the most south frame and moves
-    # forward to next one in the North direction
-    # TODO: add option to reverse direction of stitching
-    sorted_ix = np.argsort(np.array(temp_snwe_list)[:, 0], axis=0)
-
-    # Loop through attributes
-    snwe_list = [temp_snwe_list[ii] for ii in sorted_ix]
-    latlon_spacing_list = [temp_latlon_spacing_list[ii] for ii in sorted_ix]
-
-    # Loop through sorted frames, and stitch neighboring frames
-    for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
-        if verbose:
-            print('Frame-1:',
-                  meta_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
-            print('Frame-2:',
-                  meta_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
-        # Frame1
-        frame1_meta_array = get_GUNW_array(meta_attr_dicts[ix1]['PATH'])
-        # Frame2
-        frame2_meta_array = get_GUNW_array(meta_attr_dicts[ix2]['PATH'])
-
-        # Mask nodata values
-        frame1_meta_array[frame1_meta_array ==
-                          meta_attr_dicts[ix1]['NODATA']] = np.nan
-        frame2_meta_array[frame2_meta_array ==
-                          meta_attr_dicts[ix2]['NODATA']] = np.nan
-
-        if i == 0:
-            (corr_meta1, corr_meta2) = stitch_2frames_metadata(
-                frame1_meta_array,
-                meta_attr_dicts[ix1],
-                frame2_meta_array,
-                meta_attr_dicts[ix2],
-                verbose=verbose)
-            # Store corrected values
-            corrected_meta_arrays = [corr_meta1, corr_meta2]
-        else:
-            (corr_meta1, corr_meta2) = stitch_2frames_metadata(
-                corrected_meta_arrays[-1],
-                meta_attr_dicts[ix1],
-                frame2_meta_array,
-                meta_attr_dicts[ix2],
-                verbose=verbose)
-
-            # Overwrite the last element in corrected arrays
-            # TODO: check how to do this without using del
-            del corrected_meta_arrays[-1]
-            corrected_meta_arrays.extend([corr_meta1, corr_meta2])
-
-    # Combine corrected unwrappedPhase arrays
-    combined_meta, combined_snwe, _ = combine_data_to_single(
-        corrected_meta_arrays, snwe_list,
-        latlon_spacing_list, method='mean',
-        latlon_step=[-0.1, 0.1])
-
-    # replace nan with 0.0
-    combined_meta = np.nan_to_num(combined_meta, nan=0.0)
-
-    # Write
-    # create temp files
-    meta_out = output_meta.parent / (output_meta.name)
-    # write stitched metadata product
-    write_GUNW_array(meta_out, combined_meta, combined_snwe,
-                     format=output_format, verbose=verbose,
-                     add_vrt=True, nodata=0.0)
-
-
 def plot_GUNW_stitched(stiched_unw_filename: str,
-                       stiched_conn_filename: str) -> None:
+                       stiched_conn_filename: str, epsg: str) -> None:
     '''
     Plotting function for stitched outputs
     '''
@@ -941,9 +882,9 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
     output_fig.unlink(missing_ok=True)
 
     # Load Data
-    stitched_unw = get_GUNW_array(stiched_unw_filename)
-    stitched_conn = get_GUNW_array(stiched_conn_filename)
-    stitched_attr = get_GUNW_attr(stiched_unw_filename)
+    stitched_unw = get_GUNW_array(stiched_unw_filename, proj=f'EPSG:{epsg}')
+    stitched_conn = get_GUNW_array(stiched_conn_filename, proj=f'EPSG:{epsg}')
+    stitched_attr = get_GUNW_attr(stiched_unw_filename, proj=f'EPSG:{epsg}')
 
     # ConnComp discrete colormap
     # bounds = np.linspace(0, int(np.nanmax(stitched_conn)),

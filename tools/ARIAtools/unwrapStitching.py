@@ -7,26 +7,27 @@
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-import pdb
-import os
-import time
-import sys
-import logging
-
-import numpy as np
-from osgeo import gdal,ogr
-from osgeo.gdalconst import *
-import tempfile
-import shutil
-from shapely.geometry import Point,Polygon,shape, LinearRing
-from shapely.ops import nearest_points
-import copy
-import json
-from joblib import Parallel, delayed, dump, load
-import random
-import glob
 import collections
+import copy
+import glob
+import json
+import logging
+import os
+import random
+import shutil
+import sys
+import tempfile
+import time
+
+import h5py
+import numpy as np
+from joblib import Parallel, delayed, dump, load
+from osgeo import gdal, ogr
+from osgeo.gdalconst import *
+from pyproj import Transformer
+from shapely.geometry import Point, Polygon, LinearRing
+from shapely.ops import nearest_points, transform
+from shapely.wkt import loads
 
 from ARIAtools.logger import logger
 from ARIAtools.shapefile_util import open_shapefile, save_shapefile
@@ -36,6 +37,12 @@ log = logging.getLogger(__name__)
 solverTypes = ['pulp', 'glpk', 'gurobi']
 redarcsTypes = {'MCF':-1, 'REDARC0':0, 'REDARC1':1, 'REDARC2':2}
 stitchMethodTypes = ['overlap','2stage']
+
+
+def _nan_filled_array(masked_array):
+    masked_array.fill_value = np.nan
+    return masked_array.filled()
+
 
 class Stitching:
     '''
@@ -175,7 +182,35 @@ class Stitching:
             ccFile_temp = gdalTest(ccFile)
             # check if it exist and well-formed and pass back shapefile of it
             if self.stitchMethodType == "overlap":
-                bbox_temp = open_shapefile(prodbboxFile,'productBoundingBox',1)
+                # access NISAR frame bbox
+                if '.h5' in prodbboxFile:
+                    sdskeys = prodbboxFile[8:].split('"')
+                    basename = os.path.basename(sdskeys[0])
+                    # Get polarization
+                    pol_dict = {}
+                    pol_dict['SV'] = 'VV'
+                    pol_dict['SH'] = 'HH'
+                    file_pol = pol_dict[basename.split('_')[10]]
+                    lyr_pref = '/science/LSAR/GUNW/grids/frequencyA' + \
+                                    f'/unwrappedInterferogram/{file_pol}/'
+                    proj_location = lyr_pref + 'projection'
+                    with h5py.File(sdskeys[0], 'r') as hdf_gunw:
+                        bbox_temp = hdf_gunw[sdskeys[1][1:]]
+                        bbox_temp = bbox_temp[()]
+                        bbox_temp = loads(bbox_temp)
+                        latlon_file_bbox = hdf_gunw[sdskeys[1][1:]]
+                        latlon_file_bbox = latlon_file_bbox[()]
+                        latlon_file_bbox = loads(latlon_file_bbox)
+                        self.proj = int(hdf_gunw[proj_location][()])
+                    pyproj_transformer = Transformer.from_crs('EPSG:4326',
+                        f'EPSG:{self.proj}', always_xy=True)
+                    bbox_temp = transform(lambda x, y, z=None: \
+                        pyproj_transformer.transform(x, y), latlon_file_bbox)
+                if '.nc' in prodbboxFile:
+                    bbox_temp = open_shapefile(prodbboxFile,
+                        'productBoundingBox',1)
+                    self.proj = 4326
+                print('self.proj!!!', self.proj)
                 prodbboxFile_temp = prodbboxFile
             else:
                 bbox_temp= "Pass"
@@ -295,7 +330,7 @@ class Stitching:
         for file in glob.glob(self.outFileConnComp + "*"):
             os.remove(file)
         gdal.BuildVRT(self.outFileConnComp+'.vrt', conCompFiles,
-                      options=gdal.BuildVRTOptions(srcNodata=-1))
+                      options=gdal.BuildVRTOptions(srcNodata=self.concompNodata))
         gdal.Warp(self.outFileConnComp, self.outFileConnComp+'.vrt',
                  options=gdal.WarpOptions(format=self.outputFormat,
                  cutlineDSName=self.setTotProdBBoxFile,
@@ -381,6 +416,7 @@ class UnwrapOverlap(Stitching):
             # the files are already sorted in the ARIAproduct class, will make consecutive overlaps between these sorted products
             for counter in range(self.nfiles-1):
                 # getting the two neighboring frames
+                print('self.prodbbox', self.prodbbox)
                 bbox_frame1 = self.prodbbox[counter]
                 bbox_frame2 = self.prodbbox[counter+1]
 
@@ -391,13 +427,15 @@ class UnwrapOverlap(Stitching):
                 polyOverlap = bbox_frame1.intersection(bbox_frame2)
 
                 # will save the geojson under a temp local filename
-                tmfile = tempfile.NamedTemporaryFile(mode='w+b',suffix='.json', prefix='Overlap_', dir='.')
-                outname = tmfile.name
+               # tmfile = tempfile.NamedTemporaryFile(mode='w+b',suffix='.json', prefix='Overlap_', dir='.')
+                #outname = tmfile.name
                 # will remove it as GDAL polygonize function cannot overwrite files
-                tmfile.close()
-                tmfile = None
+                #tmfile.close()
+                #tmfile = None
                 # saving the temp geojson
-                save_shapefile(outname, polyOverlap, 'GeoJSON')
+                #save_shapefile(outname, polyOverlap, 'GeoJSON', self.proj)
+                outname = '/Users/ssangha/Downloads/NISAR_test/adjacent_pairs/test_Overlap_fqgx08v5.geojson'
+                polyOverlap = open_shapefile(outname, 0, 0)
 
                 # calculate the mean of the phase for each product in the overlap region alone
                 # will first attempt to mask out connected component 0, and default to complete overlap if this fails.
@@ -405,15 +443,21 @@ class UnwrapOverlap(Stitching):
                 # connected component
                 out_data,connCompNoData1,geoTrans,proj = GDALread( \
                     self.ccFile[counter],data_band=1,loadData=False)
+                print('connCompNoData1', connCompNoData1)
+                self.concompNodata = connCompNoData1
+                #connCompNoData1 = -1
                 out_data,connCompNoData2,geoTrans,proj = GDALread( \
                     self.ccFile[counter+1],data_band=1,loadData=False)
+                print('connCompNoData2', connCompNoData2)
+                #connCompNoData2 = -1
                 connCompFile1 = gdal.Warp('', self.ccFile[counter],
                     options = gdal.WarpOptions(format="MEM",
                     cutlineDSName=outname,
                     outputBounds=polyOverlap.bounds,
                     dstNodata=connCompNoData1,
                     xRes=self.arrres[0], yRes=self.arrres[1],
-                    targetAlignedPixels=True))
+                    targetAlignedPixels=True,
+                    outputType=gdal.GDT_Float32))
                 # need to specify spacing to avoid inconsistent dimensions
                 connCompFile2 = gdal.Warp('', self.ccFile[counter+1],
                     options=gdal.WarpOptions(format="MEM",
@@ -422,7 +466,8 @@ class UnwrapOverlap(Stitching):
                     dstNodata=connCompNoData2,
                     xRes=self.arrres[0], yRes=self.arrres[1],
                     targetAlignedPixels=True,
-                    multithread = True))
+                    multithread = True,
+                    outputType=gdal.GDT_Float32))
 
 
                 # unwrapped phase
@@ -450,9 +495,16 @@ class UnwrapOverlap(Stitching):
 
                 # finding the component with the largest overlap
                 connCompData1 =connCompFile1.GetRasterBand(1).ReadAsArray()
+                #!#connCompData1 = np.ma.masked_invalid(connCompData1)
+                #!#np.ma.set_fill_value(connCompData1, -1.)
+                print('connCompData1', connCompData1)
                 connCompData1[(connCompData1==connCompNoData1) | (connCompData1==0)]=np.nan
+                print('final connCompData1', connCompData1)
                 connCompData2 =connCompFile2.GetRasterBand(1).ReadAsArray()
+                #!#connCompData2 = np.ma.masked_invalid(connCompData2)
+                #!#np.ma.set_fill_value(connCompData2, -1.)
                 connCompData2[(connCompData2==connCompNoData2) | (connCompData2==0)]=np.nan
+                print('final connCompData2', connCompData2)
                 connCompData2_temp = (connCompData2*100)
                 with np.errstate(invalid='ignore'):
                     temp = connCompData2_temp.astype(int)-connCompData1.astype(int)
@@ -512,7 +564,8 @@ class UnwrapOverlap(Stitching):
                 connCompFile2 = None
 
                 # remove the tempfile
-                shutil.os.remove(outname)
+                print('outname!!!!', outname)
+                #shutil.os.remove(outname)
 
                 # store the residual and populate the design matrix
                 residualcycles[counter]=cycles_temp
@@ -1141,7 +1194,11 @@ def GDALread(filename,data_band=1,loadData=True):
 
     # open the GDAL file and get typical data information
     try:
-        data =  gdal.Open(filename, gdal.GA_ReadOnly)
+        #data =  gdal.Open(filename, gdal.GA_ReadOnly)
+        data = gdal.Warp('',
+            filename,
+            format='MEM',
+            outputType=gdal.GDT_Float32)
     except:
         raise Exception(filename + " is not a GDAL supported")
 
@@ -1194,12 +1251,15 @@ def createConnComp_Int(inputs):
 
     # setting up the connected component integer 2PI shift mapping
     intMapping = connCompMapping[:,2]
+    print('intMapping', intMapping)
     # Will add the no-data to the mapping as well (such we can handle no-data region)
     # i.e. max comp ID + 1 = Nodata connected component which gets mapped to 0 integer shift such no-data region remains unaffected
     intMapping = np.append(intMapping, [0])
 
     # update the connected component with the new no-data value used in the mapping
+    print('NoDataMapping!!!!!!', NoDataMapping)
     connData[connData==connNoData]=NoDataMapping
+    print('new connData', connData)
 
     ## STEP 2: apply the mapping functions
     # interger 2PI scaling mapping for unw phase
@@ -1226,6 +1286,7 @@ def createConnComp_Int(inputs):
 
     # Offseting the vrt for the range offset correctiom
     unwRangeOffsetVRTName = os.path.abspath(os.path.join(saveDir,'unw',saveNameID + '_rangeOffset.vrt'))
+    print('connCompMapping[1,3]', connCompMapping[1,3])
     buildScaleOffsetVRT(unwRangeOffsetVRTName,unwFile,connProj,connGeoTrans,File1_offset=connCompMapping[1,3],length=length,width=width)
 
     # writing out the corrected unw phase vrt => phase + 2PI * integer map
@@ -1242,6 +1303,7 @@ def write_ambiguity(data, outName,proj, geoTrans,noData=False):
     # GDAL precision support in tif
     Byte = gdal.GDT_Byte
     Int16 = gdal.GDT_Int16
+    Flt32 = gdal.GDT_Float32
 
     # check if the path to the file needs to be created
     dirname = os.path.dirname(outName)
@@ -1253,7 +1315,7 @@ def write_ambiguity(data, outName,proj, geoTrans,noData=False):
     # leverage the compression option to ensure small file size
     dst_options = ['COMPRESS=LZW']
     # create the dataset
-    ds = driver.Create(outName , data.shape[1], data.shape[0], 1, Int16, dst_options)
+    ds = driver.Create(outName , data.shape[1], data.shape[0], 1, Flt32, dst_options)
     # setting the proj and transformation
     ds.SetGeoTransform(geoTrans)
     ds.SetProjection(proj)
@@ -1282,7 +1344,7 @@ def build2PiScaleVRT(output,File,width=False,length=False):
     <ComplexSource>
         <SourceFilename relativeToVRT="1">{File}</SourceFilename>
         <SourceBand>1</SourceBand>
-        <SourceProperties RasterXSize="{width}" RasterYSize="{length}" DataType="Int16"/>
+        <SourceProperties RasterXSize="{width}" RasterYSize="{length}" DataType="Float32"/>
         <ScaleOffset>0</ScaleOffset>
         <ScaleRatio>6.28319</ScaleRatio>
     </ComplexSource>

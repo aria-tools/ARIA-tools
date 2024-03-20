@@ -379,6 +379,12 @@ def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
                extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
     from copy import deepcopy
+    
+    # track if product stack is NISAR GUNW or not
+    nisar_file = False
+    track_fileext = products[0]['unwrappedPhase'][0]
+    if len(track_fileext.split('.h5')) > 1:
+        nisar_file = True
 
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
     ignore_lyr = ['productBoundingBox','productBoundingBoxFrames','pair_name']
@@ -491,12 +497,12 @@ def layerCheck(products, layers, nc_version, gacos_products, tropo_models,
                         'as tropo component layers are not common '
                         'to all products.')
             tropo_total = False
-        if model_names == []:
+        if model_names == [] and not nisar_file:
             log.warning('Extraction of raider-derived troposphere '
                         'layers is not possible as specified tropo model '
                         f'name(s) "-tm {tropo_models}" is not valid.')
             tropo_total = False
-
+    
     return layers, tropo_total, model_names
 
 

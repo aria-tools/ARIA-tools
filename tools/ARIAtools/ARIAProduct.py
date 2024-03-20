@@ -7,17 +7,24 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+import logging
 import os
 import re
+
+import h5py
 import numpy as np
 from joblib import Parallel, delayed
-import logging
 from osgeo import gdal
+from pyproj import Transformer
+from shapely.ops import transform
+from shapely.wkt import loads
 
-from ARIAtools.url_manager import url_versions
-from ARIAtools.shapefile_util import open_shapefile, save_shapefile
-from ARIAtools.logger import logger
 from ARIAtools.ARIA_global_variables import ARIA_TROPO_INTERNAL
+from ARIAtools.logger import logger
+from ARIAtools.shapefile_util import open_shapefile, save_shapefile
+from ARIAtools.url_manager import url_versions
+
+from datetime import datetime
 
 gdal.UseExceptions()
 gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -81,7 +88,7 @@ class ARIA_standardproduct:
     import glob
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
-                 url_version='None', nc_version='None', verbose=False):
+                 url_version='None', nc_version='None', projection='4326', verbose=False):
         """
 
         Parse products and input bounding box (if specified)
@@ -98,6 +105,7 @@ class ARIA_standardproduct:
         self.pairname = None
         # enforced netcdf version
         self.nc_version = nc_version
+        self.projection = projection
         # pass number of threads for multiprocessing computation
         if num_threads == 'all':
             import multiprocessing
@@ -138,7 +146,7 @@ class ARIA_standardproduct:
         tmp_files = self.files.copy()
         for f in tmp_files:
             ext = os.path.splitext(f)[1].lower()
-            if not ext == '.nc':
+            if not ext == '.nc' and not ext == '.h5':
                 self.files.remove(f)
                 log.warning('%s is not a supported NetCDF... skipping', f)
 
@@ -151,15 +159,16 @@ class ARIA_standardproduct:
             gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', 'cookies.txt')
             # gdal.SetConfigOption('CPL_VSIL_CURL_CHUNK_SIZE','10485760')
             gdal.SetConfigOption('VSI_CACHE', 'YES')
-
-            fmt = gdal.Open( \
-                [s for s in self.files if 'https://' in s][0] \
-                ).GetDriver().GetDescription()
-            if fmt != 'netCDF': raise Exception('System update required to '
-                'read requested virtual products: '
-                'Linux kernel >=4.3 and libnetcdf >=4.5')
-        #check if local file reader is being captured as netcdf
-        if any("https://" not in i for i in self.files):
+            if not any('.h5' in i for i in self.files):
+                fmt = gdal.Open( \
+                    [s for s in self.files if 'https://' in s][0] \
+                    ).GetDriver().GetDescription()
+                if fmt != 'netCDF': raise Exception('System update required '
+                    'to read requested virtual products: '
+                    'Linux kernel >=4.3 and libnetcdf >=4.5')
+        #check if local file reader is being captured as netcdf for S1 GUNW
+        if any('https://' not in i for i in self.files) \
+            and not any('.h5' in i for i in self.files):
             fmt = gdal.Open( \
                 [s for s in self.files if 'https://' not in s][0] \
                 ).GetDriver().GetDescription()
@@ -172,6 +181,33 @@ class ARIA_standardproduct:
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
+            
+        # find native projection, if specified
+        if self.projection.lower() == 'native':
+            fname = self.files[0]
+            basename = os.path.basename(fname)
+            if basename.split('_')[0] == 'NISAR':
+                record_proj = []
+                pol_dict = {}
+                pol_dict['SV'] = 'VV'
+                pol_dict['SH'] = 'HH'
+                pol_dict['HHNA'] = 'HH'
+                for i in self.files:
+                    fname = 'NETCDF:"' + i
+                    basename = os.path.basename(i)
+                    file_pol = pol_dict[basename.split('_')[10]]
+                    lyr_pref = '/science/LSAR/GUNW/grids/frequencyA' + \
+                        f'/unwrappedInterferogram/{file_pol}/'
+                    proj_location = lyr_pref + 'projection'
+                    with h5py.File(fname[8:], 'r') as hdf_gunw:
+                        file_proj = int(hdf_gunw[proj_location][()])
+                    record_proj.append(file_proj)
+                self.projection = int(np.median(record_proj))
+            else:
+                self.projection = 4326
+                
+        else:
+            self.projection = int(self.projection)
 
         ### Check if bbox input is valid list or shapefile.
         if bbox is not None:
@@ -217,44 +253,62 @@ class ARIA_standardproduct:
         number, and populate corresponding product dictionary accordingly.
 
         """
-        ### Get standard product version from file
-        try:
-            #version accessed differently between URL vs downloaded product
-            version=str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
-        except:
-            log.warning('%s is not a supported file type... skipping', fname)
-            return []
+        basename = os.path.basename(fname)
+        fname = 'NETCDF:"' + fname
 
-        # Enforce forward-compatibility of netcdf versions
-        if self.nc_version == '1a': nc_version_check = ['1a', '1b', '1c']
-        if self.nc_version == '1b': nc_version_check = ['1b', '1c']
-        if self.nc_version == '1c': nc_version_check = ['1c']
+        ### Get standard product version from file
+        if basename.split('_')[0] == 'NISAR':
+            version = basename.split('_')[-1][:-3]
+            version = '.'.join(version)
+            if self.nc_version == '1a' or self.nc_version == '1b' or \
+                self.nc_version == '1c':
+                nc_version_check = ['0.0.1']
+        else:
+            try:
+                # version accessed differently between URL vs local product
+                version = \
+                    str(gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+            except:
+                log.warning('%s is not a supported file type... skipping',
+                                    fname)
+                return []
+            # Enforce forward-compatibility of netcdf versions
+            if self.nc_version == '1a': nc_version_check = ['1a', '1b', '1c']
+            if self.nc_version == '1b': nc_version_check = ['1b', '1c']
+            if self.nc_version == '1c': nc_version_check = ['1c']
 
         if version not in nc_version_check:
-            log.warning('input nc_version = %s, file %s rejected because '
-                        'it is a version %s product', \
-                        self.nc_version, fname, version)
+            log.warning(f'input nc_version = {self.nc_version}, '
+                               f'file {fname} rejected because '
+                               f'it is a version {version} product')
             return []
 
         ### Get lists of radarmetadata/layer keys for this file version
-        fname = 'NETCDF:"' + fname
-        rmdkeys, sdskeys = self.__mappingVersion__(fname, version)
-
-        # Open standard product bbox
-        if self.bbox is not None:
-            file_bbox = open_shapefile(fname + '":'+sdskeys[0],
-                                       'productBoundingBox', 1)
-            # Only generate dictionaries if there is spatial overlap
-            # with user bbox
-            if file_bbox.intersects(self.bbox):
-                product_dicts = [self.__mappingData__( \
-                                 fname, rmdkeys, sdskeys, version)]
-            else:
-                product_dicts = []
-        # If no bbox specified, just pass dictionaries
+        # separate NISAR reader
+        file_bbox_intersect = True
+        if basename.split('_')[0] == 'NISAR':
+            rmdkeys, sdskeys, file_bbox = self.__NISARmappingVersion__(
+                fname, version)
         else:
-            product_dicts = [self.__mappingData__( \
-                             fname, rmdkeys, sdskeys, version)]
+            rmdkeys, sdskeys, file_bbox = self.__mappingVersion__(
+                fname, version)
+
+        # Only pass dictionaries if there is spatial overlap with user bbox
+        # If no bbox specified, pass dictionaries
+        if self.bbox is not None:
+            file_bbox_intersect = file_bbox.intersects(self.bbox)
+            if file_bbox_intersect is False:
+                product_dicts = []
+        if file_bbox_intersect is not False:
+            # separate NISAR dict convention
+            if basename.split('_')[0] == 'NISAR':
+                 product_dicts = [self.__NISARmappingData__( \
+                         fname, rmdkeys, sdskeys, version)]
+            else:
+               product_dicts = [self.__mappingData__( \
+                         fname, rmdkeys, sdskeys, version)]
+            # assign product bounding box object to dictionary
+            product_dicts[0][1]['productBoundingBox'] = file_bbox
 
         return product_dicts
 
@@ -366,8 +420,8 @@ class ARIA_standardproduct:
         del rdrmetadata, sdsdict
 
         return [rdrmetadata_dict, datalyr_dict]
-
-
+        
+        
     def __mappingVersion__(self, fname, version):
         """
 
@@ -409,6 +463,7 @@ class ARIA_standardproduct:
                     int(rdrmetadata_dict['centerLatitude'][:-1])
 
             #hardcoded keys for a given sensor
+            rdrmetadata_dict['projection'] = self.projection
             if basename.split('-')[0] == 'S1':
                 rdrmetadata_dict['missionID'] = 'Sentinel-1'
                 rdrmetadata_dict['productType'] = 'UNW GEO IFG'
@@ -448,6 +503,9 @@ class ARIA_standardproduct:
                 '/science/grids/imagingGeometry/lookAngle',
                 '/science/grids/imagingGeometry/azimuthAngle'
             ]
+            # get product bounding box
+            file_bbox = open_shapefile(fname + '":' + sdskeys[0],
+                                       'productBoundingBox', 1)
             if version.lower()=='1c':
                 lyr_pref = '/science/grids/corrections'
                 sdskeys_addlyrs = [
@@ -472,7 +530,7 @@ class ARIA_standardproduct:
                 sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
                 sdskeys.extend(sdskeys_addlyrs)
 
-        return rdrmetadata_dict, sdskeys
+        return rdrmetadata_dict, sdskeys, file_bbox
 
 
     def __mappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
@@ -527,6 +585,166 @@ class ARIA_standardproduct:
         return [rdrmetadata_dict, datalyr_dict]
 
 
+    def __NISARmappingVersion__(self, fname, version):
+        """
+
+        Track the mapping of NISAR ARIA standard product versions.
+
+        The order of the keys needs to be consistent with the keys in the
+        mappingData function.
+        E.g. a new expected radar-metadata key can be added as XXX to the end
+        of the list "rmdkeys" below, and correspondingly to the end of the list
+        "radarkeys" inside the mappingData function. Same protocol for new
+        expected layer keys in the list "sdskeys" below, and correspondingly in
+        "layerkeys" inside the mappingData function.
+
+        """
+        # initiate variables
+        rdrmetadata_dict = {}
+        sdskeys = ['/science/LSAR/identification/boundingPolygon']
+        #Pass pair name
+        basename     = os.path.basename(fname)
+        self.pairname = basename.split('_')[11][:8] + \
+                                  '_' + basename.split('_')[13][:8]
+                                  
+        # Get polarization
+        pol_dict = {}
+        pol_dict['SV'] = 'VV'
+        pol_dict['SH'] = 'HH'
+        pol_dict['HHNA'] = 'HH'
+        file_pol = pol_dict[basename.split('_')[10]]
+
+        # Radarmetadata names for these versions
+        rdrmetadata_dict['pair_name'] = self.pairname
+        # get mid azimuth time
+        ref_doppler_time = datetime.strptime(basename.split('_')[11],
+            '%Y%m%dT%H%M%S')
+        sec_doppler_time = datetime.strptime(basename.split('_')[12],
+            '%Y%m%dT%H%M%S')
+        mid_dt = ref_doppler_time + \
+                        (sec_doppler_time - ref_doppler_time) / 2
+        mid_datetime_str = mid_dt.strftime('%Y-%m-%dT%H:%M:%S')
+        mid_datetime_str += '.0'
+        rdrmetadata_dict['azimuthZeroDopplerMidTime'] = mid_datetime_str
+
+        # assign latitude to assist with sorting
+        # get product bounding box
+        lyr_pref = '/science/LSAR/GUNW/grids/frequencyA' + \
+                        f'/unwrappedInterferogram/{file_pol}/'
+        proj_location = lyr_pref + 'projection'
+        with h5py.File(fname[8:], 'r') as hdf_gunw:
+            latlon_file_bbox = hdf_gunw[sdskeys[0]]
+            latlon_file_bbox = latlon_file_bbox[()]
+            latlon_file_bbox = loads(latlon_file_bbox)
+        rdrmetadata_dict['centerLatitude'] =  int(latlon_file_bbox.centroid.y)
+        rdrmetadata_dict['projection'] = self.projection
+        pyproj_transformer = Transformer.from_crs('EPSG:4326',
+            f'EPSG:{self.projection}', always_xy=True)
+        file_bbox = transform(lambda x, y, z=None: \
+            pyproj_transformer.transform(x, y), latlon_file_bbox)
+
+        # hardcoded keys
+        rdrmetadata_dict['missionID'] = 'NISAR'
+        rdrmetadata_dict['productType'] = 'UNW GEO IFG'
+        rdrmetadata_dict['wavelength'] = 0.24
+        rdrmetadata_dict['centerFrequency'] = 1.2699997500604727e+09
+        rdrmetadata_dict['slantRangeSpacing'] = 4.461197291666666
+        rdrmetadata_dict['slantRangeStart'] = 727415.98682514
+        rdrmetadata_dict['slantRangeEnd'] = 791384.81843777
+        #hardcoded key meant to gauge temporal connectivity of scenes
+        # (i.e. seconds between start and end)
+        rdrmetadata_dict['sceneLength'] = 16
+
+        # assigning full-res layer names
+        sdskeys.extend([
+            lyr_pref + 'unwrappedPhase',
+            lyr_pref + 'coherenceMagnitude',
+            lyr_pref + 'connectedComponents',
+            lyr_pref + 'ionospherePhaseScreen',
+            lyr_pref + 'ionospherePhaseScreenUncertainty'
+        ])
+        lyr_pref = '/science/LSAR/GUNW/metadata/radarGrid/'
+        sdskeys.extend([
+            lyr_pref + 'perpendicularBaseline',
+            lyr_pref + 'parallelBaseline',
+            lyr_pref + 'incidenceAngle',
+            lyr_pref + 'losUnitVectorX', # derive azimuthAngle from this
+            lyr_pref + 'losUnitVectorY', # derive azimuthAngle from this
+            lyr_pref + 'elevationAngle'
+        ])
+        # track and add additional correction layers, if they exist
+        sdskeys_addlyrs = [
+            lyr_pref + 'slantRangeSolidEarthTidesPhase',
+            lyr_pref + 'alongTrackSolidEarthTidesPhase',
+            lyr_pref + 'hydrostaticTroposphericPhaseScreen',
+            lyr_pref + 'wetTroposphericPhaseScreen'
+        ]
+        meta = gdal.Info(fname)
+        # remove keys not found in product
+        sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
+        sdskeys.extend(sdskeys_addlyrs)
+
+        return rdrmetadata_dict, sdskeys, file_bbox
+
+
+    def __NISARmappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
+        """
+
+        Pass product record of metadata and layers
+
+        Output and group together 2 dictionaries containing the
+        “radarmetadata info” and “data layer keys+paths”, respectively
+        The order of the dictionary keys below needs to be consistent with the
+        keys in the __NISARmappingVersion__ function of the
+        ARIA_standardproduct class (see instructions on how to appropriately
+        add new keys there).
+
+        """
+        # Expected layers
+        layerkeys=['productBoundingBox','unwrappedPhase',
+        'coherence','connectedComponents','ionospherePhaseScreen',
+        'ionospherePhaseScreenUncertainty','bPerpendicular',
+        'bParallel','incidenceAngle','losUnitVectorX', 'losUnitVectorY',
+        'elevationAngle']
+        # remove references to keys not found in product
+        # check for SET layers
+        addkeys = ['slantRangeSolidEarthTidesPhase',
+                           'alongTrackSolidEarthTidesPhase']
+        keys_reject = [i for i in addkeys \
+                               if i not in ''.join(sdskeys)]
+        addkeys = [i for i in addkeys if i not in keys_reject]
+
+        # check for tropo layers
+        tropo_lyrs = {}
+        tropo_lyrs['troposphereHydrostatic'] = \
+            'hydrostaticTroposphericPhaseScreen'
+        tropo_lyrs['troposphereWet'] = \
+            'wetTroposphericPhaseScreen'
+        for key_name, lyr_name in tropo_lyrs.items():
+            if lyr_name not in ''.join(sdskeys):
+                keys_reject.extend([key_name])
+            else:
+                addkeys.extend([key_name])
+        for i in keys_reject:
+            log.warning(f'Expected data layer key {i} '
+                               f'not found in {fname}')
+
+        layerkeys.extend(addkeys)
+
+        # Setup datalyr_dict
+        datalyr_dict={}
+        for i in enumerate(layerkeys):
+            datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
+        datalyr_dict['pair_name']=self.pairname
+        # 'productBoundingBox' will be updated to point to shapefile
+        # corresponding to final output raster, so record of
+        # indivdual frames preserved here
+        datalyr_dict['productBoundingBoxFrames'] = \
+            datalyr_dict['productBoundingBox']
+
+        return [rdrmetadata_dict, datalyr_dict]
+
+
     def __continuous_time__(self):
         """
 
@@ -544,7 +762,7 @@ class ARIA_standardproduct:
 
         """
         # import dependencies
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         import itertools
 
         sorted_products = []
@@ -562,10 +780,8 @@ class ARIA_standardproduct:
                                       scene[0]['pair_name'][9:]) and \
                                   (new_scene[0]['pair_name'][:8] == \
                                       scene[0]['pair_name'][:8])
-            scene_shape = open_shapefile( \
-                scene[1]['productBoundingBox'], 'productBoundingBox', 1)
-            new_scene_shape = open_shapefile( \
-                new_scene[1]['productBoundingBox'], 'productBoundingBox', 1)
+            scene_shape = scene[1]['productBoundingBox']
+            new_scene_shape = new_scene[1]['productBoundingBox']
             same_area = new_scene_shape.intersection(scene_shape).area \
                                       / scene_shape.area
             inv_same_area = scene_shape.intersection(new_scene_shape).area \
@@ -621,12 +837,8 @@ class ARIA_standardproduct:
                 "%Y%m%d")
             new_scene_t = datetime.strptime(new_scene[0]['pair_name'][9:],
                 "%Y%m%d")
-            scene_area = open_shapefile( \
-                                       scene[1]['productBoundingBox'],  \
-                                       'productBoundingBox', 1)
-            new_scene_area = open_shapefile( \
-                                               new_scene[1]['productBoundingBox'], \
-                                               'productBoundingBox', 1)
+            scene_area = scene[1]['productBoundingBox']
+            new_scene_area = new_scene[1]['productBoundingBox']
 
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
@@ -770,7 +982,8 @@ class ARIA_standardproduct:
 
         # Exit if products from different sensors were mixed
         if not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products) \
-            and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products):
+            and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products) \
+            and not all(i[0]['missionID'] == 'NISAR' for i in self.products):
             raise Exception('Specified input contains standard products from '
                 'different sensors, please proceed with homogeneous products')
 
