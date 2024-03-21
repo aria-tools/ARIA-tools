@@ -687,7 +687,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field):
     return
 
 def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
-                        nisar_file=False, proj='4326', driver='ENVI'):
+    nisar_file=False, proj='4326', driver='ENVI', model_name=''):
     """ Wrapper to prep metadata layer for extraction """
 
     if dem is None:
@@ -703,11 +703,9 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
         gdal.BuildVRT(outname + '.vrt', metadata_arr)
         return [0], None, outname
 
-    # capture model if tropo product
-    model_name = ''
+    # set output name differently if tropo
     if 'tropo' in key:
         if not nisar_file:
-            model_name = metadata_arr[0].split('/')[-3]
             out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
         if not os.path.exists(out_dir):
@@ -775,7 +773,7 @@ def prep_metadatalayers(outname, metadata_arr, dem, key, layers,
             gdal.Open(outname+'.vrt').SetMetadataItem(hgt_field,
                 gdal.Open(metadata_arr[0]).GetMetadataItem(hgt_field))
 
-    return hgt_field, model_name, ref_outname
+    return hgt_field, ref_outname
 
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
@@ -832,6 +830,8 @@ def handle_epoch_layers(layers,
                         product_dict,
                         proj,
                         lyr_path,
+                        user_lyrs,
+                        map_lyrs,
                         key,
                         sec_key,
                         ref_key,
@@ -889,15 +889,25 @@ def handle_epoch_layers(layers,
     for i in enumerate(product_dict[0]):
         ifg = product_dict[1][i[0]][0]
         outname = os.path.abspath(os.path.join(workdir, ifg))
+        # capture model if tropo product
+        model_name = ''
+        if 'tropo' in key:
+            out_dir = os.path.dirname(outname)
+            if not nisar_file:
+                model_name = i[1][0].split('/')[-3]
+                out_dir = os.path.join(out_dir, model_name)
+            if not os.path.exists(out_dir):
+                os.mkdir(out_dir)
 
         # create temp files for ref/sec components
-        ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
-        hgt_field, model_name, ref_outname = prep_metadatalayers(
-            ref_outname, i[1],
-            dem, ref_key,
-            layers, nisar_file,
-            proj,
-            outputFormat)
+        if ref_key in user_lyrs or tropo_total:
+            ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
+            hgt_field, ref_outname = prep_metadatalayers(
+                ref_outname, i[1],
+                dem, ref_key,
+                layers, nisar_file,
+                proj,
+                outputFormat, model_name)
         # Update progress bar
         prog_bar.update(i[0]+1, suffix=ifg)
 
@@ -921,17 +931,18 @@ def handle_epoch_layers(layers,
                     'reference', sec_key)
             else:
                 wet_path = os.path.join(lyr_path,
-                    'wetTroposphericPhaseScreen')
+                    map_lyrs[0])
                 dry_path = os.path.join(lyr_path,
-                    'hydrostaticTroposphericPhaseScreen')
+                    map_lyrs[1])
             sec_comp = [j.replace(wet_path, dry_path)
                         for j in i[1]]
-            hgt_field, model_name, sec_outname = prep_metadatalayers(
-                sec_outname,
-                sec_comp, dem,
-                sec_key, layers, nisar_file,
-                proj,
-                outputFormat)
+            if sec_key in user_lyrs or tropo_total:
+                hgt_field, sec_outname = prep_metadatalayers(
+                    sec_outname,
+                    sec_comp, dem,
+                    sec_key, layers, nisar_file,
+                    proj,
+                    outputFormat, model_name)
             # if specified, compute total delay
             if tropo_total:
                 model_dir = os.path.abspath(os.path.join(workdir, model_name))
@@ -1059,9 +1070,11 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
     
     # track if product stack is NISAR GUNW or not
     nisar_file = False
+    range_correction = True
     track_fileext = full_product_dict[0]['unwrappedPhase'][0]
     if len(track_fileext.split('.h5')) > 1:
         nisar_file = True
+        range_correction = False
         model_names = ['']
     else:
         model_names = [f'_{i}' for i in model_names]
@@ -1102,8 +1115,9 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-    if tropo_total or list(set.intersection(*map(set,
-                                                 [layers, tropo_lyrs]))) != []:
+    user_lyrs =  list(set.intersection(*map(set,
+        [layers, tropo_lyrs])))
+    if tropo_total or user_lyrs != []:
         # set input keys
         if nisar_file:
             lyr_prefix = '/science/LSAR/GUNW/metadata/radarGrid/'
@@ -1114,6 +1128,7 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
         dry_key = 'troposphereHydrostatic'
         workdir = os.path.join(outDir, key)
         lyr_input_dict['lyr_path'] = lyr_prefix
+        lyr_input_dict['user_lyrs'] = user_lyrs
         lyr_input_dict['key'] = key
         lyr_input_dict['sec_key'] = dry_key
         lyr_input_dict['ref_key'] = wet_key
@@ -1130,6 +1145,13 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
                 [j["pair_name"]
                     for j in full_product_dict if model in j.keys()]
             ]
+            product_dict_dry = [j[dry_key + f'{i}'] for j in full_product_dict if \
+                dry_key + f'{i}' in j.keys()]
+
+            # get unique layer names from path
+            map_lyrs = [product_dict[0][0][0].split('/')[-1], 
+                product_dict_dry[0][0].split('/')[-1]]
+            lyr_input_dict['map_lyrs'] = map_lyrs
 
             # set iterative keys
             prev_outname = os.path.abspath(os.path.join(workdir, i))
@@ -1157,8 +1179,9 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
-    if list(set.intersection(*map(set,
-                                  [layers, ['solidEarthTide']]))) != []:
+    user_lyrs =  list(set.intersection(*map(set,
+        [layers, ['solidEarthTide']])))
+    if user_lyrs != []:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
         key = 'solidEarthTide'
         ref_key = key
@@ -1166,16 +1189,20 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
         product_dict = \
             [[j[key] for j in full_product_dict if key in j.keys()],
              [j["pair_name"] for j in full_product_dict if key in j.keys()]]
+        # get unique layer names from path
+        map_lyrs = [product_dict[0][0][0].split('/')[-1]]
+        lyr_input_dict['map_lyrs'] = map_lyrs
 
         workdir = os.path.join(outDir, key)
         prev_outname = deepcopy(workdir)
         prog_bar = progBar.progressBar(maxValue=len(product_dict[0]),
-                                       prefix='Generating: '+key+' - ')
+                                       prefix='Generating: tropo layers- ')
 
         # set input keys
         lyr_input_dict['prog_bar'] = prog_bar
         lyr_input_dict['product_dict'] = product_dict
         lyr_input_dict['lyr_path'] = lyr_prefix
+        lyr_input_dict['user_lyrs'] = user_lyrs
         lyr_input_dict['key'] = key
         lyr_input_dict['sec_key'] = sec_key
         lyr_input_dict['ref_key'] = ref_key
@@ -1195,9 +1222,9 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
 
     # If specified, extract ionosphere long wavelength
     ext_corr_lyrs += ['ionosphere']
-
-    if list(set.intersection(*map(set,
-                                  [layers, ['ionosphere']]))) != []:
+    user_lyrs =  list(set.intersection(*map(set,
+        [layers, ['ionosphere']])))
+    if user_lyrs != []:
         # set input keys
         key = 'ionosphere'
         product_dict = \
@@ -1312,7 +1339,7 @@ def export_products(full_product_dict, proj, bbox_file, prods_TOTbbox, layers,
                         #mask_file=mask,  # str filename
                         output_format=outputFormatPhys,
                         correction_method='cycle2pi',
-                        range_correction=True,
+                        range_correction=range_correction,
                         save_fig=False,
                         overwrite=True)
                         # verbose=verbose)

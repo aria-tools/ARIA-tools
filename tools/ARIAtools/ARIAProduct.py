@@ -640,6 +640,14 @@ class ARIA_standardproduct:
             latlon_file_bbox = loads(latlon_file_bbox)
             # get center frequency
             center_freq_var = float(hdf_gunw[center_freq][()])
+            # get slant range info
+            rdr_slant_range = \
+                ds['/science/LSAR/GUNW/metadata/radarGrid/slantRange'][()] \
+                .flatten()
+            min_range = min(rdr_slant_range)
+            max_range = max(rdr_slant_range)
+            rdr_slant_range_spac = ds['/science/LSAR/GUNW/grids/' + \
+                'frequencyA/unwrappedInterferogram/xCoordinateSpacing'][()]
         rdrmetadata_dict['centerFrequency'] = center_freq_var
         rdrmetadata_dict['wavelength'] = 299792458 /  \
             rdrmetadata_dict['centerFrequency']
@@ -653,9 +661,9 @@ class ARIA_standardproduct:
         # hardcoded keys
         rdrmetadata_dict['missionID'] = 'NISAR'
         rdrmetadata_dict['productType'] = 'UNW GEO IFG'
-        rdrmetadata_dict['slantRangeSpacing'] = 4.461197291666666
-        rdrmetadata_dict['slantRangeStart'] = 727415.98682514
-        rdrmetadata_dict['slantRangeEnd'] = 791384.81843777
+        rdrmetadata_dict['slantRangeSpacing'] = rdr_slant_range_spac
+        rdrmetadata_dict['slantRangeStart'] = min_range
+        rdrmetadata_dict['slantRangeEnd'] = max_range
         #hardcoded key meant to gauge temporal connectivity of scenes
         # (i.e. seconds between start and end)
         rdrmetadata_dict['sceneLength'] = 16
@@ -710,31 +718,10 @@ class ARIA_standardproduct:
         'coherence','connectedComponents','ionospherePhaseScreen',
         'ionospherePhaseScreenUncertainty','bPerpendicular',
         'bParallel','incidenceAngle','losUnitVectorX', 'losUnitVectorY',
-        'elevationAngle']
-        # remove references to keys not found in product
-        # check for SET layers
-        addkeys = ['slantRangeSolidEarthTidesPhase',
-                           'alongTrackSolidEarthTidesPhase']
-        keys_reject = [i for i in addkeys \
-                               if i not in ''.join(sdskeys)]
-        addkeys = [i for i in addkeys if i not in keys_reject]
-
-        # check for tropo layers
-        tropo_lyrs = {}
-        tropo_lyrs['troposphereHydrostatic'] = \
-            'hydrostaticTroposphericPhaseScreen'
-        tropo_lyrs['troposphereWet'] = \
-            'wetTroposphericPhaseScreen'
-        for key_name, lyr_name in tropo_lyrs.items():
-            if lyr_name not in ''.join(sdskeys):
-                keys_reject.extend([key_name])
-            else:
-                addkeys.extend([key_name])
-        for i in keys_reject:
-            log.warning(f'Expected data layer key {i} '
-                               f'not found in {fname}')
-
-        layerkeys.extend(addkeys)
+        'elevationAngle', 'slantRangeSolidEarthTidesPhase',
+        'alongTrackSolidEarthTidesPhase',
+        'hydrostaticTroposphericPhaseScreen',
+        'wetTroposphericPhaseScreen']
 
         # Setup datalyr_dict
         datalyr_dict={}
@@ -747,8 +734,13 @@ class ARIA_standardproduct:
         datalyr_dict['productBoundingBoxFrames'] = \
             datalyr_dict['productBoundingBox']
             
-        # Rewrite iono key
-        datalyr_dict['ionosphere'] = datalyr_dict.pop('ionospherePhaseScreen')
+        # Rewrite tropo and iono keys
+        datalyr_dict['ionosphere'] = \
+            datalyr_dict.pop('ionospherePhaseScreen')
+        datalyr_dict['troposphereHydrostatic'] = \
+            datalyr_dict.pop('hydrostaticTroposphericPhaseScreen')
+        datalyr_dict['troposphereWet'] = \
+            datalyr_dict.pop('wetTroposphericPhaseScreen')
 
         return [rdrmetadata_dict, datalyr_dict]
 
