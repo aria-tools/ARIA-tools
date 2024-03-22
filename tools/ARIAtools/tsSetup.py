@@ -72,9 +72,10 @@ def create_parser():
     parser.add_argument('-d', '--demfile', dest='demfile', type=str,
                         default='download', help='DEM file. Default is to '
                                                  'download new DEM.')
-    parser.add_argument('-p', '--projection', dest='projection',
-                        default='WGS84', type=str, help='projection for DEM. '
-                                                        'By default WGS84.')
+    parser.add_argument('-p', '--projection', dest='projection', default='4326', type=str,
+                        help='EPSG projection code for DEM. By default 4326. '
+                                 'Specify "native" to pass most common '
+                                 'projection from stack.')
     parser.add_argument('-b', '--bbox', dest='bbox', type=str, default=None,
                         help='Provide either valid shapefile or Lat/Lon '
                              'Bounding SNWE. -- Example : "19 20 -99.5 -98.5"')
@@ -95,15 +96,6 @@ def create_parser():
                                                     'threads for multiprocessing operation in gdal. '
                                                     'By default "2". Can also specify "All" to use all '
                                                     'available threads.')
-    parser.add_argument('-sm', '--stitchMethod', dest='stitchMethodType',
-                        type=str, default='sequential', help='Method applied to '
-                                                          'stitch the unwrapped data. Allowed methods are: '
-                                                          '"overlap", "2stage", and "sequential". "overlap" - '
-                                                          'product overlap is minimized, "2stage" - '
-                                                          'minimization is done on connected components, '
-                                                          '"sequential" - sequential minimization of all '
-                                                          'overlapping connected components. '
-                                                          'Default is "overlap".')
     parser.add_argument('-of', '--outputFormat', dest='outputFormat', type=str,
                         default='VRT', help='GDAL compatible output format '
                                             '(e.g., "ENVI", "GTiff"). By default files are '
@@ -393,6 +385,7 @@ def main(inps=None):
     # (if bbox specified)
     standardproduct_info = ARIA_standardproduct(inps.imgfile,
                                                 bbox=inps.bbox,
+                                                projection=inps.projection,
                                                 workdir=inps.workdir,
                                                 num_threads=inps.num_threads,
                                                 url_version=inps.version,
@@ -472,6 +465,7 @@ def main(inps=None):
     # Extract
     # aria_extract default parms
     export_dict = {
+        'proj': proj,
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'dem': demfile,
@@ -481,7 +475,6 @@ def main(inps=None):
         'mask': inps.mask,
         'outDir': inps.workdir,
         'outputFormat': inps.outputFormat,
-        'stitchMethodType': inps.stitchMethodType,
         'verbose': inps.verbose,
         'num_threads': inps.num_threads,
         'multilooking': inps.multilooking
