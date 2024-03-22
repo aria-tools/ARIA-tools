@@ -642,11 +642,11 @@ class ARIA_standardproduct:
             center_freq_var = float(hdf_gunw[center_freq][()])
             # get slant range info
             rdr_slant_range = \
-                ds['/science/LSAR/GUNW/metadata/radarGrid/slantRange'][()] \
-                .flatten()
+                hdf_gunw['/science/LSAR/GUNW/metadata/' + \
+                    'radarGrid/slantRange'][()].flatten()
             min_range = min(rdr_slant_range)
             max_range = max(rdr_slant_range)
-            rdr_slant_range_spac = ds['/science/LSAR/GUNW/grids/' + \
+            rdr_slant_range_spac = hdf_gunw['/science/LSAR/GUNW/grids/' + \
                 'frequencyA/unwrappedInterferogram/xCoordinateSpacing'][()]
         rdrmetadata_dict['centerFrequency'] = center_freq_var
         rdrmetadata_dict['wavelength'] = 299792458 /  \
