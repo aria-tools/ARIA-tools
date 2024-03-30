@@ -70,10 +70,9 @@ Below we list the dependencies for ARIA-tools
 ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. The easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and using the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
 
 ### Conda
-Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Run the commands below to download/clone the ARIA-tools package to your local directory. It is advised to use `mamba` as prompted to speed the install up:
+Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Run the commands below to download/clone the ARIA-tools package to your local directory.:
 
 ```.tcsh
-conda install mamba
 git clone https://github.com/aria-tools/ARIA-tools.git
 cd ARIA-tools
 ```
@@ -81,14 +80,8 @@ cd ARIA-tools
 Run the commands below to install dependencies to a new conda environment `ARIA-tools` and activate it:
 
 ```.tcsh
-mamba env create -f environment.yml
+conda env create -f environment.yml
 conda activate ARIA-tools
-```
-
-Or run the commands below to install dependencies to an existing conda environment (`base` by default):
-
-```.tcsh
-mamba install -c conda-forge --yes --file requirements.txt
 ```
 
 We have included a `setup.py` script which allows for easy compilation and installation of third-party dependencies (c-code), as well as for setting up the ARIA-tools package itself (python and command line tools).
@@ -104,7 +97,7 @@ setenv PATH ${PATH}:${PWD}/tools/ARIAtools
 
 To avoid potential issues associated with dependencies when cloning new ARIA-tools commits, it is advised to regularly maintain your conda environment as so (making sure to adjust the conda environment argument name `--name ARIA-tools` as appropriate):
 ```.tcsh
-mamba env update --name ARIA-tools --file environment.yml --prune
+conda env update --name ARIA-tools --file environment.yml --prune
 ```
 
 ### Other installation options
