@@ -14,7 +14,7 @@ FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 
 # Set log level to warning for some third party packages
-for logger in ['botocore', 'urllib3', 'rasterio']:
+for logger in ['botocore', 'urllib3', 'rasterio', 'asyncio']:
     logging.getLogger(logger).setLevel(logging.WARNING)
 
 

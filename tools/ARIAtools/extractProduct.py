@@ -1246,21 +1246,21 @@ def export_products(
         output_files = glob.glob(os.path.join(
             export_workers_temp_dir, 'outputs_*.json'))
 
-        with open(os.path.join(
-                export_workers_temp_dir, 'outputs_00_00.json')) as ifp:
-            output_dict = json.load(ifp)
-            ref_arr = copy.deepcopy(output_dict['prod_arr'])
-
-        for output_file in output_files:
-            with open(output_file) as ifp:
+        if len(output_files) > 0:
+            with open(os.path.join(
+                    export_workers_temp_dir, 'outputs_00_00.json')) as ifp:
                 output_dict = json.load(ifp)
-            ARIAtools.util.vrt.dim_check(ref_arr, output_dict['prod_arr'])
-            prev_outname = output_dict['outname']
+                ref_arr = copy.deepcopy(output_dict['prod_arr'])
+
+            for output_file in output_files:
+                with open(output_file) as ifp:
+                    output_dict = json.load(ifp)
+                ARIAtools.util.vrt.dim_check(ref_arr, output_dict['prod_arr'])
+                prev_outname = output_dict['outname']
 
     end_time = time.time()
     LOGGER.debug(
         "export_product_worker took %f seconds" % (end_time-start_time))
-
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(
@@ -1268,7 +1268,7 @@ def export_products(
     if os.path.exists(plots_subdir) and len(os.listdir(plots_subdir)) == 0:
         shutil.rmtree(plots_subdir)
 
-    return [ref_hgt, ref_wid, ref_geotrans, prev_outname]
+    return ref_arr
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
