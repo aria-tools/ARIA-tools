@@ -867,7 +867,7 @@ def export_product_worker(
 
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
-            outname, bounds, dem_bounds, prods_TOTbbox, dem, dem_expanded,
+            outname, bounds, dem_bounds, prods_TOTbbox, dem_expanded,
             lat, lon, hgt_field, product, mask, outputFormatPhys,
             verbose=verbose)
 
@@ -1272,7 +1272,7 @@ def export_products(
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
-                      dem_expanded, lat, lon, hgt_field, prod_list, mask=None,
+                      lat, lon, hgt_field, prod_list, mask=None,
                       outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
@@ -1358,7 +1358,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
         # Save file
         ARIAtools.util.vrt.renderVRT(
-            tmp_name, out_interpolated, geotrans=dem_expanded.GetGeoTransform(),
+            tmp_name, out_interpolated, geotrans=dem.GetGeoTransform(),
             drivername=outputFormat,
             gdal_fmt=data_array.ReadAsArray().dtype.name,
             proj=dem.GetProjection(), nodata=nodata)
