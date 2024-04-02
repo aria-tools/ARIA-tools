@@ -1268,7 +1268,11 @@ def export_products(
     if os.path.exists(plots_subdir) and len(os.listdir(plots_subdir)) == 0:
         shutil.rmtree(plots_subdir)
 
-    return ref_arr
+    try:
+        retval = ref_arr
+    except UnboundLocalError:
+        retval = [None, None, None, None]
+    return retval
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
