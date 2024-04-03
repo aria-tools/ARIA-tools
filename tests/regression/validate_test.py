@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Alex Fore
@@ -12,10 +11,12 @@ import argparse
 import numpy as np
 import logging
 import tarfile
+import pytest
 
 import osgeo.gdal
 
-ENVI_FILES = {
+ENVI_FILES = {}
+ENVI_FILES['extract'] = {
     'azimuthAngle': 'azimuthAngle/20230829_20230724',
     'troposphereTotal_HRRR': 'troposphereTotal/HRRR/20230829_20230724',
     'troposphereTotal_HRRR_dates_20230724': \
@@ -27,8 +28,7 @@ ENVI_FILES = {
     'connectedComponents': 'connectedComponents/20230829_20230724',
     'ionosphere': 'ionosphere/20230829_20230724'
 }
-
-ENVI_FILES_TSSETUP = {
+ENVI_FILES['tssetup'] = {
     'azimuthAngle': 'azimuthAngle/20230829_20230724',
     'bPerpendicular_20230829_20230724': 'bPerpendicular/20230829_20230724',
     'bPerpendicular_20230829_20230817': 'bPerpendicular/20230829_20230817',
@@ -56,112 +56,158 @@ ENVI_FILES_TSSETUP = {
     'unwrappedPhase_20230829_20230817': 'unwrappedPhase/20230829_20230817',
 }
 
-LOGGER = logging.getLogger('validate_test.py')
+LOGGER = logging.getLogger(__name__)
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        'flavor', choices=['extract', 'tssetup'],
-        help="Flavor: either 'extract or tssetup'")
-    parser.add_argument(
-        '-l', '--log-level', default='info', help='Logger log level')
-    args = parser.parse_args()
+class ENVIDataTester(object):
+    def __init__(self, test_dir, ref_dir, flavor):
+        self.test_data = {}
+        self.ref_data = {}
 
-    format = '%(levelname)s %(name)s %(message)s'
+        for filetype, filepath in ENVI_FILES[flavor].items():
 
-    log_level = {
-        'debug': logging.DEBUG, 'info': logging.INFO,
-        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
-    logging.basicConfig(level=log_level, format=format)
+            test_file = os.path.join(test_dir, filepath)
+            test = osgeo.gdal.Open(test_file)
+            self.test_data[filetype] = {
+                'data': test.ReadAsArray(),
+                'fill_value': test.GetRasterBand(1).GetNoDataValue(),
+                'filename': test_file}
 
-    test_dir = os.path.join('test_outputs', args.flavor)
-    ref_dir = os.path.join('golden_test_outputs', args.flavor)
+            ref_file = os.path.join(ref_dir, filepath)
+            ref = osgeo.gdal.Open(ref_file)
+            self.ref_data[filetype] = {
+                'data': ref.ReadAsArray(),
+                'fill_value': ref.GetRasterBand(1).GetNoDataValue(),
+                'filename': ref_file}
 
-    if args.flavor == 'extract':
-        iter_dict = ENVI_FILES
+    def test_nonfinite(self):
+        any_fail = False
+        for filetype in self.ref_data:
+            assert filetype in self.test_data
 
-    else:
-        iter_dict = ENVI_FILES_TSSETUP
+            ref_data = self.ref_data[filetype]['data']
+            test_data = self.test_data[filetype]['data']
+            fill_value = self.ref_data[filetype]['fill_value']
 
-    with tarfile.open(os.path.join(
-            'golden_test_outputs', args.flavor+'.tar.gz')) as tar:
-        tar.extractall(os.path.join('golden_test_outputs'))
+            test_file = self.test_data[filetype]['filename']
+            ref_file = self.ref_data[filetype]['filename']
 
-    any_fail = False
-    for filetype, filepath in iter_dict.items():
-        test_file = os.path.join(test_dir, filepath)
-        ref_file = os.path.join(ref_dir, filepath)
+            mask_ref = ref_data != fill_value
+            mask_test = test_data != fill_value
 
-        if not os.path.isfile(test_file):
-            LOGGER.warning(
-                'For key: {}, output file does not exist!'.format(filetype))
-            any_file = True
-            continue
+            num_nonfinite_test = (~np.isfinite(test_data[mask_test])).sum()
+            num_nonfinite_ref = (~np.isfinite(ref_data[mask_ref])).sum()
 
-        test = osgeo.gdal.Open(test_file)
-        ref = osgeo.gdal.Open(ref_file)
+            if num_nonfinite_test > 0:
+                LOGGER.warning((
+                    'For test data file: {}, {} non-finite value(s)!').format(
+                        test_file, num_nonfinite_test))
+                any_fail = True
 
-        test_data = test.ReadAsArray()
-        ref_data = ref.ReadAsArray()
+            if num_nonfinite_ref > 0:
+                LOGGER.warning((
+                    'For ref data file: {}, {} non-finite value(s)!').format(
+                        ref_file, num_nonfinite_ref))
 
-        # Compare mean/std of data arrays
-        fill_value = ref.GetRasterBand(1).GetNoDataValue()
+        if any_fail:
+            raise AssertionError('Non-finite values found in test data!')
 
-        mask_ref = ref_data != fill_value
-        mask_test = test_data != fill_value
+    def test_shape(self):
+        any_fail = False
+        for filetype in self.ref_data:
+            assert filetype in self.test_data
 
-        # Verify all values are finite
-        num_nonfinite_test = (~np.isfinite(test_data[mask_test])).sum()
-        num_nonfinite_ref = (~np.isfinite(ref_data[mask_ref])).sum()
+            ref_data = self.ref_data[filetype]['data']
+            test_data = self.test_data[filetype]['data']
+            test_file = self.test_data[filetype]['filename']
 
-        if num_nonfinite_test > 0:
-            LOGGER.warning((
-                'For test data key: {}, {} non-finite value(s)!').format(
-                    filetype, num_nonfinite_test))
-            any_fail = True
+            if not ref_data.shape == test_data.shape:
+                LOGGER.warning((
+                    'For file: {}, ref and test data have different shape, '
+                    'ref: {}, test: {}!').format(
+                        test_file, mask_ref.shape, mask_test.shape))
+                any_fail = True
 
-        if num_nonfinite_ref > 0:
-            LOGGER.warning((
-                'For ref data key: {}, {} non-finite value(s)!').format(
-                    filetype, num_nonfinite_ref))
-            any_fail = True
+        if any_fail:
+            raise AssertionError(
+                'Different array shapes found in test and ref data!')
 
-        # Check that they have the same shape
-        if not mask_ref.shape == mask_test.shape:
-            LOGGER.warning((
-                'For key: {}, ref and test data have different shape, '
-                'ref: {}, test: {}!').format(
-                    filetype, mask_ref.shape, mask_test.shape))
-            any_fail = True
+    def test_fill(self):
+        any_fail = False
+        for filetype in self.ref_data:
+            assert filetype in self.test_data
 
-        else:
-            # Check that the same pixels have fill value in both arrays
+            ref_data = self.ref_data[filetype]['data']
+            test_data = self.test_data[filetype]['data']
+            fill_value = self.ref_data[filetype]['fill_value']
+
+            test_file = self.test_data[filetype]['filename']
+            ref_file = self.ref_data[filetype]['filename']
+
+            mask_ref = ref_data != fill_value
+            mask_test = test_data != fill_value
+
             if not (mask_ref == mask_test).all():
                 LOGGER.warning((
-                    'For key: {}, ref and test data have fill values in '
-                    'different places!').format(filetype))
+                    'For file: {}, ref and test data have fill values in '
+                    'different places!').format(test_file))
                 any_fail = True
 
-            mask_joint = np.logical_and.reduce((
-                mask_ref, np.isfinite(test_data), np.isfinite(ref_data)))
+        if any_fail:
+            raise AssertionError((
+                'Fill values found in different array locations in test '
+                'and ref data!'))
 
-            # Compute mean/std of the data values
-            delta = (test_data[mask_joint] - ref_data[mask_joint]) / np.median(
-                test_data[mask_joint])
+    def test_values(self):
+        any_fail = False
+        for filetype in self.ref_data:
+            assert filetype in self.test_data
 
-            if not (np.abs(delta) < 10**-8).all():
+            ref_data = self.ref_data[filetype]['data']
+            test_data = self.test_data[filetype]['data']
+            fill_value = self.ref_data[filetype]['fill_value']
+
+            test_file = self.test_data[filetype]['filename']
+            ref_file = self.ref_data[filetype]['filename']
+
+            mask_ref = ref_data != fill_value
+            mask_test = test_data != fill_value
+
+            if not np.allclose(test_data, ref_data, equal_nan=True):
                 LOGGER.warning((
-                    'For key: {}, ref and test data differ by more than '
-                    'threshold!').format(filetype))
+                    'For file: {}, ref and test data differ by more than '
+                    'threshold!').format(test_file))
                 any_fail = True
 
-            mean_diff = (test_data[mask_joint]-ref_data[mask_joint]).mean()
-            std_diff = (test_data[mask_joint]-ref_data[mask_joint]).std()
-            LOGGER.info('For key %s, mean/std diff: %e %e' % (
-                filetype, mean_diff, std_diff))
+        if any_fail:
+            raise AssertionError(
+                'Test and ref data differ by more than threshold')
 
-        if not any_fail:
-            LOGGER.info("For key: {}, all tests passed.".format(filetype))
+class AriaToolsScriptTester():
+    @pytest.fixture(scope='class')
+    def tester(self):
+        flavor = 'tssetup'
+        with tarfile.open(os.path.join(
+                'golden_test_outputs', self.FLAVOR+'.tar.gz')) as tar:
+            tar.extractall(os.path.join('golden_test_outputs'))
 
-if __name__ == "__main__":
-    main()
+        test_dir = os.path.join('test_outputs', self.FLAVOR)
+        ref_dir = os.path.join('golden_test_outputs', self.FLAVOR)
+        return ENVIDataTester(test_dir, ref_dir, self.FLAVOR)
+
+    def test_nonfinite(self, tester):
+        return tester.test_nonfinite()
+
+    def test_shape(self, tester):
+        return tester.test_shape()
+
+    def test_fill(self, tester):
+        return tester.test_fill()
+
+    def test_values(self, tester):
+        return tester.test_values()
+
+class TestAriaTSsetup(AriaToolsScriptTester):
+    FLAVOR='tssetup'
+
+class TestAriaExtract(AriaToolsScriptTester):
+    FLAVOR='extract'

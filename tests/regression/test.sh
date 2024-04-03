@@ -9,8 +9,5 @@ aws s3 sync s3://aria-tools/tests/regression/ . --no-sign-request
 # Run the tssetup test cases
 ./run_tssetup_test.py
 
-# Run the test validation script on the extract test output data
-./validate_test.py extract
-
-# Run the test validation script on the tssetup test output data
-./validate_test.py tssetup
+# Run the test suite
+python -m pytest
