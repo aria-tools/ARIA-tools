@@ -12,6 +12,7 @@ import numpy as np
 import logging
 import tarfile
 import pytest
+import subprocess
 
 import osgeo.gdal
 
@@ -206,8 +207,33 @@ class AriaToolsScriptTester():
     def test_values(self, tester):
         return tester.test_values()
 
+@pytest.mark.usefixtures('run_tssetup_test')
 class TestAriaTSsetup(AriaToolsScriptTester):
     FLAVOR='tssetup'
 
+@pytest.mark.usefixtures('run_extract_test')
 class TestAriaExtract(AriaToolsScriptTester):
     FLAVOR='extract'
+
+@pytest.fixture(scope='session')
+def sync_golden_data():
+    return_code = subprocess.call(
+        'aws s3 sync s3://aria-tools/tests/regression/ . --no-sign-request',
+        shell=True)
+    if return_code != 0:
+        LOGGER.error("Error syncing golden test data!")
+        raise AssertionError("Error syncing golden test data!")
+
+@pytest.fixture(scope='session')
+def run_extract_test(sync_golden_data):
+    return_code = subprocess.call('./run_extract_test.py', shell=True)
+    if return_code != 0:
+        LOGGER.error("Error running ariaExtract test case!")
+        raise AssertionError("Error running ariaExtract test case!")
+
+@pytest.fixture(scope='session')
+def run_tssetup_test(sync_golden_data):
+    return_code = subprocess.call('./run_tssetup_test.py', shell=True)
+    if return_code != 0:
+        LOGGER.error("Error running ariaTSsetup test case!")
+        raise AssertionError("Error running ariaTSsetup test case!")
