@@ -49,21 +49,43 @@ def package_dict(scene, new_scene, scene_ind,
     'sorted_dict' = dictionary of sorted products to modify
     'dict_ind' = index of sorted products dictionary being queried
     """
-    dict_keys = scene[scene_ind].keys()
+    dict_keys_ref = scene[scene_ind].keys()
+    if sorted_dict:
+        dict_keys_ref = sorted_dict[dict_ind][scene_ind].keys()
+    dict_keys_sec = new_scene[scene_ind].keys()
+    # avoid dict mismatch by passing the longer list of keys
+    # which corresponds to a newer product increment
+    if len(dict_keys_sec) > len(dict_keys_ref):
+        dict_keys = dict_keys_sec
+    else:
+        dict_keys = dict_keys_ref
 
     # initialize new entry for new IFG and extend dict
     if not sorted_dict:
         if scene != new_scene:
+            # first pass empty list if key does not exist for a scene
+            for i in dict_keys:
+                if i not in dict_keys_ref:
+                    scene[scene_ind][i] = []
+                if i not in dict_keys_sec:
+                    new_scene[scene_ind][i] = []
+            # then merge
             dict_vals = [
                 list(a) for a in zip(
                     scene[scene_ind].values(), new_scene[scene_ind].values())]
-
         else:
             dict_vals = [
                 list(a) for a in zip(scene[scene_ind].values())]
 
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
+        # first pass empty list if key does not exist for a scene
+        for i in dict_keys:
+            if i not in dict_keys_ref:
+                sorted_dict[dict_ind][scene_ind][i] = []
+            if i not in dict_keys_sec:
+                new_scene[scene_ind][i] = []
+        # then merge
         dict_vals = [[
             subitem for item in a for subitem in (item if
             isinstance(item, list) else [item])] for a in zip(
@@ -541,15 +563,14 @@ class Product:
 
         # Setup datalyr_dict
         datalyr_dict = {}
-        for i in enumerate(these_layer_keys):
-            datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
         datalyr_dict['pair_name'] = self.pairname
-
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # indivdual frames preserved here
         datalyr_dict['productBoundingBoxFrames'] = \
-            datalyr_dict['productBoundingBox']
+            fname + '":' + sdskeys[0]
+        for i in enumerate(these_layer_keys):
+            datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -569,6 +590,7 @@ class Product:
         """
         sorted_products = []
         track_rejected_pairs = []
+        track_legacy_products = []
 
         # Check for (and remove) duplicate products
         num_prods = len(self.products)
@@ -766,6 +788,71 @@ class Product:
              not in track_rejected_pairs)],
             [item[1] for item in sorted_products if (item[1]['pair_name'][0]
              not in track_rejected_pairs)]]
+
+        # Ensure version 2 and 3 products are not mixed for each IFG
+        track_rejected_pairs = []
+        track_rejected_inds = []
+        for i in enumerate(sorted_products[1]):
+            # If any version 3 products exist for a given IFG
+            # remove all version 2 products
+            vers = []
+            for path_bbox in i[1]['productBoundingBox']:
+                ver_str = re.search(
+                    r'(v\d+_\d+_\d+.*)\.',
+                    os.path.basename(path_bbox)).group(1)
+                ver_num = float(ver_str[1:].replace('_', ''))
+                vers.append(ver_num)
+
+            if any(item >= 300. for item in vers) and \
+                any(item < 300. for item in vers):
+                legacy_indices = [ind for ind, val in enumerate(vers) \
+                                  if val < 300.]
+                # Iterate over each dictionary to remove these keys
+                LOGGER.debug('The following v2 products were rejected '
+                    'to ensure they are not mixed with v3 products:')
+                LOGGER.debug([os.path.basename(item.split('"')[1]) for \
+                    ind, item in \
+                    enumerate(i[1]['unwrappedPhase']) if \
+                    ind in legacy_indices])
+                for key, val in sorted_products[0][i[0]].items():
+                    sorted_products[0][i[0]][key] = [item for ind, item in \
+                        enumerate(val) if ind not in legacy_indices]
+                for key, val in sorted_products[1][i[0]].items():
+                    sorted_products[1][i[0]][key] = [item for ind, item in \
+                        enumerate(val) if ind not in legacy_indices]
+                # check if there are any gaps in the passed IFG
+                for j in range(len( \
+                    sorted_products[1][i[0]]['productBoundingBox']) -1):
+                    scene = \
+                        sorted_products[1][i[0]]['productBoundingBox'][j]
+                    new_scene = \
+                        sorted_products[1][i[0]]['productBoundingBox'][j + 1]
+                    scene_pair = \
+                        sorted_products[1][i[0]]['pair_name'][j]
+                    new_scene_pair = \
+                        sorted_products[0][i[0]]['pair_name'][j + 1]
+                    scene_area = ARIAtools.util.shp.open_shp(
+                        scene,
+                        'productBoundingBox', 1)
+                    new_scene_area = ARIAtools.util.shp.open_shp(
+                        new_scene,
+                        'productBoundingBox', 1)
+                    # Reject pair if there is a gap
+                    # between remaining product frames
+                    if scene_area.intersection(new_scene_area).area == 0.:
+                        track_rejected_inds.extend(i[0])
+                        track_rejected_pairs.extend((
+                            scene_pair, new_scene_pair))
+                        LOGGER.debug(
+                        "Gap for interferogram %s", scene_pair)
+
+        # Remove legacy products in the presence of v3 products
+        if track_rejected_inds != []:
+            sorted_products = [
+            [item[1] for item in enumerate(sorted_products[0]) if item[0]
+                not in track_rejected_inds],
+            [item[1] for item in enumerate(sorted_products[1]) if item[0]
+                not in track_rejected_inds]]
 
         # Report dictionaries for all valid products
         # Check if pairs successfully selected
