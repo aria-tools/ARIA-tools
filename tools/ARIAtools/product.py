@@ -128,45 +128,50 @@ def remove_scenes(products):
 
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
-                try:
-                    dict_ind = sorted_products.index(next(
-                        item for item in sorted_products
-                        if scene[1]['productBoundingBox'] in
-                        item[1]['productBoundingBox']))
+                dict_item = None
+                for item in sorted_products:
+                    if scene[1]['productBoundingBox'] in \
+                       item[1]['productBoundingBox']:
+                        dict_item = item
+                        break
+                if dict_item is not None:
+                    dict_ind = sorted_products.index(dict_item)
                     dict_1 = package_dict(
                         scene, new_scene, 0, sorted_products, dict_ind)
                     dict_2 = package_dict(
                         scene, new_scene, 1, sorted_products, dict_ind)
                     sorted_products[dict_ind] = [dict_1, dict_2]
-
                 # Match IFG corresponding to reference product NOT found
                 # so initialize dictionary for new IFG
-                except BaseException:
+                else:
                     dict_1 = package_dict(scene, new_scene, 0)
                     dict_2 = package_dict(scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
                     sorted_products.extend([new_dict])
+
             # If prods correspond to different orbits entirely
             else:
+
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does not then pass as new IFG
-                # TODO clean this conditional
-                if [item for item in sorted_products
-                    if scene[1]['productBoundingBox'] in
-                    item[1]['productBoundingBox']] == []:
-
+                track_existing_ifg = []
+                for item in sorted_products:
+                    if scene[1]['productBoundingBox'] in \
+                    item[1]['productBoundingBox']:
+                        track_existing_ifg.append(item)
+                if track_existing_ifg == []:
                     dict_1 = package_dict(scene, scene, 0)
                     dict_2 = package_dict(scene, scene, 1)
                     new_dict = [dict_1, dict_2]
                     sorted_products.extend([new_dict])
-
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does not then pass as new IFG
-                # TODO clean this conditional
-                if [item for item in sorted_products
-                        if new_scene[1]['productBoundingBox'] in
-                    item[1]['productBoundingBox']] == []:
-
+                track_existing_ifg = []
+                for item in sorted_products:
+                    if new_scene[1]['productBoundingBox'] in \
+                    item[1]['productBoundingBox']:
+                        track_existing_ifg.append(item)
+                if track_existing_ifg == []:
                     dict_1 = package_dict(new_scene, new_scene, 0)
                     dict_2 = package_dict(new_scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
@@ -334,7 +339,7 @@ class Product:
 
                 try:
                     bbox = [float(val) for val in bbox.split()]
-                except BaseException:
+                except ValueError:
                     raise Exception(
                         'Cannot understand the --bbox argument. String input '
                         'is incorrect or path does not exist.')
@@ -376,13 +381,13 @@ class Product:
         number, and populate corresponding product dictionary accordingly.
         """
         # Get standard product version from file
-        try:
-            # version accessed differently between URL vs downloaded product
-            version = str(
-                osgeo.gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
-
-        except BaseException:
-            LOGGER.warning('%s is not a supported file type... skipping', fname)
+        # version accessed differently between URL vs downloaded product
+        version = str(
+            osgeo.gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+        if version == 'None':
+            LOGGER.warning(
+                f'{fname} is not a supported file '
+                'type... skipping')
             return []
 
         # Enforce forward-compatibility of netcdf versions
@@ -818,20 +823,22 @@ class Product:
 
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
-                try:
-                    dict_ind = sorted_products.index(next(
-                        item for item in sorted_products
-                        if scene[1]['productBoundingBox'] in
-                        item[1]['productBoundingBox']))
+                dict_item = None
+                for item in sorted_products:
+                    if scene[1]['productBoundingBox'] in \
+                       item[1]['productBoundingBox']:
+                        dict_item = item
+                        break
+                if dict_item is not None:
+                    dict_ind = sorted_products.index(dict_item)
                     dict_1 = package_dict(
                         scene, new_scene, 0, sorted_products, dict_ind)
                     dict_2 = package_dict(
                         scene, new_scene, 1, sorted_products, dict_ind)
                     sorted_products[dict_ind] = [dict_1, dict_2]
-
                 # Match IFG corresponding to reference product NOT found
                 # so initialize dictionary for new IFG
-                except BaseException:
+                else:
                     dict_1 = package_dict(scene, new_scene, 0)
                     dict_2 = package_dict(scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
@@ -851,29 +858,29 @@ class Product:
 
             # If prods correspond to different orbits entirely
             else:
+
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does not then pass as new IFG
-                # TODO clean this conditional
-                if [item for item in sorted_products
-                    if scene[1]['productBoundingBox'] in
-                    item[1]['productBoundingBox']] == [] \
-                    and scene[0]['pair_name'] not in \
-                        track_rejected_pairs:
-
+                track_existing_ifg = []
+                for item in sorted_products:
+                    if scene[1]['productBoundingBox'] in \
+                    item[1]['productBoundingBox']:
+                        track_existing_ifg.append(item)
+                if track_existing_ifg == [] and \
+                    scene[0]['pair_name'] not in track_rejected_pairs:
                     dict_1 = package_dict(scene, scene, 0)
                     dict_2 = package_dict(scene, scene, 1)
                     new_dict = [dict_1, dict_2]
                     sorted_products.extend([new_dict])
-
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does not then pass as new IFG
-                # TODO clean this conditional
-                if [item for item in sorted_products
-                        if new_scene[1]['productBoundingBox'] in
-                    item[1]['productBoundingBox']] == [] \
-                        and new_scene[0]['pair_name'] not in \
-                    track_rejected_pairs:
-
+                track_existing_ifg = []
+                for item in sorted_products:
+                    if new_scene[1]['productBoundingBox'] in \
+                    item[1]['productBoundingBox']:
+                        track_existing_ifg.append(item)
+                if track_existing_ifg == [] and \
+                    new_scene[0]['pair_name'] not in track_rejected_pairs:
                     dict_1 = package_dict(new_scene, new_scene, 0)
                     dict_2 = package_dict(new_scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
