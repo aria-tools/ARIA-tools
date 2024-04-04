@@ -1248,7 +1248,7 @@ def export_products(
 
         if len(output_files) > 0:
             with open(os.path.join(
-                    export_workers_temp_dir, 'outputs_00_00.json')) as ifp:
+                    export_workers_temp_dir, 'outputs_0_0.json')) as ifp:
                 output_dict = json.load(ifp)
                 ref_arr = copy.deepcopy(output_dict['prod_arr'])
 
