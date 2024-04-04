@@ -96,6 +96,127 @@ def package_dict(scene, new_scene, scene_ind,
     return new_dict
 
 
+def remove_scenes(products):
+    """
+    For ARIA-S1 GUNW products, identify and reject legacy v2 products if
+    in the presence of v3 products for a given IFG.
+
+    'products' = list of input products
+    """
+    track_legacy_products = []
+    sorted_products = []
+
+    # only check ARIA-S1 GUNW products
+    if os.path.basename(products[0][1]['productBoundingBox'].split( \
+        '"')[1])[:2] == 'S1':
+        for i in enumerate(products[:-1]):
+            scene = i[1]
+            new_scene = products[i[0] + 1]
+            scene_t_ref = datetime.datetime.strptime(
+                scene[0]['pair_name'][:8], "%Y%m%d")
+            new_scene_t_ref = datetime.datetime.strptime(
+                new_scene[0]['pair_name'][:8], "%Y%m%d")
+            scene_t = datetime.datetime.strptime(
+                scene[0]['pair_name'][9:], "%Y%m%d")
+            new_scene_t = datetime.datetime.strptime(
+                new_scene[0]['pair_name'][9:], "%Y%m%d")
+
+            # Only pass scene if it temporally (i.e. in same orbit)
+            # overlaps with reference scene
+            if abs(new_scene_t - scene_t) <= ONE_DAY and \
+                abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY:
+                print('inside')
+
+                # Check if IFG dict corresponding to ref prod already exists
+                # and if it does then append values
+                try:
+                    dict_ind = sorted_products.index(next(
+                        item for item in sorted_products
+                        if scene[1]['productBoundingBox'] in
+                        item[1]['productBoundingBox']))
+                    dict_1 = package_dict(
+                        scene, new_scene, 0, sorted_products, dict_ind)
+                    dict_2 = package_dict(
+                        scene, new_scene, 1, sorted_products, dict_ind)
+                    sorted_products[dict_ind] = [dict_1, dict_2]
+
+                # Match IFG corresponding to reference product NOT found
+                # so initialize dictionary for new IFG
+                except BaseException:
+                    dict_1 = package_dict(scene, new_scene, 0)
+                    dict_2 = package_dict(scene, new_scene, 1)
+                    new_dict = [dict_1, dict_2]
+                    sorted_products.extend([new_dict])
+            # If prods correspond to different orbits entirely
+            else:
+                # Check if IFG dict corresponding to ref prod already exists
+                # and if it does not then pass as new IFG
+                # TODO clean this conditional
+                if [item for item in sorted_products
+                    if scene[1]['productBoundingBox'] in
+                    item[1]['productBoundingBox']] == []:
+
+                    dict_1 = package_dict(scene, scene, 0)
+                    dict_2 = package_dict(scene, scene, 1)
+                    new_dict = [dict_1, dict_2]
+                    sorted_products.extend([new_dict])
+
+                # Check if IFG dict corresponding to ref prod already exists
+                # and if it does not then pass as new IFG
+                # TODO clean this conditional
+                if [item for item in sorted_products
+                        if new_scene[1]['productBoundingBox'] in
+                    item[1]['productBoundingBox']] == []:
+
+                    dict_1 = package_dict(new_scene, new_scene, 0)
+                    dict_2 = package_dict(new_scene, new_scene, 1)
+                    new_dict = [dict_1, dict_2]
+                    sorted_products.extend([new_dict])
+
+        sorted_products = [
+            [item[0] for item in sorted_products],
+            [item[1] for item in sorted_products]]
+
+        # Go through each pair and check if there are any
+        # legacy products to remove
+        for i in enumerate(sorted_products[1]):
+            # If any version 3 products exist for a given IFG
+            # remove all version 2 products
+            vers = []
+            for path_bbox in i[1]['productBoundingBox']:
+                ver_str = re.search(
+                    r'(v\d+_\d+_\d+.*)\.',
+                    os.path.basename(path_bbox)).group(1)
+                ver_num = float(ver_str[1:].replace('_', ''))
+                vers.append(ver_num)
+
+            if any(item >= 300. for item in vers) and \
+                any(item < 300. for item in vers):
+                legacy_indices = [ind for ind, val in enumerate(vers) \
+                                  if val < 300.]
+                track_legacy_products.extend([val for ind, val \
+                    in enumerate(i[1]['productBoundingBox']) \
+                    if ind in legacy_indices])
+                
+                # Iterate over each dictionary to remove these keys
+                LOGGER.debug('The following v2 products were rejected '
+                    'to ensure they are not mixed with v3 products:')
+                LOGGER.debug([os.path.basename( \
+                    item.split('"')[1]) for \
+                    item in track_legacy_products])
+
+        # Remove legacy products in the presence of v3 products
+        if track_legacy_products != []:
+            filt_products = []
+            for i in products:
+                if i[1]['productBoundingBox'] not in track_legacy_products:
+                    filt_products.append(i)
+
+            products = filt_products
+
+    return products
+
+
 # Input file(s) and bbox as either list or physical shape file.
 class Product:
     """
@@ -590,7 +711,10 @@ class Product:
         """
         sorted_products = []
         track_rejected_pairs = []
-        track_legacy_products = []
+
+        # For ARIA-S1 GUNW, ensure version 2 and 3 products
+        # are not mixed for each IFG
+        self.products = remove_scenes(self.products)
 
         # Check for (and remove) duplicate products
         num_prods = len(self.products)
@@ -788,71 +912,6 @@ class Product:
              not in track_rejected_pairs)],
             [item[1] for item in sorted_products if (item[1]['pair_name'][0]
              not in track_rejected_pairs)]]
-
-        # Ensure version 2 and 3 products are not mixed for each IFG
-        track_rejected_pairs = []
-        track_rejected_inds = []
-        for i in enumerate(sorted_products[1]):
-            # If any version 3 products exist for a given IFG
-            # remove all version 2 products
-            vers = []
-            for path_bbox in i[1]['productBoundingBox']:
-                ver_str = re.search(
-                    r'(v\d+_\d+_\d+.*)\.',
-                    os.path.basename(path_bbox)).group(1)
-                ver_num = float(ver_str[1:].replace('_', ''))
-                vers.append(ver_num)
-
-            if any(item >= 300. for item in vers) and \
-                any(item < 300. for item in vers):
-                legacy_indices = [ind for ind, val in enumerate(vers) \
-                                  if val < 300.]
-                # Iterate over each dictionary to remove these keys
-                LOGGER.debug('The following v2 products were rejected '
-                    'to ensure they are not mixed with v3 products:')
-                LOGGER.debug([os.path.basename(item.split('"')[1]) for \
-                    ind, item in \
-                    enumerate(i[1]['unwrappedPhase']) if \
-                    ind in legacy_indices])
-                for key, val in sorted_products[0][i[0]].items():
-                    sorted_products[0][i[0]][key] = [item for ind, item in \
-                        enumerate(val) if ind not in legacy_indices]
-                for key, val in sorted_products[1][i[0]].items():
-                    sorted_products[1][i[0]][key] = [item for ind, item in \
-                        enumerate(val) if ind not in legacy_indices]
-                # check if there are any gaps in the passed IFG
-                for j in range(len( \
-                    sorted_products[1][i[0]]['productBoundingBox']) -1):
-                    scene = \
-                        sorted_products[1][i[0]]['productBoundingBox'][j]
-                    new_scene = \
-                        sorted_products[1][i[0]]['productBoundingBox'][j + 1]
-                    scene_pair = \
-                        sorted_products[1][i[0]]['pair_name'][j]
-                    new_scene_pair = \
-                        sorted_products[0][i[0]]['pair_name'][j + 1]
-                    scene_area = ARIAtools.util.shp.open_shp(
-                        scene,
-                        'productBoundingBox', 1)
-                    new_scene_area = ARIAtools.util.shp.open_shp(
-                        new_scene,
-                        'productBoundingBox', 1)
-                    # Reject pair if there is a gap
-                    # between remaining product frames
-                    if scene_area.intersection(new_scene_area).area == 0.:
-                        track_rejected_inds.extend(i[0])
-                        track_rejected_pairs.extend((
-                            scene_pair, new_scene_pair))
-                        LOGGER.debug(
-                        "Gap for interferogram %s", scene_pair)
-
-        # Remove legacy products in the presence of v3 products
-        if track_rejected_inds != []:
-            sorted_products = [
-            [item[1] for item in enumerate(sorted_products[0]) if item[0]
-                not in track_rejected_inds],
-            [item[1] for item in enumerate(sorted_products[1]) if item[0]
-                not in track_rejected_inds]]
 
         # Report dictionaries for all valid products
         # Check if pairs successfully selected
