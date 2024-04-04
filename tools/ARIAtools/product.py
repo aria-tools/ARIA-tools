@@ -125,7 +125,6 @@ def remove_scenes(products):
             # overlaps with reference scene
             if abs(new_scene_t - scene_t) <= ONE_DAY and \
                 abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY:
-                print('inside')
 
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
