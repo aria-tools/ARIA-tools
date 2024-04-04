@@ -10,6 +10,7 @@ channels:
 dependencies:
   - python>=3.8
   - asf_search
+  - earthaccess
   - cartopy
   - dem_stitcher>=2.5.0
   - gdal>=3.4.1
