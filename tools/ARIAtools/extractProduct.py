@@ -326,9 +326,10 @@ def merged_productbbox(
     os.makedirs(workdir, exist_ok=True)
 
     # If specified, check if user's bounding box meets minimum threshold area
+    lyr_proj = int(metadata_dict[0]['projection'][0])
     if bbox_file is not None:
         user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
-        overlap_area = ARIAtools.util.shp.shp_area(user_bbox)
+        overlap_area = ARIAtools.util.shp.shp_area(user_bbox, lyr_proj)
         if overlap_area < minimumOverlap:
             raise Exception(f'User bound box {bbox_file} has an area of only '
                             f'{overlap_area}km\u00b2, below specified '
@@ -343,13 +344,12 @@ def merged_productbbox(
         outname = os.path.join(workdir, pair_name + '.json')
 
         # Create union of productBoundingBox layers
-        for frame in scene["productBoundingBox"]:
-            prods_bbox = ARIAtools.util.shp.open_shp(
-                frame, 'productBoundingBox', 1)
+        for prods_bbox in scene["productBoundingBox"]:
             if os.path.exists(outname):
                 union_bbox = ARIAtools.util.shp.open_shp(outname)
                 prods_bbox = prods_bbox.union(union_bbox)
-            ARIAtools.util.shp.save_shp(outname, prods_bbox)
+            ARIAtools.util.shp.save_shp(
+                outname, prods_bbox, lyr_proj)
         scene["productBoundingBox"] = [outname]
 
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
@@ -364,17 +364,20 @@ def merged_productbbox(
     ind_max_area = sceneareas.index(max(sceneareas))
     product_bbox = product_dict[ind_max_area]['productBoundingBox'][0]
     ARIAtools.util.shp.save_shp(
-        prods_TOTbbox_metadatalyr, ARIAtools.util.shp.open_shp(product_bbox))
+        prods_TOTbbox_metadatalyr, ARIAtools.util.shp.open_shp(product_bbox),
+        lyr_proj)
 
     # Initiate intersection file with bbox, if bbox specified
     if bbox_file is not None:
         ARIAtools.util.shp.save_shp(
-            prods_TOTbbox, ARIAtools.util.shp.open_shp(bbox_file))
+            prods_TOTbbox, ARIAtools.util.shp.open_shp(bbox_file),
+            lyr_proj)
 
     # Initiate intersection with largest scene, if bbox NOT specified
     else:
         ARIAtools.util.shp.save_shp(
-            prods_TOTbbox, ARIAtools.util.shp.open_shp(product_bbox))
+            prods_TOTbbox, ARIAtools.util.shp.open_shp(product_bbox),
+            lyr_proj)
 
     rejected_scenes = []
     for scene in product_dict:
@@ -390,9 +393,11 @@ def merged_productbbox(
             total_bbox_metadatalyr = total_bbox_metadatalyr.union(prods_bbox)
 
             # Save to file
-            ARIAtools.util.shp.save_shp(prods_TOTbbox, total_bbox)
             ARIAtools.util.shp.save_shp(
-                prods_TOTbbox_metadatalyr, total_bbox_metadatalyr)
+                prods_TOTbbox, total_bbox, lyr_proj)
+            ARIAtools.util.shp.save_shp(
+                prods_TOTbbox_metadatalyr, total_bbox_metadatalyr,
+                lyr_proj)
 
         # Generate footprint for the common intersection of all products
         else:
@@ -414,7 +419,8 @@ def merged_productbbox(
                 os.remove(scene_obj)
 
             else:
-                overlap_area = ARIAtools.util.shp.shp_area(prods_bbox)
+                overlap_area = ARIAtools.util.shp.shp_area(
+                    prods_bbox, lyr_proj)
 
                 # Kick out scenes below specified overlap threshold
                 if overlap_area < minimumOverlap:
@@ -424,7 +430,8 @@ def merged_productbbox(
                     os.remove(scene_obj)
 
                 else:
-                    ARIAtools.util.shp.save_shp(prods_TOTbbox, prods_bbox)
+                    ARIAtools.util.shp.save_shp(
+                        prods_TOTbbox, prods_bbox, lyr_proj)
 
                     # Need to track bounds of max extent
                     # to avoid metadata interpolation issues
@@ -432,7 +439,8 @@ def merged_productbbox(
                         ARIAtools.util.shp.open_shp(
                             scene['productBoundingBox'][0]))
                     ARIAtools.util.shp.save_shp(
-                        prods_TOTbbox_metadatalyr, total_bbox_metadatalyr)
+                        prods_TOTbbox_metadatalyr, total_bbox_metadatalyr,
+                        lyr_proj)
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes != []:
@@ -452,7 +460,8 @@ def merged_productbbox(
         user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
         total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
         user_bbox = user_bbox.intersection(total_bbox)
-        ARIAtools.util.shp.save_shp(prods_TOTbbox, user_bbox)
+        ARIAtools.util.shp.save_shp(
+            prods_TOTbbox, user_bbox, lyr_proj)
 
     else:
         bbox_file = prods_TOTbbox
@@ -462,13 +471,20 @@ def merged_productbbox(
     # and adjust if necessary
     OG_bounds = list(
         ARIAtools.util.shp.open_shp(bbox_file).bounds)
-    arrres = osgeo.gdal.Open(product_dict[0]['unwrappedPhase'][0])
-    arrres = [abs(arrres.GetGeoTransform()[1]),
-              abs(arrres.GetGeoTransform()[-1])]
     gdal_warp_kwargs = {
-        'format': 'MEM', 'outputBounds': OG_bounds, 'xRes': arrres[0],
-        'yRes': arrres[1], 'targetAlignedPixels': True, 'multithread': True,
+        'format': 'MEM', 'multithread': True, 'dstSRS': f'EPSG:{lyr_proj}',
         'options': [f'NUM_THREADS={num_threads}']}
+    vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
+    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+    ds = osgeo.gdal.Warp('', vrt, options=warp_options)
+    arrres = [abs(ds.GetGeoTransform()[1]),
+              abs(ds.GetGeoTransform()[-1])]
+    ds = None
+    # warp again with fixed transform and bounds
+    gdal_warp_kwargs['outputBounds'] = OG_bounds
+    gdal_warp_kwargs['xRes'] = arrres[0]
+    gdal_warp_kwargs['yRes'] = arrres[1]
+    gdal_warp_kwargs['targetAlignedPixels'] = True
     vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
     warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
     ds = osgeo.gdal.Warp('', vrt, options=warp_options)
@@ -489,22 +505,49 @@ def merged_productbbox(
 
         # Save polygon in shapefile
         bbox_file = os.path.join(os.path.dirname(workdir), 'user_bbox.json')
-        ARIAtools.util.shp.save_shp(bbox_file, user_bbox)
+        ARIAtools.util.shp.save_shp(
+            bbox_file, user_bbox, lyr_proj)
         total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
         user_bbox = user_bbox.intersection(total_bbox)
-        ARIAtools.util.shp.save_shp(prods_TOTbbox, user_bbox)
+        ARIAtools.util.shp.save_shp(
+            prods_TOTbbox, user_bbox, lyr_proj)
 
     # Get projection of full res layers
     proj = ds.GetProjection()
+    del ds
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj)
 
 
+def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field):
+    """Wrapper to create raster and apply projection"""
+    # open original raster
+    osgeo.gdal.BuildVRT(fname+'_temp.vrt', data_lis)
+    da = rioxarray.open_rasterio(fname+'_temp.vrt', masked=True)
+
+    # Reproject the raster to the desired projection
+    reproj_da = da.rio.reproject(f'EPSG:{proj}',
+                resampling=rasterio.enums.Resampling.nearest,
+                nodata=0)
+    reproj_da.rio.to_raster(fname, driver=driver, crs=f'EPSG:{proj}')
+    os.remove(fname+'_temp.vrt')
+    da.close()
+    reproj_da.close()
+    buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
+    osgeo.gdal.BuildVRT(fname+'.vrt', fname, options=buildvrt_options)
+        
+    if hgt_field is not None:
+        # write height layers
+        osgeo.gdal.Open(fname+'.vrt').SetMetadataItem(hgt_field,
+            osgeo.gdal.Open(data_lis[0]).GetMetadataItem(hgt_field))
+                
+    return
 
 
 def prep_metadatalayers(
-        outname, metadata_arr, dem, layer, layers, driver='ENVI'):
+        outname, metadata_arr, dem, layer, layers, nisar_file=False,
+        proj='4326', driver='ENVI', model_name=''):
     """Wrapper to prep metadata layer for extraction"""
     if dem is None:
         raise Exception('No DEM input specified. '
@@ -521,10 +564,9 @@ def prep_metadatalayers(
         return [0], None, outname
 
     # capture model if tropo product
-    model_name = None
     if 'tropo' in layer:
-        model_name = metadata_arr[0].split('/')[-3]
-        out_dir = os.path.join(out_dir, model_name)
+        if not nisar_file:
+            out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
@@ -545,42 +587,48 @@ def prep_metadatalayers(
 
     if 'tropo' in layer or layer == 'solidEarthTide':
         # get ref and sec paths
-        date_dir = os.path.join(out_dir, 'dates')
-        if not os.path.exists(date_dir):
-            os.mkdir(date_dir)
+        if not nisar_file:
+            date_dir = os.path.join(out_dir, 'dates')
+            if not os.path.exists(date_dir):
+                os.mkdir(date_dir)
 
-        ref_outname = os.path.join(date_dir, ifg.split('_')[0])
-        sec_outname = os.path.join(date_dir, ifg.split('_')[1])
-        ref_str = 'reference/' + layer
-        sec_str = 'secondary/' + layer
-        sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
-        tup_outputs = [
-            (ref_outname, metadata_arr), (sec_outname, sec_metadata_arr)]
+            ref_outname = os.path.join(date_dir, ifg.split('_')[0])
+            sec_outname = os.path.join(date_dir, ifg.split('_')[1])
+            ref_str = 'reference/' + layer
+            sec_str = 'secondary/' + layer
+            sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
+            tup_outputs = [
+                (ref_outname, metadata_arr), (sec_outname, sec_metadata_arr)]
+
+        else:
+            ref_outname = os.path.join(out_dir, ifg)
+            sec_outname = ref_outname
+            tup_outputs = [(ref_outname, metadata_arr)]
 
         # write ref and sec files
         for i in tup_outputs:
 
             # delete temporary files to circumvent potential inconsistent dims
             for j in glob.glob(i[0] + '*'):
-                os.remove(j)
-            osgeo.gdal.BuildVRT(i[0] + '.vrt', i[1])
+                if os.path.isfile(j):
+                    os.remove(j)
+            create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field)
 
             # write height layers
             osgeo.gdal.Open(i[0] + '.vrt').SetMetadataItem(
                 hgt_field, osgeo.gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
 
-        # compute differential
-        generate_diff(ref_outname, sec_outname, outname, layer, layer, False,
-                      hgt_field, driver)
+        if not nisar_file:
+            # compute differential
+            generate_diff(
+                ref_outname, sec_outname, outname, layer, layer, False,
+                hgt_field, proj, driver)
 
         # write raster to file if it does not exist
         if layer in layers:
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
-                    # write to file
-                    da = rioxarray.open_rasterio(i + '.vrt')
-                    da.rio.to_raster(i, driver=driver)
-                    da.close()
+                    create_raster_from_gunw(i, [i], proj, driver)
 
     else:
         if not os.path.exists(outname + '.vrt'):
@@ -591,11 +639,11 @@ def prep_metadatalayers(
                 hgt_field, osgeo.gdal.Open(
                     metadata_arr[0]).GetMetadataItem(hgt_field))
 
-    return hgt_field, model_name, ref_outname
+    return hgt_field, ref_outname
 
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
-                  hgt_field, driver):
+                  hgt_field, proj, driver):
     """ Compute differential from reference and secondary scenes """
 
     # if specified workdir doesn't exist, create it
@@ -604,13 +652,15 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
         os.makedirs(output_dir)
 
     # open intermediate files
-    with rioxarray.open_rasterio(sec_outname + '.vrt') as da_sec:
+    with rioxarray.open_rasterio(sec_outname + '.vrt', masked=True) as da_sec:
         arr_sec = da_sec.data
-    with rioxarray.open_rasterio(ref_outname + '.vrt') as da_ref:
+    with rioxarray.open_rasterio(ref_outname + '.vrt', masked=True) as da_ref:
         arr_ref = da_ref.data
 
     # make the total arr
     # if computing total delay, must add dry and wet
+    print('arr_sec', arr_sec)
+    print('arr_ref', arr_ref)
     if tropo_total:
         arr_total = arr_sec + arr_ref
     else:
@@ -631,8 +681,10 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     da_total = da_total.assign_attrs(da_attrs)
 
     # write initial array to file
-    da_total.rio.to_raster(outname, driver=driver)
-    ds = osgeo.gdal.BuildVRT(f'{outname}.vrt', outname)
+    da_total.rio.to_raster(outname, driver=driver, crs=f'EPSG:{proj}')
+    buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
+    ds = osgeo.gdal.BuildVRT(
+        f'{outname}.vrt', outname, options=buildvrt_options)
     # fix if numpy array not set properly
     if not isinstance(da_attrs[hgt_field], np.ndarray):
         da_attrs[hgt_field] = np.array(da_attrs[hgt_field])
@@ -644,10 +696,10 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
 
 def handle_epoch_layers(
-        layers, product_dict, lyr_path, key, sec_key, ref_key, tropo_total,
-        workdir, prog_bar, bounds, dem_bounds, prods_TOTbbox, dem, lat, lon,
-        mask, outputFormat, verbose, multilooking, rankedResampling,
-        num_threads):
+        layers, product_dict, proj, lyr_path, user_lyrs, map_lyrs, key,
+        sec_key, ref_key, tropo_total, workdir, prog_bar, bounds, dem_bounds,
+        prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose,
+        multilooking, rankedResampling, num_threads, nisar_file):
     """
     Manage reference/secondary components for correction layers.
     Specifically record reference/secondary components within a `dates` subdir
@@ -691,16 +743,28 @@ def handle_epoch_layers(
         ifg = product_dict[1][i[0]][0]
         outname = os.path.abspath(os.path.join(workdir, ifg))
 
+        # capture model if tropo product
+        model_name = ''
+        if 'tropo' in key:
+            out_dir = os.path.dirname(outname)
+            if not nisar_file:
+                model_name = i[1][0].split('/')[-3]
+                out_dir = os.path.join(out_dir, model_name)
+            if not os.path.exists(out_dir):
+                os.mkdir(out_dir)
+
         # create temp files for ref/sec components
-        ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
-        hgt_field, model_name, ref_outname = prep_metadatalayers(
-            ref_outname, i[1], dem, ref_key, layers, outputFormat)
+        if ref_key in user_lyrs or tropo_total:
+            ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
+            hgt_field, ref_outname = prep_metadatalayers(
+                ref_outname, i[1], dem, ref_key, layers, nisar_file, proj,
+                outputFormat, model_name)
 
         # Update progress bar
         prog_bar.update(i[0] + 1, suffix=ifg)
 
         # record output directories
-        if model_name is not None:
+        if model_name != '':
             all_outputs.append(os.path.join(workdir, model_name))
             all_outputs.append(os.path.join(ref_workdir, model_name))
             all_outputs.append(os.path.join(sec_workdir, model_name))
@@ -712,50 +776,56 @@ def handle_epoch_layers(
         # capture if tropo and separate distinct wet and hydro layers
         if 'tropo' in key:
             sec_outname = os.path.abspath(os.path.join(sec_workdir, ifg))
-            wet_path = os.path.join(
-                lyr_path, model_name, 'reference', ref_key)
-            dry_path = os.path.join(
-                lyr_path, model_name, 'reference', sec_key)
+
+            if not nisar_file:
+                wet_path = os.path.join(
+                    lyr_path, model_name, 'reference', ref_key)
+                dry_path = os.path.join(
+                    lyr_path, model_name, 'reference', sec_key)
+            else:
+                wet_path = os.path.join(lyr_path, map_lyrs[0])
+                dry_path = os.path.join(lyr_path, map_lyrs[1])
+
             sec_comp = [
                 j.replace(wet_path, dry_path) for j in i[1]]
 
-            hgt_field, model_name, sec_outname = prep_metadatalayers(
-                sec_outname, sec_comp, dem, sec_key, layers, outputFormat)
+            if sec_key in user_lyrs or tropo_total:
+                hgt_field, sec_outname = prep_metadatalayers(
+                    sec_outname, sec_comp, dem, sec_key, layers, nisar_file,
+                    proj, outputFormat, model_name)
 
             # if specified, compute total delay
             if tropo_total:
                 model_dir = os.path.abspath(os.path.join(workdir, model_name))
                 outname = os.path.join(model_dir, ifg)
 
-                # compute reference diff
-                ref_diff = ref_outname
-                sec_diff = sec_outname
-                outname_diff = os.path.join(
-                    model_dir, 'dates', os.path.basename(ref_diff))
-
-                if not os.path.exists(outname_diff):
-                    generate_diff(ref_diff, sec_diff, outname_diff, key,
-                                  sec_key, tropo_total, hgt_field, outputFormat)
-
-                # compute secondary diff
-                ref_diff = os.path.join(
-                    os.path.dirname(ref_outname), ifg.split('_')[1])
-                sec_diff = os.path.join(
-                    os.path.dirname(sec_outname), ifg.split('_')[1])
-                outname_diff = os.path.join(
-                    model_dir, 'dates', os.path.basename(ref_diff))
-
-                if not os.path.exists(outname_diff):
-                    generate_diff(
-                        ref_diff, sec_diff, outname_diff, key, sec_key,
-                        tropo_total, hgt_field, outputFormat)
+                if not nisar_file:
+                    # compute reference diff
+                    ref_diff = ref_outname
+                    sec_diff = sec_outname
+                    outname_diff = os.path.join(model_dir, 'dates',
+                                             os.path.basename(ref_diff))
+                    if not os.path.exists(outname_diff):
+                        generate_diff(ref_diff, sec_diff, outname_diff, key,
+                            sec_key, tropo_total, hgt_field, proj, outputFormat)
+                    # compute secondary diff
+                    ref_diff = os.path.join(os.path.dirname(ref_outname),
+                                            ifg.split('_')[1])
+                    sec_diff = os.path.join(os.path.dirname(sec_outname),
+                                            ifg.split('_')[1])
+                    outname_diff = os.path.join(model_dir, 'dates',
+                                                os.path.basename(ref_diff))
+                    if not os.path.exists(outname_diff):
+                        generate_diff(
+                            ref_diff, sec_diff, outname_diff, key, sec_key,
+                            tropo_total, hgt_field, proj, outputFormat)
 
                 # compute total diff
                 ref_diff = os.path.join(ref_workdir, model_name, ifg)
                 sec_diff = os.path.join(sec_workdir, model_name, ifg)
                 generate_diff(
                     ref_diff, sec_diff, outname, key, sec_key, tropo_total,
-                    hgt_field, outputFormat)
+                    hgt_field, proj, outputFormat)
 
         else:
             sec_outname = os.path.dirname(ref_outname)
@@ -791,8 +861,8 @@ def handle_epoch_layers(
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(
                     j[1][:-4], bounds, dem_bounds, prods_TOTbbox, dem, lat,
-                    lon, hgt_field, prod_ver_list, mask, outputFormat,
-                    verbose=verbose)
+                    lon, hgt_field, prod_ver_list, nisar_file, mask,
+                    outputFormat, verbose=verbose)
 
                 # Track consistency of dimensions
                 if j[0] == 0:
@@ -816,10 +886,11 @@ def export_product_worker_helper(args):
     return export_product_worker(*args)
 
 def export_product_worker(
-        ii, ilayer, product, full_product_dict_file, layers, workdir, bounds,
-        prods_TOTbbox, demfile, demfile_expanded, maskfile, outputFormat,
-        outputFormatPhys, layer, outDir, stitchMethodType, arrres, num_threads,
-        multilooking, verbose):
+        ii, ilayer, product, proj, full_product_dict_file, layers, workdir,
+        bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
+        outputFormat, outputFormatPhys, layer, outDir,
+        arrres, epsg_code, num_threads, multilooking, verbose, nisar_file,
+        range_correction):
     """
     Worker function for export_products for parallel execution with
     multiprocessing package.
@@ -828,7 +899,7 @@ def export_product_worker(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True,
+        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj,
         'options': [f'NUM_THREADS={num_threads}']}
 
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
@@ -860,15 +931,18 @@ def export_product_worker(
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
     # Extract/crop metadata layers
-    if any(":/science/grids/imagingGeometry" in s for s in product):
+    if any(':/science/grids/imagingGeometry' in s for s in product) \
+        or any(':/science/LSAR/GUNW/metadata/radarGrid/'
+            in s for s in product):
         # make VRT pointing to metadata layers in standard product
         hgt_field, model_name, outname = prep_metadatalayers(
-            outname, product, dem_expanded, layer, layers)
+            outname, product, dem_expanded, layer, layers,
+            nisar_file, proj)
 
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
             outname, bounds, dem_bounds, prods_TOTbbox, dem_expanded,
-            lat, lon, hgt_field, product, mask, outputFormatPhys,
+            lat, lon, hgt_field, product, nisar_file, mask, outputFormatPhys,
             verbose=verbose)
 
     # Extract/crop full res layers, except for "unw" and "conn_comp"
@@ -910,30 +984,14 @@ def export_product_worker(
 
             phs_files = full_product_dict[ii]['unwrappedPhase']
 
-            # calling the stitching methods
-            if stitchMethodType == 'overlap':
-                ARIAtools.unwrapStitching.product_stitch_overlap(
-                    phs_files, conn_files, arrres,
-                    prod_bbox_files, bounds, prods_TOTbbox,
-                    outFileUnw=outFilePhs,
-                    outFileConnComp=outFileConnComp,
-                    outputFormat=outputFormatPhys, verbose=verbose)
-
-            elif stitchMethodType == '2stage':
-                ARIAtools.unwrapStitching.product_stitch_2stage(
-                    phs_files, conn_files, arrres, bounds,
-                    prods_TOTbbox, outFileUnw=outFilePhs,
-                    outFileConnComp=outFileConnComp,
-                    outputFormat=outputFormatPhys, verbose=verbose)
-
-            elif stitchMethodType == 'sequential':
-                ARIAtools.util.seq_stitch.product_stitch_sequential(
-                    phs_files, conn_files, arrres=arrres, bounds=bounds,
-                    clip_json=prods_TOTbbox, output_unw=outFilePhs,
-                    output_conn=outFileConnComp,
-                    output_format=outputFormatPhys,
-                    range_correction=True, save_fig=False,
-                    overwrite=True)
+            # stitching
+            ARIAtools.util.seq_stitch.product_stitch_sequential(
+                phs_files, conn_files, arrres=arrres, epsg=epsg_code,
+                bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
+                output_conn=outFileConnComp,
+                output_format=outputFormatPhys,
+                range_correction=range_correction, save_fig=False,
+                overwrite=True)
 
             # If necessary, resample phs/conn_comp file
             if multilooking is not None:
@@ -983,12 +1041,11 @@ def export_product_worker(
 
 
 def export_products(
-        full_product_dict, bbox_file, prods_TOTbbox, layers, arrres,
+        full_product_dict, proj, bbox_file, prods_TOTbbox, layers, arrres,
         rankedResampling=False, demfile=None, demfile_expanded=None, lat=None,
         lon=None, maskfile=None, outDir='./', outputFormat='VRT',
-        stitchMethodType='overlap', verbose=None, num_threads='2',
-        multilooking=None, tropo_total=False, model_names=[],
-        multiproc_method='single'):
+        verbose=None, num_threads='2', multilooking=None,
+        tropo_total=False, model_names=[], multiproc_method='single'):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
@@ -1019,14 +1076,33 @@ def export_products(
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
-        None if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
+        None if demfile_expanded is None
+        else osgeo.gdal.Open(demfile_expanded))
 
     # create dictionary of all inputs needed for correction lyr extraction
+    # Get the authority code (EPSG code)
+    srs = osgeo.osr.SpatialReference()
+    srs.ImportFromWkt(proj)
+    srs.AutoIdentifyEPSG()
+    epsg_code =  srs.GetAuthorityCode(None)
+    srs = None
     lyr_input_dict = {
-        'layers': layers, 'prods_TOTbbox': prods_TOTbbox, 'dem': dem_expanded,
-        'lat': lat, 'lon': lon, 'mask': mask, 'verbose': verbose,
-        'multilooking': multilooking, 'rankedResampling': rankedResampling,
-        'num_threads': num_threads}
+        'layers': layers, 'prods_TOTbbox': prods_TOTbbox,
+        'proj': int(epsg_code), 'dem': dem_expanded, 'lat': lat, 'lon': lon,
+        'mask': mask, 'verbose': verbose, 'multilooking': multilooking,
+        'rankedResampling': rankedResampling, 'num_threads': num_threads}
+
+    # track if product stack is NISAR GUNW or not
+    nisar_file = False
+    range_correction = True
+    track_fileext = full_product_dict[0]['unwrappedPhase'][0]
+    if len(track_fileext.split('.h5')) > 1:
+        nisar_file = True
+        range_correction = False
+        model_names = ['']
+    else:
+        model_names = [f'_{i}' for i in model_names]
+    lyr_input_dict['nisar_file'] = nisar_file
 
     # get bounds
     bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
@@ -1052,14 +1128,20 @@ def export_products(
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-    if tropo_total or any([layer in tropo_lyrs for layer in layers]):
+    user_lyrs =  list(
+        set.intersection(*map(set, [layers, tropo_lyrs])))
+    if tropo_total or user_lyrs != []:
         # set input keys
-        lyr_prefix = '/science/grids/corrections/external/troposphere/'
+        if nisar_file:
+            lyr_prefix = '/science/LSAR/GUNW/metadata/radarGrid/'
+        else:
+            lyr_prefix = '/science/grids/corrections/external/troposphere/'
         key = 'troposphereTotal'
         wet_key = 'troposphereWet'
         dry_key = 'troposphereHydrostatic'
         workdir = os.path.join(outDir, key)
         lyr_input_dict['lyr_path'] = lyr_prefix
+        lyr_input_dict['user_lyrs'] = user_lyrs
         lyr_input_dict['key'] = key
         lyr_input_dict['sec_key'] = dry_key
         lyr_input_dict['ref_key'] = wet_key
@@ -1068,13 +1150,25 @@ def export_products(
 
         # loop through valid models
         for i in model_names:
-            model = wet_key + f'_{i}'
+            model = wet_key + f'{i}'
             tropo_lyrs.append(model)
-            tropo_lyrs.append(dry_key + f'_{i}')
+            tropo_lyrs.append(dry_key + f'{i}')
             product_dict = [
                 [j[model] for j in full_product_dict if model in j.keys()],
                 [j["pair_name"]
-                    for j in full_product_dict if model in j.keys()]]
+                    for j in full_product_dict if model in j.keys()]
+            ]
+            product_dict_dry = [
+                j[dry_key + f'{i}'] for j in full_product_dict if
+                dry_key + f'{i}' in j.keys()
+            ]
+
+            # get unique layer names from path
+            map_lyrs = [
+                product_dict[0][0][0].split('/')[-1], 
+                product_dict_dry[0][0].split('/')[-1]
+            ]
+            lyr_input_dict['map_lyrs'] = map_lyrs
 
             # set iterative keys
             prev_outname = os.path.abspath(os.path.join(workdir, i))
@@ -1102,8 +1196,9 @@ def export_products(
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
-
-    if 'solidEarthTide' in layers:
+    user_lyrs =  list(
+        set.intersection(*map(set,[layers, ['solidEarthTide']])))
+    if user_lyrs != []:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
         key = 'solidEarthTide'
         ref_key = key
@@ -1111,6 +1206,10 @@ def export_products(
         product_dict = [
             [j[key] for j in full_product_dict if key in j.keys()],
             [j["pair_name"] for j in full_product_dict if key in j.keys()]]
+
+        # get unique layer names from path
+        map_lyrs = [product_dict[0][0][0].split('/')[-1]]
+        lyr_input_dict['map_lyrs'] = map_lyrs
 
         workdir = os.path.join(outDir, key)
         prev_outname = copy.deepcopy(workdir)
@@ -1121,6 +1220,7 @@ def export_products(
         lyr_input_dict['prog_bar'] = prog_bar
         lyr_input_dict['product_dict'] = product_dict
         lyr_input_dict['lyr_path'] = lyr_prefix
+        lyr_input_dict['user_lyrs'] = user_lyrs
         lyr_input_dict['key'] = key
         lyr_input_dict['sec_key'] = sec_key
         lyr_input_dict['ref_key'] = ref_key
@@ -1140,7 +1240,9 @@ def export_products(
 
     # If specified, extract ionosphere long wavelength
     ext_corr_lyrs += ['ionosphere']
-    if 'ionosphere' in layers:
+    user_lyrs =  list(
+        set.intersection(*map(set, [layers, ['ionosphere']])))
+    if user_lyrs != []:
         lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
         key = 'ionosphere'
         product_dict = \
@@ -1154,6 +1256,7 @@ def export_products(
 
         lyr_input_dict = dict(input_iono_files=None,
                               arrres=arrres,
+                              epsg = epsg_code,
                               output_iono=None,
                               output_format=outputFormat,
                               bounds=bounds,
@@ -1194,11 +1297,11 @@ def export_products(
         # with multiprocessing, to gain speed up
         for ii, product in enumerate(product_dict[0]):
             mp_args.append((
-                ii, ilayer, product, full_product_dict_file, layers,
+                ii, ilayer, product, proj, full_product_dict_file, layers,
                 workdir, bounds, prods_TOTbbox, demfile,
                 demfile_expanded, maskfile, outputFormat, outputFormatPhys,
-                layer, outDir, stitchMethodType, arrres, num_threads,
-                multilooking, verbose))
+                layer, outDir, arrres, epsg_code, num_threads,
+                multilooking, verbose, nisar_file, range_correction))
 
     start_time = time.time()
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
@@ -1276,8 +1379,9 @@ def export_products(
 
 
 def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
-                      lat, lon, hgt_field, prod_list, mask=None,
-                      outputFormat='ENVI', verbose=None, num_threads='2'):
+                      lat, lon, hgt_field, prod_list, nisar_file=False,
+                      mask=None, outputFormat='ENVI', verbose=None,
+                      num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
     3D layers with a DEM.
@@ -1296,13 +1400,19 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     # get minimum version
     version_check = []
     for i in prod_list:
-        v_num = i.split(':')[-2].split('/')[-1]
-        v_num = v_num.split('.nc')[0][-5:]
+        if not nisar_file:
+            v_num = i.split(':')[-2].split('/')[-1]
+            v_num = v_num.split('.nc')[0][-5:]
+        else:
+            basename = os.path.basename(i.split('"')[1])
+            v_num = basename.split('_')[-1][:-3]
+            v_num = '.'.join(v_num)
         version_check.append(v_num)
     version_check = min(version_check)
 
     metadatalyr_name = outname.split('/')[-2]
-    if metadatalyr_name in GEOM_LYRS and version_check < '2_0_4':
+    if (metadatalyr_name in GEOM_LYRS and version_check < '2_0_4') \
+        and not nisar_file:
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))
@@ -1338,7 +1448,8 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
                 data_array.RasterXSize, dtype='float32')
 
         da_dem = rioxarray.open_rasterio(
-            dem.GetDescription(), band_as_variable=True)['band_1']
+            dem.GetDescription(), band_as_variable=True,
+            masked=True)['band_1']
 
         # interpolate the DEM to the GUNW lat/lon
         nodata = dem.GetRasterBand(1).GetNoDataValue()
