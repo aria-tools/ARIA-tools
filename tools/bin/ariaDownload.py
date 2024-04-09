@@ -15,6 +15,7 @@ import argparse
 import logging
 import shapely
 import warnings
+from getpass import getpass
 import asf_search
 
 import ARIAtools.util.log
@@ -31,16 +32,18 @@ def createParser():
     see: https://github.com/asfadmin/Discovery-asf_search
     """
     parser = argparse.ArgumentParser(
-        description='Command line interface to download GUNW products from '
-                    'the ASF DAAC. GUNW products are hosted at the NASA ASF '
-                     'DAAC.\nDownloading them requires a NASA Earthdata URS '
-                     'user login and requires users to add "GRFN Door (PROD)" '
-                     'and "ASF Datapool Products" to their URS approved '
-                     'applications.',
+        description='Command line interface to download Sentinel-1/NISAR GUNW '
+                    'products from the ASF DAAC. \nDownloading them requires a '
+                     'NASA Earthdata URS user login and requires users to add '
+                     '"GRFN Door (PROD)" and "ASF Datapool Products" to their '
+                     'URS approved applications. Access to NISAR products '
+                     'requires an Earthdata Bearer token from: '
+                     'https://urs.earthdata.nasa.gov/documentation/for_users/user_token',
         epilog='Examples of use:\n'
                 '\t ariaDownload.py --track 004 --output count\n'
                 '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
-                '\t ariaDownload.py -t 004,077 --start 20190101 -o count',
+                '\t ariaDownload.py -t 004,077 --start 20190101 -o count'
+                '\t ariaDownload.py --mission NISAR -o count',
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument(
@@ -76,6 +79,11 @@ def createParser():
         help='NASA Earthdata URS user password. Users must add "GRFN Door '
              '(PROD)" and "ASF Datapool Products" to their URS approved '
              'applications.')
+
+    parser.add_argument(
+        '--mission', default='S1', type=str.upper, choices=('S1', 'NISAR'),
+        help='Sentinel-1 (S1) or NISAR. Default is S1')
+
     parser.add_argument(
         '-l', '--daysless', dest='dayslt', default=math.inf, type=int,
         help='Take pairs with a temporal baseline -- days less than this value.')
@@ -305,15 +313,34 @@ class Downloader(object):
         else:
             tracks = self.args.track
 
-        dct_kw = dict(platform=asf_search.constants.SENTINEL1,
-                      processingLevel=asf_search.constants.GUNW_STD,
-                      relativeOrbit=tracks,
-                      flightDirection=flight_direction,
-                      intersectsWith=bbox,
-                      start=self.args.start,
-                      end=self.args.end)
 
-        scenes = asf_search.geo_search(**dct_kw)
+        if self.args.mission.upper() == 'S1':
+            dct_kw = dict(dataset='ARIA S1 GUNW',
+                        processingLevel=asf_search.constants.GUNW_STD,
+                        relativeOrbit=tracks,
+                        flightDirection=flight_direction,
+                        intersectsWith=bbox,
+                        start=self.args.start,
+                        end=self.args.end)
+            scenes = asf_search.geo_search(**dct_kw)
+
+        elif self.args.mission.upper() == 'NISAR':
+            session = asf_search.ASFSession()
+            session.auth_with_token(getpass('EDL Token:'))
+            LOGGER.info ('Token accepted.')
+            ## populate once available on GUNWs are available
+            search_opts = asf_search.ASFSearchOptions(
+                            dataset=asf_search.DATASET.NISAR,
+                            session=session
+                        # processingLevel=asf_search.constants.GUNW_STD,
+                        # relativeOrbit=tracks,
+                        # flightDirection=flight_direction,
+                        # intersectsWith=bbox,
+                        # start=self.args.start,
+                        # end=self.args.end)
+                        )
+            scenes = asf_search.search(opts=search_opts, maxResults=250)
+            raise Exception('NISAR GUNWs not futher supported')
 
         return scenes
 
