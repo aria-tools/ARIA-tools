@@ -336,7 +336,7 @@ class Downloader(object):
             LOGGER.info ('Token accepted.')
             ## populate once available on GUNWs are available
             search_opts = asf_search.ASFSearchOptions(
-                            dataset=asf_search.DATASET.NISAR,
+                            shortName='NISAR_L2_GUNW_BETA_V1',
                             session=session
                         # processingLevel=asf_search.constants.GUNW_STD,
                         # relativeOrbit=tracks,
@@ -346,6 +346,7 @@ class Downloader(object):
                         # end=self.args.end)
                         )
             scenes = asf_search.search(opts=search_opts, maxResults=250)
+            print (scenes[0])
             raise Exception('NISAR GUNWs not futher supported')
 
         return scenes
