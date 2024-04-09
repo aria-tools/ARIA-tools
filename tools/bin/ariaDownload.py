@@ -108,6 +108,7 @@ def createParser():
         '--log-level', default='warning', help='Logger log level')
     return parser
 
+
 def make_bbox(inp_bbox):
     """Make a WKT from SNWE or a shapefile"""
     if inp_bbox is None:
@@ -197,8 +198,10 @@ class Downloader(object):
         else:
             LOGGER.setLevel('INFO')
 
+
     def __call__(self):
         scenes = self.query_asf()
+
         urls, ifgs = get_url_ifg(scenes)
 
         # subset everything by version
@@ -226,10 +229,9 @@ class Downloader(object):
 
             # optionally match other conditions (st/end date, elapsed time)
             else:
-                sten_chk = sti >= self.args.start and eni <= self.args.end
                 elap = (eni - sti).days
                 elap_chk = elap >= self.args.daysgt and elap <= self.args.dayslt
-                if sten_chk and elap_chk:
+                if elap_chk:
                     idx.append(i)
                 else:
                     continue
@@ -284,6 +286,7 @@ class Downloader(object):
 
         return
 
+
     def query_asf(self):
         """Get the scenes from ASF"""
         bbox = make_bbox(self.args.bbox)
@@ -306,10 +309,14 @@ class Downloader(object):
                       processingLevel=asf_search.constants.GUNW_STD,
                       relativeOrbit=tracks,
                       flightDirection=flight_direction,
-                      intersectsWith=bbox)
+                      intersectsWith=bbox,
+                      start=self.args.start,
+                      end=self.args.end)
+
         scenes = asf_search.geo_search(**dct_kw)
 
         return scenes
+
 
 def main():
     parser = createParser()
@@ -327,6 +334,7 @@ def main():
     if not args.track and not args.bbox:
         raise Exception('Must specify either a bbox or track')
     Downloader(args)()
+
 
 if __name__ == '__main__':
     main()
