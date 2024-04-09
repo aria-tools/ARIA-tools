@@ -60,8 +60,10 @@ def createParser():
         '-d', '--demfile', dest='demfile', type=str, default=None,
         help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument(
-        '-p', '--projection', dest='projection', default='WGS84', type=str,
-        help='projection for DEM. By default WGS84.')
+        '-p', '--projection', dest='projection', default='4326', type=str,
+        help='EPSG projection code for DEM. By default 4326. '
+             'Specify "native" to pass most common '
+             'projection from stack.')
     parser.add_argument(
         '-b', '--bbox', dest='bbox', type=str, default=None,
         help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- "
@@ -83,14 +85,6 @@ def createParser():
         help='Specify number of threads for multiprocessing operation in '
              'gdal. By default "2". Can also specify "All" to use all '
              'available threads.')
-    parser.add_argument(
-        '-sm', '--stitchMethod', dest='stitchMethodType', type=str,
-        default='sequential',
-        help="Method applied to stitch the unwrapped data. Allowed methods "
-             "are: 'overlap', '2stage', and 'sequential'. 'overlap' - product "
-             "overlap is minimized, '2stage' - minimization is done on "
-             "connected components, 'sequential' - sequential minimization of "
-             "all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument(
         '-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By '
@@ -157,9 +151,10 @@ def main():
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
     # bbox specified)
     standardproduct_info = ARIAtools.product.Product(
-        args.imgfile, bbox=args.bbox, workdir=args.workdir,
-        num_threads=args.num_threads, url_version=args.version,
-        nc_version=args.nc_version, verbose=args.verbose)
+        args.imgfile, bbox=args.bbox, projection=args.projection,
+        workdir=args.workdir, num_threads=args.num_threads,
+        url_version=args.version, nc_version=args.nc_version,
+        verbose=args.verbose)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
@@ -247,6 +242,7 @@ def main():
         'full_product_dict': standardproduct_info.products[1],
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
+        'proj': proj,
         'layers': args.layers,
         'arrres': arrres,
         'rankedResampling': args.rankedResampling,
@@ -257,7 +253,6 @@ def main():
         'maskfile': maskfilename,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
-        'stitchMethodType': args.stitchMethodType,
         'verbose': args.verbose,
         'num_threads': args.num_threads,
         'multilooking': args.multilooking,
