@@ -15,6 +15,7 @@ import argparse
 import logging
 import shapely
 import warnings
+from dateutil.relativedelta import relativedelta
 from getpass import getpass
 import asf_search
 
@@ -237,9 +238,10 @@ class Downloader(object):
 
             # optionally match other conditions (st/end date, elapsed time)
             else:
+                sten_chk = sti >= self.args.start and eni <= self.args.end
                 elap = (eni - sti).days
                 elap_chk = elap >= self.args.daysgt and elap <= self.args.dayslt
-                if elap_chk:
+                if sten_chk and elap_chk:
                     idx.append(i)
                 else:
                     continue
@@ -314,14 +316,18 @@ class Downloader(object):
             tracks = self.args.track
 
 
+        ## buffer a bit for loose subsetting and speedup
+        st0 = self.args.start + relativedelta(months=-3)
+        en0 = self.args.end + relativedelta(months=-3)
+
         if self.args.mission.upper() == 'S1':
             dct_kw = dict(dataset='ARIA S1 GUNW',
                         processingLevel=asf_search.constants.GUNW_STD,
                         relativeOrbit=tracks,
                         flightDirection=flight_direction,
                         intersectsWith=bbox,
-                        start=self.args.start,
-                        end=self.args.end)
+                        start=st0,
+                        end=en0)
             scenes = asf_search.geo_search(**dct_kw)
 
         elif self.args.mission.upper() == 'NISAR':
