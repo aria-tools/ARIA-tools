@@ -82,18 +82,9 @@ def package_dict(scene, new_scene, scene_ind,
 
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
-        # first pass empty list if key does not exist for a scene
-        for i in dict_keys:
-            if i not in dict_keys_ref:
-                sorted_dict[dict_ind][scene_ind][i] = []
-            if i not in dict_keys_sec:
-                new_scene[scene_ind][i] = []
-        # then merge
-        dict_vals = [
-            [subitem
-             for item in a
-             for subitem in (item if isinstance(item, list) else [item])]
-            for a in zip(
+        dict_vals = [[
+            subitem for item in a for subitem in (item if
+            isinstance(item, list) else [item])] for a in zip(
                 sorted_dict[dict_ind][scene_ind].values(),
                 new_scene[scene_ind].values())]
 
@@ -126,17 +117,21 @@ def remove_scenes(products):
             new_scene_t = datetime.datetime.strptime(
                 new_scene[0]['pair_name'][9:], "%Y%m%d")
 
+            # check temporal overlap
+            sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
+            ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
+
             # Only pass scene if it temporally (i.e. in same orbit)
             # overlaps with reference scene
-            if abs(new_scene_t - scene_t) <= ONE_DAY and \
-                    abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY:
+            if sec_within_day and ref_within_day:
 
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
                 dict_item = None
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                       item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         dict_item = item
                         break
                 if dict_item is not None:
@@ -161,8 +156,9 @@ def remove_scenes(products):
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                            item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
                     dict_1 = package_dict(scene, scene, 0)
@@ -173,8 +169,9 @@ def remove_scenes(products):
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if new_scene[1]['productBoundingBox'] in \
-                            item[1]['productBoundingBox']:
+                    scene_in_ifg = new_scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
                     dict_1 = package_dict(new_scene, new_scene, 0)
@@ -214,9 +211,8 @@ def remove_scenes(products):
                 # Iterate over each dictionary to remove these keys
                 LOGGER.debug('The following v2 products were rejected '
                              'to ensure they are not mixed with v3 products:')
-                LOGGER.debug([os.path.basename(
-                    item.split('"')[1]) for
-                    item in track_legacy_products])
+                for item in track_legacy_products:
+                    LOGGER.debug(os.path.basename(item.split('"')[1]))
 
         # Remove legacy products in the presence of v3 products
         if track_legacy_products != []:
@@ -344,8 +340,9 @@ class Product:
         # Check if bbox input is valid list or shapefile.
         if bbox is not None:
             # If list
-            if isinstance([str(val) for val in bbox.split()], list) \
-                    and not os.path.isfile(bbox):
+            bbox_is_list = isinstance(
+                [str(val) for val in bbox.split()], list)
+            if bbox_is_list and not os.path.isfile(bbox):
 
                 try:
                     bbox = [float(val) for val in bbox.split()]
@@ -583,8 +580,8 @@ class Product:
                     -1 * int(rdrmetadata_dict['centerLatitude'][:-1]))
 
             else:
-                rdrmetadata_dict['centerLatitude'] = \
-                    int(rdrmetadata_dict['centerLatitude'][:-1])
+                rdrmetadata_dict['centerLatitude'] = int(rdrmetadata_dict[
+                    'centerLatitude'][:-1])
 
             # hardcoded keys for a given sensor
             if basename.split('-')[0] == 'S1':
@@ -702,8 +699,8 @@ class Product:
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # indivdual frames preserved here
-        datalyr_dict['productBoundingBoxFrames'] = \
-            fname + '":' + sdskeys[0]
+        datalyr_dict[
+            'productBoundingBoxFrames'] = fname + '":' + sdskeys[0]
         for i in enumerate(these_layer_keys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
@@ -817,15 +814,22 @@ class Product:
             new_scene_area = ARIAtools.util.shp.open_shp(
                 new_scene[1]['productBoundingBox'], 'productBoundingBox', 1)
 
+            # check spatiotemporal overlap
+            scene_intersects = scene_area.intersection(
+                new_scene_area).area > 0.
+            sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
+            ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
+
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
-            if (scene_area.intersection(new_scene_area).area > 0. and
-                abs(new_scene_t - scene_t) <= ONE_DAY and
-                    abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY):
+            if scene_intersects and sec_within_day and ref_within_day:
 
                 # Do not export prod if already tracked as a rejected pair
-                if scene[0]['pair_name'] in track_rejected_pairs or \
-                        new_scene[0]['pair_name'] in track_rejected_pairs:
+                ref_rejected = scene[0][
+                    'pair_name'] in track_rejected_pairs
+                sec_rejected = new_scene[0][
+                    'pair_name'] in track_rejected_pairs
+                if ref_rejected or sec_rejected:
                     track_rejected_pairs.extend((
                         scene[0]['pair_name'], new_scene[0]['pair_name']))
                     continue
@@ -834,8 +838,9 @@ class Product:
                 # and if it does then append values
                 dict_item = None
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                       item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         dict_item = item
                         break
                 if dict_item is not None:
@@ -872,11 +877,13 @@ class Product:
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                            item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
-                if track_existing_ifg == [] and \
-                        scene[0]['pair_name'] not in track_rejected_pairs:
+                ref_not_rejected = scene[0][
+                    'pair_name'] not in track_rejected_pairs
+                if track_existing_ifg == [] and ref_not_rejected:
                     dict_1 = package_dict(scene, scene, 0)
                     dict_2 = package_dict(scene, scene, 1)
                     new_dict = [dict_1, dict_2]
@@ -885,11 +892,13 @@ class Product:
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if new_scene[1]['productBoundingBox'] in \
-                            item[1]['productBoundingBox']:
+                    scene_in_ifg = new_scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
-                if track_existing_ifg == [] and \
-                        new_scene[0]['pair_name'] not in track_rejected_pairs:
+                scene_not_rejected = new_scene[0][
+                    'pair_name'] not in track_rejected_pairs
+                if track_existing_ifg == [] and scene_not_rejected:
                     dict_1 = package_dict(new_scene, new_scene, 0)
                     dict_2 = package_dict(new_scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
@@ -973,10 +982,11 @@ class Product:
             # Provide report of which files were kept vs. which weren't
             LOGGER.debug(
                 'Specifically, the following GUNW products were rejected:')
-            LOGGER.debug([
-                os.path.basename(i) for i in self.files if i not in
-                [i[1]['productBoundingBox'].split('"')[1]
-                 for i in self.products]])
+            for i in self.files:
+                product_bboxes = [i[1]['productBoundingBox'].split('"')[1]
+                                  for i in self.products]
+                if i not in product_bboxes:
+                    LOGGER.debug(os.path.basename(i))
 
         else:
             LOGGER.info(
