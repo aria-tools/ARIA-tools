@@ -317,8 +317,8 @@ class Downloader(object):
 
 
         ## buffer a bit for loose subsetting and speedup
-        st0 = self.args.start + relativedelta(months=-3)
-        en0 = self.args.end + relativedelta(months=-3)
+        start = self.args.start + relativedelta(months=-3)
+        end   = self.args.end + relativedelta(months=3)
 
         if self.args.mission.upper() == 'S1':
             dct_kw = dict(dataset='ARIA S1 GUNW',
@@ -326,15 +326,16 @@ class Downloader(object):
                         relativeOrbit=tracks,
                         flightDirection=flight_direction,
                         intersectsWith=bbox,
-                        start=st0,
-                        end=en0)
+                        start=start,
+                        end=end)
             scenes = asf_search.geo_search(**dct_kw)
 
         elif self.args.mission.upper() == 'NISAR':
             session = asf_search.ASFSession()
             session.auth_with_token(getpass('EDL Token:'))
-            LOGGER.info ('Token accepted.')
+            LOGGER.info('Token accepted.')
             ## populate once available on GUNWs are available
+            # TODO:
             search_opts = asf_search.ASFSearchOptions(
                             shortName='NISAR_L2_GUNW_BETA_V1',
                             session=session
@@ -346,8 +347,11 @@ class Downloader(object):
                         # end=self.args.end)
                         )
             scenes = asf_search.search(opts=search_opts, maxResults=250)
-            print (scenes[0])
-            raise Exception('NISAR GUNWs not futher supported')
+            if len(scenes)>0:
+                LOGGER.info('Found NISAR GUNW Betas.')
+            else:
+                LOGGER.warning('No NISAR GUNW Betas found.')
+            raise Exception('Exiting, NISAR GUNWs not futher supported.')
 
         return scenes
 
