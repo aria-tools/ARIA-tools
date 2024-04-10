@@ -39,6 +39,8 @@ import ARIAtools.util.stitch
 LOGGER = logging.getLogger(__name__)
 
 #  STITCHING SUBROUTINES
+
+
 def stitch_unwrapped_frames(input_unw_files: List[str],
                             input_conncomp_files: List[str],
                             proj: Optional[str] = 'EPSG:4326',
@@ -59,7 +61,7 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
     temp_snwe_list = []
     for unw_file, conn_file in zip(input_unw_files, input_conncomp_files):
         unw_attr_dicts.append(
-             ARIAtools.util.stitch.get_GUNW_attr(unw_file, proj=proj))
+            ARIAtools.util.stitch.get_GUNW_attr(unw_file, proj=proj))
         conncomp_attr_dicts.append(
             ARIAtools.util.stitch.get_GUNW_attr(conn_file, proj=proj))
 
@@ -82,13 +84,14 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
+
             LOGGER.info(50 * '*')
-            LOGGER.info(
-                'Frame-1:',
-                unw_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
-            LOGGER.info(
-                'Frame-2:',
-                unw_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
+            frame1_prods = unw_attr_dicts[ix1][
+                'PATH'].split('"')[1].split('/')[-1]
+            LOGGER.info('Frame-1: ', frame1_prods)
+            frame2_prods = unw_attr_dicts[ix2][
+                'PATH'].split('"')[1].split('/')[-1]
+            LOGGER.info('Frame-2: ', frame2_prods)
 
         # Get numpy masked arrays
         # Frame1
@@ -133,13 +136,13 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
 
         # apply mask
         frame1_unw_array = np.ma.masked_where(unw_mask_ix1,
-            frame1_unw_array)
+                                              frame1_unw_array)
         frame1_conn_array = np.ma.masked_where(conncomp_mask_ix1,
-            frame1_conn_array)
+                                               frame1_conn_array)
         frame2_unw_array = np.ma.masked_where(unw_mask_ix2,
-            frame2_unw_array)
+                                              frame2_unw_array)
         frame2_conn_array = np.ma.masked_where(conncomp_mask_ix2,
-            frame2_conn_array)
+                                               frame2_conn_array)
 
         if i == 0:
             (corr_unw, corr_conn, corr_dict) = stitch_unw2frames(
@@ -304,12 +307,12 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
     (combined_unwrap, combined_snwe, combined_latlon_spacing) = \
         ARIAtools.util.stitch.combine_data_to_single(
             [ARIAtools.util.stitch._nan_filled_array(unw_data1),
-            ARIAtools.util.stitch._nan_filled_array(unw_data2)],
+             ARIAtools.util.stitch._nan_filled_array(unw_data2)],
             comb_snwe, comb_latlon, method='mean', latlon_step=comb_latlon[0])
 
     combined_conn, _, _ = ARIAtools.util.stitch.combine_data_to_single(
         [ARIAtools.util.stitch._nan_filled_array(conn_data1),
-        ARIAtools.util.stitch._nan_filled_array(conn_data2)],
+         ARIAtools.util.stitch._nan_filled_array(conn_data2)],
         comb_snwe, comb_latlon, method='min', latlon_step=comb_latlon[0])
 
     # combined dict
@@ -621,6 +624,8 @@ def _metadata_offset(unw1: NDArray, unw2: NDArray,
         return None
 
 # MAIN
+
+
 def product_stitch_sequential(input_unw_files: List[str],
                               input_conncomp_files: List[str],
                               arrres: List[float],
@@ -815,8 +820,8 @@ def product_stitch_sequential(input_unw_files: List[str],
         else:
             concomp_array = ARIAtools.util.stitch.get_GUNW_array(
                 str(output_conn.with_suffix('.vrt')), proj=f'EPSG:{epsg}')
-            concomp_array[(concomp_array == -1) \
-                | (concomp_array == 0)] = np.nan
+            concomp_array[(concomp_array == -1)
+                          | (concomp_array == 0)] = np.nan
             concomp_array = np.isnan(concomp_array)
             array[array == 0] = np.nan
             array[concomp_array] = np.nan
@@ -829,11 +834,13 @@ def product_stitch_sequential(input_unw_files: List[str],
     # NOTE: saving output figure adds 4 seconds
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')),
-                           str(output_conn.with_suffix('.vrt')))
+                           str(output_conn.with_suffix('.vrt')),
+                           epsg)
 
     # Remove temp files
     if temp_unw_out.exists():
         temp_unw_out.unlink()
+
 
 def product_stitch_sequential_metadata(
         input_meta_files: List[str],
@@ -857,8 +864,8 @@ def product_stitch_sequential_metadata(
     verbose : bool
         print info messages [True/False]
 
-    NOTE: Move cropping (osgeo.gdal.Warp to bounds and clip_json) and masking to
-          ariaExtract.py to make this function modular for other use
+    NOTE: Move cropping (osgeo.gdal.Warp to bounds and clip_json) and masking
+          to ariaExtract.py to make this function modular for other use
     """
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
@@ -897,12 +904,13 @@ def product_stitch_sequential_metadata(
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
-            LOGGER.info(
-                'Frame-1:',
-                meta_attr_dicts[ix1]['PATH'].split('"')[1].split('/')[-1])
-            LOGGER.info(
-                'Frame-2:',
-                meta_attr_dicts[ix2]['PATH'].split('"')[1].split('/')[-1])
+
+            frame1_meta = meta_attr_dicts[ix1][
+                'PATH'].split('"')[1].split('/')[-1]
+            LOGGER.info('Frame-1: ', frame1_meta)
+            framew_meta = meta_attr_dicts[ix2][
+                'PATH'].split('"')[1].split('/')[-1]
+            LOGGER.info('Frame-2: ', framew_meta)
 
         # Frame1
         frame1_meta_array = ARIAtools.util.stitch.get_GUNW_array(

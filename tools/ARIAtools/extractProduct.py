@@ -15,7 +15,6 @@ import time
 import copy
 import json
 import shutil
-import requests
 import logging
 import rioxarray
 import rasterio
@@ -24,7 +23,6 @@ import pyproj
 import datetime
 import tarfile
 import dask
-import contextlib
 import subprocess
 import scipy.interpolate
 import numpy as np
@@ -42,6 +40,7 @@ LOGGER = logging.getLogger(__name__)
 # only apply to geometry layers and prods derived from older ISCE versions
 GEOM_LYRS = ['bPerpendicular', 'bParallel', 'incidenceAngle',
              'lookAngle', 'azimuthAngle']
+
 
 class MetadataQualityCheck:
     """
@@ -209,12 +208,14 @@ class MetadataQualityCheck:
                 no_data_value = self.data_array.GetRasterBand(
                     i).GetNoDataValue()
                 self.data_array_band = np.ma.masked_where(
-                    self.data_array_band == no_data_value, self.data_array_band)
+                    self.data_array_band == no_data_value,
+                    self.data_array_band)
                 negs_percent = ((self.data_array_band < 0).sum()
                                 / self.data_array_band.size) * 100
 
                 # Unique bug-fix for bPerp layers with sign-flips
-                if (self.prod_key == 'bPerpendicular' and min(rsquaredarr) < 0.8
+                if (self.prod_key == 'bPerpendicular'
+                        and min(rsquaredarr) < 0.8
                         and max(std_errarr) > 0.1) and (
                         negs_percent != 100 or negs_percent != 0):
 
@@ -310,6 +311,7 @@ class MetadataQualityCheck:
 
         del self.data_array_band
         return self.data_array
+
 
 def merged_productbbox(
         metadata_dict, product_dict, workdir='./', bbox_file=None,
@@ -446,7 +448,7 @@ def merged_productbbox(
     if rejected_scenes != []:
         LOGGER.info(("%d out of %d interferograms rejected for not meeting "
                      "specified spatial thresholds"),
-                     len(rejected_scenes), len(product_dict))
+                    len(rejected_scenes), len(product_dict))
     metadata_dict = [
         i for j, i in enumerate(metadata_dict) if j not in rejected_scenes]
     product_dict = [
@@ -520,7 +522,7 @@ def merged_productbbox(
             prods_TOTbbox_metadatalyr, arrres, proj)
 
 
-def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field):
+def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     """Wrapper to create raster and apply projection"""
     # open original raster
     osgeo.gdal.BuildVRT(fname+'_temp.vrt', data_lis)
@@ -528,20 +530,21 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field):
 
     # Reproject the raster to the desired projection
     reproj_da = da.rio.reproject(f'EPSG:{proj}',
-                resampling=rasterio.enums.Resampling.nearest,
-                nodata=0)
+                                 resampling=rasterio.enums.Resampling.nearest,
+                                 nodata=0)
     reproj_da.rio.to_raster(fname, driver=driver, crs=f'EPSG:{proj}')
     os.remove(fname+'_temp.vrt')
     da.close()
     reproj_da.close()
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
     osgeo.gdal.BuildVRT(fname+'.vrt', fname, options=buildvrt_options)
-        
+
     if hgt_field is not None:
         # write height layers
-        osgeo.gdal.Open(fname+'.vrt').SetMetadataItem(hgt_field,
-            osgeo.gdal.Open(data_lis[0]).GetMetadataItem(hgt_field))
-                
+        hgt_meta = osgeo.gdal.Open(data_lis[0]).GetMetadataItem(hgt_field)
+        osgeo.gdal.Open(
+            fname+'.vrt').SetMetadataItem(hgt_field, hgt_meta)
+
     return
 
 
@@ -596,7 +599,8 @@ def prep_metadatalayers(
             sec_outname = os.path.join(date_dir, ifg.split('_')[1])
             ref_str = 'reference/' + layer
             sec_str = 'secondary/' + layer
-            sec_metadata_arr = [i[:-len(ref_str)] + sec_str for i in metadata_arr]
+            sec_metadata_arr = [
+                i[:-len(ref_str)] + sec_str for i in metadata_arr]
             tup_outputs = [
                 (ref_outname, metadata_arr), (sec_outname, sec_metadata_arr)]
 
@@ -614,10 +618,6 @@ def prep_metadatalayers(
                     os.remove(j)
             create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field)
 
-            # write height layers
-            osgeo.gdal.Open(i[0] + '.vrt').SetMetadataItem(
-                hgt_field, osgeo.gdal.Open(i[1][0]).GetMetadataItem(hgt_field))
-
         if not nisar_file:
             # compute differential
             generate_diff(
@@ -628,7 +628,7 @@ def prep_metadatalayers(
         if layer in layers:
             for i in [ref_outname, sec_outname]:
                 if not os.path.exists(i):
-                    create_raster_from_gunw(i, [i], proj, driver)
+                    create_raster_from_gunw(i, [i], proj, driver, hgt_field)
 
     else:
         if not os.path.exists(outname + '.vrt'):
@@ -659,8 +659,6 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
     # make the total arr
     # if computing total delay, must add dry and wet
-    print('arr_sec', arr_sec)
-    print('arr_ref', arr_ref)
     if tropo_total:
         arr_total = arr_sec + arr_ref
     else:
@@ -804,10 +802,11 @@ def handle_epoch_layers(
                     ref_diff = ref_outname
                     sec_diff = sec_outname
                     outname_diff = os.path.join(model_dir, 'dates',
-                                             os.path.basename(ref_diff))
+                                                os.path.basename(ref_diff))
                     if not os.path.exists(outname_diff):
-                        generate_diff(ref_diff, sec_diff, outname_diff, key,
-                            sec_key, tropo_total, hgt_field, proj, outputFormat)
+                        generate_diff(
+                            ref_diff, sec_diff, outname_diff, key, sec_key,
+                            tropo_total, hgt_field, proj, outputFormat)
                     # compute secondary diff
                     ref_diff = os.path.join(os.path.dirname(ref_outname),
                                             ifg.split('_')[1])
@@ -885,6 +884,7 @@ def export_product_worker_helper(args):
     """Calls export_product_worker with * expanded args"""
     return export_product_worker(*args)
 
+
 def export_product_worker(
         ii, ilayer, product, proj, full_product_dict_file, layers, workdir,
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
@@ -905,7 +905,8 @@ def export_product_worker(
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
-        None if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
+        None
+        if demfile_expanded is None else osgeo.gdal.Open(demfile_expanded))
 
     if dem_expanded is not None:
         gt = dem_expanded.GetGeoTransform()
@@ -933,7 +934,7 @@ def export_product_worker(
     # Extract/crop metadata layers
     if any(':/science/grids/imagingGeometry' in s for s in product) \
         or any(':/science/LSAR/GUNW/metadata/radarGrid/'
-            in s for s in product):
+               in s for s in product):
         # make VRT pointing to metadata layers in standard product
         hgt_field, model_name, outname = prep_metadatalayers(
             outname, product, dem_expanded, layer, layers,
@@ -980,7 +981,7 @@ def export_product_worker(
         # Check if phs phase and conn_comp files are already generated
         outFilePhs = os.path.join(outDir, 'unwrappedPhase', ifg_tag)
         if (not os.path.exists(outFilePhs) or
-            not os.path.exists(outFileConnComp)):
+                not os.path.exists(outFileConnComp)):
 
             phs_files = full_product_dict[ii]['unwrappedPhase']
 
@@ -1084,7 +1085,7 @@ def export_products(
     srs = osgeo.osr.SpatialReference()
     srs.ImportFromWkt(proj)
     srs.AutoIdentifyEPSG()
-    epsg_code =  srs.GetAuthorityCode(None)
+    epsg_code = srs.GetAuthorityCode(None)
     srs = None
     lyr_input_dict = {
         'layers': layers, 'prods_TOTbbox': prods_TOTbbox,
@@ -1128,7 +1129,7 @@ def export_products(
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-    user_lyrs =  list(
+    user_lyrs = list(
         set.intersection(*map(set, [layers, tropo_lyrs])))
     if tropo_total or user_lyrs != []:
         # set input keys
@@ -1165,7 +1166,7 @@ def export_products(
 
             # get unique layer names from path
             map_lyrs = [
-                product_dict[0][0][0].split('/')[-1], 
+                product_dict[0][0][0].split('/')[-1],
                 product_dict_dry[0][0].split('/')[-1]
             ]
             lyr_input_dict['map_lyrs'] = map_lyrs
@@ -1196,8 +1197,8 @@ def export_products(
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
-    user_lyrs =  list(
-        set.intersection(*map(set,[layers, ['solidEarthTide']])))
+    user_lyrs = list(
+        set.intersection(*map(set, [layers, ['solidEarthTide']])))
     if user_lyrs != []:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
         key = 'solidEarthTide'
@@ -1240,7 +1241,7 @@ def export_products(
 
     # If specified, extract ionosphere long wavelength
     ext_corr_lyrs += ['ionosphere']
-    user_lyrs =  list(
+    user_lyrs = list(
         set.intersection(*map(set, [layers, ['ionosphere']])))
     if user_lyrs != []:
         lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
@@ -1256,7 +1257,7 @@ def export_products(
 
         lyr_input_dict = dict(input_iono_files=None,
                               arrres=arrres,
-                              epsg = epsg_code,
+                              epsg=epsg_code,
                               output_iono=None,
                               output_format=outputFormat,
                               bounds=bounds,
@@ -1309,7 +1310,8 @@ def export_products(
             outputs = [export_product_worker_helper(arg) for arg in mp_args]
 
         else:
-            LOGGER.debug('Running %d total jobs in with threads' % len(mp_args))
+            LOGGER.debug('Running %d total jobs in with threads' %
+                         len(mp_args))
             jobs = []
             for arg in mp_args:
                 job = dask.delayed(export_product_worker)(*arg)
@@ -1412,7 +1414,7 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
     metadatalyr_name = outname.split('/')[-2]
     if (metadatalyr_name in GEOM_LYRS and version_check < '2_0_4') \
-        and not nisar_file:
+            and not nisar_file:
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))
@@ -1437,15 +1439,15 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
 
         latitudeMeta = np.linspace(
             data_array.GetGeoTransform()[3],
-            data_array.GetGeoTransform()[3] + (
-                data_array.GetGeoTransform()[5] * (data_array.RasterYSize - 1)),
-                data_array.RasterYSize, dtype='float32')
+            data_array.GetGeoTransform()[3] +
+            (data_array.GetGeoTransform()[5] * (data_array.RasterYSize - 1)),
+            data_array.RasterYSize, dtype='float32')
 
         longitudeMeta = np.linspace(
             data_array.GetGeoTransform()[0],
-            data_array.GetGeoTransform()[0] + (
-                data_array.GetGeoTransform()[1] * (data_array.RasterXSize - 1)),
-                data_array.RasterXSize, dtype='float32')
+            data_array.GetGeoTransform()[0] +
+            (data_array.GetGeoTransform()[1] * (data_array.RasterXSize - 1)),
+            data_array.RasterXSize, dtype='float32')
 
         da_dem = rioxarray.open_rasterio(
             dem.GetDescription(), band_as_variable=True,
@@ -1596,9 +1598,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
     for i in enumerate(gacos_products):
         if not os.path.isdir(i[1]) and not i[1].endswith('.ztd') \
                 and not i[1].endswith('.tif'):
-            untar_dir = os.path.join(os.path.abspath(os.path.join(i[1],
-                                                                  os.pardir)),
-                                     os.path.basename(i[1]).split('.')[0] + '_extracted')
+            untar_dir = os.path.join(os.path.abspath(os.path.join(
+                i[1], os.pardir)), os.path.basename(i[1]).split('.')[0] + '_extracted')
             if not tarfile.is_tarfile(i[1]):
                 raise Exception('Cannot extract %s because it is not a '
                                 'valid tarfile. Resolve this '
@@ -1767,16 +1768,16 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             for j in [tropo_reference, tropo_secondary]:
                 # Get ARIA product times
                 aria_rsc_dict = {}
-                aria_rsc_dict['azimuthZeroDopplerMidTime'] = \
-                    [datetime.datetime.strptime(os.path.basename(j)[:4]
-                                       + '-' + os.path.basename(j)[4:6]
-                                       + '-' + os.path.basename(j)[6:8]
-                                       + '-' + m[11:], "%Y-%m-%d-%H:%M:%S.%f")
-                     for m in metadata_dict[0][0]]
+                aria_rsc_dict['azimuthZeroDopplerMidTime'] = [
+                    datetime.datetime.strptime(
+                        os.path.basename(j)[: 4] + '-' + os.path.
+                        basename(j)[4: 6] + '-' + os.path.basename(j)[6: 8] +
+                        '-' + m[11:],
+                        "%Y-%m-%d-%H:%M:%S.%f") for m in metadata_dict[0][0]]
                 # Get tropo product UTC times
                 tropo_rsc_dict = {}
-                tropo_rsc_dict['TIME_OF_DAY'] = open(j[:-4] + '.rsc',
-                                                     'r').readlines()[-1].split()[1].split('UTC')[:-1]
+                tropo_rsc_dict['TIME_OF_DAY'] = open(
+                    j[:-4] + '.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
                 # If new TIF product, UTC times not available
                 if 'None' in tropo_rsc_dict['TIME_OF_DAY'][0]:
                     tropo_rsc_dict['TIME_OF_DAY'] = [
@@ -1785,23 +1786,28 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                 # applicable)
                 elif '-' in tropo_rsc_dict['TIME_OF_DAY'][0]:
                     tropo_rsc_dict['TIME_OF_DAY'] = [
-                        datetime.datetime.strptime(m[:10] + '-' +
-                        m[11:].split('.')[0] + '-'
-                        + str(round(float('0.' + m[11:].split('.')[1]) * 60)),
-                        "%Y-%m-%d-%H-%M")
-                        for m in tropo_rsc_dict['TIME_OF_DAY']
-                    ]
+                        datetime.datetime.strptime(
+                            m[: 10] + '-' + m[11:].split('.')[0] + '-' +
+                            str(
+                                round(
+                                    float('0.' + m[11:].split('.')[1]) * 60)),
+                            "%Y-%m-%d-%H-%M")
+                        for m in tropo_rsc_dict['TIME_OF_DAY']]
                 else:
                     tropo_rsc_dict['TIME_OF_DAY'] = [
                         datetime.datetime.strptime(
-                        os.path.basename(j)[:4] + '-'
-                        + os.path.basename(j)[4:6] + '-'
-                        + os.path.basename(j)[6:8] + '-'
-                        + tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[0]
-                        + '-' + str(round(float('0.'
-                                                + tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[-1])
-                                          * 60)), "%Y-%m-%d-%H-%M")
-                    ]
+                            os.path.basename(j)[: 4] + '-' + os.path.
+                            basename(j)[4: 6] + '-' + os.path.basename(j)
+                            [6: 8] + '-' +
+                            tropo_rsc_dict['TIME_OF_DAY'][0].split('.')[0] +
+                            '-' +
+                            str(
+                                round(
+                                    float(
+                                        '0.' +
+                                        tropo_rsc_dict['TIME_OF_DAY'][0].
+                                        split('.')[-1]) * 60)),
+                            "%Y-%m-%d-%H-%M")]
 
                 # Check and report if tropospheric product falls outside of
                 # standard product range
@@ -1826,14 +1832,12 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                 'targetAlignedPixels': True,
                                 'multithread': True,
                                 'options': [f'NUM_THREADS={num_threads}']}
-            tropo_reference = osgeo.gdal.Warp('',
-                                              tropo_reference,
-                                              options=osgeo.gdal.WarpOptions(
-                                                  **gdal_warp_kwargs)).ReadAsArray()
-            tropo_secondary = osgeo.gdal.Warp('',
-                                              tropo_secondary,
-                                              options=osgeo.gdal.WarpOptions(
-                                                  **gdal_warp_kwargs)).ReadAsArray()
+            tropo_reference = osgeo.gdal.Warp(
+                '', tropo_reference, options=osgeo.gdal.WarpOptions(
+                    **gdal_warp_kwargs)).ReadAsArray()
+            tropo_secondary = osgeo.gdal.Warp(
+                '', tropo_secondary, options=osgeo.gdal.WarpOptions(
+                    **gdal_warp_kwargs)).ReadAsArray()
             tropo_product = np.subtract(tropo_secondary, tropo_reference)
 
             # Convert troposphere from m to rad

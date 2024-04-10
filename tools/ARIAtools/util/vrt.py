@@ -23,6 +23,8 @@ osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Save file with gdal
+
+
 def renderVRT(
         fname, data_lyr, geotrans=None, drivername='ENVI',
         gdal_fmt='float32', proj=None, nodata=None, verbose=False):
@@ -67,13 +69,14 @@ def renderOGRVRT(vrt_filename, src_datasets):
         ofp.write(VRT_HEAD)
         for i in enumerate(src_datasets):
             ofp.write(
-                '    <OGRVRTLayer name="Dataset%i_%s">\n' %(
-                i[0], os.path.basename(i[1]).split('.shp')[0]))
+                '    <OGRVRTLayer name="Dataset%i_%s">\n' % (
+                    i[0], os.path.basename(i[1]).split('.shp')[0]))
             ofp.write(
-                '      <SrcDataSource shared="1">%s</SrcDataSource>\n' %(i[1]))
+                '      <SrcDataSource shared="1">%s</SrcDataSource>\n' %
+                (i[1]))
             ofp.write(
-                '      <SrcLayer>%s</SrcLayer>\n' %(
-                os.path.basename(i[1]).split('.shp')[0]))
+                '      <SrcLayer>%s</SrcLayer>\n' % (
+                    os.path.basename(i[1]).split('.shp')[0]))
             ofp.write('    </OGRVRTLayer>\n')
         ofp.write(VRT_TAIL)
     return
@@ -212,9 +215,10 @@ def resampleRaster(
             warp_options = osgeo.gdal.WarpOptions(
                 format=outputFormat, cutlineDSName=prods_TOTbbox,
                 outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, resampleAlg='mode', multithread=True,
+                targetAlignedPixels=True, resampleAlg='mode',
+                multithread=True,
                 options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-            osgeo.gdal.Warp(fnameconcomp, fnameconcomp,options=warp_options)
+            osgeo.gdal.Warp(fnameconcomp, fnameconcomp, options=warp_options)
 
             # update VRT
             vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
@@ -564,6 +568,7 @@ def get_basic_attrs(fname):
     no_data = data_set.GetRasterBand(1).GetNoDataValue()
     data_set = None
     return width, height, geo_trans, proj, no_data
+
 
 def dim_check(ref_arr, prod_arr):
     """Check dimensions between successive products"""

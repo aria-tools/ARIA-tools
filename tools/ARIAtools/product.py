@@ -9,11 +9,11 @@
 import os
 import re
 import glob
-import h5py
 import logging
-import netCDF4
 import datetime
 import itertools
+import h5py
+import netCDF4
 import numpy as np
 import osgeo
 from pyproj import Transformer
@@ -34,6 +34,8 @@ LOGGER = logging.getLogger(__name__)
 
 # Unpacking class fuction of readproduct to become
 # global fucntion that can be called in parallel
+
+
 def unwrap_self_readproduct(arg):
     """
     Arg is the self argument and the filename is of the file to be read
@@ -48,7 +50,8 @@ def package_dict(scene, new_scene, scene_ind,
     contiguous products
 
     'scene' = specific reference product
-    'new_scene' = specific secondary product (same as above if appending scenes)
+    'new_scene' = specific secondary product
+        (same as above if appending scenes)
     'scene_ind' = pass metadata (0) vs data layer (1) values for a given scene
     'sorted_dict' = dictionary of sorted products to modify
     'dict_ind' = index of sorted products dictionary being queried
@@ -83,13 +86,6 @@ def package_dict(scene, new_scene, scene_ind,
 
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
-        # first pass empty list if key does not exist for a scene
-        for i in dict_keys:
-            if i not in dict_keys_ref:
-                sorted_dict[dict_ind][scene_ind][i] = []
-            if i not in dict_keys_sec:
-                new_scene[scene_ind][i] = []
-        # then merge
         dict_vals = [[
             subitem for item in a for subitem in (item if
             isinstance(item, list) else [item])] for a in zip(
@@ -111,8 +107,8 @@ def remove_scenes(products):
     sorted_products = []
 
     # only check ARIA-S1 GUNW products
-    if os.path.basename(products[0][1]['unwrappedPhase'].split( \
-        '"')[1])[:2] == 'S1':
+    if os.path.basename(products[0][1]['unwrappedPhase'].split(
+            '"')[1])[:2] == 'S1':
         for i in enumerate(products[:-1]):
             scene = i[1]
             new_scene = products[i[0] + 1]
@@ -125,17 +121,21 @@ def remove_scenes(products):
             new_scene_t = datetime.datetime.strptime(
                 new_scene[0]['pair_name'][9:], "%Y%m%d")
 
+            # check temporal overlap
+            sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
+            ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
+
             # Only pass scene if it temporally (i.e. in same orbit)
             # overlaps with reference scene
-            if abs(new_scene_t - scene_t) <= ONE_DAY and \
-                abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY:
+            if sec_within_day and ref_within_day:
 
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
                 dict_item = None
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                       item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         dict_item = item
                         break
                 if dict_item is not None:
@@ -160,8 +160,9 @@ def remove_scenes(products):
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                    item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
                     dict_1 = package_dict(scene, scene, 0)
@@ -172,8 +173,9 @@ def remove_scenes(products):
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if new_scene[1]['productBoundingBox'] in \
-                    item[1]['productBoundingBox']:
+                    scene_in_ifg = new_scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
                     dict_1 = package_dict(new_scene, new_scene, 0)
@@ -200,20 +202,21 @@ def remove_scenes(products):
                 ver_num = float(ver_str[1:].replace('_', ''))
                 vers.append(ver_num)
 
-            if any(item >= 300. for item in vers) and \
-                any(item < 300. for item in vers):
-                legacy_indices = [ind for ind, val in enumerate(vers) \
+            # determine if there is a mix of incompatible versions
+            v2_prods = any(item < 300. for item in vers)
+            v3_prods = any(item >= 300. for item in vers)
+
+            if v2_prods and v3_prods:
+                legacy_indices = [ind for ind, val in enumerate(vers)
                                   if val < 300.]
-                track_legacy_products.extend([val for ind, val \
-                    in enumerate(i[1]['unwrappedPhase']) \
-                    if ind in legacy_indices])
-                
+                track_legacy_products.extend([val for ind, val in enumerate(
+                    i[1]['unwrappedPhase']) if ind in legacy_indices])
+
                 # Iterate over each dictionary to remove these keys
                 LOGGER.debug('The following v2 products were rejected '
-                    'to ensure they are not mixed with v3 products:')
-                LOGGER.debug([os.path.basename( \
-                    item.split('"')[1]) for \
-                    item in track_legacy_products])
+                             'to ensure they are not mixed with v3 products:')
+                for item in track_legacy_products:
+                    LOGGER.debug(os.path.basename(item.split('"')[1]))
 
         # Remove legacy products in the presence of v3 products
         if track_legacy_products != []:
@@ -233,6 +236,7 @@ class Product:
     Load ARIA standard products and split them into spatiotemporally
     contiguous interferograms.
     """
+
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
                  verbose=False):
@@ -325,8 +329,9 @@ class Product:
                     'products: Linux kernel >=4.3 and libnetcdf >=4.5')
 
         # check if local file reader is being captured as netcdf
-        if any("https://" not in i for i in self.files) \
-            and not any(".h5" in i for i in self.files):
+        check_for_urls = any("https://" not in i for i in self.files)
+        check_for_h5 = any(".h5" in i for i in self.files)
+        if check_for_urls and not check_for_h5:
             fmt = osgeo.gdal.Open(
                 [s for s in self.files if 'https://' not in s][0]
             ).GetDriver().GetDescription()
@@ -356,8 +361,8 @@ class Product:
                     fname = 'NETCDF:"' + i
                     basename = os.path.basename(i)
                     file_pol = pol_dict[basename.split('_')[10]]
-                    lyr_pref = '/science/LSAR/GUNW/grids/frequencyA' + \
-                        f'/unwrappedInterferogram/{file_pol}/'
+                    lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
+                    lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
                     proj_location = lyr_pref + 'projection'
                     with h5py.File(fname[8:], 'r') as hdf_gunw:
                         file_proj = int(hdf_gunw[proj_location][()])
@@ -365,15 +370,16 @@ class Product:
                 self.projection = int(np.median(record_proj))
             else:
                 self.projection = 4326
-                
+
         else:
             self.projection = int(self.projection)
 
         # Check if bbox input is valid list or shapefile.
         if bbox is not None:
             # If list
-            if isinstance([str(val) for val in bbox.split()], list) \
-                    and not os.path.isfile(bbox):
+            bbox_is_list = isinstance(
+                [str(val) for val in bbox.split()], list)
+            if bbox_is_list and not os.path.isfile(bbox):
 
                 try:
                     bbox = [float(val) for val in bbox.split()]
@@ -437,8 +443,7 @@ class Product:
                 osgeo.gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
             if version == 'None':
                 LOGGER.warning(
-                    f'{fname} is not a supported file '
-                    'type... skipping')
+                    '%s is not a supported file type... skipping', fname)
                 return []
 
             # Enforce forward-compatibility of netcdf versions
@@ -453,9 +458,8 @@ class Product:
 
         if version not in nc_version_check:
             LOGGER.warning(
-                f'input nc_version = {self.nc_version}, '
-                f'file {fname} rejected because '
-                f'it is a version {version} product')
+                'input nc_version = %s, file %s rejected because it is a '
+                'version %s product', self.nc_version, fname, version)
             return []
 
         # Get lists of radarmetadata/layer keys for this file version
@@ -482,14 +486,14 @@ class Product:
         if file_bbox_intersect is not False:
             # separate NISAR dict convention
             if basename.split('_')[0] == 'NISAR':
-                 product_dicts = [
-                     self.__NISARmappingData__(
-                         fname, rmdkeys, sdskeys, version)
-                 ]
+                product_dicts = [
+                    self.__NISARmappingData__(
+                        fname, rmdkeys, sdskeys, version)
+                ]
 
             else:
-               product_dicts = [
-                   self.__mappingData__(fname, rmdkeys, sdskeys, version)]
+                product_dicts = [
+                    self.__mappingData__(fname, rmdkeys, sdskeys, version)]
 
             # assign product bounding box object to dictionary
             product_dicts[0][1]['productBoundingBox'] = file_bbox
@@ -519,17 +523,18 @@ class Product:
                        'slantRangeSpacing', 'slantRangeEnd', 'slantRangeStart']
 
             # Layer names for these versions
-            sdskeys = ['productBoundingBox', 'unwrappedPhase', 'coherence',
-                       'connectedComponents', 'amplitude', 'perpendicularBaseline',
-                       'parallelBaseline', 'incidenceAngle', 'lookAngle',
-                       'azimuthAngle', 'ionosphere']
+            sdskeys = [
+                'productBoundingBox', 'unwrappedPhase', 'coherence',
+                'connectedComponents', 'amplitude', 'perpendicularBaseline',
+                'parallelBaseline', 'incidenceAngle', 'lookAngle',
+                'azimuthAngle', 'ionosphere']
 
             # Pass pair name
             read_file = netCDF4.Dataset(
                 fname, keepweakref=True).groups['science'].groups[
                 'radarMetaData'].groups['inputSLC']
             self.pairname = (read_file.groups['reference'][
-                    'L1InputGranules'][:][0][17:25] + '_' + 
+                'L1InputGranules'][:][0][17:25] + '_' +
                 read_file.groups['secondary']['L1InputGranules'][:][0][17:25])
         return rmdkeys, sdskeys
 
@@ -635,12 +640,12 @@ class Product:
             rdrmetadata_dict[
                 'centerLatitude'] = basename.split('-')[8].split('_')[1]
             if rdrmetadata_dict['centerLatitude'][-1] == 'S':
-                rdrmetadata_dict['centerLatitude'] = (-1 * 
-                    int(rdrmetadata_dict['centerLatitude'][:-1]))
+                rdrmetadata_dict['centerLatitude'] = (
+                    -1 * int(rdrmetadata_dict['centerLatitude'][:-1]))
 
             else:
-                rdrmetadata_dict['centerLatitude'] = \
-                    int(rdrmetadata_dict['centerLatitude'][:-1])
+                rdrmetadata_dict['centerLatitude'] = int(rdrmetadata_dict[
+                    'centerLatitude'][:-1])
 
             # hardcoded keys for a given sensor
             rdrmetadata_dict['projection'] = self.projection
@@ -754,7 +759,7 @@ class Product:
                 i for i in tropo_lyrs if i not in ''.join(addkeys)])
             for i in keys_reject:
                 LOGGER.warning(
-                    f'Expected data layer key {i} not found in {fname}')
+                    'Expected data layer key %s not found in %s' % (i, fname))
             these_layer_keys.extend(addkeys)
 
         # Setup datalyr_dict
@@ -763,8 +768,8 @@ class Product:
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # individual frames preserved here
-        datalyr_dict['productBoundingBoxFrames'] = \
-            fname + '":' + sdskeys[0]
+        datalyr_dict[
+            'productBoundingBoxFrames'] = fname + '":' + sdskeys[0]
         for i in enumerate(these_layer_keys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
@@ -787,11 +792,11 @@ class Product:
         # initiate variables
         rdrmetadata_dict = {}
         sdskeys = ['/science/LSAR/identification/boundingPolygon']
-        #Pass pair name
-        basename     = os.path.basename(fname)
-        self.pairname = basename.split('_')[11][:8] + \
-                                  '_' + basename.split('_')[13][:8]
-                                  
+        # Pass pair name
+        basename = os.path.basename(fname)
+        self.pairname = basename.split('_')[11][:8] + '_'
+        self.pairname += basename.split('_')[13][:8]
+
         # Get polarization
         pol_dict = {}
         pol_dict['SV'] = 'VV'
@@ -803,11 +808,11 @@ class Product:
         rdrmetadata_dict['pair_name'] = self.pairname
         # get mid azimuth time
         ref_doppler_time = datetime.datetime.strptime(basename.split('_')[11],
-            '%Y%m%dT%H%M%S')
+                                                      '%Y%m%dT%H%M%S')
         sec_doppler_time = datetime.datetime.strptime(basename.split('_')[12],
-            '%Y%m%dT%H%M%S')
-        mid_dt = ref_doppler_time + \
-                        (sec_doppler_time - ref_doppler_time) / 2
+                                                      '%Y%m%dT%H%M%S')
+        mid_dt = ref_doppler_time
+        mid_dt += (sec_doppler_time - ref_doppler_time) / 2
         mid_datetime_str = mid_dt.strftime('%Y-%m-%dT%H:%M:%S')
         mid_datetime_str += '.0'
         rdrmetadata_dict['azimuthZeroDopplerMidTime'] = mid_datetime_str
@@ -815,8 +820,8 @@ class Product:
         # assign latitude to assist with sorting
         # get product bounding box
         # and other variables
-        lyr_pref = '/science/LSAR/GUNW/grids/frequencyA' + \
-                        f'/unwrappedInterferogram/{file_pol}/'
+        lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
+        lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
         center_freq = '/science/LSAR/GUNW/grids/frequencyA/centerFrequency'
         with h5py.File(fname[8:], 'r') as hdf_gunw:
             # get bbox
@@ -826,22 +831,25 @@ class Product:
             # get center frequency
             center_freq_var = float(hdf_gunw[center_freq][()])
             # get slant range info
-            rdr_slant_range = \
-                hdf_gunw['/science/LSAR/GUNW/metadata/' + \
-                    'radarGrid/slantRange'][()].flatten()
+            rdr_slant_range = hdf_gunw[
+                '/science/LSAR/GUNW/metadata/' +
+                'radarGrid/slantRange'][()].flatten()
             min_range = min(rdr_slant_range)
             max_range = max(rdr_slant_range)
-            rdr_slant_range_spac = hdf_gunw['/science/LSAR/GUNW/grids/' + \
-                'frequencyA/unwrappedInterferogram/xCoordinateSpacing'][()]
+            rdr_slant_range_spac = hdf_gunw['/science/LSAR/GUNW/grids/' +
+                                            'frequencyA/' +
+                                            'unwrappedInterferogram/' +
+                                            'xCoordinateSpacing'][()]
         rdrmetadata_dict['centerFrequency'] = center_freq_var
-        rdrmetadata_dict['wavelength'] = 299792458 /  \
-            rdrmetadata_dict['centerFrequency']
-        rdrmetadata_dict['centerLatitude'] =  int(latlon_file_bbox.centroid.y)
+        rdrmetadata_dict[
+            'wavelength'] = 299792458 / rdrmetadata_dict['centerFrequency']
+        rdrmetadata_dict['centerLatitude'] = int(latlon_file_bbox.centroid.y)
         rdrmetadata_dict['projection'] = self.projection
-        pyproj_transformer = Transformer.from_crs('EPSG:4326',
-            f'EPSG:{self.projection}', always_xy=True)
-        file_bbox = transform(lambda x, y, z=None: \
-            pyproj_transformer.transform(x, y), latlon_file_bbox)
+        pyproj_transformer = Transformer.from_crs(
+            'EPSG:4326', f'EPSG:{self.projection}', always_xy=True)
+        file_bbox = transform(
+            lambda x, y, z=None: pyproj_transformer.transform(x, y),
+            latlon_file_bbox)
 
         # hardcoded keys
         rdrmetadata_dict['missionID'] = 'NISAR'
@@ -849,7 +857,7 @@ class Product:
         rdrmetadata_dict['slantRangeSpacing'] = rdr_slant_range_spac
         rdrmetadata_dict['slantRangeStart'] = min_range
         rdrmetadata_dict['slantRangeEnd'] = max_range
-        #hardcoded key meant to gauge temporal connectivity of scenes
+        # hardcoded key meant to gauge temporal connectivity of scenes
         # (i.e. seconds between start and end)
         rdrmetadata_dict['sceneLength'] = 16
 
@@ -866,8 +874,8 @@ class Product:
             lyr_pref + 'perpendicularBaseline',
             lyr_pref + 'parallelBaseline',
             lyr_pref + 'incidenceAngle',
-            lyr_pref + 'losUnitVectorX', # derive azimuthAngle from this
-            lyr_pref + 'losUnitVectorY', # derive azimuthAngle from this
+            lyr_pref + 'losUnitVectorX',  # derive azimuthAngle from this
+            lyr_pref + 'losUnitVectorY',  # derive azimuthAngle from this
             lyr_pref + 'elevationAngle'
         ])
         # track and add additional correction layers, if they exist
@@ -898,33 +906,33 @@ class Product:
 
         """
         # Expected layers
-        layerkeys=['productBoundingBox','unwrappedPhase',
-        'coherence','connectedComponents','ionospherePhaseScreen',
-        'ionospherePhaseScreenUncertainty','bPerpendicular',
-        'bParallel','incidenceAngle','losUnitVectorX', 'losUnitVectorY',
-        'elevationAngle', 'slantRangeSolidEarthTidesPhase',
-        'alongTrackSolidEarthTidesPhase',
-        'hydrostaticTroposphericPhaseScreen',
-        'wetTroposphericPhaseScreen']
+        layerkeys = [
+            'productBoundingBox', 'unwrappedPhase', 'coherence',
+            'connectedComponents', 'ionospherePhaseScreen',
+            'ionospherePhaseScreenUncertainty', 'bPerpendicular', 'bParallel',
+            'incidenceAngle', 'losUnitVectorX', 'losUnitVectorY',
+            'elevationAngle', 'slantRangeSolidEarthTidesPhase',
+            'alongTrackSolidEarthTidesPhase',
+            'hydrostaticTroposphericPhaseScreen', 'wetTroposphericPhaseScreen']
 
         # Setup datalyr_dict
-        datalyr_dict={}
-        datalyr_dict['pair_name']=self.pairname
+        datalyr_dict = {}
+        datalyr_dict['pair_name'] = self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # individual frames preserved here
-        datalyr_dict['productBoundingBoxFrames'] = \
-            fname + '":' + sdskeys[0]
+        datalyr_dict[
+            'productBoundingBoxFrames'] = fname + '":' + sdskeys[0]
         for i in enumerate(layerkeys):
-            datalyr_dict[i[1]]=fname + '":'+sdskeys[i[0]]
-            
+            datalyr_dict[i[1]] = fname + '":'+sdskeys[i[0]]
+
         # Rewrite tropo and iono keys
-        datalyr_dict['ionosphere'] = \
-            datalyr_dict.pop('ionospherePhaseScreen')
-        datalyr_dict['troposphereHydrostatic'] = \
-            datalyr_dict.pop('hydrostaticTroposphericPhaseScreen')
-        datalyr_dict['troposphereWet'] = \
-            datalyr_dict.pop('wetTroposphericPhaseScreen')
+        datalyr_dict['ionosphere'] = datalyr_dict.pop(
+            'ionospherePhaseScreen')
+        datalyr_dict['troposphereHydrostatic'] = datalyr_dict.pop(
+            'hydrostaticTroposphericPhaseScreen')
+        datalyr_dict['troposphereWet'] = datalyr_dict.pop(
+            'wetTroposphericPhaseScreen')
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -950,7 +958,6 @@ class Product:
         self.products = remove_scenes(self.products)
 
         # Check for (and remove) duplicate products
-        num_prods = len(self.products)
         num_dups = []
         for i in enumerate(self.products[:-1]):
             scene = i[1]
@@ -1005,7 +1012,7 @@ class Product:
                 LOGGER.debug(
                     "Duplicate product captured. Rejecting scene %s",
                     os.path.basename(scenes[0][1]['unwrappedPhase'].split(
-                    ':')[1]))
+                        ':')[1]))
 
         # Delete duplicate products
         self.products = list(
@@ -1041,15 +1048,22 @@ class Product:
             scene_area = scene[1]['productBoundingBox']
             new_scene_area = new_scene[1]['productBoundingBox']
 
+            # check spatiotemporal overlap
+            scene_intersects = scene_area.intersection(
+                new_scene_area).area > 0.
+            sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
+            ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
+
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
-            if (scene_area.intersection(new_scene_area).area > 0. and
-                abs(new_scene_t - scene_t) <= ONE_DAY and
-                abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY):
+            if scene_intersects and sec_within_day and ref_within_day:
 
                 # Do not export prod if already tracked as a rejected pair
-                if scene[0]['pair_name'] in track_rejected_pairs or \
-                        new_scene[0]['pair_name'] in track_rejected_pairs:
+                ref_rejected = scene[0][
+                    'pair_name'] in track_rejected_pairs
+                sec_rejected = new_scene[0][
+                    'pair_name'] in track_rejected_pairs
+                if ref_rejected or sec_rejected:
                     track_rejected_pairs.extend((
                         scene[0]['pair_name'], new_scene[0]['pair_name']))
                     continue
@@ -1058,8 +1072,9 @@ class Product:
                 # and if it does then append values
                 dict_item = None
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                       item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         dict_item = item
                         break
                 if dict_item is not None:
@@ -1096,11 +1111,13 @@ class Product:
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if scene[1]['productBoundingBox'] in \
-                    item[1]['productBoundingBox']:
+                    scene_in_ifg = scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
-                if track_existing_ifg == [] and \
-                    scene[0]['pair_name'] not in track_rejected_pairs:
+                ref_not_rejected = scene[0][
+                    'pair_name'] not in track_rejected_pairs
+                if track_existing_ifg == [] and ref_not_rejected:
                     dict_1 = package_dict(scene, scene, 0)
                     dict_2 = package_dict(scene, scene, 1)
                     new_dict = [dict_1, dict_2]
@@ -1109,11 +1126,13 @@ class Product:
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    if new_scene[1]['productBoundingBox'] in \
-                    item[1]['productBoundingBox']:
+                    scene_in_ifg = new_scene[1][
+                        'productBoundingBox'] in item[1]['productBoundingBox']
+                    if scene_in_ifg:
                         track_existing_ifg.append(item)
-                if track_existing_ifg == [] and \
-                    new_scene[0]['pair_name'] not in track_rejected_pairs:
+                scene_not_rejected = new_scene[0][
+                    'pair_name'] not in track_rejected_pairs
+                if track_existing_ifg == [] and scene_not_rejected:
                     dict_1 = package_dict(new_scene, new_scene, 0)
                     dict_2 = package_dict(new_scene, new_scene, 1)
                     new_dict = [dict_1, dict_2]
@@ -1125,8 +1144,8 @@ class Product:
             LOGGER.warning(
                 '%d out of %d interferograms rejected since stitched '
                 'interferogram would have gaps' % (
-                len(track_rejected_pairs),
-                len([item[0] for item in sorted_products])))
+                    len(track_rejected_pairs),
+                    len([item[0] for item in sorted_products])))
 
             # Provide report of which files were kept vs. which were not
             LOGGER.debug('Specifically, gaps were found between the '
@@ -1172,10 +1191,14 @@ class Product:
                 i[0]['pair_name'], i[0]['azimuthZeroDopplerMidTime'],
                 i[0]['centerLatitude'])))
 
+        # determine if there is a mix of different sensors
+        s1_prods = all(i[0]['missionID'] ==
+                       'Sentinel-1' for i in self.products)
+        alos2_prods = all(i[0]['missionID'] == 'ALOS-2' for i in self.products)
+        nisar_prods = all(i[0]['missionID'] == 'NISAR' for i in self.products)
+
         # Exit if products from different sensors were mixed
-        if (not all(i[0]['missionID'] == 'Sentinel-1' for i in self.products)
-            and not all(i[0]['missionID'] == 'ALOS-2' for i in self.products)
-            and not all(i[0]['missionID'] == 'NISAR' for i in self.products)):
+        if not s1_prods and not alos2_prods and not nisar_prods:
 
             raise Exception(
                 'Specified input contains standard products from different '
@@ -1194,10 +1217,11 @@ class Product:
             # Provide report of which files were kept vs. which weren't
             LOGGER.debug(
                 'Specifically, the following GUNW products were rejected:')
-            LOGGER.debug([
-                os.path.basename(i) for i in self.files if i not in
-                [i[1]['productBoundingBox'].split('"')[1]
-                for i in self.products]])
+            for i in self.files:
+                product_bboxes = [i[1]['productBoundingBox'].split('"')[1]
+                                  for i in self.products]
+                if i not in product_bboxes:
+                    LOGGER.debug(os.path.basename(i))
 
         else:
             LOGGER.info(

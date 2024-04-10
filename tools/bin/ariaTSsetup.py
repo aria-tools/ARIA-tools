@@ -39,6 +39,7 @@ osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 LOGGER = logging.getLogger('ariaTSsetup.py')
 
+
 def create_parser():
     """Parser to read command line arguments."""
     parser = argparse.ArgumentParser(
@@ -93,9 +94,9 @@ def create_parser():
              'to omit amplitude mask. default: "None".')
     parser.add_argument(
         '-nt', '--num_threads', dest='num_threads', default='2', type=str,
-        help='Specify number of threads for multiprocessing operation in gdal. '
-             'By default "2". Can also specify "All" to use all available '
-             'threads.')
+        help='Specify number of threads for multiprocessing operation '
+             'in gdal. By default "2". Can also specify "All" to use all '
+             'available threads.')
     parser.add_argument(
         '-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By '
@@ -133,7 +134,8 @@ def create_parser():
         help='Specify version as str, e.g. 2_0_4 or all prods; default: all')
     parser.add_argument(
         '--nc_version', dest='nc_version', default='1b',
-        help='Specify netcdf version as str, e.g. 1c or all prods; default: 1b')
+        help='Specify netcdf version as str, e.g. 1c or all prods; '
+             'default: 1b')
     parser.add_argument(
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
@@ -196,7 +198,8 @@ def extract_utc_time(aria_dates, aztime_list):
             min_mid_time = min(mid_time)
             max_mid_time = max(mid_time)
 
-            # Calculate time difference between minimum start and maximum end time,
+            # Calculate time difference
+            # between minimum start and maximum end time,
             # and add it to mean start time.
             time_delta = (max_mid_time - min_mid_time) / 2
             utc_time = (min_mid_time + time_delta).time()
@@ -239,7 +242,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # handle individual epochs if external correction layer
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
-        domain_name in ARIA_TROPO_MODELS):
+            domain_name in ARIA_TROPO_MODELS):
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # Find files
@@ -411,7 +414,6 @@ def main():
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose)
 
-
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
     # but user may specify union), and expected shape for DEM.
@@ -550,11 +552,11 @@ def main():
         if args.tropo_total is True:
             LOGGER.info(
                 'Extracting, %s for each applicable interferogram pair' % (
-                'troposphereTotal'))
+                    'troposphereTotal'))
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=args.tropo_total,
             model_names=model_names, layers=layers,
-             multiproc_method='gnu_parallel', **export_dict)
+            multiproc_method='gnu_parallel', **export_dict)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)

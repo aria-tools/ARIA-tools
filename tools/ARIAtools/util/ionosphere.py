@@ -19,28 +19,29 @@ import ARIAtools.util.stitch
 GUNW_LAYERS = {
     'unwrappedPhase': 'NETCDF:"%s":/science/grids/data/unwrappedPhase',
     'coherence': 'NETCDF:"%s":/science/grids/data/coherence',
-    'connectedComponents': \
+    'connectedComponents':
         'NETCDF:"%s":/science/grids/data/connectedComponents',
-    'ionosphere': \
+    'ionosphere':
         'NETCDF:"%s":/science/grids/corrections/derived/ionosphere/ionosphere'
-    }
+}
 
 NISAR_GUNW_LAYERS = {
-    'unwrappedPhase': \
+    'unwrappedPhase':
         'NETCDF:"%s":/science/LSAR/GUNW/grids/frequencyA/'
         'unwrappedInterferogram/%s/unwrappedPhase',
-    'coherence': \
+    'coherence':
         'NETCDF:"%s":/science/LSAR/GUNW/grids/frequencyA/'
         'unwrappedInterferogram/%s/coherenceMagnitude',
-    'connectedComponents': \
+    'connectedComponents':
         'NETCDF:"%s":/science/LSAR/GUNW/grids/frequencyA/'
         'unwrappedInterferogram/%s/connectedComponents',
-    'ionosphere': \
+    'ionosphere':
         'NETCDF:"%s":/science/LSAR/GUNW/grids/frequencyA/'
         'unwrappedInterferogram/%s/ionospherePhaseScreen'}
 
 
 LOGGER = logging.getLogger(__name__)
+
 
 def fit_surface(data, order=2):
     dshape = data.shape
@@ -137,14 +138,14 @@ def stitch_ionosphere_frames(
 
         # Generate mask using unwrapPhase connectedComponents
         if nisar_file:
-            mask_xr = xr.open_dataset( \
-                NISAR_GUNW_LAYERS['connectedComponents'] \
-                %(filename, file_pol), 
+            mask_xr = xr.open_dataset(
+                NISAR_GUNW_LAYERS['connectedComponents']
+                % (filename, file_pol),
                 engine='rasterio').squeeze()
         else:
-            mask_xr = xr.open_dataset( \
-                GUNW_LAYERS['connectedComponents'] \
-                % filename, 
+            mask_xr = xr.open_dataset(
+                GUNW_LAYERS['connectedComponents']
+                % filename,
                 engine='rasterio').squeeze()
 
         mask = np.bool_(mask_xr.connectedComponents.data != 0)
@@ -203,6 +204,8 @@ def stitch_ionosphere_frames(
     return surface, combined_iono[1], combined_iono[2]
 
 # MAIN
+
+
 def export_ionosphere(input_iono_files: typing.List[str],
                       arrres: typing.List[float],
                       epsg: typing.Optional[str] = '4326',
@@ -233,7 +236,7 @@ def export_ionosphere(input_iono_files: typing.List[str],
     # and therefore no stitching needed
     if len(input_iono_files) == 1:
         osgeo.gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
-                      input_iono_files[0])
+                            input_iono_files[0])
 
     else:
         (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(

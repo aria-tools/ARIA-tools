@@ -122,7 +122,8 @@ def createParser():
         help='Specify version as str, e.g. 2_0_4 or all prods; default: all')
     parser.add_argument(
         '--nc_version', dest='nc_version', default='1b',
-        help='Specify netcdf version as str, e.g. 1c or all prods; default: 1b')
+        help='Specify netcdf version as str, '
+             'e.g. 1c or all prods; default: 1b')
     parser.add_argument(
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
