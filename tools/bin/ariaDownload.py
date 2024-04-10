@@ -15,7 +15,6 @@ import argparse
 import logging
 import shapely
 import warnings
-from dateutil.relativedelta import relativedelta
 from getpass import getpass
 import asf_search
 
@@ -317,17 +316,17 @@ class Downloader(object):
 
 
         ## buffer a bit for loose subsetting and speedup
-        start = self.args.start + relativedelta(months=-3)
-        end   = self.args.end + relativedelta(months=3)
+        start = self.args.start + datetime.timedelta(days=-90)
+        end   = self.args.end + relativedelta(days=90)
 
         if self.args.mission.upper() == 'S1':
             dct_kw = dict(dataset='ARIA S1 GUNW',
-                        processingLevel=asf_search.constants.GUNW_STD,
-                        relativeOrbit=tracks,
-                        flightDirection=flight_direction,
-                        intersectsWith=bbox,
-                        start=start,
-                        end=end)
+                            processingLevel=asf_search.constants.GUNW_STD,
+                            relativeOrbit=tracks,
+                            flightDirection=flight_direction,
+                            intersectsWith=bbox,
+                            start=start,
+                            end=end)
             scenes = asf_search.geo_search(**dct_kw)
 
         elif self.args.mission.upper() == 'NISAR':
@@ -339,12 +338,12 @@ class Downloader(object):
             search_opts = asf_search.ASFSearchOptions(
                             shortName='NISAR_L2_GUNW_BETA_V1',
                             session=session
-                        # processingLevel=asf_search.constants.GUNW_STD,
-                        # relativeOrbit=tracks,
-                        # flightDirection=flight_direction,
-                        # intersectsWith=bbox,
-                        # start=self.args.start,
-                        # end=self.args.end)
+                            # processingLevel=asf_search.constants.GUNW_STD,
+                            # relativeOrbit=tracks,
+                            # flightDirection=flight_direction,
+                            # intersectsWith=bbox,
+                            # start=self.args.start,
+                            # end=self.args.end)
                         )
             scenes = asf_search.search(opts=search_opts, maxResults=250)
             if len(scenes)>0:
