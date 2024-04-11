@@ -16,12 +16,12 @@ def url_versions(urls, user_version, wd):
     Uses the the latest if user_version is None else use specified ver.
     """
     if user_version is not None and str(user_version).lower() != 'all':
-        # dummy-proof if version entered as digit, as opposed to 2_X_X
-        if len(user_version) != 5:
-            raise Exception(f'Input version {user_version} not in format 2_X_X'
-                            'as expected')
+        user_version = user_version.lstrip('v')
+        if not user_version[0].isdigit():
+            raise Exception(f'Input version {user_version} not in format X* '
+                            'as expected (e.g., 3, 3_0_0)')
         LOGGER.debug(f'Only using products version: {user_version}')
-        urls_final = [url for url in urls if user_version in url]
+        urls_final = [url for url in urls if f'-v{user_version}' in url]
         if not urls_final:
             raise Exception(
                 f'No products with user specified version: {urls_final}')
