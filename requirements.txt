@@ -5,6 +5,7 @@ gdal>=3.4.1
 h5py
 joblib
 matplotlib
+netcdf4
 pandas
 parallel
 pip
