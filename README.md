@@ -75,8 +75,9 @@ __[Conda](https://docs.conda.io/en/latest/index.html)__ is a cross-platform way 
 Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Run the commands below to download/clone the ARIA-tools package to your local directory.:
 
 ```.tcsh
-conda config --add channels conda-forge
-conda install mamba
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+bash Miniforge3-Linux-x86_64.sh -b -p miniforge
+miniforge/bin/mamba init tcsh
 git clone https://github.com/aria-tools/ARIA-tools.git
 cd ARIA-tools
 ```
