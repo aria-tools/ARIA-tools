@@ -317,7 +317,7 @@ class Downloader(object):
 
         ## buffer a bit for loose subsetting and speedup
         start = self.args.start + datetime.timedelta(days=-90)
-        end   = self.args.end + relativedelta(days=90)
+        end   = self.args.end + datetime.timedelta(days=90)
 
         if self.args.mission.upper() == 'S1':
             dct_kw = dict(dataset='ARIA S1 GUNW',
