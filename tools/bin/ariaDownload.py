@@ -164,7 +164,7 @@ def get_url_ifg(scenes):
     return urls, ifgs
 
 
-def fmt_dst(inps):
+def fmt_dst(args):
     """Format the save name"""
     ext = '.kmz' if args.output == 'Kml' else '.txt'
 
@@ -258,7 +258,7 @@ class Downloader(object):
         #                    'Revert to an older version of ARIAtools')
 
         elif self.args.output == 'Url':
-            dst = fmt_dst(inps)
+            dst = fmt_dst(self.args)
             with open(dst, 'w') as fh:
                 for url in urls:
                     print(url, sep='\n', file=fh)
