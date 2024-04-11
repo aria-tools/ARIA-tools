@@ -5,6 +5,7 @@ gdal>=3.4.1
 h5py
 joblib
 matplotlib
+netcdf4
 pandas
 xarray
 rasterio
@@ -14,6 +15,8 @@ pyproj
 requests
 scipy>1.10.0
 shapely
+dask
 ## notebook dependencies, keep commented out for better compatiability with other codes
 #jupyterlab
+#rise
 #jupyter_contrib_nbextensions
