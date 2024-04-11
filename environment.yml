@@ -8,23 +8,27 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.8
   - asf_search
+  - dask
   - dem_stitcher>=2.5.0
   - gdal>=3.4.1
   - h5py
   - joblib
   - matplotlib
+  - netcdf4
   - pandas
-  - xarray
-  - rasterio
-  - rioxarray
+  - parallel
   - pip
   - pyproj
+  - pytest
+  - python>=3.8
+  - rasterio
+  - rioxarray
   - requests
   - scipy>1.10.0
   - shapely
-  - pytest
+  - tile_mate
+  - xarray
   #for ARIA-tools-docs
-  - jupyterlab
-  - jupyter_contrib_nbextensions
+  #- jupyterlab
+  #- jupyter_contrib_nbextensions
