@@ -15,6 +15,7 @@ dependencies:
   - h5py
   - joblib
   - matplotlib
+  - netCDF4
   - pandas
   - xarray
   - rasterio
@@ -24,6 +25,7 @@ dependencies:
   - requests
   - scipy>1.10.0
   - shapely
+  - dask
   #for ARIA-tools-docs
-  - jupyterlab
-  - jupyter_contrib_nbextensions
+  #- jupyterlab
+  #- jupyter_contrib_nbextensions
