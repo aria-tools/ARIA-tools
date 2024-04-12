@@ -287,7 +287,7 @@ class Downloader(object):
 
             LOGGER.info(
                 f'Download complete. Wrote -- {len(scenes)} -- products to: '
-                '{self.args.wd}')
+                f'{self.args.wd}')
 
         if self.args.verbose:
             for scene in scenes:
@@ -320,13 +320,15 @@ class Downloader(object):
         end   = self.args.end + datetime.timedelta(days=90)
 
         if self.args.mission.upper() == 'S1':
-            dct_kw = dict(dataset='ARIA S1 GUNW',
+            dct_kw = dict(dataset=asf_search.DATASET.ARIA_S1_GUNW,
                             processingLevel=asf_search.constants.GUNW_STD,
                             relativeOrbit=tracks,
                             flightDirection=flight_direction,
                             intersectsWith=bbox,
                             start=start,
-                            end=end)
+                            end=end,
+            )
+                            # collectionAlias=False)
             scenes = asf_search.geo_search(**dct_kw)
 
         elif self.args.mission.upper() == 'NISAR':
