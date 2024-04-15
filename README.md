@@ -145,6 +145,8 @@ export VSI_CACHE=YES
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
+* NOTE, currently ARIA-tools does not support deduplication (we are working to add it soon though), so for each commandline input please make sure to specify a fresh output directory with the `--workdir` option.
+
 ### Commandline download of GUNW Products
 GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
 
