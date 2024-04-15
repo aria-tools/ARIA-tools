@@ -18,5 +18,4 @@ shapely
 dask
 ## notebook dependencies, keep commented out for better compatiability with other codes
 #jupyterlab
-#rise
 #jupyter_contrib_nbextensions
