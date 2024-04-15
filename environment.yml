@@ -15,7 +15,7 @@ dependencies:
   - h5py
   - joblib
   - matplotlib
-  - netCDF4
+  - netcdf4
   - pandas
   - xarray
   - rasterio
