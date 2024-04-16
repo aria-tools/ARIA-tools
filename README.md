@@ -79,9 +79,9 @@ ARIA-tools package can be easily installed and used after the dependencies are i
 __[Conda](https://docs.conda.io/en/latest/index.html)__ is a cross-platform way to use Python that allows you to setup and use "virtual environments," which allows for the easy installation and management of all of the required dependencies. We recommend using the [Miniforge](https://github.com/conda-forge/miniforge) conda environment manager, which uses conda-forge as its default code repo. Alternatively, see __[here](https://docs.anaconda.com/anaconda/install/)__ for help installing Anaconda and __[here](https://docs.conda.io/en/latest/miniconda.html)__ for installing Miniconda.
 
 ### Conda
-Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements.
+Below we outline the different steps for setting up the ARIA-tools while leveraging Miniforge for installation of the requirements.
 
-Run the commands below to download and setup your miniforge environment manager:
+Run the commands below to download and setup your Miniforge environment manager:
 
 ```.tcsh
 cd ~/tools
