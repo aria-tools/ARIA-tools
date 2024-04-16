@@ -74,7 +74,7 @@ ARIA-tools has been tested on the following system:
 
 Below we demonstrate how to build and setup an environment from scratch through Linux through a `TCSH` shell.
 
-ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. The easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and using the setup.py script as outlined below.
+ARIA-tools package can be easily installed and used after the dependencies are installed and activated.
 
 __[Conda](https://docs.conda.io/en/latest/index.html)__ is a cross-platform way to use Python that allows you to setup and use "virtual environments," which allows for the easy installation and management of all of the required dependencies. We recommend using the [Miniforge](https://github.com/conda-forge/miniforge) conda environment manager, which uses conda-forge as its default code repo. Alternatively, see __[here](https://docs.anaconda.com/anaconda/install/)__ for help installing Anaconda and __[here](https://docs.conda.io/en/latest/miniconda.html)__ for installing Miniconda.
 
