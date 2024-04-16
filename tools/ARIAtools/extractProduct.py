@@ -695,8 +695,8 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
 def handle_epoch_layers(
         layers, product_dict, proj, lyr_path, user_lyrs, map_lyrs, key,
-        sec_key, ref_key, tropo_total, workdir, prog_bar, bounds, dem_bounds,
-        prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose,
+        sec_key, ref_key, tropo_total, workdir, prog_bar, bounds, arrres,
+        dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose,
         multilooking, rankedResampling, num_threads, nisar_file):
     """
     Manage reference/secondary components for correction layers.
@@ -859,9 +859,9 @@ def handle_epoch_layers(
             for j in enumerate(record_epochs):
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(
-                    j[1][:-4], bounds, dem_bounds, prods_TOTbbox, dem, lat,
-                    lon, hgt_field, prod_ver_list, nisar_file, mask,
-                    outputFormat, verbose=verbose)
+                    j[1][:-4], bounds, arrres, dem_bounds, prods_TOTbbox,
+                    dem, lat, lon, hgt_field, prod_ver_list, nisar_file,
+                    mask, outputFormat, verbose=verbose)
 
                 # Track consistency of dimensions
                 if j[0] == 0:
@@ -942,7 +942,7 @@ def export_product_worker(
 
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
-            outname, bounds, dem_bounds, prods_TOTbbox, dem_expanded,
+            outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
             lat, lon, hgt_field, product, nisar_file, mask, outputFormatPhys,
             verbose=verbose)
 
@@ -1108,6 +1108,7 @@ def export_products(
     # get bounds
     bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
     lyr_input_dict['bounds'] = bounds
+    lyr_input_dict['arrres'] = arrres
     if dem_expanded is not None:
         dem_gt = dem_expanded.GetGeoTransform()
         dem_bounds = [
@@ -1353,7 +1354,7 @@ def export_products(
 
         if len(output_files) > 0:
             with open(os.path.join(
-                    export_workers_temp_dir, 'outputs_00_00.json')) as ifp:
+                    export_workers_temp_dir, 'outputs_0_0.json')) as ifp:
                 output_dict = json.load(ifp)
                 ref_arr = copy.deepcopy(output_dict['prod_arr'])
 
@@ -1380,8 +1381,8 @@ def export_products(
     return retval
 
 
-def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
-                      lat, lon, hgt_field, prod_list, nisar_file=False,
+def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
+                      dem, lat, lon, hgt_field, prod_list, nisar_file=False,
                       mask=None, outputFormat='ENVI', verbose=None,
                       num_threads='2'):
     """Interpolate and extract 2D metadata layer.
@@ -1389,9 +1390,9 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     3D layers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
-    arrshape = [dem.RasterYSize, dem.RasterXSize]
+    #arrshape = [dem.RasterYSize, dem.RasterXSize]
     ref_geotrans = dem.GetGeoTransform()
-    arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
+    dem_arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
 
     # load layered metadata array
     tmp_name = outname + '.vrt'
@@ -1488,16 +1489,18 @@ def finalize_metadata(outname, bbox_bounds, dem_bounds, prods_TOTbbox, dem,
     data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
-        'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
-        'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
+        'outputBounds': dem_bounds, 'dstNodata': data_array_nodata,
+        'xRes': dem_arrres[0], 'yRes': dem_arrres[1], 'targetAlignedPixels': True,
         'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
     warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
     osgeo.gdal.Warp(tmp_name + '_temp', tmp_name, options=warp_options)
 
     # Adjust shape
     gdal_warp_kwargs = {
-        'format': outputFormat, 'height': arrshape[0], 'width': arrshape[1],
-        'options': [f'NUM_THREADS={num_threads}']}
+        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+        'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
+        'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
+        'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
     warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
     osgeo.gdal.Warp(outname, tmp_name + '_temp', options=warp_options)
 

@@ -1054,6 +1054,12 @@ class Product:
             sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
             ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
 
+            # check spatiotemporal overlap
+            scene_intersects = scene_area.intersection(
+                new_scene_area).area > 0.
+            sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
+            ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
+
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
             if scene_intersects and sec_within_day and ref_within_day:
