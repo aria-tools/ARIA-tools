@@ -20,8 +20,10 @@ dependencies:
   - xarray
   - rasterio
   - rioxarray
+  - parallel
   - pip
   - pyproj
+  - pytest
   - requests
   - scipy>1.10.0
   - shapely
