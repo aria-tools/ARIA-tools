@@ -7,13 +7,12 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import os
-import argparse
-import numpy as np
+import hashlib
 import logging
 import tarfile
-import pytest
 import subprocess
-
+import numpy as np
+import pytest
 import osgeo.gdal
 
 ENVI_FILES = {}
@@ -55,6 +54,19 @@ ENVI_FILES['tssetup'] = {
         'troposphereTotal/HRRR/dates/20230829',
     'unwrappedPhase_20230829_20230724': 'unwrappedPhase/20230829_20230724',
     'unwrappedPhase_20230829_20230817': 'unwrappedPhase/20230829_20230817',
+}
+
+NETCDF_FILES = {}
+NETCDF_FILES['download'] = {
+    'products_20211220_20211214':
+        ('products/S1-GUNW-D-R-071-tops-20211220_20211214-135232-'
+         '00119W_00034N-PP-fe7a-v2_0_5.nc'),
+    'products_20211220_20211214':
+        ('products/S1-GUNW-D-R-071-tops-20220101_20211214-135232-'
+         '00119W_00034N-PP-246b-v2_0_5.nc'),
+    'products_20211220_20211214':
+        ('products/S1-GUNW-D-R-071-tops-20220101_20211220-135232-'
+         '00119W_00034N-PP-e72b-v2_0_5.nc')
 }
 
 LOGGER = logging.getLogger(__name__)
@@ -185,10 +197,41 @@ class ENVIDataTester(object):
                 'Test and ref data differ by more than threshold')
 
 
+class NetCDFDataTester():
+    def __init__(self, test_dir, ref_dir, flavor):
+        self.flavor = flavor
+        self.test_dir = test_dir
+        self.ref_dir = ref_dir
+
+    def test_md5sum(self):
+        any_fail = False
+        for filetype, filepath in NETCDF_FILES[self.flavor].items():
+
+            test_file = os.path.join(self.test_dir, filepath)
+            ref_file = os.path.join(self.ref_dir, filepath)
+
+            ref_md5sum = self.md5sum(ref_file)
+            test_md5sum = self.md5sum(test_file)
+
+            if ref_md5sum != test_md5sum:
+                LOGGER.warning(
+                    'For file: %s, ref and test data do not have same md5sum!',
+                    filepath)
+                any_fail = True
+
+        if any_fail:
+            raise AssertionError('Test and ref data do not have same md5sums')
+
+    @staticmethod
+    def md5sum(filename):
+        """Returns the md5sum of filename"""
+        with open(filename, 'rb') as ifp:
+            return hashlib.md5(ifp.read()).hexdigest()
+
+
 class AriaToolsScriptTester():
     @pytest.fixture(scope='class')
     def tester(self):
-        flavor = 'tssetup'
         with tarfile.open(os.path.join(
                 'golden_test_outputs', self.FLAVOR+'.tar.gz')) as tar:
             tar.extractall(os.path.join('golden_test_outputs'))
@@ -220,6 +263,24 @@ class TestAriaExtract(AriaToolsScriptTester):
     FLAVOR = 'extract'
 
 
+@pytest.mark.usefixtures('run_download_test')
+class TestAriaDownload():
+    FLAVOR = 'download'
+
+    @pytest.fixture(scope='class')
+    def tester(self):
+        with tarfile.open(os.path.join(
+                'golden_test_outputs', self.FLAVOR+'.tar.gz')) as tar:
+            tar.extractall(os.path.join('golden_test_outputs'))
+
+        test_dir = os.path.join('test_outputs', self.FLAVOR)
+        ref_dir = os.path.join('golden_test_outputs', self.FLAVOR)
+        return NetCDFDataTester(test_dir, ref_dir, self.FLAVOR)
+
+    def test_md5sum(self, tester):
+        return tester.test_md5sum()
+
+
 @pytest.fixture(scope='session')
 def sync_golden_data():
     return_code = subprocess.call(
@@ -244,3 +305,11 @@ def run_tssetup_test(sync_golden_data):
     if return_code != 0:
         LOGGER.error("Error running ariaTSsetup test case!")
         raise AssertionError("Error running ariaTSsetup test case!")
+
+
+@pytest.fixture(scope='session')
+def run_download_test(sync_golden_data):
+    return_code = subprocess.call('./run_download_test.py', shell=True)
+    if return_code != 0:
+        LOGGER.error("Error running ariaDownload test case!")
+        raise AssertionError("Error running ariaDownload test case!")
