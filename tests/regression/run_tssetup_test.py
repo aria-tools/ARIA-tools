@@ -16,6 +16,7 @@ import logging
 
 LOGGER = logging.getLogger('run_extract_test.py')
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -43,7 +44,8 @@ def main():
         shutil.rmtree('golden_test_inputs/tssetup')
 
     # Uncompress .tar.gz file with input data in it
-    with tarfile.open(os.path.join('golden_test_inputs/tssetup.tar.gz')) as tar:
+    with tarfile.open(
+            os.path.join('golden_test_inputs/tssetup.tar.gz')) as tar:
         tar.extractall('golden_test_inputs')
 
     with contextlib.suppress(FileNotFoundError):
@@ -57,6 +59,7 @@ def main():
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
     run_subproc(exec_string, 'ariaTSsetup')
+
 
 if __name__ == "__main__":
     main()

@@ -20,9 +20,9 @@ ENVI_FILES = {}
 ENVI_FILES['extract'] = {
     'azimuthAngle': 'azimuthAngle/20230829_20230724',
     'troposphereTotal_HRRR': 'troposphereTotal/HRRR/20230829_20230724',
-    'troposphereTotal_HRRR_dates_20230724': \
+    'troposphereTotal_HRRR_dates_20230724':
         'troposphereTotal/HRRR/dates/20230724',
-    'troposphereTotal_HRRR_dates_20230829': \
+    'troposphereTotal_HRRR_dates_20230829':
         'troposphereTotal/HRRR/dates/20230829',
     'coherence': 'coherence/20230829_20230724',
     'unwrappedPhase': 'unwrappedPhase/20230829_20230724',
@@ -33,9 +33,9 @@ ENVI_FILES['tssetup'] = {
     'azimuthAngle': 'azimuthAngle/20230829_20230724',
     'bPerpendicular_20230829_20230724': 'bPerpendicular/20230829_20230724',
     'bPerpendicular_20230829_20230817': 'bPerpendicular/20230829_20230817',
-    'connectedComponents_20230829_20230724': \
+    'connectedComponents_20230829_20230724':
         'connectedComponents/20230829_20230724',
-    'connectedComponents_20230829_20230817': \
+    'connectedComponents_20230829_20230817':
         'connectedComponents/20230829_20230817',
     'incidenceAngle': 'incidenceAngle/20230829_20230724',
     'ionosphere_20230829_20230724': 'ionosphere/20230829_20230724',
@@ -43,21 +43,22 @@ ENVI_FILES['tssetup'] = {
     'lookAngle': 'lookAngle/20230829_20230724',
     'solidEarthTide_20230829_20230724': 'solidEarthTide/20230829_20230724',
     'solidEarthTide_20230829_20230817': 'solidEarthTide/20230829_20230817',
-    'troposphereTotal_HRRR_20230829_20230817': \
+    'troposphereTotal_HRRR_20230829_20230817':
         'troposphereTotal/HRRR/20230829_20230817',
-    'troposphereTotal_HRRR_20230829_20230724': \
+    'troposphereTotal_HRRR_20230829_20230724':
         'troposphereTotal/HRRR/20230829_20230724',
-    'troposphereTotal_HRRR_dates_20230724': \
+    'troposphereTotal_HRRR_dates_20230724':
         'troposphereTotal/HRRR/dates/20230724',
-    'troposphereTotal_HRRR_dates_20230817': \
+    'troposphereTotal_HRRR_dates_20230817':
         'troposphereTotal/HRRR/dates/20230817',
-    'troposphereTotal_HRRR_dates_20230829': \
+    'troposphereTotal_HRRR_dates_20230829':
         'troposphereTotal/HRRR/dates/20230829',
     'unwrappedPhase_20230829_20230724': 'unwrappedPhase/20230829_20230724',
     'unwrappedPhase_20230829_20230817': 'unwrappedPhase/20230829_20230817',
 }
 
 LOGGER = logging.getLogger(__name__)
+
 
 class ENVIDataTester(object):
     def __init__(self, test_dir, ref_dir, flavor):
@@ -183,6 +184,7 @@ class ENVIDataTester(object):
             raise AssertionError(
                 'Test and ref data differ by more than threshold')
 
+
 class AriaToolsScriptTester():
     @pytest.fixture(scope='class')
     def tester(self):
@@ -207,13 +209,16 @@ class AriaToolsScriptTester():
     def test_values(self, tester):
         return tester.test_values()
 
+
 @pytest.mark.usefixtures('run_tssetup_test')
 class TestAriaTSsetup(AriaToolsScriptTester):
-    FLAVOR='tssetup'
+    FLAVOR = 'tssetup'
+
 
 @pytest.mark.usefixtures('run_extract_test')
 class TestAriaExtract(AriaToolsScriptTester):
-    FLAVOR='extract'
+    FLAVOR = 'extract'
+
 
 @pytest.fixture(scope='session')
 def sync_golden_data():
@@ -224,12 +229,14 @@ def sync_golden_data():
         LOGGER.error("Error syncing golden test data!")
         raise AssertionError("Error syncing golden test data!")
 
+
 @pytest.fixture(scope='session')
 def run_extract_test(sync_golden_data):
     return_code = subprocess.call('./run_extract_test.py', shell=True)
     if return_code != 0:
         LOGGER.error("Error running ariaExtract test case!")
         raise AssertionError("Error running ariaExtract test case!")
+
 
 @pytest.fixture(scope='session')
 def run_tssetup_test(sync_golden_data):
