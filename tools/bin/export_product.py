@@ -28,7 +28,7 @@ def main():
         'ii': ii, 'ilayer': ilayer, 'outname': outname, 'prod_arr': prod_arr}
 
     base_dir = os.path.abspath(os.path.dirname(args.export_products_json))
-    outfile = os.path.join(base_dir, 'outputs_%2.2d_%2.2d.json' % (
+    outfile = os.path.join(base_dir, 'outputs_%d_%d.json' % (
         ii, ilayer))
 
     with open(outfile, 'w') as ofp:
