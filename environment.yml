@@ -27,6 +27,7 @@ dependencies:
   - scipy>1.10.0
   - mintpy
   - shapely
+  - pytest
   #for ARIA-tools-docs
   - jupyterlab
   
