@@ -58,7 +58,7 @@ def main():
         '-w test_outputs/tssetup/')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
-    run_subproc(exec_string, 'ariaTSsetup')
+    run_subproc(exec_string, 'ariaTSsetup', raise_exception=True)
 
 
 if __name__ == "__main__":

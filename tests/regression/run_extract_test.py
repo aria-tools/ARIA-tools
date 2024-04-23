@@ -59,7 +59,7 @@ def main():
         '-w test_outputs/extract/')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
-    run_subproc(exec_string, 'ariaExtract azimuthAngle')
+    run_subproc(exec_string, 'ariaExtract azimuthAngle', raise_exception=True)
 
     # extract troposhere
     exec_string = (
@@ -69,7 +69,8 @@ def main():
         '-w test_outputs/extract/')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
-    run_subproc(exec_string, 'ariaExtract troposphereTotal')
+    run_subproc(
+        exec_string, 'ariaExtract troposphereTotal', raise_exception=True)
 
     # extract coherence
     exec_string = (
@@ -85,7 +86,8 @@ def main():
         '-l unwrappedPhase -w test_outputs/extract/')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
-    run_subproc(exec_string, 'ariaExtract unwrappedPhase')
+    run_subproc(
+        exec_string, 'ariaExtract unwrappedPhase', raise_exception=True)
 
     # extract ionosphere
     # This command fails using either branch of aria-tools...
@@ -94,7 +96,7 @@ def main():
         '-l ionosphere -w test_outputs/extract/')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
-    run_subproc(exec_string, 'ariaExtract ionosphere')
+    run_subproc(exec_string, 'ariaExtract ionosphere', raise_exception=True)
 
 
 if __name__ == "__main__":
