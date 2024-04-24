@@ -1602,7 +1602,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
         if not os.path.isdir(i[1]) and not i[1].endswith('.ztd') \
                 and not i[1].endswith('.tif'):
             untar_dir = os.path.join(os.path.abspath(os.path.join(
-                i[1], os.pardir)), os.path.basename(i[1]).split('.')[0] + '_extracted')
+                i[1], os.pardir)),
+                os.path.basename(i[1]).split('.')[0] + '_extracted')
             if not tarfile.is_tarfile(i[1]):
                 raise Exception('Cannot extract %s because it is not a '
                                 'valid tarfile. Resolve this '
@@ -1780,7 +1781,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                 # Get tropo product UTC times
                 tropo_rsc_dict = {}
                 tropo_rsc_dict['TIME_OF_DAY'] = open(
-                    j[:-4] + '.rsc', 'r').readlines()[-1].split()[1].split('UTC')[:-1]
+                    j[:-4] + '.rsc',
+                    'r').readlines()[-1].split()[1].split('UTC')[:-1]
                 # If new TIF product, UTC times not available
                 if 'None' in tropo_rsc_dict['TIME_OF_DAY'][0]:
                     tropo_rsc_dict['TIME_OF_DAY'] = [
