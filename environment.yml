@@ -10,7 +10,6 @@ channels:
 dependencies:
   - python>=3.8
   - asf_search
-  - cartopy
   - dem_stitcher>=2.5.0
   - gdal>=3.4.1
   - h5py
@@ -21,15 +20,14 @@ dependencies:
   - xarray
   - rasterio
   - rioxarray
+  - parallel
   - pip
   - pyproj
+  - pytest
   - requests
   - scipy>1.10.0
-  - mintpy
   - shapely
+  - dask
   #for ARIA-tools-docs
-  - jupyterlab
-  
-  - pip:
-    - rise
-    - jupyter_contrib_nbextensions
+  #- jupyterlab
+  #- jupyter_contrib_nbextensions

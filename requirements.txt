@@ -1,6 +1,5 @@
 python>=3.8
 asf_search
-cartopy
 dem_stitcher>=2.5.0
 gdal>=3.4.1
 h5py
@@ -11,12 +10,14 @@ pandas
 xarray
 rasterio
 rioxarray
+parallel
 pip
 pyproj
+pytest
 requests
 scipy>1.10.0
 shapely
+dask
 ## notebook dependencies, keep commented out for better compatiability with other codes
 #jupyterlab
 #jupyter_contrib_nbextensions
-#rise
