@@ -117,10 +117,10 @@ def stitch_ionosphere_frames(
     mask_xr_list = []
 
     # track if product stack is NISAR GUNW or not
-    nisar_file = False
+    is_nisar_file = False
     track_fileext = input_iono_files[0].split(':')[1]
     if len(track_fileext.split('.h5')) > 1:
-        nisar_file = True
+        is_nisar_file = True
         # Get polarization
         pol_dict = {}
         pol_dict['SV'] = 'VV'
@@ -137,7 +137,7 @@ def stitch_ionosphere_frames(
         iono_xr = xr.open_dataset(iono_file, engine='rasterio').squeeze()
 
         # Generate mask using unwrapPhase connectedComponents
-        if nisar_file:
+        if is_nisar_file:
             mask_xr = xr.open_dataset(
                 NISAR_GUNW_LAYERS['connectedComponents']
                 % (filename, file_pol),

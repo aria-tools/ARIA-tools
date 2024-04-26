@@ -328,10 +328,10 @@ def merged_productbbox(
     os.makedirs(workdir, exist_ok=True)
 
     # determine if NISAR GUNW
-    nisar_file = False
+    is_nisar_file = False
     track_fileext = product_dict[0]['unwrappedPhase'][0]
     if len(track_fileext.split('.h5')) > 1:
-        nisar_file = True
+        is_nisar_file = True
 
     # If specified, check if user's bounding box meets minimum threshold area
     lyr_proj = int(metadata_dict[0]['projection'][0])
@@ -525,7 +525,7 @@ def merged_productbbox(
     del ds
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
-            prods_TOTbbox_metadatalyr, arrres, proj, nisar_file)
+            prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
 
 
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
@@ -555,7 +555,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
 
 
 def prep_metadatalayers(
-        outname, metadata_arr, dem, layer, layers, nisar_file=False,
+        outname, metadata_arr, dem, layer, layers, is_nisar_file=False,
         proj='4326', driver='ENVI', model_name=''):
     """Wrapper to prep metadata layer for extraction"""
     if dem is None:
@@ -574,7 +574,7 @@ def prep_metadatalayers(
 
     # capture model if tropo product
     if 'tropo' in layer:
-        if not nisar_file:
+        if not is_nisar_file:
             out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
         if not os.path.exists(out_dir):
@@ -596,7 +596,7 @@ def prep_metadatalayers(
 
     if 'tropo' in layer or layer == 'solidEarthTide':
         # get ref and sec paths
-        if not nisar_file:
+        if not is_nisar_file:
             date_dir = os.path.join(out_dir, 'dates')
             if not os.path.exists(date_dir):
                 os.mkdir(date_dir)
@@ -624,7 +624,7 @@ def prep_metadatalayers(
                     os.remove(j)
             create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field)
 
-        if not nisar_file:
+        if not is_nisar_file:
             # compute differential
             generate_diff(
                 ref_outname, sec_outname, outname, layer, layer, False,
@@ -703,7 +703,7 @@ def handle_epoch_layers(
         layers, product_dict, proj, lyr_path, user_lyrs, map_lyrs, key,
         sec_key, ref_key, tropo_total, workdir, prog_bar, bounds, arrres,
         dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose,
-        multilooking, rankedResampling, num_threads, nisar_file):
+        multilooking, rankedResampling, num_threads, is_nisar_file):
     """
     Manage reference/secondary components for correction layers.
     Specifically record reference/secondary components within a `dates` subdir
@@ -751,7 +751,7 @@ def handle_epoch_layers(
         model_name = ''
         if 'tropo' in key:
             out_dir = os.path.dirname(outname)
-            if not nisar_file:
+            if not is_nisar_file:
                 model_name = i[1][0].split('/')[-3]
                 out_dir = os.path.join(out_dir, model_name)
             if not os.path.exists(out_dir):
@@ -761,7 +761,7 @@ def handle_epoch_layers(
         if ref_key in user_lyrs or tropo_total:
             ref_outname = os.path.abspath(os.path.join(ref_workdir, ifg))
             hgt_field, ref_outname = prep_metadatalayers(
-                ref_outname, i[1], dem, ref_key, layers, nisar_file, proj,
+                ref_outname, i[1], dem, ref_key, layers, is_nisar_file, proj,
                 outputFormat, model_name)
 
         # Update progress bar
@@ -781,7 +781,7 @@ def handle_epoch_layers(
         if 'tropo' in key:
             sec_outname = os.path.abspath(os.path.join(sec_workdir, ifg))
 
-            if not nisar_file:
+            if not is_nisar_file:
                 wet_path = os.path.join(
                     lyr_path, model_name, 'reference', ref_key)
                 dry_path = os.path.join(
@@ -795,7 +795,7 @@ def handle_epoch_layers(
 
             if sec_key in user_lyrs or tropo_total:
                 hgt_field, sec_outname = prep_metadatalayers(
-                    sec_outname, sec_comp, dem, sec_key, layers, nisar_file,
+                    sec_outname, sec_comp, dem, sec_key, layers, is_nisar_file,
                     proj, outputFormat, model_name)
 
             # if specified, compute total delay
@@ -803,7 +803,7 @@ def handle_epoch_layers(
                 model_dir = os.path.abspath(os.path.join(workdir, model_name))
                 outname = os.path.join(model_dir, ifg)
 
-                if not nisar_file:
+                if not is_nisar_file:
                     # compute reference diff
                     ref_diff = ref_outname
                     sec_diff = sec_outname
@@ -866,7 +866,7 @@ def handle_epoch_layers(
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(
                     j[1][:-4], bounds, arrres, dem_bounds, prods_TOTbbox,
-                    dem, lat, lon, hgt_field, prod_ver_list, nisar_file,
+                    dem, lat, lon, hgt_field, prod_ver_list, is_nisar_file,
                     mask, outputFormat, verbose=verbose)
 
                 # Track consistency of dimensions
@@ -895,7 +895,7 @@ def export_product_worker(
         ii, ilayer, product, proj, full_product_dict_file, layers, workdir,
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
         outputFormat, outputFormatPhys, layer, outDir,
-        arrres, epsg_code, num_threads, multilooking, verbose, nisar_file,
+        arrres, epsg_code, num_threads, multilooking, verbose, is_nisar_file,
         range_correction):
     """
     Worker function for export_products for parallel execution with
@@ -944,12 +944,12 @@ def export_product_worker(
         # make VRT pointing to metadata layers in standard product
         hgt_field, model_name, outname = prep_metadatalayers(
             outname, product, dem_expanded, layer, layers,
-            nisar_file, proj)
+            is_nisar_file, proj)
 
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
             outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
-            lat, lon, hgt_field, product, nisar_file, mask, outputFormatPhys,
+            lat, lon, hgt_field, product, is_nisar_file, mask, outputFormatPhys,
             verbose=verbose)
 
     # Extract/crop full res layers, except for "unw" and "conn_comp"
@@ -1049,7 +1049,7 @@ def export_product_worker(
 
 def export_products(
         full_product_dict, proj, bbox_file, prods_TOTbbox, layers, arrres,
-        nisar_file, rankedResampling=False, demfile=None,
+        is_nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
         outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
         tropo_total=False, model_names=[], multiproc_method='single'):
@@ -1098,12 +1098,12 @@ def export_products(
         'proj': int(epsg_code), 'dem': dem_expanded, 'lat': lat, 'lon': lon,
         'mask': mask, 'verbose': verbose, 'multilooking': multilooking,
         'rankedResampling': rankedResampling, 'num_threads': num_threads,
-        'nisar_file': nisar_file}
+        'is_nisar_file': is_nisar_file}
 
     # track if product stack is NISAR GUNW or not
     range_correction = True
     track_fileext = full_product_dict[0]['unwrappedPhase'][0]
-    if nisar_file:
+    if is_nisar_file:
         range_correction = False
         model_names = ['']
     else:
@@ -1138,7 +1138,7 @@ def export_products(
         set.intersection(*map(set, [layers, tropo_lyrs])))
     if tropo_total or user_lyrs != []:
         # set input keys
-        if nisar_file:
+        if is_nisar_file:
             lyr_prefix = '/science/LSAR/GUNW/metadata/radarGrid/'
         else:
             lyr_prefix = '/science/grids/corrections/external/troposphere/'
@@ -1307,7 +1307,7 @@ def export_products(
                 workdir, bounds, prods_TOTbbox, demfile,
                 demfile_expanded, maskfile, outputFormat, outputFormatPhys,
                 layer, outDir, arrres, epsg_code, num_threads,
-                multilooking, verbose, nisar_file, range_correction))
+                multilooking, verbose, is_nisar_file, range_correction))
 
     start_time = time.time()
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
@@ -1386,7 +1386,7 @@ def export_products(
 
 
 def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
-                      dem, lat, lon, hgt_field, prod_list, nisar_file=False,
+                      dem, lat, lon, hgt_field, prod_list, is_nisar_file=False,
                       mask=None, outputFormat='ENVI', verbose=None,
                       num_threads='2'):
     """Interpolate and extract 2D metadata layer.
@@ -1407,7 +1407,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     # get minimum version
     version_check = []
     for i in prod_list:
-        if not nisar_file:
+        if not is_nisar_file:
             v_num = i.split(':')[-2].split('/')[-1]
             v_num = v_num.split('.nc')[0][-5:]
         else:
@@ -1419,7 +1419,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
 
     metadatalyr_name = outname.split('/')[-2]
     if (metadatalyr_name in GEOM_LYRS and version_check < '2_0_4') \
-            and not nisar_file:
+            and not is_nisar_file:
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))

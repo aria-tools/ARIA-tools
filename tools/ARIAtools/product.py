@@ -257,7 +257,7 @@ class Product:
         self.nc_version = nc_version
 
         # track if NISAR GUNW or not
-        self.nisar_file = False
+        self.is_nisar_file = False
 
         # enforced projection for output rasters
         self.projection = projection
@@ -436,7 +436,7 @@ class Product:
         # version accessed differently between URL vs downloaded product
         # vs NISAR and S1 GUNWs
         if basename.split('_')[0] == 'NISAR':
-            self.nisar_file = True
+            self.is_nisar_file = True
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]

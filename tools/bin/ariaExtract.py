@@ -176,7 +176,7 @@ def main():
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
      prods_TOTbbox_metadatalyr, arrres,
-     proj, nisar_file) = ARIAtools.extractProduct.merged_productbbox(
+     proj, is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
         standardproduct_info.products[0], standardproduct_info.products[1],
         os.path.join(args.workdir, 'productBoundingBox'),
         standardproduct_info.bbox_file, args.croptounion,
@@ -189,7 +189,7 @@ def main():
         amplitude_products = []
         for d in standardproduct_info.products[1]:
             # for NISAR GUNW
-            if nisar_file:
+            if is_nisar_file:
                 if 'coherence' in d:
                     for item in list(set(d['coherence'])):
                         amplitude_products.append(item)
@@ -250,7 +250,7 @@ def main():
         'prods_TOTbbox': prods_TOTbbox,
         'proj': proj,
         'layers': args.layers,
-        'nisar_file': nisar_file,
+        'is_nisar_file': is_nisar_file,
         'arrres': arrres,
         'rankedResampling': args.rankedResampling,
         'demfile': demfile,
