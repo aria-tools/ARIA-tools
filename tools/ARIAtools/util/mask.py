@@ -11,11 +11,10 @@ import os
 import shutil
 
 import affine
-from copy import deepcopy
+import copy
 import osgeo.gdal
-from pyproj import CRS
+import pyproj
 import rasterio
-from rasterio.warp import reproject, Resampling
 
 import ARIAtools.util.shp
 import ARIAtools.util.vrt
@@ -53,7 +52,7 @@ def prep_mask(
         # if download specified, default to esa world cover mask
         if maskfilename.lower() == 'download':
             maskfilename = 'esa_world_cover_2021'
-        lyr_name = deepcopy(maskfilename)
+        lyr_name = copy.deepcopy(maskfilename)
         LOGGER.debug('Downloading water mask: %s', lyr_name)
 
         # set file names
@@ -74,10 +73,10 @@ def prep_mask(
         # assign datatype and set resampling mode
         dat_arr = dat_arr.astype('byte')
         f_dtype = 'uint8'
-        resampling_mode = Resampling.nearest
+        resampling_mode = rasterio.warp.Resampling.nearest
 
         # get output parameters from temp file
-        crs = CRS.from_wkt(proj)
+        crs = pyproj.CRS.from_wkt(proj)
         osgeo.gdal.Warp(
             ref_file, product_dict[0], format=outputFormat,
             outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
@@ -90,19 +89,14 @@ def prep_mask(
 
         # save uncropped raster to file
         with rasterio.open(uncropped_maskfilename, 'w',
-                           height=resize_row, width=resize_col,
-                           count=1,
-                           dtype=f_dtype,
-                           crs=crs,
+                           height=resize_row, width=resize_col, count=1,
+                           dtype=f_dtype, crs=crs,
                            transform=affine.Affine(*reference_gt)) as dst:
-            reproject(source=dat_arr,
+            rasterio.warp.reproject(source=dat_arr,
                       destination=rasterio.band(dst, 1),
                       src_transform=dat_prof['transform'],
-                      src_crs=dat_prof['crs'],
-                      dst_transform=reference_gt,
-                      dst_crs=crs,
-                      resampling=resampling_mode
-                      )
+                      src_crs=dat_prof['crs'], dst_transform=reference_gt,
+                      dst_crs=crs, resampling=resampling_mode)
 
         # save cropped mask with precise spacing
         osgeo.gdal.Warp(
