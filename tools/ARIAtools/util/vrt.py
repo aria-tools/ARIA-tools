@@ -411,10 +411,10 @@ def layerCheck(
         extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
     # track if product stack is NISAR GUNW or not
-    nisar_file = False
+    is_nisar_file = False
     track_fileext = products[0]['unwrappedPhase'][0]
     if len(track_fileext.split('.h5')) > 1:
-        nisar_file = True
+        is_nisar_file = True
 
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
     IGNORE_LAYERS = [
@@ -548,7 +548,7 @@ def layerCheck(
                 'component layers are not common to all products.')
             tropo_total = False
 
-        if model_names == [] and not nisar_file:
+        if model_names == [] and not is_nisar_file:
             LOGGER.warning(
                 'Extraction of raider-derived troposphere layers is not '
                 'possible as specified tropo model name(s) '

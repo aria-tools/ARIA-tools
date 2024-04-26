@@ -19,8 +19,8 @@ import osgeo
 from pyproj import Transformer
 
 import shapely.geometry
-from shapely.ops import transform
-from shapely.wkt import loads
+from shapely.ops import transform as shapely_ops_transform
+from shapely.wkt import loads as shapely_wkt_loads
 
 import ARIAtools.constants
 import ARIAtools.util.url
@@ -305,7 +305,7 @@ class Product:
         tmp_files = self.files.copy()
         for f in tmp_files:
             ext = os.path.splitext(f)[1].lower()
-            if not ext == '.nc' and not ext == '.h5':
+            if ext not in ['.nc', '.h5']:
                 self.files.remove(f)
                 LOGGER.warning('%s is not a supported NetCDF... skipping', f)
 
@@ -351,7 +351,7 @@ class Product:
         if self.projection.lower() == 'native':
             fname = self.files[0]
             basename = os.path.basename(fname)
-            if basename.split('_')[0] == 'NISAR':
+            if basename.startswith('NISAR_'):
                 record_proj = []
                 pol_dict = {}
                 pol_dict['SV'] = 'VV'
@@ -432,7 +432,7 @@ class Product:
         # Get standard product version from file
         # version accessed differently between URL vs downloaded product
         # vs NISAR and S1 GUNWs
-        if basename.split('_')[0] == 'NISAR':
+        if basename.startswith('NISAR_'):
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]
@@ -649,7 +649,7 @@ class Product:
 
             # hardcoded keys for a given sensor
             rdrmetadata_dict['projection'] = self.projection
-            if basename.split('-')[0] == 'S1':
+            if basename.startswith('S1'):
                 rdrmetadata_dict['missionID'] = 'Sentinel-1'
                 rdrmetadata_dict['productType'] = 'UNW GEO IFG'
                 rdrmetadata_dict['wavelength'] = 0.05546576
@@ -661,7 +661,7 @@ class Product:
                 # (i.e. seconds between start and end)
                 rdrmetadata_dict['sceneLength'] = 35
 
-            elif basename.split('-')[0] == 'ALOS2':
+            elif basename.startswith('ALOS2'):
                 rdrmetadata_dict['missionID'] = 'ALOS-2'
                 rdrmetadata_dict['productType'] = 'UNW GEO IFG'
                 rdrmetadata_dict['wavelength'] = 0.229
@@ -827,7 +827,7 @@ class Product:
             # get bbox
             latlon_file_bbox = hdf_gunw[sdskeys[0]]
             latlon_file_bbox = latlon_file_bbox[()]
-            latlon_file_bbox = loads(latlon_file_bbox)
+            latlon_file_bbox = shapely_wkt_loads(latlon_file_bbox)
             # get center frequency
             center_freq_var = float(hdf_gunw[center_freq][()])
             # get slant range info
@@ -847,7 +847,7 @@ class Product:
         rdrmetadata_dict['projection'] = self.projection
         pyproj_transformer = Transformer.from_crs(
             'EPSG:4326', f'EPSG:{self.projection}', always_xy=True)
-        file_bbox = transform(
+        file_bbox = shapely_ops_transform(
             lambda x, y, z=None: pyproj_transformer.transform(x, y),
             latlon_file_bbox)
 
