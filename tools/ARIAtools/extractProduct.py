@@ -327,6 +327,12 @@ def merged_productbbox(
     # If specified workdir doesn't exist, create it
     os.makedirs(workdir, exist_ok=True)
 
+    # determine if NISAR GUNW
+    nisar_file = False
+    track_fileext = product_dict[0]['unwrappedPhase'][0]
+    if len(track_fileext.split('.h5')) > 1:
+        nisar_file = True
+
     # If specified, check if user's bounding box meets minimum threshold area
     lyr_proj = int(metadata_dict[0]['projection'][0])
     if bbox_file is not None:
@@ -519,7 +525,7 @@ def merged_productbbox(
     del ds
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
-            prods_TOTbbox_metadatalyr, arrres, proj)
+            prods_TOTbbox_metadatalyr, arrres, proj, nisar_file)
 
 
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
@@ -1043,9 +1049,9 @@ def export_product_worker(
 
 def export_products(
         full_product_dict, proj, bbox_file, prods_TOTbbox, layers, arrres,
-        rankedResampling=False, demfile=None, demfile_expanded=None, lat=None,
-        lon=None, maskfile=None, outDir='./', outputFormat='VRT',
-        verbose=None, num_threads='2', multilooking=None,
+        nisar_file, rankedResampling=False, demfile=None,
+        demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
+        outputFormat='VRT',verbose=None, num_threads='2', multilooking=None,
         tropo_total=False, model_names=[], multiproc_method='single'):
     """
     Export layer and 2D meta-data layers (at the product resolution).
@@ -1091,19 +1097,17 @@ def export_products(
         'layers': layers, 'prods_TOTbbox': prods_TOTbbox,
         'proj': int(epsg_code), 'dem': dem_expanded, 'lat': lat, 'lon': lon,
         'mask': mask, 'verbose': verbose, 'multilooking': multilooking,
-        'rankedResampling': rankedResampling, 'num_threads': num_threads}
+        'rankedResampling': rankedResampling, 'num_threads': num_threads,
+        'nisar_file': nisar_file}
 
     # track if product stack is NISAR GUNW or not
-    nisar_file = False
     range_correction = True
     track_fileext = full_product_dict[0]['unwrappedPhase'][0]
-    if len(track_fileext.split('.h5')) > 1:
-        nisar_file = True
+    if nisar_file:
         range_correction = False
         model_names = ['']
     else:
         model_names = [f'_{i}' for i in model_names]
-    lyr_input_dict['nisar_file'] = nisar_file
 
     # get bounds
     bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds

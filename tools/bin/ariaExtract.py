@@ -178,7 +178,7 @@ def main():
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
      prods_TOTbbox_metadatalyr, arrres,
-     proj) = ARIAtools.extractProduct.merged_productbbox(
+     proj, nisar_file) = ARIAtools.extractProduct.merged_productbbox(
         standardproduct_info.products[0], standardproduct_info.products[1],
         os.path.join(args.workdir, 'productBoundingBox'),
         standardproduct_info.bbox_file, args.croptounion,
@@ -190,9 +190,16 @@ def main():
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
-            if 'amplitude' in d:
-                for item in list(set(d['amplitude'])):
-                    amplitude_products.append(item)
+            # for NISAR GUNW
+            if nisar_file:
+                if 'coherence' in d:
+                    for item in list(set(d['coherence'])):
+                        amplitude_products.append(item)
+            # for S1 GUNW
+            else:
+                if 'amplitude' in d:
+                    for item in list(set(d['amplitude'])):
+                        amplitude_products.append(item)
 
         # mask parms
         mask_dict = {
@@ -245,6 +252,7 @@ def main():
         'prods_TOTbbox': prods_TOTbbox,
         'proj': proj,
         'layers': args.layers,
+        'nisar_file': nisar_file,
         'arrres': arrres,
         'rankedResampling': args.rankedResampling,
         'demfile': demfile,
