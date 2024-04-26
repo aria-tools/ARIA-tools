@@ -19,7 +19,8 @@ import osgeo
 from pyproj import Transformer
 
 import shapely.geometry
-from shapely.ops import transform as shapely_ops_transform
+import shapely.ops
+import shapely.wkt
 from shapely.wkt import loads as shapely_wkt_loads
 
 import ARIAtools.constants
@@ -827,7 +828,7 @@ class Product:
             # get bbox
             latlon_file_bbox = hdf_gunw[sdskeys[0]]
             latlon_file_bbox = latlon_file_bbox[()]
-            latlon_file_bbox = shapely_wkt_loads(latlon_file_bbox)
+            latlon_file_bbox = shapely.wkt.loads(latlon_file_bbox)
             # get center frequency
             center_freq_var = float(hdf_gunw[center_freq][()])
             # get slant range info
@@ -847,7 +848,7 @@ class Product:
         rdrmetadata_dict['projection'] = self.projection
         pyproj_transformer = Transformer.from_crs(
             'EPSG:4326', f'EPSG:{self.projection}', always_xy=True)
-        file_bbox = shapely_ops_transform(
+        file_bbox = shapely.ops.transform(
             lambda x, y, z=None: pyproj_transformer.transform(x, y),
             latlon_file_bbox)
 
