@@ -49,7 +49,7 @@ def prep_mask(
 
     # Download mask
     if maskfilename.lower() == 'download' or \
-          maskfilename.lower() in DATASET_SHORTNAMES:
+            maskfilename.lower() in DATASET_SHORTNAMES:
         # if download specified, default to esa world cover mask
         if maskfilename.lower() == 'download':
             maskfilename = 'esa_world_cover_2021'
