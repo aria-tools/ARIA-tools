@@ -949,8 +949,8 @@ def export_product_worker(
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
             outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
-            lat, lon, hgt_field, product, is_nisar_file, mask, outputFormatPhys,
-            verbose=verbose)
+            lat, lon, hgt_field, product, is_nisar_file, mask,
+            outputFormatPhys, verbose=verbose)
 
     # Extract/crop full res layers, except for "unw" and "conn_comp"
     # which requires advanced stitching
