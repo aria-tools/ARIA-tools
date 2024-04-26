@@ -22,6 +22,8 @@ import datetime
 import collections
 import osgeo.gdal
 
+from tile_mate.stitcher import DATASET_SHORTNAMES
+
 import ARIAtools.product
 import ARIAtools.util.vrt
 import ARIAtools.util.misc
@@ -82,12 +84,9 @@ def create_parser():
              'Example : "19 20 -99.5 -98.5"')
     parser.add_argument(
         '-m', '--mask', dest='mask', type=str, default=None,
-        help='Path to mask file or "Download". File needs to be GDAL '
-             'compatabile, contain spatial reference information, and have '
-             'invalid/valid data represented by 0/1, respectively. If '
-             '"Download", will use GSHHS water mask. If "NLCD", will mask '
-             'classes 11, 12, 90, 95; see: '
-             'www.mrlc.gov/national-land-cover-database-nlcd-2016')
+        help='Specify either path to valid water mask, or '
+             'download using one of the following '
+             f'data sources: {DATASET_SHORTNAMES}')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitudes below this threshold will be masked. Specify "None" '
