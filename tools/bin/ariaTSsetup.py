@@ -22,7 +22,7 @@ import datetime
 import collections
 import osgeo.gdal
 
-from tile_mate.stitcher import DATASET_SHORTNAMES
+import tile_mate
 
 import ARIAtools.product
 import ARIAtools.util.vrt
@@ -86,7 +86,7 @@ def create_parser():
         '-m', '--mask', dest='mask', type=str, default=None,
         help='Specify either path to valid water mask, or '
              'download using one of the following '
-             f'data sources: {DATASET_SHORTNAMES}')
+             f'data sources: {tile_mate.stitcher.DATASET_SHORTNAMES}')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitudes below this threshold will be masked. Specify "None" '

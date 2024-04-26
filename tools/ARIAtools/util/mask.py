@@ -19,8 +19,7 @@ import rasterio
 import ARIAtools.util.shp
 import ARIAtools.util.vrt
 
-from tile_mate import get_raster_from_tiles
-from tile_mate.stitcher import DATASET_SHORTNAMES
+import tile_mate
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ def prep_mask(
 
     # Download mask
     if maskfilename.lower() == 'download' or \
-            maskfilename.lower() in DATASET_SHORTNAMES:
+            maskfilename.lower() in tile_mate.stitcher.DATASET_SHORTNAMES:
         # if download specified, default to esa world cover mask
         if maskfilename.lower() == 'download':
             maskfilename = 'esa_world_cover_2021'
@@ -62,8 +61,8 @@ def prep_mask(
         ref_file = os.path.join(workdir, 'tmp_referencefile')
 
         # download mask
-        dat_arr, dat_prof = get_raster_from_tiles(bounds,
-                                                  tile_shortname=lyr_name)
+        dat_arr, dat_prof = tile_mate.get_raster_from_tiles(bounds,
+            tile_shortname=lyr_name)
 
         # fill permanent water body
         if lyr_name == 'esa_world_cover_2021':

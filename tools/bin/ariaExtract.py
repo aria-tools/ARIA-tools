@@ -10,7 +10,7 @@ import os
 import argparse
 import logging
 
-from tile_mate.stitcher import DATASET_SHORTNAMES
+import tile_mate
 
 import ARIAtools.extractProduct
 import ARIAtools.util.vrt
@@ -73,7 +73,7 @@ def createParser():
         '-m', '--mask', dest='mask', type=str, default=None,
         help='Specify either path to valid water mask, or '
              'download using one of the following '
-             f'data sources: {DATASET_SHORTNAMES}')
+             f'data sources: {tile_mate.stitcher.DATASET_SHORTNAMES}')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitude threshold below which to mask. Specify "None" to not '
