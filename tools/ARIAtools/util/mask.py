@@ -49,7 +49,7 @@ def prep_mask(
 
     # Download mask
     if maskfilename.lower() == 'download' or \
-        maskfilename.lower() in DATASET_SHORTNAMES:
+          maskfilename.lower() in DATASET_SHORTNAMES:
         # if download specified, default to esa world cover mask
         if maskfilename.lower() == 'download':
             maskfilename = 'esa_world_cover_2021'
@@ -58,13 +58,13 @@ def prep_mask(
 
         # set file names
         uncropped_maskfilename = os.path.join(workdir,
-            f'{maskfilename}_uncropped.tif')
+                                              f'{maskfilename}_uncropped.tif')
         maskfilename = os.path.join(workdir, f'{maskfilename}.msk')
         ref_file = os.path.join(workdir, 'tmp_referencefile')
 
         # download mask
         dat_arr, dat_prof = get_raster_from_tiles(bounds,
-            tile_shortname=lyr_name)
+                                                  tile_shortname=lyr_name)
 
         # fill permanent water body
         if lyr_name == 'esa_world_cover_2021':
@@ -115,7 +115,7 @@ def prep_mask(
         update_file.SetProjection(proj)
         update_file.GetRasterBand(1).SetNoDataValue(0.)
         osgeo.gdal.Translate(f'{maskfilename}.vrt',
-            maskfilename, format='VRT')
+                             maskfilename, format='VRT')
 
     # User specified mask
     else:

@@ -1051,7 +1051,7 @@ def export_products(
         full_product_dict, proj, bbox_file, prods_TOTbbox, layers, arrres,
         nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
-        outputFormat='VRT',verbose=None, num_threads='2', multilooking=None,
+        outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
         tropo_total=False, model_names=[], multiproc_method='single'):
     """
     Export layer and 2D meta-data layers (at the product resolution).
