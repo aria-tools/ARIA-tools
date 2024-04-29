@@ -58,30 +58,6 @@ def renderVRT(
     return
 
 
-# Make OGR VRT file
-def renderOGRVRT(vrt_filename, src_datasets):
-    """Generate VRT of shapefile unions."""
-    VRT_HEAD = ('<OGRVRTDataSource>\n  <OGRVRTUnionLayer name="merged">\n    '
-                '<FieldStrategy>Union</FieldStrategy>\n')
-    VRT_TAIL = '  </OGRVRTUnionLayer>\n</OGRVRTDataSource>\n'
-
-    with open(vrt_filename, 'w') as ofp:
-        ofp.write(VRT_HEAD)
-        for i in enumerate(src_datasets):
-            ofp.write(
-                '    <OGRVRTLayer name="Dataset%i_%s">\n' % (
-                    i[0], os.path.basename(i[1]).split('.shp')[0]))
-            ofp.write(
-                '      <SrcDataSource shared="1">%s</SrcDataSource>\n' %
-                (i[1]))
-            ofp.write(
-                '      <SrcLayer>%s</SrcLayer>\n' % (
-                    os.path.basename(i[1]).split('.shp')[0]))
-            ofp.write('    </OGRVRTLayer>\n')
-        ofp.write(VRT_TAIL)
-    return
-
-
 # Resample raster
 def resampleRaster(
         fname, multilooking, bounds, prods_TOTbbox, rankedResampling=False,

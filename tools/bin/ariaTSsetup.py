@@ -22,6 +22,8 @@ import datetime
 import collections
 import osgeo.gdal
 
+import tile_mate
+
 import ARIAtools.product
 import ARIAtools.util.vrt
 import ARIAtools.util.misc
@@ -82,12 +84,9 @@ def create_parser():
              'Example : "19 20 -99.5 -98.5"')
     parser.add_argument(
         '-m', '--mask', dest='mask', type=str, default=None,
-        help='Path to mask file or "Download". File needs to be GDAL '
-             'compatabile, contain spatial reference information, and have '
-             'invalid/valid data represented by 0/1, respectively. If '
-             '"Download", will use GSHHS water mask. If "NLCD", will mask '
-             'classes 11, 12, 90, 95; see: '
-             'www.mrlc.gov/national-land-cover-database-nlcd-2016')
+        help='Specify either path to valid water mask, or '
+             'download using one of the following '
+             f'data sources: {tile_mate.stitcher.DATASET_SHORTNAMES}')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitudes below this threshold will be masked. Specify "None" '
@@ -420,7 +419,7 @@ def main():
     LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres, proj) = \
+     prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file) = \
         ARIAtools.extractProduct.merged_productbbox(
             standardproduct_info.products[0], standardproduct_info.products[1],
             os.path.join(args.workdir, 'productBoundingBox'),
@@ -458,9 +457,16 @@ def main():
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
-            if 'amplitude' in d:
-                for item in list(set(d['amplitude'])):
-                    amplitude_products.append(item)
+            # for NISAR GUNW
+            if is_nisar_file:
+                if 'coherence' in d:
+                    for item in list(set(d['coherence'])):
+                        amplitude_products.append(item)
+            # for S1 GUNW
+            else:
+                if 'amplitude' in d:
+                    for item in list(set(d['amplitude'])):
+                        amplitude_products.append(item)
 
         mask_dict = {
             'product_dict': amplitude_products,
@@ -488,6 +494,7 @@ def main():
         'prods_TOTbbox': prods_TOTbbox,
         'demfile': demfile,
         'demfile_expanded': demfile_expanded,
+        'is_nisar_file': is_nisar_file,
         'arrres': arrres,
         'lat': lat,
         'lon': lon,
