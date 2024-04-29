@@ -214,10 +214,9 @@ class MetadataQualityCheck:
                                 / self.data_array_band.size) * 100
 
                 # Unique bug-fix for bPerp layers with sign-flips
-                if (self.prod_key == 'bPerpendicular'
-                        and min(rsquaredarr) < 0.8
-                        and max(std_errarr) > 0.1) and (
-                        negs_percent != 100 or negs_percent != 0):
+                if ((self.prod_key == 'bPerpendicular' and
+                    min(rsquaredarr) < 0.8 and max(std_errarr) > 0.1) and
+                    (negs_percent != 100 or negs_percent != 0)):
 
                     # Circumvent Bperp sign-flip bug by comparing percentage of
                     # positive and negative values
@@ -309,7 +308,7 @@ class MetadataQualityCheck:
                     rsquaredarr_az, std_errarr_az = self.__getCovar__(
                         'azimuth', profprefix='corrected')
 
-        del self.data_array_band
+        self.data_array_band = None
         return self.data_array
 
 
@@ -522,7 +521,7 @@ def merged_productbbox(
 
     # Get projection of full res layers
     proj = ds.GetProjection()
-    del ds
+    ds = None
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -556,7 +555,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
 
 def prep_metadatalayers(
         outname, metadata_arr, dem, layer, layers, is_nisar_file=False,
-        proj='4326', driver='ENVI', model_name=''):
+        proj='4326', driver='ENVI', model_name=None):
     """Wrapper to prep metadata layer for extraction"""
     if dem is None:
         raise Exception('No DEM input specified. '
@@ -694,7 +693,7 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
         da_attrs[hgt_field] = np.array(da_attrs[hgt_field])
     da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
     ds.SetMetadata(da_attrs)
-    del ds
+    ds = None
 
     return
 
@@ -748,7 +747,7 @@ def handle_epoch_layers(
         outname = os.path.abspath(os.path.join(workdir, ifg))
 
         # capture model if tropo product
-        model_name = ''
+        model_name = None
         if 'tropo' in key:
             out_dir = os.path.dirname(outname)
             if not is_nisar_file:
@@ -768,7 +767,7 @@ def handle_epoch_layers(
         prog_bar.update(i[0] + 1, suffix=ifg)
 
         # record output directories
-        if model_name != '':
+        if model_name is not None:
             all_outputs.append(os.path.join(workdir, model_name))
             all_outputs.append(os.path.join(ref_workdir, model_name))
             all_outputs.append(os.path.join(sec_workdir, model_name))
@@ -800,10 +799,10 @@ def handle_epoch_layers(
 
             # if specified, compute total delay
             if tropo_total:
-                model_dir = os.path.abspath(os.path.join(workdir, model_name))
-                outname = os.path.join(model_dir, ifg)
+                model_dir = os.path.abspath(workdir)
 
                 if not is_nisar_file:
+                    model_dir = os.path.join(model_dir, model_name)
                     # compute reference diff
                     ref_diff = ref_outname
                     sec_diff = sec_outname
@@ -825,9 +824,16 @@ def handle_epoch_layers(
                             ref_diff, sec_diff, outname_diff, key, sec_key,
                             tropo_total, hgt_field, proj, outputFormat)
 
-                # compute total diff
-                ref_diff = os.path.join(ref_workdir, model_name, ifg)
-                sec_diff = os.path.join(sec_workdir, model_name, ifg)
+                    # compute total diff
+                    ref_diff = os.path.join(ref_workdir, model_name, ifg)
+                    sec_diff = os.path.join(sec_workdir, model_name, ifg)
+
+                else:
+                    # compute total diff
+                    ref_diff = os.path.join(ref_workdir, ifg)
+                    sec_diff = os.path.join(sec_workdir, ifg)
+
+                outname = os.path.join(model_dir, ifg)
                 generate_diff(
                     ref_diff, sec_diff, outname, key, sec_key, tropo_total,
                     hgt_field, proj, outputFormat)
@@ -938,9 +944,8 @@ def export_product_worker(
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
     # Extract/crop metadata layers
-    if any(':/science/grids/imagingGeometry' in s for s in product) \
-        or any(':/science/LSAR/GUNW/metadata/radarGrid/'
-               in s for s in product):
+    if (any(':/science/grids/imagingGeometry' in s for s in product) or
+        any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
         # make VRT pointing to metadata layers in standard product
         hgt_field, model_name, outname = prep_metadatalayers(
             outname, product, dem_expanded, layer, layers,
@@ -1036,7 +1041,8 @@ def export_product_worker(
             mask_arr = mask.ReadAsArray() * \
                 osgeo.gdal.Open(outname + '.vrt').ReadAsArray()
             update_file.GetRasterBand(1).WriteArray(mask_arr)
-            del update_file, mask_arr
+            update_file = None
+            mask_arr = None
 
     prod_wid, prod_hgt, prod_geotrans, _, _ = \
         ARIAtools.util.vrt.get_basic_attrs(outname + '.vrt')
@@ -1108,6 +1114,7 @@ def export_products(
         model_names = ['']
     else:
         model_names = [f'_{i}' for i in model_names]
+    lyr_input_dict['is_nisar_file'] = is_nisar_file
 
     # get bounds
     bounds = ARIAtools.util.shp.open_shp(bbox_file).bounds
@@ -1134,8 +1141,7 @@ def export_products(
 
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
-    user_lyrs = list(
-        set.intersection(*map(set, [layers, tropo_lyrs])))
+    user_lyrs = list(set(layers).intersection(tropo_lyrs))
     if tropo_total or user_lyrs != []:
         # set input keys
         if is_nisar_file:
@@ -1202,9 +1208,7 @@ def export_products(
     # If specified, extract solid earth tides
     tropo_lyrs = list(set(tropo_lyrs))
     ext_corr_lyrs = tropo_lyrs + ['solidEarthTide', 'troposphereTotal']
-    user_lyrs = list(
-        set.intersection(*map(set, [layers, ['solidEarthTide']])))
-    if user_lyrs != []:
+    if 'solidEarthTide' in layers:
         lyr_prefix = '/science/grids/corrections/external/tides/solidEarth/'
         key = 'solidEarthTide'
         ref_key = key
@@ -1226,7 +1230,7 @@ def export_products(
         lyr_input_dict['prog_bar'] = prog_bar
         lyr_input_dict['product_dict'] = product_dict
         lyr_input_dict['lyr_path'] = lyr_prefix
-        lyr_input_dict['user_lyrs'] = user_lyrs
+        lyr_input_dict['user_lyrs'] = ['solidEarthTide']
         lyr_input_dict['key'] = key
         lyr_input_dict['sec_key'] = sec_key
         lyr_input_dict['ref_key'] = ref_key
@@ -1246,9 +1250,7 @@ def export_products(
 
     # If specified, extract ionosphere long wavelength
     ext_corr_lyrs += ['ionosphere']
-    user_lyrs = list(
-        set.intersection(*map(set, [layers, ['ionosphere']])))
-    if user_lyrs != []:
+    if 'ionosphere' in layers:
         lyr_prefix = '/science/grids/corrections/derived/ionosphere/ionosphere'
         key = 'ionosphere'
         product_dict = \
@@ -1418,8 +1420,8 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     version_check = min(version_check)
 
     metadatalyr_name = outname.split('/')[-2]
-    if (metadatalyr_name in GEOM_LYRS and version_check < '2_0_4') \
-            and not is_nisar_file:
+    if ((metadatalyr_name in GEOM_LYRS and version_check < '2_0_4')
+        and not is_nisar_file):
         # create directory for quality control plots
         plots_subdir = os.path.abspath(os.path.join(outname, '../..',
                                        'metadatalyr_plots', metadatalyr_name))
@@ -1484,7 +1486,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             drivername=outputFormat,
             gdal_fmt=data_array.ReadAsArray().dtype.name,
             proj=dem.GetProjection(), nodata=nodata)
-        del out_interpolated
+        out_interpolated = None
 
     # Since metadata layer extends at least one grid node
     # outside of the expected track bounds,
@@ -1525,9 +1527,10 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         # Update VRT with new raster
         update_file = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
         update_file.GetRasterBand(1).WriteArray(out_interpolated)
-        del update_file, out_interpolated
+        update_file = None
+        out_interpolated = None
 
-    del data_array
+    data_array = None
 
 
 def gacos_correction(full_product_dict, gacos_products, bbox_file,
@@ -1769,7 +1772,8 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
             if unw_geotrans == output_geotrans and np.array_equal(
                     unw_prodcheck, tropo_prodcheck):
                 continue
-            del unw_prodcheck, tropo_prodcheck
+            unw_prodcheck = None
+            tropo_prodcheck = None
 
         if os.path.exists(tropo_reference) and os.path.exists(tropo_secondary):
             # Check if tropo products are temporally consistent with IFG
@@ -1897,8 +1901,12 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                     drivername=outputFormat, gdal_fmt='float32', proj=proj,
                     nodata=0.)
 
-            del tropo_product, tropo_reference, \
-                tropo_secondary, da, inc_arr, cos_inc
+            tropo_product = None
+            tropo_reference = None
+            tropo_secondary = None
+            da = None
+            inc_arr = None
+            cos_inc = None
 
             # Track consistency of dimensions
             if i[0] == 0:

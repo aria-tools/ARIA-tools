@@ -241,7 +241,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # handle individual epochs if external correction layer
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
-            domain_name in ARIA_TROPO_MODELS):
+        domain_name in ARIA_TROPO_MODELS):
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # Find files

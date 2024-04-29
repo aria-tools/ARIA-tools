@@ -158,7 +158,9 @@ def stitch_ionosphere_frames(
         mask_xr_list.append(mask_xr)
 
     # Remove intermidate variables
-    del iono_xr, mask_xr, mask
+    iono_xr = None
+    mask_xr = None
+    mask = None
 
     # Get SNWE and LATLON_SPACING
     SNWE = np.vstack([d['SNWE'] for d in iono_attr_list])
