@@ -61,8 +61,8 @@ def prep_mask(
         ref_file = os.path.join(workdir, 'tmp_referencefile')
 
         # download mask
-        dat_arr, dat_prof = tile_mate.get_raster_from_tiles(bounds,
-            tile_shortname=lyr_name)
+        dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
+            bounds, tile_shortname=lyr_name)
 
         # fill permanent water body
         if lyr_name == 'esa_world_cover_2021':
@@ -91,11 +91,11 @@ def prep_mask(
                            height=resize_row, width=resize_col, count=1,
                            dtype=f_dtype, crs=crs,
                            transform=affine.Affine(*reference_gt)) as dst:
-            rasterio.warp.reproject(source=dat_arr,
-                      destination=rasterio.band(dst, 1),
-                      src_transform=dat_prof['transform'],
-                      src_crs=dat_prof['crs'], dst_transform=reference_gt,
-                      dst_crs=crs, resampling=resampling_mode)
+            rasterio.warp.reproject(
+                source=dat_arr, destination=rasterio.band(dst, 1),
+                src_transform=dat_prof['transform'], src_crs=dat_prof['crs'],
+                dst_transform=reference_gt, dst_crs=crs,
+                resampling=resampling_mode)
 
         # save cropped mask with precise spacing
         osgeo.gdal.Warp(
