@@ -21,7 +21,6 @@ from pyproj import Transformer
 import shapely.geometry
 import shapely.ops
 import shapely.wkt
-from shapely.wkt import loads as shapely_wkt_loads
 
 import ARIAtools.constants
 import ARIAtools.util.url
