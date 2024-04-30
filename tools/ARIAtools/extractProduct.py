@@ -328,7 +328,7 @@ def merged_productbbox(
 
     # determine if NISAR GUNW
     is_nisar_file = False
-    track_fileext = product_dict[0]['unwrappedPhase'][0]
+    track_fileext = product_dict[0]['unwrappedPhase'][0].split('"')[1]
     if track_fileext.endswith('.h5'):
         is_nisar_file = True
 
