@@ -16,6 +16,7 @@ pyproj
 requests
 scipy>1.10.0
 shapely
+pytest
 ## notebook dependencies, keep commented out for better compatiability with other codes
 #jupyterlab
 #jupyter_contrib_nbextensions
