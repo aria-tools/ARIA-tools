@@ -67,18 +67,41 @@ Below we list the dependencies for ARIA-tools
 
 ------
 ## Installation
-ARIA-tools package can be easily installed and used after the dependencies are installed and activated. The third-party RelaxIV package is optional (not required), and  only used when opting to minimizing phase-discontinuities. Prior to use of RelaxIV, users should conform to the RelaxIV license agreement. The easiest way of installing RelaxIV is by downloading the min-cost-flow repository in the third-party folder of the ARIAtools and using the setup.py script as outlined below. For the required dependencies, we strongly recommend using [Anaconda](https://www.anaconda.com/distribution/) package manager for easy installation of dependencies in the python environment.
+
+
+ARIA-tools has been tested on the following system:
+- Linux v.7 and up
+
+Below we demonstrate how to build and setup an environment from scratch through Linux through a `TCSH` shell.
+
+ARIA-tools package can be easily installed and used after the dependencies are installed and activated.
+
+__[Conda](https://docs.conda.io/en/latest/index.html)__ is a cross-platform way to use Python that allows you to setup and use "virtual environments," which allows for the easy installation and management of all of the required dependencies. We recommend using the [Miniforge](https://github.com/conda-forge/miniforge) conda environment manager, which uses conda-forge as its default code repo. Alternatively, see __[here](https://docs.anaconda.com/anaconda/install/)__ for help installing Anaconda and __[here](https://docs.conda.io/en/latest/miniconda.html)__ for installing Miniconda.
 
 ### Conda
-Below we outline the different steps for setting up the ARIA-tools while leveraging Anaconda for installation of the requirements. Run the commands below to download/clone the ARIA-tools package to your local directory. It is advised to use `mamba` as prompted to speed the install up:
+Below we outline the different steps for setting up the ARIA-tools while leveraging Miniforge for installation of the requirements.
+
+Run the commands below to download and setup your Miniforge environment manager:
 
 ```.tcsh
-conda install mamba
+cd ~/tools
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+bash Miniforge3-Linux-x86_64.sh -b -p miniforge
+miniforge/bin/mamba init tcsh
+# reset shell
+csh
+```
+
+Run the commands below to download/clone the ARIA-tools package to your local directory:
+
+```.tcsh
+cd ~/tools
 git clone https://github.com/aria-tools/ARIA-tools.git
 cd ARIA-tools
 ```
 
-Run the commands below to install dependencies to a new conda environment `ARIA-tools` and activate it:
+Run the commands below to install dependencies to a new conda environment `ARIA-tools` and activate it.
+Make sure to activate your environment each time you open a new session:
 
 ```.tcsh
 mamba env create -f environment.yml
@@ -96,10 +119,10 @@ We have included a `setup.py` script which allows for easy compilation and insta
 python -m pip install -e .
 ```
 
-If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For c-shell this can be done as follows (replace "ARIAtoolsREPO" to the location where you have cloned the ARIAtools repository):
+If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For `TCSH` shell this can be done as follows (replace `{$PWD}/tools/ARIAtools` to the location where you have cloned the ARIAtools repository):
 ```.tcsh
 setenv PYTHONPATH ${PYTHONPATH}:{$PWD}/tools/ARIAtools
-setenv PATH ${PATH}:${PWD}/tools/ARIAtools
+setenv PATH ${PATH}:${PWD}/tools/bin
 ```
 
 To avoid potential issues associated with dependencies when cloning new ARIA-tools commits, it is advised to regularly maintain your conda environment as so (making sure to adjust the conda environment argument name `--name ARIA-tools` as appropriate):
@@ -140,6 +163,8 @@ export VSI_CACHE=YES
 ## Running ARIA-tools
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
+
+* NOTE, currently ARIA-tools does not support deduplication (we are working to add it soon though), so for each commandline input please make sure to specify a fresh output directory with the `--workdir` option.
 
 ### Commandline download of GUNW Products
 GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
