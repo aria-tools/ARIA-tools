@@ -22,4 +22,3 @@ xarray
 ## notebook dependencies, keep commented out for better compatiability with other codes
 #jupyterlab
 #jupyter_contrib_nbextensions
-#rise
