@@ -39,13 +39,17 @@ def open_shp(fname, lyrind=0, ftind=0):
     return file_bbox
 
 
-def save_shp(fname, polygon, drivername='GeoJSON'):
+def save_shp(fname, polygon, projection, drivername='GeoJSON'):
     """Save a polygon shapefile."""
+    # Define the target spatial reference system
+    target_srs = osgeo.ogr.osr.SpatialReference()
+    target_srs.ImportFromEPSG(projection)
+
     # open file
     ds = osgeo.ogr.GetDriverByName(drivername).CreateDataSource(fname)
 
     # create layer
-    layer = ds.CreateLayer('', None, osgeo.ogr.wkbPolygon)
+    layer = ds.CreateLayer('', target_srs, osgeo.ogr.wkbPolygon)
 
     # Add 1 attribute
     layer.CreateField(osgeo.ogr.FieldDefn('id', osgeo.ogr.OFTInteger))
@@ -61,7 +65,7 @@ def save_shp(fname, polygon, drivername='GeoJSON'):
     return
 
 
-def shp_area(file_bbox, bounds=False):
+def shp_area(file_bbox, projection, bounds=False):
     """Compute km\u00b2 area of shapefile."""
     # loop through polygons
     shape_area = 0
@@ -72,26 +76,33 @@ def shp_area(file_bbox, bounds=False):
 
     for polyobj in file_bbox:
 
-        # get coords
-        if bounds:
-            # Pass coordinates of bounds as opposed to cutline
-            # Necessary for estimating DEM/mask footprints
-            WSEN = polyobj.bounds
-            lon = np.array([WSEN[0], WSEN[0], WSEN[2], WSEN[2], WSEN[0]])
-            lat = np.array([WSEN[1], WSEN[3], WSEN[3], WSEN[1], WSEN[1]])
+        # need to reproject if not already in UTM
+        if projection == 4326:
+
+            # get coords
+            if bounds:
+                # Pass coordinates of bounds as opposed to cutline
+                # Necessary for estimating DEM/mask footprints
+                WSEN = polyobj.bounds
+                lon = np.array([WSEN[0], WSEN[0], WSEN[2], WSEN[2], WSEN[0]])
+                lat = np.array([WSEN[1], WSEN[3], WSEN[3], WSEN[1], WSEN[1]])
+            else:
+                lon, lat = polyobj.exterior.coords.xy
+
+            # use equal area projection centered on/bracketing AOI
+            pa = pyproj.Proj(
+                "+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
+                    min(lat), max(lat), (max(lat) + min(lat)) / 2,
+                    (max(lon) + min(lon)) / 2))
+            x, y = pa(lon, lat)
+            cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+
+            # area in km^2
+            shape_area += shapely.geometry.shape(cop).area / 1e6
+
         else:
-            lon, lat = polyobj.exterior.coords.xy
-
-        # use equal area projection centered on/bracketing AOI
-        pa = pyproj.Proj(
-            "+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-                min(lat), max(lat), (max(lat) + min(lat)) / 2,
-                (max(lon) + min(lon)) / 2))
-        x, y = pa(lon, lat)
-        cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-
-        # area in km^2
-        shape_area += shapely.geometry.shape(cop).area / 1e6
+            # area in km^2
+            shape_area = polyobj.area / 1e6
     return shape_area
 
 

@@ -10,13 +10,14 @@ import os
 import argparse
 import logging
 
+import tile_mate
+
 import ARIAtools.extractProduct
 import ARIAtools.util.vrt
 import ARIAtools.util.dem
 import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.product
-
 
 LOGGER = logging.getLogger('ariaExtract.py')
 
@@ -60,20 +61,19 @@ def createParser():
         '-d', '--demfile', dest='demfile', type=str, default=None,
         help='DEM file. To download new DEM, specify "Download".')
     parser.add_argument(
-        '-p', '--projection', dest='projection', default='WGS84', type=str,
-        help='projection for DEM. By default WGS84.')
+        '-p', '--projection', dest='projection', default='4326', type=str,
+        help='EPSG projection code for DEM. By default 4326. '
+             'Specify "native" to pass most common '
+             'projection from stack.')
     parser.add_argument(
         '-b', '--bbox', dest='bbox', type=str, default=None,
         help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- "
              "Example : '19 20 -99.5 -98.5'")
     parser.add_argument(
         '-m', '--mask', dest='mask', type=str, default=None,
-        help="Path to mask file or 'Download'. File needs to be GDAL "
-             "compatabile, contain spatial reference information, and have "
-             "invalid/valid data represented by 0/1, respectively. If "
-             "'Download', will use GSHHS water mask. If 'NLCD', will mask "
-             "classes 11, 12, 90, 95; see: "
-             "www.mrlc.gov/national-land-cover-database-nlcd-2016")
+        help='Specify either path to valid water mask, or '
+             'download using one of the following '
+             f'data sources: {tile_mate.stitcher.DATASET_SHORTNAMES}')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitude threshold below which to mask. Specify "None" to not '
@@ -83,14 +83,6 @@ def createParser():
         help='Specify number of threads for multiprocessing operation in '
              'gdal. By default "2". Can also specify "All" to use all '
              'available threads.')
-    parser.add_argument(
-        '-sm', '--stitchMethod', dest='stitchMethodType', type=str,
-        default='sequential',
-        help="Method applied to stitch the unwrapped data. Allowed methods "
-             "are: 'overlap', '2stage', and 'sequential'. 'overlap' - product "
-             "overlap is minimized, '2stage' - minimization is done on "
-             "connected components, 'sequential' - sequential minimization of "
-             "all overlapping connected components.  Default is 'overlap'.")
     parser.add_argument(
         '-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By '
@@ -128,7 +120,8 @@ def createParser():
         help='Specify version as str, e.g. 2_0_4 or all prods; default: all')
     parser.add_argument(
         '--nc_version', dest='nc_version', default='1b',
-        help='Specify netcdf version as str, e.g. 1c or all prods; default: 1b')
+        help='Specify netcdf version as str, '
+             'e.g. 1c or all prods; default: 1b')
     parser.add_argument(
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
@@ -157,9 +150,10 @@ def main():
     # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
     # bbox specified)
     standardproduct_info = ARIAtools.product.Product(
-        args.imgfile, bbox=args.bbox, workdir=args.workdir,
-        num_threads=args.num_threads, url_version=args.version,
-        nc_version=args.nc_version, verbose=args.verbose)
+        args.imgfile, bbox=args.bbox, projection=args.projection,
+        workdir=args.workdir, num_threads=args.num_threads,
+        url_version=args.version, nc_version=args.nc_version,
+        verbose=args.verbose)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
@@ -182,7 +176,7 @@ def main():
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
      prods_TOTbbox_metadatalyr, arrres,
-     proj) = ARIAtools.extractProduct.merged_productbbox(
+     proj, is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
         standardproduct_info.products[0], standardproduct_info.products[1],
         os.path.join(args.workdir, 'productBoundingBox'),
         standardproduct_info.bbox_file, args.croptounion,
@@ -194,9 +188,16 @@ def main():
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
-            if 'amplitude' in d:
-                for item in list(set(d['amplitude'])):
-                    amplitude_products.append(item)
+            # for NISAR GUNW
+            if is_nisar_file:
+                if 'coherence' in d:
+                    for item in list(set(d['coherence'])):
+                        amplitude_products.append(item)
+            # for S1 GUNW
+            else:
+                if 'amplitude' in d:
+                    for item in list(set(d['amplitude'])):
+                        amplitude_products.append(item)
 
         # mask parms
         mask_dict = {
@@ -247,7 +248,9 @@ def main():
         'full_product_dict': standardproduct_info.products[1],
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
+        'proj': proj,
         'layers': args.layers,
+        'is_nisar_file': is_nisar_file,
         'arrres': arrres,
         'rankedResampling': args.rankedResampling,
         'demfile': demfile,
@@ -257,7 +260,6 @@ def main():
         'maskfile': maskfilename,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
-        'stitchMethodType': args.stitchMethodType,
         'verbose': args.verbose,
         'num_threads': args.num_threads,
         'multilooking': args.multilooking,

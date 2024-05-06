@@ -116,7 +116,8 @@ class PlotClass(object):
             L[i[0]] = float(pbaseline_val)
             if (np.isnan(L[i[0]])):
                 L[i[0]] = 0.0
-            del pbaseline_val, pbaseline_nodata
+            pbaseline_val = None
+            pbaseline_nodata = None
 
         A = A[:, 1:]
         B = B[:, :-1]
@@ -315,7 +316,7 @@ class PlotClass(object):
             coh_hist.append(coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
             slaves.append(pd.to_datetime(self.product_dict[1][i[0]][0][:8]))
             masters.append(pd.to_datetime(self.product_dict[1][i[0]][0][9:]))
-            del coh_file
+            coh_file = None
 
         # Plot average coherence per IFG
         cols, mapper = self._create_colors_coh(coh_hist)
@@ -389,9 +390,9 @@ class PlotClass(object):
             update_file = gdal.Open(outname, gdal.GA_Update)
             update_file.GetRasterBand(1).WriteArray(
                 self.mask.ReadAsArray() * coh_file)
-            del update_file
+            update_file = None
 
-        del coh_file
+        coh_file = None
 
         ds = gdal.Open(f'{outname}.vrt')
         # for making ~water pixels white
@@ -470,7 +471,7 @@ class PlotClass(object):
             coh_vals.append(coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
             y1.append(offset_dict[i[1][9:]])
             y2.append(offset_dict[i[1][:8]])
-            del coh_file
+            coh_file = None
 
         cols, mapper = self._create_colors_coh(
             coh_vals, 'autumn')  # don't use hot
@@ -561,5 +562,5 @@ def get_extent(path_ds, shrink=None):
             extent[2] + delS,
             extent[3] - delN]
 
-    del ds
+    ds = None
     return extent

@@ -121,8 +121,8 @@ python -m pip install -e .
 
 If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For `TCSH` shell this can be done as follows (replace `{$PWD}/tools/ARIAtools` to the location where you have cloned the ARIAtools repository):
 ```.tcsh
-setenv PYTHONPATH ${PYTHONPATH}:{$PWD}/tools/ARIAtools
-setenv PATH ${PATH}:${PWD}/tools/bin
+setenv PYTHONPATH ${PYTHONPATH}:{$PWD}/tools/ARIAtools/tools
+setenv PATH "${PWD}/tools/ARIAtools/tools/bin:$PATH"
 ```
 
 To avoid potential issues associated with dependencies when cloning new ARIA-tools commits, it is advised to regularly maintain your conda environment as so (making sure to adjust the conda environment argument name `--name ARIA-tools` as appropriate):
@@ -195,3 +195,4 @@ Buzzanga, B., Bekaert, D. P. S., Hamlington, B. D., & Sangha, S. S. (2020). Towa
 -   [other community members](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
 
 We welcome community contributions. For instructions see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md).
+

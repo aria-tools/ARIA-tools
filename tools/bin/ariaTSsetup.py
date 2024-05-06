@@ -22,6 +22,8 @@ import datetime
 import collections
 import osgeo.gdal
 
+import tile_mate
+
 import ARIAtools.product
 import ARIAtools.util.vrt
 import ARIAtools.util.misc
@@ -38,6 +40,7 @@ osgeo.gdal.UseExceptions()
 # Suppress warnings
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 LOGGER = logging.getLogger('ariaTSsetup.py')
+
 
 def create_parser():
     """Parser to read command line arguments."""
@@ -71,37 +74,28 @@ def create_parser():
         '-d', '--demfile', dest='demfile', type=str, default='download',
         help='DEM file. Default is to download new DEM.')
     parser.add_argument(
-        '-p', '--projection', dest='projection', default='WGS84', type=str,
-        help='projection for DEM. By default WGS84.')
+        '-p', '--projection', dest='projection', default='4326', type=str,
+        help='EPSG projection code for DEM. By default 4326. '
+             'Specify "native" to pass most common '
+             'projection from stack.')
     parser.add_argument(
         '-b', '--bbox', dest='bbox', type=str, default=None,
         help='Provide either valid shapefile or Lat/Lon Bounding SNWE. -- '
              'Example : "19 20 -99.5 -98.5"')
     parser.add_argument(
         '-m', '--mask', dest='mask', type=str, default=None,
-        help='Path to mask file or "Download". File needs to be GDAL '
-             'compatabile, contain spatial reference information, and have '
-             'invalid/valid data represented by 0/1, respectively. If '
-             '"Download", will use GSHHS water mask. If "NLCD", will mask '
-             'classes 11, 12, 90, 95; see: '
-             'www.mrlc.gov/national-land-cover-database-nlcd-2016')
+        help='Specify either path to valid water mask, or '
+             'download using one of the following '
+             f'data sources: {tile_mate.stitcher.DATASET_SHORTNAMES}')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitudes below this threshold will be masked. Specify "None" '
              'to omit amplitude mask. default: "None".')
     parser.add_argument(
         '-nt', '--num_threads', dest='num_threads', default='2', type=str,
-        help='Specify number of threads for multiprocessing operation in gdal. '
-             'By default "2". Can also specify "All" to use all available '
-             'threads.')
-    parser.add_argument(
-        '-sm', '--stitchMethod', dest='stitchMethodType', type=str,
-        default='sequential',
-        help='Method applied to stitch the unwrapped data. Allowed methods '
-             'are: "overlap", "2stage", and "sequential". "overlap" - '
-             'product overlap is minimized, "2stage" - minimization is done '
-             'on connected components, "sequential" - sequential minimization '
-             'of all overlapping connected components. Default is "overlap".')
+        help='Specify number of threads for multiprocessing operation '
+             'in gdal. By default "2". Can also specify "All" to use all '
+             'available threads.')
     parser.add_argument(
         '-of', '--outputFormat', dest='outputFormat', type=str, default='VRT',
         help='GDAL compatible output format (e.g., "ENVI", "GTiff"). By '
@@ -139,7 +133,8 @@ def create_parser():
         help='Specify version as str, e.g. 2_0_4 or all prods; default: all')
     parser.add_argument(
         '--nc_version', dest='nc_version', default='1b',
-        help='Specify netcdf version as str, e.g. 1c or all prods; default: 1b')
+        help='Specify netcdf version as str, e.g. 1c or all prods; '
+             'default: 1b')
     parser.add_argument(
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
@@ -202,7 +197,8 @@ def extract_utc_time(aria_dates, aztime_list):
             min_mid_time = min(mid_time)
             max_mid_time = max(mid_time)
 
-            # Calculate time difference between minimum start and maximum end time,
+            # Calculate time difference
+            # between minimum start and maximum end time,
             # and add it to mean start time.
             time_delta = (max_mid_time - min_mid_time) / 2
             utc_time = (min_mid_time + time_delta).time()
@@ -412,10 +408,10 @@ def main():
     # (if bbox specified)
     LOGGER.info('Building ARIA product instance')
     standardproduct_info = ARIAtools.product.Product(
-        args.imgfile, bbox=args.bbox, workdir=args.workdir,
-        num_threads=args.num_threads, url_version=args.version,
-        nc_version=args.nc_version, verbose=args.verbose)
-
+        args.imgfile, bbox=args.bbox, projection=args.projection,
+        workdir=args.workdir, num_threads=args.num_threads,
+        url_version=args.version, nc_version=args.nc_version,
+        verbose=args.verbose)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -423,7 +419,7 @@ def main():
     LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres, proj) = \
+     prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file) = \
         ARIAtools.extractProduct.merged_productbbox(
             standardproduct_info.products[0], standardproduct_info.products[1],
             os.path.join(args.workdir, 'productBoundingBox'),
@@ -461,9 +457,16 @@ def main():
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
-            if 'amplitude' in d:
-                for item in list(set(d['amplitude'])):
-                    amplitude_products.append(item)
+            # for NISAR GUNW
+            if is_nisar_file:
+                if 'coherence' in d:
+                    for item in list(set(d['coherence'])):
+                        amplitude_products.append(item)
+            # for S1 GUNW
+            else:
+                if 'amplitude' in d:
+                    for item in list(set(d['amplitude'])):
+                        amplitude_products.append(item)
 
         mask_dict = {
             'product_dict': amplitude_products,
@@ -486,17 +489,18 @@ def main():
 
     # Extract
     export_dict = {
+        'proj': proj,
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'demfile': demfile,
         'demfile_expanded': demfile_expanded,
+        'is_nisar_file': is_nisar_file,
         'arrres': arrres,
         'lat': lat,
         'lon': lon,
         'maskfile': maskfilename,
         'outDir': args.workdir,
         'outputFormat': args.outputFormat,
-        'stitchMethodType': args.stitchMethodType,
         'verbose': args.verbose,
         'num_threads': args.num_threads,
         'multilooking': args.multilooking
@@ -555,11 +559,11 @@ def main():
         if args.tropo_total is True:
             LOGGER.info(
                 'Extracting, %s for each applicable interferogram pair' % (
-                'troposphereTotal'))
+                    'troposphereTotal'))
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=args.tropo_total,
             model_names=model_names, layers=layers,
-             multiproc_method='gnu_parallel', **export_dict)
+            multiproc_method='gnu_parallel', **export_dict)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)

@@ -9,9 +9,10 @@ from pathlib import Path
 #  READ/WRITE GDAL UTILITIES
 
 
-def get_GUNW_attr(filename: Union[str, Path]) -> dict:
+def get_GUNW_attr(filename: Union[str, Path],
+                  proj: Optional[str] = None) -> dict:
     """
-    Use GDAl to get raster metadata
+    Use GDAL to get raster metadata
 
     Parameters
     ----------
@@ -26,7 +27,11 @@ def get_GUNW_attr(filename: Union[str, Path]) -> dict:
     """
 
     # Use GDAL to read GUNW netcdf
-    ds = gdal.Open(filename)
+    if proj is not None:
+        ds = gdal.Warp(
+            '', filename, format='MEM', dstSRS=proj)
+    else:
+        ds = gdal.Open(filename, gdal.GA_ReadOnly)
 
     # Get GUNW Raster attributes
     nodata = ds.GetRasterBand(1).GetNoDataValue()
@@ -59,15 +64,18 @@ def get_GUNW_attr(filename: Union[str, Path]) -> dict:
 
 
 def get_GUNW_array(filename: Union[str, Path],
+                   proj: Optional[str] = 'EPSG:4326',
                    nodata: Optional[float] = None,
                    subset: Optional[tuple] = None) -> NDArray:
     """
-    Use GDAl to get raster data [as array]
+    Use GDAL to get raster data [as array]
 
     Parameters
     ----------
     filename : str
         path to raster
+    proj : str
+        raster projection
     subset : slice
         subset created with np.s_ TODO: insert tuple of (x1,x2, y1,y2)
         and then convert to slice with np.s_
@@ -80,6 +88,8 @@ def get_GUNW_array(filename: Union[str, Path],
 
     # Use GDAL to read GUNW netcdf
     ds = gdal.Open(filename)
+    ds = gdal.Warp(
+        '', filename, format='MEM', dstSRS=proj, outputType=gdal.GDT_Float32)
 
     data = ds.ReadAsArray()
     # close
@@ -105,7 +115,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
                      verbose: Optional[bool] = False,
                      update_mode: Optional[bool] = True) -> None:
     """
-    Use GDAl to write raster
+    Use GDAL to write raster
 
     Parameters
     ----------
@@ -155,7 +165,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
     # Geotransform
     geo = (snwe[2], x_step, 0, snwe[1], 0, y_step)
     srs = osr.SpatialReference()
-    srs.ImportFromEPSG(epsg)  # get projection
+    srs.ImportFromEPSG(epsg)  # set projection
 
     # Write
     driver = gdal.GetDriverByName(format)

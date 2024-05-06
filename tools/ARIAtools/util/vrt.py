@@ -23,6 +23,8 @@ osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 
 # Save file with gdal
+
+
 def renderVRT(
         fname, data_lyr, geotrans=None, drivername='ENVI',
         gdal_fmt='float32', proj=None, nodata=None, verbose=False):
@@ -53,29 +55,6 @@ def renderVRT(
     # Finalize VRT
     translate_options = osgeo.gdal.TranslateOptions(**translate_options_dict)
     osgeo.gdal.Translate(fname + '.vrt', gdalfile, options=translate_options)
-    return
-
-
-# Make OGR VRT file
-def renderOGRVRT(vrt_filename, src_datasets):
-    """Generate VRT of shapefile unions."""
-    VRT_HEAD = ('<OGRVRTDataSource>\n  <OGRVRTUnionLayer name="merged">\n    '
-                '<FieldStrategy>Union</FieldStrategy>\n')
-    VRT_TAIL = '  </OGRVRTUnionLayer>\n</OGRVRTDataSource>\n'
-
-    with open(vrt_filename, 'w') as ofp:
-        ofp.write(VRT_HEAD)
-        for i in enumerate(src_datasets):
-            ofp.write(
-                '    <OGRVRTLayer name="Dataset%i_%s">\n' %(
-                i[0], os.path.basename(i[1]).split('.shp')[0]))
-            ofp.write(
-                '      <SrcDataSource shared="1">%s</SrcDataSource>\n' %(i[1]))
-            ofp.write(
-                '      <SrcLayer>%s</SrcLayer>\n' %(
-                os.path.basename(i[1]).split('.shp')[0]))
-            ofp.write('    </OGRVRTLayer>\n')
-        ofp.write(VRT_TAIL)
     return
 
 
@@ -212,9 +191,10 @@ def resampleRaster(
             warp_options = osgeo.gdal.WarpOptions(
                 format=outputFormat, cutlineDSName=prods_TOTbbox,
                 outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, resampleAlg='mode', multithread=True,
+                targetAlignedPixels=True, resampleAlg='mode',
+                multithread=True,
                 options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-            osgeo.gdal.Warp(fnameconcomp, fnameconcomp,options=warp_options)
+            osgeo.gdal.Warp(fnameconcomp, fnameconcomp, options=warp_options)
 
             # update VRT
             vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
@@ -406,6 +386,12 @@ def layerCheck(
         products, layers, nc_version, gacos_products, tropo_models,
         extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
+    # track if product stack is NISAR GUNW or not
+    is_nisar_file = False
+    track_fileext = products[0]['unwrappedPhase'][0]
+    if len(track_fileext.split('.h5')) > 1:
+        is_nisar_file = True
+
     # Ignore productBoundingBoxes & pair-names, they are not raster layers
     IGNORE_LAYERS = [
         'productBoundingBox', 'productBoundingBoxFrames', 'pair_name']
@@ -538,7 +524,7 @@ def layerCheck(
                 'component layers are not common to all products.')
             tropo_total = False
 
-        if model_names == []:
+        if model_names == [] and not is_nisar_file:
             LOGGER.warning(
                 'Extraction of raider-derived troposphere layers is not '
                 'possible as specified tropo model name(s) '
@@ -558,6 +544,7 @@ def get_basic_attrs(fname):
     no_data = data_set.GetRasterBand(1).GetNoDataValue()
     data_set = None
     return width, height, geo_trans, proj, no_data
+
 
 def dim_check(ref_arr, prod_arr):
     """Check dimensions between successive products"""
