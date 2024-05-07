@@ -24,6 +24,7 @@ osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
 LOGGER = logging.getLogger('ariaPlot.py')
 
+
 def createParser():
     '''
     Make any of the following specified plot(s): ⊥ baseline + histogram,
@@ -53,8 +54,8 @@ def createParser():
              'have invalid/valid data represented by 0/1, respectively. '
              'If "Download", will use GSHHS water mask. If "NLCD", will mask '
              'classes 11, 12, 90, 95; see: https://www.mrlc.gov/national'
-            '-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover'
-            '-database-nlcd-2016')
+             '-land-cover-database-nlcd-201://www.mrlc.gov/national-land-cover'
+             '-database-nlcd-2016')
     parser.add_argument(
         '-at', '--amp_thresh', dest='amp_thresh', default=None, type=str,
         help='Amplitude threshold below which to mask. Specify "None" to '
@@ -71,16 +72,18 @@ def createParser():
     parser.add_argument(
         '-croptounion', '--croptounion', action='store_true',
         dest='croptounion',
-        help='If turned on, IFGs cropped to bounds based off of union and bbox '
-             '(if specified). Program defaults to crop all IFGs to bounds '
-             'based off of common intersection and bbox (if specified).')
+        help='If turned on, IFGs cropped to bounds based off of union and '
+             'bbox (if specified). Program defaults to crop all IFGs to '
+             'bounds based off of common intersection and bbox (if '
+             'specified).')
     parser.add_argument(
         '-plottracks', '--plottracks', action='store_true', dest='plottracks',
         help='Make plot of track latitude extents vs bounding bbox/common '
              'track extent.')
     parser.add_argument(
         '-plotbperp', '--plotbperp', action='store_true', dest='plotbperp',
-        help="Make a baseline plot, and a histogram of perpendicular baseline.")
+        help="Make a baseline plot, and a histogram of perpendicular "
+             "baseline.")
     parser.add_argument(
         '-plotbperpcoh', '--plotbperpcoh', action='store_true',
         dest='plotbperpcoh',
@@ -115,13 +118,15 @@ def createParser():
         help='Specify version as str, e.g. 2_0_4 or all prods; default: all')
     parser.add_argument(
         '--nc_version', dest='nc_version', default='1b',
-        help='Specify netcdf version as str, e.g. 1c or all prods; default: 1b')
+        help='Specify netcdf version as str, e.g. 1c or all prods; default: '
+             '1b')
     parser.add_argument(
         '-v', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
         '--log-level', default='warning', help='Logger log level')
     return parser
+
 
 def main(inps=None):
     parser = createParser()
@@ -158,31 +163,35 @@ def main(inps=None):
     # pass number of threads for gdal multiprocessing computation
     if args.num_threads.lower() == 'all':
         import multiprocessing
-        LOGGER.info('User specified use of all %s threads for gdal multiprocessing',
-                 multiprocessing.cpu_count())
+        LOGGER.info(
+            'User specified use of all %s threads for gdal multiprocessing',
+            multiprocessing.cpu_count())
         args.num_threads = 'ALL_CPUS'
     LOGGER.info(
         'Thread count specified for gdal multiprocessing = %s',
         args.num_threads)
 
     if args.plottracks or args.plotcoh or args.makeavgoh or args.plotbperpcoh:
-        # extract/merge productBoundingBox layers for each pair and update dict,
-        # report common track bbox (default is to take common intersection, but
-        # user may specify union), and expected shape for DEM.
+        # extract/merge productBoundingBox layers for each pair and update
+        # dict, report common track bbox (default is to take common
+        # intersection, but user may specify union), and expected shape for
+        # DEM.
 
         # TODO make LHS a tuple
         standardproduct_info.products[0], standardproduct_info.products[1], \
             standardproduct_info.bbox_file, prods_TOTbbox, \
-            prods_TOTbbox_metadatalyr, arrres, proj = ARIAtools.extractProduct.merged_productbbox(
-            standardproduct_info.products[0], standardproduct_info.products[1],
-            os.path.join(args.workdir, 'productBoundingBox'),
-            standardproduct_info.bbox_file, args.croptounion,
-            num_threads=args.num_threads,
-            minimumOverlap=args.minimumOverlap, verbose=args.verbose)
+            prods_TOTbbox_metadatalyr, arrres, proj = \
+                ARIAtools.extractProduct.merged_productbbox(
+                    standardproduct_info.products[0],
+                    standardproduct_info.products[1],
+                    os.path.join(args.workdir, 'productBoundingBox'),
+                    standardproduct_info.bbox_file, args.croptounion,
+                    num_threads=args.num_threads,
+                    minimumOverlap=args.minimumOverlap, verbose=args.verbose)
 
         # Load or download mask (if specified).
         if args.mask is not None:
-            # TODO refactor these list comps, this is not understandable in any way
+            # TODO refactor these list comps, this is not understandable
             args.mask = ARIAtools.util.mask.prep_mask(
                 [[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist],
                                    [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]],

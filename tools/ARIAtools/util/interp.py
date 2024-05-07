@@ -8,6 +8,7 @@
 import numpy as np
 import scipy.interpolate
 
+
 class InterpCube(object):
     """Class to interpolate intersection of cube with DEM."""
 
@@ -34,4 +35,3 @@ class InterpCube(object):
         vals = np.array([x(line, pix)[0, 0] for x in self.interp])
         est = scipy.interpolate.interp1d(self.hgts, vals, kind='cubic')
         return est(h) + self.offset
-

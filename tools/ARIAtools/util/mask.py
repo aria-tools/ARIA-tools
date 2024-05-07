@@ -195,4 +195,3 @@ def prep_mask(
 
     # return filename of mask
     return maskfilename
-

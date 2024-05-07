@@ -21,6 +21,7 @@ from ARIAtools.util.shp import open_shp
 
 LOGGER = logging.getLogger(__name__)
 
+
 class PlotClass(object):
     """ Class to generate standard plots for ARIA products. """
     mpl._log.setLevel('ERROR')
@@ -108,8 +109,8 @@ class PlotClass(object):
             pbaseline_nodata = pbaseline_nodata.GetRasterBand(
                 1).GetNoDataValue()
             pbaseline_val = gdal.BuildVRT('', i[1]).ReadAsArray()
-            pbaseline_val = np.ma.masked_where(pbaseline_val == pbaseline_nodata,
-                                               pbaseline_val)
+            pbaseline_val = np.ma.masked_where(
+                pbaseline_val == pbaseline_nodata, pbaseline_val)
             pbaseline_val = pbaseline_val.mean()
             # Record baseline val for histogram
             baseline_hist.append(pbaseline_val)
@@ -454,13 +455,13 @@ class PlotClass(object):
             slaves.append(pd.to_datetime(i[1][:8]))
             masters.append(pd.to_datetime(i[1][9:]))
             # Open coherence file
-            coh_file = gdal.Warp('', self.product_dict[2][i[0]], format="MEM",
-                                 cutlineDSName=self.prods_TOTbbox,
-                                 outputBounds=self.bbox_file, resampleAlg='average',
-                                 targetAlignedPixels=True,
-                                 xRes=self.arrres[0], yRes=self.arrres[1],
-                                 multithread=True,
-                                 options=[f'NUM_THREADS={self.num_threads}'])
+            coh_file = gdal.Warp(
+                '', self.product_dict[2][i[0]], format="MEM",
+                cutlineDSName=self.prods_TOTbbox,
+                outputBounds=self.bbox_file, resampleAlg='average',
+                targetAlignedPixels=True,
+                xRes=self.arrres[0], yRes=self.arrres[1], multithread=True,
+                options=[f'NUM_THREADS={self.num_threads}'])
 
             # Apply mask (if specified).
             if self.mask is not None:

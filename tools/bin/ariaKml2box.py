@@ -16,6 +16,7 @@ gdal.UseExceptions()
 
 LOGGER = logging.getLogger('ariaKml2box.py')
 
+
 def createParser():
     '''
     Convert .kml files of Google Earth polygons to GeoJSON files which
@@ -38,6 +39,7 @@ def createParser():
     parser.add_argument(
         '--log-level', default='warning', help='Logger log level')
     return parser
+
 
 def main():
     parser = createParser()

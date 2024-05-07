@@ -42,8 +42,8 @@ Once the (absolute) misclosure is calculated, the user can view the time
 history of any pixel by clicking on the maps.
 
 Thumbnail images of the misclosure associated with any given triplet are
-saved in the MisclosureFigs folder. Additionally, georeferenced tiffs of the cumulative misclosure and absolute cumulative
-misclosure maps are saved.
+saved in the MisclosureFigs folder. Additionally, georeferenced tiffs of the
+cumulative misclosure and absolute cumulative misclosure maps are saved.
 '''
 
 EXAMPLES = '''EXAMPLES
@@ -58,6 +58,7 @@ ariaMisclosure.py -f stack/unwrapStack.vrt -refLon 89.358 -refLat 32.621
 # Limit triplet selection by time interval (12 days to 48 days)
 ariaMisclosure.py -f stack/unwrapStack.vrt --mintime 12 --maxtime 48
 '''
+
 
 def create_parser():
     parser = argparse.ArgumentParser(
@@ -166,7 +167,7 @@ def main(inps=None):
         verbose=args.verbose)
 
     # Plot pairs if requested
-    if args.plotPairs == True:
+    if args.plotPairs:
         dataStack.plotPairs()
 
     # Create list of triplets
@@ -175,7 +176,7 @@ def main(inps=None):
         printTriplets=args.printTriplets)
 
     # Plot triplets if requested
-    if args.plotTriplets == True:
+    if args.plotTriplets:
         dataStack.plotTriplets()
 
     # Compute misclosure

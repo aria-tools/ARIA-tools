@@ -530,25 +530,25 @@ def merged_productbbox(
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     """Wrapper to create raster and apply projection"""
     # open original raster
-    osgeo.gdal.BuildVRT(fname+'_temp.vrt', data_lis)
-    da = rioxarray.open_rasterio(fname+'_temp.vrt', masked=True)
+    osgeo.gdal.BuildVRT(fname + '_temp.vrt', data_lis)
+    da = rioxarray.open_rasterio(fname + '_temp.vrt', masked=True)
 
     # Reproject the raster to the desired projection
     reproj_da = da.rio.reproject(f'EPSG:{proj}',
                                  resampling=rasterio.enums.Resampling.nearest,
                                  nodata=0)
     reproj_da.rio.to_raster(fname, driver=driver, crs=f'EPSG:{proj}')
-    os.remove(fname+'_temp.vrt')
+    os.remove(fname + '_temp.vrt')
     da.close()
     reproj_da.close()
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
-    osgeo.gdal.BuildVRT(fname+'.vrt', fname, options=buildvrt_options)
+    osgeo.gdal.BuildVRT(fname + '.vrt', fname, options=buildvrt_options)
 
     if hgt_field is not None:
         # write height layers
         hgt_meta = osgeo.gdal.Open(data_lis[0]).GetMetadataItem(hgt_field)
         osgeo.gdal.Open(
-            fname+'.vrt').SetMetadataItem(hgt_field, hgt_meta)
+            fname + '.vrt').SetMetadataItem(hgt_field, hgt_meta)
 
     return
 
@@ -1374,7 +1374,7 @@ def export_products(
 
     end_time = time.time()
     LOGGER.debug(
-        "export_product_worker took %f seconds" % (end_time-start_time))
+        "export_product_worker took %f seconds" % (end_time - start_time))
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(
@@ -1398,7 +1398,6 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     3D layers with a DEM.
     Lat/lon arrays must also be passed for this process.
     """
-    #arrshape = [dem.RasterYSize, dem.RasterXSize]
     ref_geotrans = dem.GetGeoTransform()
     dem_arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
 
@@ -1498,8 +1497,9 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': dem_bounds, 'dstNodata': data_array_nodata,
-        'xRes': dem_arrres[0], 'yRes': dem_arrres[1], 'targetAlignedPixels': True,
-        'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
+        'xRes': dem_arrres[0], 'yRes': dem_arrres[1],
+        'targetAlignedPixels': True, 'multithread': True,
+        'options': [f'NUM_THREADS={num_threads}']}
     warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
     osgeo.gdal.Warp(tmp_name + '_temp', tmp_name, options=warp_options)
 

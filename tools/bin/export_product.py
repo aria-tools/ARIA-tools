@@ -12,6 +12,7 @@ import os
 
 import ARIAtools.extractProduct
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -33,6 +34,7 @@ def main():
 
     with open(outfile, 'w') as ofp:
         json.dump(outputs, ofp)
+
 
 if __name__ == "__main__":
     main()

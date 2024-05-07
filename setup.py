@@ -49,9 +49,16 @@ print(f'ARIA-tools {version} {date}')
 # If third party package is found compile as well
 if os.path.isdir(relaxPath):
     print('Installing ARIA-tools with support for RelaxIV')
-    module1 = Extension('ARIAtools.demo', sources=['tools/bindings/relaxIVdriver.cpp',
-                                                   'tools/bindings/unwcompmodule.cpp',
-                                                   os.path.join(relaxPath, 'RelaxIV/RelaxIV.C')], include_dirs=['tools/include', os.path.join(relaxPath, 'MCFClass'), os.path.join(relaxPath, 'OPTUtils'), os.path.join(relaxPath, 'RelaxIV')])
+    module1 = Extension(
+        'ARIAtools.demo',
+        sources=[
+            'tools/bindings/relaxIVdriver.cpp',
+            'tools/bindings/unwcompmodule.cpp',
+            os.path.join(relaxPath, 'RelaxIV/RelaxIV.C')],
+        include_dirs=[
+            'tools/include', os.path.join(relaxPath, 'MCFClass'),
+            os.path.join(relaxPath, 'OPTUtils'),
+            os.path.join(relaxPath, 'RelaxIV')])
 
     setup(name='ARIAtools',
           version=version0,
@@ -59,7 +66,10 @@ if os.path.isdir(relaxPath):
           ext_modules=[module1],
           packages=['ARIAtools'],
           package_dir={'': 'tools'},
-          scripts=['tools/bin/ariaPlot.py', 'tools/bin/ariaDownload.py', 'tools/bin/ariaExtract.py', 'tools/bin/ariaTSsetup.py', 'tools/bin/ariaAOIassist.py', 'tools/bin/ariaMisclosure.py'])
+          scripts=['tools/bin/ariaPlot.py', 'tools/bin/ariaDownload.py',
+                   'tools/bin/ariaExtract.py', 'tools/bin/ariaTSsetup.py',
+                   'tools/bin/ariaAOIassist.py', 'tools/bin/ariaMisclosure.py'
+                   'tools/bin/export_product.py'])
 else:
     # Third party package RelaxIV not found
     print('Installing ARIA-tools without support for RelaxIV')
@@ -69,4 +79,7 @@ else:
           description='This is the ARIA tools package without RelaxIV support',
           packages=['ARIAtools'],
           package_dir={'': 'tools'},
-          scripts=['tools/bin/ariaPlot.py', 'tools/bin/ariaDownload.py', 'tools/bin/ariaExtract.py', 'tools/bin/ariaTSsetup.py', 'tools/bin/ariaAOIassist.py', 'tools/bin/ariaMisclosure.py'])
+          scripts=['tools/bin/ariaPlot.py', 'tools/bin/ariaDownload.py',
+                   'tools/bin/ariaExtract.py', 'tools/bin/ariaTSsetup.py',
+                   'tools/bin/ariaAOIassist.py', 'tools/bin/ariaMisclosure.py',
+                   'tools/bin/export_product.py'])

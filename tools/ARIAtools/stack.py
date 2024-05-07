@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 
 LOGGER = logging.getLogger(__name__)
 
+
 # STACK OBJECT ---
 class Stack:
     '''
@@ -170,7 +171,8 @@ class Stack:
     def __formatExcludePairs__(self):
         '''
         Check that exclude dates are in one of two formats:
-        1. a string containing the pairs in YOUNGER_OLDER format, space-separated
+        1. a string containing the pairs in YOUNGER_OLDER format,
+           space-separated
         2. a .txt file with lines of the same formatting
         Formatting should match "pair" formatting: [[master,slave]]
         '''
@@ -231,8 +233,9 @@ class Stack:
         # Legend
         handles, labels = pairAx.get_legend_handles_labels()
         uniqueLabels = dict(zip(labels, handles))
-        pairAx.legend(uniqueLabels.values(), uniqueLabels.keys(),
-                      bbox_to_anchor=(0.005, 0.99), loc='upper left', borderaxespad=0.)
+        pairAx.legend(
+            uniqueLabels.values(), uniqueLabels.keys(),
+            bbox_to_anchor=(0.005, 0.99), loc='upper left', borderaxespad=0.)
 
         # Other formatting
         pairAx.set_yticks([])
@@ -279,14 +282,15 @@ class Stack:
         self.nTriplets = len(self.triplets)
 
         # Print to text file
-        with open(os.path.join(self.workdir, 'ValidTriplets.txt'), 'w') as tripletFile:
+        with open(os.path.join(
+                self.workdir, 'ValidTriplets.txt'), 'w') as tripletFile:
             for triplet in self.triplets:
                 strPair = [self.__datePair2strPair__(pair) for pair in triplet]
                 tripletFile.write('{}\n'.format(strPair))
             tripletFile.close()
 
         # Report if requested
-        if printTriplets == True:
+        if printTriplets:
 
             # Print to screen
             LOGGER.info('Existing triplets:')
@@ -294,7 +298,7 @@ class Stack:
                 LOGGER.info([
                     self.__datePair2strPair__(pair) for pair in triplet])
 
-        if self.verbose == True:
+        if self.verbose:
             LOGGER.info(
                 '%s existing triplets found based on search criteria',
                 self.nTriplets)
@@ -425,11 +429,11 @@ class Stack:
     # Reference point formatting
     def __referencePoint__(self, refXY, refLoLa):
         '''
-        Determine the reference point in XY coordinates. The reference point can be
-        automatically or manually selected by the user and is subtracted
-        from each interferogram.
-        The point can be given in pixels or lon/lat coordinates. If given in Lat/Lon, determine
-        the location in XY.
+        Determine the reference point in XY coordinates. The reference point
+        can be automatically or manually selected by the user and is
+        subtracted from each interferogram.
+        The point can be given in pixels or lon/lat coordinates. If given in
+        Lat/Lon, determine the location in XY.
         '''
         LOGGER.debug('Determining reference point...')
 
@@ -460,7 +464,8 @@ class Stack:
     # Random reference point
     def __autoReferencePoint__(self):
         '''
-        Use the coherence stack to automatically determine a suitable reference point.
+        Use the coherence stack to automatically determine a suitable
+        reference point.
         '''
         # Load coherence data from cohStack.vrt
         cohfile = os.path.join(self.imgdir, 'cohStack.vrt')
@@ -479,7 +484,7 @@ class Stack:
 
         # Loop until suitable reference point is found
         n = 0
-        while cohMask[self.refY, self.refX] == False:
+        while not cohMask[self.refY, self.refX]:
 
             # Reselect reference points
             self.refX = np.random.randint(cohDS.RasterXSize)
@@ -606,7 +611,7 @@ class Stack:
         Plot misclosure timeseries.
         '''
         # Plot data
-        if self.plotTimeIntervals == False:
+        if not self.plotTimeIntervals:
             ax.plot([tripletDate[1]
                     for tripletDate in self.tripletDates], data, '-k.')
         else:
@@ -760,7 +765,8 @@ class Stack:
             qLon, qLat = self.XY2LoLa(queryXY[0], queryXY[1])
 
         LOGGER.debug(
-            'Query point: X %s / Y %s; Lon %.4f / Lat %.4f', qx, qy, qLon, qLat)
+            'Query point: X %s / Y %s; Lon %.4f / Lat %.4f',
+            qx, qy, qLon, qLat)
 
         # Plot query points on map
         self.netMscAx.plot(

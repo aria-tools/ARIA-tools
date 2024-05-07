@@ -159,10 +159,12 @@ def resampleRaster(
             unwmap = np.array(unwmap)
 
             # finalize unw array shape
-            indx0 = int(decimal.Decimal(ds_unw.shape[0] / multilooking).quantize(
-                0, decimal.ROUND_HALF_UP))
-            indx1 = int(decimal.Decimal(ds_unw.shape[1] / multilooking).quantize(
-                0, decimal.ROUND_HALF_UP))
+            indx0 = int(decimal.Decimal(
+                ds_unw.shape[0] / multilooking).quantize(
+                    0, decimal.ROUND_HALF_UP))
+            indx1 = int(decimal.Decimal(
+                ds_unw.shape[1] / multilooking).quantize(
+                    0, decimal.ROUND_HALF_UP))
             unwmap = unwmap[0:indx0, 0:indx1]
             unwmap = np.ma.masked_invalid(unwmap)
             np.ma.set_fill_value(unwmap, ds_unw_nodata)

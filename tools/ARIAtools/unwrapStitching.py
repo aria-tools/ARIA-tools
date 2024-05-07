@@ -327,11 +327,10 @@ class Stitching:
             self.outFileUnw + '.vrt', unwFiles,
             options=osgeo.gdal.BuildVRTOptions(srcNodata=0))
 
-
         warp_options = osgeo.gdal.WarpOptions(
             format=self.outputFormat, cutlineDSName=self.setTotProdBBoxFile,
-           outputBounds=self.bbox_file, xRes=self.arrres[0], yRes=self.arrres[1],
-           targetAlignedPixels=True)
+            outputBounds=self.bbox_file, xRes=self.arrres[0],
+            yRes=self.arrres[1], targetAlignedPixels=True)
         osgeo.gdal.Warp(
             self.outFileUnw, self.outFileUnw + '.vrt', options=warp_options)
 
@@ -343,7 +342,8 @@ class Stitching:
 
         # Apply mask (if specified).
         if self.mask is not None:
-            update_file = osgeo.gdal.Open(self.outFileUnw, osgeo.gdal.GA_Update)
+            update_file = osgeo.gdal.Open(
+                self.outFileUnw, osgeo.gdal.GA_Update)
             msk_arr = self.mask.ReadAsArray() * \
                 osgeo.gdal.Open(self.outFileUnw + '.vrt').ReadAsArray()
             update_file = update_file.GetRasterBand(1).WriteArray(msk_arr)
@@ -421,11 +421,13 @@ class UnwrapOverlap(Stitching):
             raise Exception
 
         if self.ccFile is None:
-            LOGGER.error("Input Connected Components file(s) is (are) not set.")
+            LOGGER.error(
+                "Input Connected Components file(s) is (are) not set.")
             raise Exception
 
         if self.prodbboxFile is None:
-            LOGGER.error("Input product Bounding box file(s) is (are) not set.")
+            LOGGER.error(
+                "Input product Bounding box file(s) is (are) not set.")
             raise Exception
 
         # Verify if all the inputs are well-formed/GDAL compatible
@@ -503,18 +505,20 @@ class UnwrapOverlap(Stitching):
 
                 warp_options = osgeo.gdal.WarpOptions(
                     format="MEM", cutlineDSName=outname,
-                    outputBounds=polyOverlap.bounds, dstNodata=connCompNoData1,
-                   xRes=self.arrres[0], yRes=self.arrres[1],
-                   targetAlignedPixels=True)
+                    outputBounds=polyOverlap.bounds,
+                    dstNodata=connCompNoData1,
+                    xRes=self.arrres[0], yRes=self.arrres[1],
+                    targetAlignedPixels=True)
                 connCompFile1 = osgeo.gdal.Warp(
                     '', self.ccFile[counter], options=warp_options)
 
                 # need to specify spacing to avoid inconsistent dimensions
                 warp_options = osgeo.gdal.WarpOptions(
                     format="MEM", cutlineDSName=outname,
-                    outputBounds=polyOverlap.bounds, dstNodata=connCompNoData2,
-                    xRes=self.arrres[0], yRes=self.arrres[1],
-                    targetAlignedPixels=True, multithread=True)
+                    outputBounds=polyOverlap.bounds,
+                    dstNodata=connCompNoData2, xRes=self.arrres[0],
+                    yRes=self.arrres[1], targetAlignedPixels=True,
+                    multithread=True)
                 connCompFile2 = osgeo.gdal.Warp(
                     '', self.ccFile[counter + 1], options=warp_options)
 
@@ -719,7 +723,8 @@ class UnwrapComponents(Stitching):
             raise Exception
 
         if self.ccFile is None:
-            LOGGER.error("Input Connected Components file(s) is (are) not set.")
+            LOGGER.error(
+                "Input Connected Components file(s) is (are) not set.")
             raise Exception
 
         if self.solver not in SOLVER_TYPES:
@@ -729,7 +734,8 @@ class UnwrapComponents(Stitching):
                 str(unwTreeTypes))
 
         if self.redArcs not in REDARCS_TYPES.keys():
-            raise ValueError(self.redArcs + ' must be in ' + str(REDARCS_TYPES))
+            raise ValueError(
+                self.redArcs + ' must be in ' + str(REDARCS_TYPES))
 
         # Verify if all the inputs are well-formed/GDAL compatible
         # Update files to be vrt if they exist and remove files which failed
@@ -741,8 +747,8 @@ class UnwrapComponents(Stitching):
         # in "polyTableDict" variable.
         #  Key is a unique polygon [1, max number of unique polygons of all
         #   products]
-        #  Note: there can be components with mutiple polygons (e.g. inner/outer
-        #   edges)
+        #  Note: there can be components with mutiple polygons (e.g.
+        #   inner/outer edges)
         #  Each key will have a corresponding dictionary with keys:
         #       "connFile" = Original connected component file
         #       "connCompID" = Original ID connected component id (wrt original
@@ -832,8 +838,8 @@ class UnwrapComponents(Stitching):
                 polygonDict['sizeData'] = sizeData
 
                 # Track the mapping from connCompID to connCompID_unique
-                connCompMapping.append(
-                    [ccomp[poly_counter],
+                connCompMapping.append([
+                    ccomp[poly_counter],
                     ccomp[poly_counter] + connComp_offset])
 
                 # tracking how much the next file needs to be offsetted in
@@ -963,8 +969,8 @@ class UnwrapComponents(Stitching):
                             # parse inputs as a tuple
                             pairing = (
                                 polygon1, polygon2, connFile1, connFile2)
-                            pointDistance_temp, points_temp = minDistancePoints(
-                                pairing)
+                            pointDistance_temp, points_temp = \
+                                minDistancePoints(pairing)
                             points.append(points_temp)
                             pointDistance.append(pointDistance_temp)
 
@@ -1048,8 +1054,9 @@ class UnwrapComponents(Stitching):
                 connCompID1_temp = self.tablePoints[counter, 1]
                 connFile1_temp = self.tablePoints[counter, 2]
                 unwFile1_temp = self.tablePoints[counter, 3]
-                point1_temp = np.array(
-                    [self.tablePoints[counter, 4], self.tablePoints[counter, 5]])
+                point1_temp = np.array([
+                    self.tablePoints[counter, 4],
+                    self.tablePoints[counter, 5]])
                 geoTrans1_temp = self.tablePoints[counter, 6]
 
                 # parse inputs as a tuple
@@ -1083,8 +1090,9 @@ class UnwrapComponents(Stitching):
                 connCompID1_temp = self.tablePoints[counter, 1]
                 connFile1_temp = self.tablePoints[counter, 2]
                 unwFile1_temp = self.tablePoints[counter, 3]
-                point1_temp = np.array(
-                    [self.tablePoints[counter, 4], self.tablePoints[counter, 5]])
+                point1_temp = np.array([
+                    self.tablePoints[counter, 4],
+                    self.tablePoints[counter, 5]])
                 geoTrans1_temp = self.tablePoints[counter, 6]
                 # parse inputs as a tuple
                 inputs = (
@@ -1517,8 +1525,8 @@ def createConnComp_Int(inputs):
     unwVRTName = os.path.abspath(
         os.path.join(saveDir, 'unw', saveNameID + '.vrt'))
     buildSumVRT(
-        unwVRTName, unwRangeOffsetVRTName, scaleVRTName, connProj, connGeoTrans,
-        length, width, description=inputs['description'])
+        unwVRTName, unwRangeOffsetVRTName, scaleVRTName, connProj,
+        connGeoTrans, length, width, description=inputs['description'])
 
     return [connDataName, unwVRTName]
 
@@ -1624,7 +1632,8 @@ def buildScaleOffsetVRT(
         </ComplexSource>
     </VRTRasterBand>
 </VRTDataset>"""
-    # <SourceProperties RasterXSize="{lengthwidth}" RasterYSize="{length}" DataType="Float32"/>
+    # <SourceProperties RasterXSize="{lengthwidth}" RasterYSize="{length}"
+    #  DataType="Float32"/>
 
     # the inputs needed to build the vrt
     # load the width and length from the GDAL file in case not specified
@@ -1688,8 +1697,9 @@ def buildSumVRT(output, File1, File2, proj, geoTrans,
     with open('{0}'.format(output), 'w') as fid:
         fid.write(
             vrttmpl.format(
-                width=width, length=length, File1=File1, File2=File2, proj=proj,
-                geoTrans=str(geoTrans)[1:-1], description=description))
+                width=width, length=length, File1=File1, File2=File2,
+                proj=proj, geoTrans=str(geoTrans)[1:-1],
+                description=description))
 
 def point2unwPhase(inputs):
     """

@@ -392,7 +392,8 @@ class PhaseUnwrap(object):
             else:
                 self.loops = self.__createTriangulation(
                     delauneyTri, vertices, edges)
-                self.neutralResidue, self.neutralNodeIdx = self.__computeNeutralResidue()
+                self.neutralResidue, self.neutralNodeIdx = (
+                    self.__computeNeutralResidue())
 
             # Saving some variables for plotting
             self.__redArcs = redArcs
@@ -420,16 +421,19 @@ class PhaseUnwrap(object):
         '''
         Get Sequence of triangle points
         '''
-        def line(va, vb, vc): return (((vc.y - va.y) * (vb.x - va.x))
-                                      ) - ((vc.x - va.x) * (vb.y - va.y))
+        def line(va, vb, vc):
+            return (((vc.y - va.y) * (vb.x - va.x)) -
+                    ((vc.x - va.x) * (vb.y - va.y)))
 
         # Line equation through pt0 and pt1
         # Test for pt3 - Does it lie to the left or to the right ?
         pos3 = line(va, vb, vc)
-        if(pos3 > 0):
-            # left
+
+        # left
+        if pos3 > 0:
             return (va, vc, vb)
-        else:  # right
+        # right
+        else:
             return (va, vb, vc)
 
     # Create Delaunay Triangulation.
@@ -578,8 +582,9 @@ class PhaseUnwrap(object):
 
         # Generate the points in a sequence
         def getSeq(va, vb, vc):
-            def line(va, vb, vc): return (
-                ((vc.y - va.y) * (vb.x - va.x))) - ((vc.x - va.x) * (vb.y - va.y))
+            def line(va, vb, vc):
+                return (((vc.y - va.y) * (vb.x - va.x)) -
+                        ((vc.x - va.x) * (vb.y - va.y)))
 
             # Line equation through pt0 and pt1
             # Test for pt3 - Does it lie to the left or to the right ?
@@ -739,8 +744,8 @@ class PhaseUnwrap(object):
         try:
             from . import unwcomp
         except BaseException:
-            raise Exception("MCF requires RelaxIV solver - Please drop the RelaxIV software \
-                          into the src folder and re-make")
+            raise Exception("MCF requires RelaxIV solver - Please drop the "
+                            "RelaxIV software into the src folder and re-make")
         return unwcomp.relaxIVwrapper_Py(fileName)
 
     def solve(self, solver, filename="network.dmx"):
@@ -764,19 +769,24 @@ class PhaseUnwrap(object):
         # Solve the objective function
         if solver == 'glpk':
             LOGGER.info('Using GLPK MIP solver')
-            def MIPsolver(): return self.__prob__.solve(pulp.GLPK(msg=0))
+
+            def MIPsolver():
+                return self.__prob__.solve(pulp.GLPK(msg=0))
+
         elif solver == 'pulp':
             LOGGER.info('Using PuLP MIP solver')
-            def MIPsolver(): return self.__prob__.solve()
+
+            def MIPsolver():
+                return self.__prob__.solve()
+
         elif solver == 'gurobi':
             LOGGER.info('Using Gurobi MIP solver')
-            def MIPsolver(): return self.__prob__.solve(pulp.GUROBI_CMD())
+
+            def MIPsolver():
+                return self.__prob__.solve(pulp.GUROBI_CMD())
 
         LOGGER.info(
-            'Time Taken (in sec) to solve: %f',
-            T.timeit(
-                MIPsolver,
-                number=1))
+            'Time Taken (in sec) to solve: %f', T.timeit(MIPsolver, number=1))
 
         # Get solution
         for v, edge in self.__edges.items():
@@ -916,18 +926,24 @@ def firstPassCommandLine():
     parser = argparse.ArgumentParser(description='Phase Unwrapping')
 
     # Positional argument - Input XML file
-    parser.add_argument('--inputType', choices=['plane', 'sinc', 'sine'],
-                        help='Type of input to unwrap', default='plane', dest='inputType')
-    parser.add_argument('--dim', type=int, default=100,
-                        help='Dimension of the image (square)', dest='dim')
-    parser.add_argument('-c', action='store_true',
-                        help='Component-wise unwrap test', dest='compTest')
-    parser.add_argument('-MCF', action='store_true',
-                        help='Minimum Cost Flow', dest='mcf')
-    parser.add_argument('--redArcs', type=int, default=0,
-                        help='Redundant Arcs', dest='redArcs')
-    parser.add_argument('--solver', choices=['glpk', 'pulp', 'gurobi'],
-                        help='Type of solver', default='pulp', dest='solver')
+    parser.add_argument(
+        '--inputType', choices=['plane', 'sinc', 'sine'],
+        help='Type of input to unwrap', default='plane', dest='inputType')
+    parser.add_argument(
+        '--dim', type=int, default=100,
+        help='Dimension of the image (square)', dest='dim')
+    parser.add_argument(
+        '-c', action='store_true',
+        help='Component-wise unwrap test', dest='compTest')
+    parser.add_argument(
+        '-MCF', action='store_true',
+        help='Minimum Cost Flow', dest='mcf')
+    parser.add_argument(
+        '--redArcs', type=int, default=0,
+        help='Redundant Arcs', dest='redArcs')
+    parser.add_argument(
+        '--solver', choices=['glpk', 'pulp', 'gurobi'],
+        help='Type of solver', default='pulp', dest='solver')
 
     # Parse input
     args = parser.parse_args()
@@ -1011,7 +1027,8 @@ def main():
             xidx, yidx, wrapImg[xidx, yidx], redArcs=redArcs)
     else:
         phaseunwrap = PhaseUnwrap(
-            xidx, yidx, wrapImg[xidx, yidx], compImg[xidx, yidx], redArcs=redArcs)
+            xidx, yidx, wrapImg[xidx, yidx], compImg[xidx, yidx],
+            redArcs=redArcs)
 
     # Including the neutral node for min cost flow
     phaseunwrap.solve(solver)
@@ -1021,10 +1038,6 @@ def main():
     # phaseunwrap.plotDelaunay("final%d.png"%(redArcs))
     # phaseunwrap.plotSpanningTree("spanningTree%d.png"%(redArcs))
     phaseunwrap.plotResult("final%d.png" % (redArcs))
-
-    #import pdb; pdb.set_trace()
-    #fig = plt.figure()
-    #ax = fig.add_subplot(111, projection='3d')
 
 
 if __name__ == '__main__':

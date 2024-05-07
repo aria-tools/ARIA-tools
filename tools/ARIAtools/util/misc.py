@@ -9,6 +9,7 @@ import sys
 import time
 import numpy as np
 
+
 class ProgressBar:
     """Creates a text-based progress bar. Call the object with
     the simple print command to see the progress bar, which looks

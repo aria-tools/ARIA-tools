@@ -233,7 +233,7 @@ class AriaToolsScriptTester():
     @pytest.fixture(scope='class')
     def tester(self):
         with tarfile.open(os.path.join(
-                'golden_test_outputs', self.FLAVOR+'.tar.gz')) as tar:
+                'golden_test_outputs', self.FLAVOR + '.tar.gz')) as tar:
             tar.extractall(os.path.join('golden_test_outputs'))
 
         test_dir = os.path.join('test_outputs', self.FLAVOR)
@@ -271,7 +271,7 @@ class TestAriaDownload():
     @pytest.fixture(scope='class')
     def tester(self):
         with tarfile.open(os.path.join(
-                'golden_test_outputs', self.FLAVOR+'.tar.gz')) as tar:
+                'golden_test_outputs', self.FLAVOR + '.tar.gz')) as tar:
             tar.extractall(os.path.join('golden_test_outputs'))
 
         test_dir = os.path.join('test_outputs', self.FLAVOR)

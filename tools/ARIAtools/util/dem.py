@@ -20,6 +20,7 @@ import ARIAtools.util.shp
 
 LOGGER = logging.getLogger(__name__)
 
+
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
              proj, arrres=None, workdir='./',
              outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
@@ -47,8 +48,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     if demfilename.lower() == 'download':
         if dem_name not in dem_stitcher.datasets.DATASETS:
             raise ValueError(
-                '%s must be in %s' % (dem_name, ', '.join(
-                dem_stitcher.datasets.DATASETS)))
+                '%s must be in %s' % (
+                    dem_name, ', '.join(dem_stitcher.datasets.DATASETS)))
 
         LOGGER.info("Downloading DEM...")
         demfilename = download_dem(
@@ -146,5 +147,3 @@ def download_dem(
     vrt_path = f'{root}_uncropped.vrt'
     ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
     return vrt_path
-
-

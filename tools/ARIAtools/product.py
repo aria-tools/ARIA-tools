@@ -87,8 +87,9 @@ def package_dict(scene, new_scene, scene_ind,
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
         dict_vals = [[
-            subitem for item in a for subitem in (item if
-            isinstance(item, list) else [item])] for a in zip(
+            subitem for item in a for subitem in (
+                item if isinstance(item, list) else [item])]
+            for a in zip(
                 sorted_dict[dict_ind][scene_ind].values(),
                 new_scene[scene_ind].values())]
 
@@ -924,7 +925,7 @@ class Product:
         datalyr_dict[
             'productBoundingBoxFrames'] = fname + '":' + sdskeys[0]
         for i in enumerate(layerkeys):
-            datalyr_dict[i[1]] = fname + '":'+sdskeys[i[0]]
+            datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
         # Rewrite tropo and iono keys
         datalyr_dict['ionosphere'] = datalyr_dict.pop(

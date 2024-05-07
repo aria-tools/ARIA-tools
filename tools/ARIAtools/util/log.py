@@ -59,18 +59,3 @@ class CustomFormatter(UnixColorFormatter):
         if record.levelno >= logging.WARNING:
             message = ": ".join((record.levelname, message))
         return message
-
-# TODO decide to keep or remove this older code
-# stdout_handler = logging.StreamHandler(sys.stdout)
-# stdout_handler.setFormatter(CustomFormatter(use_color=os.name != "nt"))
-# 
-# errorfile_handler = logging.FileHandler("error.log")
-# errorfile_handler.setFormatter(logging.Formatter(
-#     "[{asctime}] {funcName:>20}:{lineno:<5} {levelname:<10} {message}",
-#     style="{"))
-# errorfile_handler.setLevel(logging.WARNING)
-# 
-# logger.addHandler(stdout_handler)
-# logger.addHandler(errorfile_handler)
-# logger = logging.getLogger("ARIAtools")
-# logger.setLevel(logging.INFO)
