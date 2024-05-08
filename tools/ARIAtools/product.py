@@ -398,7 +398,7 @@ class Product:
                 # Save polygon in shapefile
                 ARIAtools.util.shp.save_shp(
                     os.path.join(workdir, 'user_bbox.json'),
-                    self.bbox, 'GeoJSON')
+                    self.bbox, self.projection, drivername='GeoJSON')
                 self.bbox_file = os.path.join(workdir, 'user_bbox.json')
 
                 LOGGER.info(

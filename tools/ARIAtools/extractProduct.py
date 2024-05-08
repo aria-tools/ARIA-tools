@@ -944,12 +944,10 @@ def export_product_worker(
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
     # Extract/crop metadata layers
-    if (
-        any(':/science/grids/imagingGeometry' in s for s in product) or
-        any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)
-    ):
+    if (any(':/science/grids/imagingGeometry' in s for s in product) or
+        any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
         # make VRT pointing to metadata layers in standard product
-        hgt_field, model_name, outname = prep_metadatalayers(
+        hgt_field, outname = prep_metadatalayers(
             outname, product, dem_expanded, layer, layers,
             is_nisar_file, proj)
 
