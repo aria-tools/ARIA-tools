@@ -902,7 +902,7 @@ def export_product_worker(
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
         outputFormat, outputFormatPhys, layer, outDir,
         arrres, epsg_code, num_threads, multilooking, verbose, is_nisar_file,
-        range_correction):
+        range_correction, rankedResampling):
     """
     Worker function for export_products for parallel execution with
     multiprocessing package.
@@ -1309,7 +1309,8 @@ def export_products(
                 workdir, bounds, prods_TOTbbox, demfile,
                 demfile_expanded, maskfile, outputFormat, outputFormatPhys,
                 layer, outDir, arrres, epsg_code, num_threads,
-                multilooking, verbose, is_nisar_file, range_correction))
+                multilooking, verbose, is_nisar_file, range_correction,
+                rankedResampling))
 
     start_time = time.time()
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
