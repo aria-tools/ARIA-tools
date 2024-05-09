@@ -1162,7 +1162,7 @@ class Product:
             for item in self.products:
                 if item[0]['pair_name'] in track_rejected_pairs:
                     record_rejected_scenes.append(
-                        item[1]['productBoundingBox'].split('"')[1])
+                        item[1]['unwrappedPhase'].split('"')[1])
 
             for record_rejected_scene in list(set(record_rejected_scenes)):
                 LOGGER.debug(os.path.basename(record_rejected_scene))
@@ -1225,7 +1225,7 @@ class Product:
             LOGGER.debug(
                 'Specifically, the following GUNW products were rejected:')
             for i in self.files:
-                product_bboxes = [i[1]['productBoundingBox'].split('"')[1]
+                product_bboxes = [i[1]['unwrappedPhase'].split('"')[1]
                                   for i in self.products]
                 if i not in product_bboxes:
                     LOGGER.debug(os.path.basename(i))
