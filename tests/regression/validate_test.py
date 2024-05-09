@@ -81,6 +81,9 @@ class ENVIDataTester(object):
 
             test_file = os.path.join(test_dir, filepath)
             test = osgeo.gdal.Open(test_file)
+            if test is None:
+                LOGGER.error('Unable to load test file: %s', test_file)
+
             self.test_data[filetype] = {
                 'data': test.ReadAsArray(),
                 'fill_value': test.GetRasterBand(1).GetNoDataValue(),
@@ -88,6 +91,9 @@ class ENVIDataTester(object):
 
             ref_file = os.path.join(ref_dir, filepath)
             ref = osgeo.gdal.Open(ref_file)
+            if ref is None:
+                LOGGER.error('Unable to load ref file: %s', ref_file)
+
             self.ref_data[filetype] = {
                 'data': ref.ReadAsArray(),
                 'fill_value': ref.GetRasterBand(1).GetNoDataValue(),
