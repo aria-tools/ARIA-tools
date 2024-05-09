@@ -1195,8 +1195,8 @@ class Product:
         # Sort by pair, start time, and latitude
         self.products = list(sorted(
             [i for i in self.products if i != []], key=lambda i: (
-                i[0]['pair_name'], i[0]['azimuthZeroDopplerMidTime'],
-                i[0]['centerLatitude'])))
+                i[0]['pair_name'], i[0]['centerLatitude'],
+                i[0]['azimuthZeroDopplerMidTime'])))
 
         # determine if there is a mix of different sensors
         s1_prods = all(i[0]['missionID'] ==
