@@ -135,7 +135,7 @@ def remove_scenes(products):
                 dict_item = None
                 for item in sorted_products:
                     scene_in_ifg = scene[1][
-                        'productBoundingBox'] in item[1]['productBoundingBox']
+                        'unwrappedPhase'] in item[1]['unwrappedPhase']
                     if scene_in_ifg:
                         dict_item = item
                         break
@@ -162,7 +162,7 @@ def remove_scenes(products):
                 track_existing_ifg = []
                 for item in sorted_products:
                     scene_in_ifg = scene[1][
-                        'productBoundingBox'] in item[1]['productBoundingBox']
+                        'unwrappedPhase'] in item[1]['unwrappedPhase']
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
@@ -175,7 +175,7 @@ def remove_scenes(products):
                 track_existing_ifg = []
                 for item in sorted_products:
                     scene_in_ifg = new_scene[1][
-                        'productBoundingBox'] in item[1]['productBoundingBox']
+                        'unwrappedPhase'] in item[1]['unwrappedPhase']
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
@@ -1080,7 +1080,7 @@ class Product:
                 dict_item = None
                 for item in sorted_products:
                     scene_in_ifg = scene[1][
-                        'productBoundingBox'] in item[1]['productBoundingBox']
+                        'unwrappedPhase'] in item[1]['unwrappedPhase']
                     if scene_in_ifg:
                         dict_item = item
                         break
@@ -1119,7 +1119,7 @@ class Product:
                 track_existing_ifg = []
                 for item in sorted_products:
                     scene_in_ifg = scene[1][
-                        'productBoundingBox'] in item[1]['productBoundingBox']
+                        'unwrappedPhase'] in item[1]['unwrappedPhase']
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
                 ref_not_rejected = scene[0][
@@ -1134,7 +1134,7 @@ class Product:
                 track_existing_ifg = []
                 for item in sorted_products:
                     scene_in_ifg = new_scene[1][
-                        'productBoundingBox'] in item[1]['productBoundingBox']
+                        'unwrappedPhase'] in item[1]['unwrappedPhase']
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
                 scene_not_rejected = new_scene[0][
