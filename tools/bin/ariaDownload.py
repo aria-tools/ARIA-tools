@@ -279,12 +279,11 @@ class Downloader(object):
                     scenes.download(self.args.wd, processes=nt)
 
             LOGGER.info(
-                f'Download complete. Wrote -- {len(scenes)} -- products to: '
-                '{self.args.wd}')
+                'Download complete. Wrote %s products to: %s', len(scenes),
+                self.args.wd)
 
-        if self.args.verbose:
-            for scene in scenes:
-                LOGGER.info(scene.geojson()['properties']['sceneName'])
+        for scene in scenes:
+            LOGGER.debug(scene.geojson()['properties']['sceneName'])
 
         return
 
