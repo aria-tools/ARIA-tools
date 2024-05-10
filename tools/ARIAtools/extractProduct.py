@@ -721,6 +721,10 @@ def handle_epoch_layers(
         sec_workdir = copy.deepcopy(workdir)
         ref_workdir = copy.deepcopy(workdir)
 
+    # Set output res
+    if multilooking is not None:
+        arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
+
     # If specified workdir doesn't exist, create it
     all_workdirs = [workdir, sec_workdir, ref_workdir]
     all_workdirs = list(set(all_workdirs))
@@ -873,7 +877,7 @@ def handle_epoch_layers(
                 finalize_metadata(
                     j[1][:-4], bounds, arrres, dem_bounds, prods_TOTbbox,
                     dem, lat, lon, hgt_field, prod_ver_list, is_nisar_file,
-                    mask, outputFormat, verbose=verbose)
+                    outputFormat, verbose=verbose)
 
                 # Track consistency of dimensions
                 if j[0] == 0:
@@ -954,8 +958,8 @@ def export_product_worker(
         # Interpolate/intersect with DEM before cropping
         finalize_metadata(
             outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
-            lat, lon, hgt_field, product, is_nisar_file, mask,
-            outputFormatPhys, verbose=verbose)
+            lat, lon, hgt_field, product, is_nisar_file, outputFormatPhys,
+            verbose=verbose)
 
     # Extract/crop full res layers, except for "unw" and "conn_comp"
     # which requires advanced stitching
@@ -1021,11 +1025,7 @@ def export_product_worker(
                         osgeo.gdal.Open(j + '.vrt').ReadAsArray()
                     update_file.GetRasterBand(1).WriteArray(mask_arr)
 
-    if layer != 'unwrappedPhase' and layer != 'connectedComponents' and \
-            not any(":/science/grids/imagingGeometry"
-                    in s for s in product) and \
-            not any(":/science/grids/corrections"
-                    in s for s in product):
+    if layer != 'unwrappedPhase' and layer != 'connectedComponents':
 
         # If necessary, resample raster
         if multilooking is not None:
@@ -1262,8 +1262,14 @@ def export_products(
         prog_bar = ARIAtools.util.misc.ProgressBar(
             maxValue=len(product_dict[0]), prefix='Generating: ' + key + ' - ')
 
+        # Set output res
+        if multilooking is not None:
+            iono_arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
+        else:
+            iono_arrres = arrres
+
         lyr_input_dict = dict(input_iono_files=None,
-                              arrres=arrres,
+                              arrres=iono_arrres,
                               epsg=epsg_code,
                               output_iono=None,
                               output_format=outputFormat,
@@ -1390,8 +1396,7 @@ def export_products(
 
 def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
                       dem, lat, lon, hgt_field, prod_list, is_nisar_file=False,
-                      mask=None, outputFormat='ENVI', verbose=None,
-                      num_threads='2'):
+                      outputFormat='ENVI', verbose=None, num_threads='2'):
     """Interpolate and extract 2D metadata layer.
     2D metadata layer is derived by interpolating and then intersecting
     3D layers with a DEM.
@@ -1519,17 +1524,6 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     translate_options = osgeo.gdal.TranslateOptions(format="VRT")
     osgeo.gdal.Translate(
         outname + '.vrt', outname, options=translate_options)
-
-    # Apply mask (if specified)
-    if mask is not None:
-        out_interpolated = (
-            mask.ReadAsArray() * osgeo.gdal.Open(outname).ReadAsArray())
-
-        # Update VRT with new raster
-        update_file = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
-        update_file.GetRasterBand(1).WriteArray(out_interpolated)
-        update_file = None
-        out_interpolated = None
 
     data_array = None
 

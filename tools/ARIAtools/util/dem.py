@@ -24,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
              proj, arrres=None, workdir='./',
              outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
-             multilooking=None, rankedResampling=False):
+             multilooking=1, rankedResampling=False):
     """
     Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
@@ -44,6 +44,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         LOGGER.warning(
             "Cannot proceed with VRT format, using ENVI format instead")
         outputFormat = 'ENVI'
+
+    # Set output res
+    arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
     if demfilename.lower() == 'download':
         if dem_name not in dem_stitcher.datasets.DATASETS:
@@ -90,22 +93,14 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
             'Applied cutline to produce 3 arc-sec SRTM DEM: %s',
             aria_dem)
 
-    # Apply multilooking, if specified
-    if multilooking is not None:
-        ARIAtools.util.vrt.resampleRaster(
-            aria_dem, multilooking, bounds, prods_TOTbbox, rankedResampling,
-            outputFormat=outputFormat, num_threads=num_threads)
-        ds_aria = osgeo.gdal.Open(aria_dem)
-
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
     bounds = list(
         ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr).bounds)
 
-    gt = ds_aria.GetGeoTransform()
     gdal_warp_kwargs = {
-        'format': outputFormat, 'outputBounds': bounds, 'xRes': abs(gt[1]),
-        'yRes': abs(gt[-1]), 'targetAlignedPixels': True, 'multithread': True,
+        'format': outputFormat, 'outputBounds': bounds, 'xRes': arrres[0],
+        'yRes': arrres[1], 'targetAlignedPixels': True, 'multithread': True,
         'options': ['NUM_THREADS=%s' % (num_threads) + ' -overwrite']}
     demfile_expanded = aria_dem.replace('.dem', '_expanded.dem')
     ds_aria_expanded = osgeo.gdal.Warp(

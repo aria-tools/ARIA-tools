@@ -90,20 +90,9 @@ def resampleRaster(
     geotrans = ds.GetGeoTransform()
     proj = ds.GetProjection()
 
-    # Must resample mask with nearest-neighbor
-    if fname.split('/')[-2] == 'mask':
-
-        # Resample raster
-        warp_options = osgeo.gdal.WarpOptions(
-            format=outputFormat, cutlineDSName=prods_TOTbbox,
-            outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-            targetAlignedPixels=True, resampleAlg='near', multithread=True,
-            options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-        osgeo.gdal.Warp(fname, inputname, options=warp_options)
-
     # Use pixel function to downsample connected components/unw files
     # based off of frequency of connected components in each window
-    elif fname.split('/')[-2] == 'connectedComponents' \
+    if fname.split('/')[-2] == 'connectedComponents' \
             or fname.split('/')[-2] == 'unwrappedPhase':
 
         # Resample unw phase based off of mode of connected components
