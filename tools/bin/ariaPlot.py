@@ -10,6 +10,7 @@
 import os
 import logging
 import argparse
+
 import osgeo
 import numpy as np
 

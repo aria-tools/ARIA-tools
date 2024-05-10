@@ -7,15 +7,17 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Import modules
-from shapely.geometry import Polygon, MultiPolygon
-from osgeo import ogr
 import os
 import argparse
+
+from shapely.geometry import Polygon, MultiPolygon
+from osgeo import ogr
 import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas.plotting import register_matplotlib_converters
+
 register_matplotlib_converters()
 
 

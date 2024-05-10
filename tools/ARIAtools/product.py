@@ -12,15 +12,15 @@ import glob
 import logging
 import datetime
 import itertools
+import osgeo
+
 import h5py
 import netCDF4
 import numpy as np
-import osgeo
-from pyproj import Transformer
-
 import shapely.geometry
 import shapely.ops
 import shapely.wkt
+from pyproj import Transformer
 
 import ARIAtools.constants
 import ARIAtools.util.url

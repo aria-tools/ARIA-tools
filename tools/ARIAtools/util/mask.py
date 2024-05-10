@@ -15,11 +15,11 @@ import copy
 import osgeo.gdal
 import pyproj
 import rasterio
+import tile_mate
 
 import ARIAtools.util.shp
 import ARIAtools.util.vrt
 
-import tile_mate
 
 LOGGER = logging.getLogger(__name__)
 

@@ -13,8 +13,9 @@ import math
 import datetime
 import argparse
 import logging
-import shapely
 import warnings
+
+import shapely
 import asf_search
 
 import ARIAtools.util.log

@@ -20,8 +20,8 @@ import logging
 import argparse
 import datetime
 import collections
-import osgeo.gdal
 
+import osgeo.gdal
 import tile_mate
 
 import ARIAtools.product
