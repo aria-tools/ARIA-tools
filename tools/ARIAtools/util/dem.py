@@ -24,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
              proj, arrres=None, workdir='./',
              outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
-             multilooking=1, rankedResampling=False):
+             multilooking=None, rankedResampling=False):
     """
     Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
@@ -46,7 +46,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         outputFormat = 'ENVI'
 
     # Set output res
-    arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
+    if multilooking is not None:
+        arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
     if demfilename.lower() == 'download':
         if dem_name not in dem_stitcher.datasets.DATASETS:

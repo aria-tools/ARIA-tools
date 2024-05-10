@@ -27,7 +27,7 @@ LOGGER = logging.getLogger(__name__)
 def prep_mask(
         product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         amp_thresh=None, arrres=None, workdir='./', outputFormat='ENVI',
-        num_threads='2', multilooking=1, rankedResampling=False):
+        num_threads='2', multilooking=None, rankedResampling=False):
     """
     Function to load and export mask file with tile_mate
     """
@@ -46,7 +46,8 @@ def prep_mask(
         outputFormat = 'ENVI'
 
     # Set output res
-    arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
+    if multilooking is not None:
+        arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
     # Download mask
     if maskfilename.lower() == 'download' or \
