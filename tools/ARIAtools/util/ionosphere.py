@@ -274,7 +274,8 @@ def export_ionosphere(input_iono_files: typing.List[str],
 
     # Update VRT
     if verbose:
-        LOGGER.info(f'Writing {output_iono}, {output.with_suffix(".vrt")}')
+        LOGGER.info(
+            f'Writing {output_iono}, {output_iono.with_suffix(".vrt")}')
     osgeo.gdal.Translate(
         str(output_iono.with_suffix('.vrt')), str(output_iono), format="VRT")
 
