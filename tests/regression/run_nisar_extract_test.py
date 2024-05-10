@@ -14,7 +14,7 @@ import contextlib
 import tarfile
 import logging
 
-LOGGER = logging.getLogger('run_tssetup_test.py')
+LOGGER = logging.getLogger('run_nisar_extract_test.py')
 
 
 def main():
@@ -41,24 +41,26 @@ def main():
                 raise Exception('%s failed!' % message)
 
     with contextlib.suppress(FileNotFoundError):
-        shutil.rmtree('golden_test_inputs/tssetup')
+        shutil.rmtree('golden_test_inputs/nisar_extract')
 
     # Uncompress .tar.gz file with input data in it
     with tarfile.open(
-            os.path.join('golden_test_inputs/tssetup.tar.gz')) as tar:
+            os.path.join('golden_test_inputs/nisar_extract.tar.gz')) as tar:
         tar.extractall('golden_test_inputs')
 
     with contextlib.suppress(FileNotFoundError):
-        shutil.rmtree('test_outputs/tssetup')
-    os.makedirs('test_outputs/tssetup')
+        shutil.rmtree('test_outputs/nisar_extract')
+    os.makedirs('test_outputs/nisar_extract')
 
+    # extract azimuth angle
     exec_string = (
-        'ariaTSsetup.py -f "golden_test_inputs/tssetup/products/*.nc" '
-        '-tm HRRR -d golden_test_inputs/tssetup/DEM/glo_90.dem '
-        '-w test_outputs/tssetup/')
+        'ariaExtract.py -f "golden_test_inputs/nisar_extract/products/*h5" '
+        '-l "unwrappedPhase,troposphereTotal,ionosphere" '
+        '-w test_outputs/nisar_extract '
+        '-d golden_test_inputs/nisar_extract/DEM/glo_90.dem')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
-    run_subproc(exec_string, 'ariaTSsetup', raise_exception=True)
+    run_subproc(exec_string, 'ariaExtract', raise_exception=True)
 
 
 if __name__ == "__main__":

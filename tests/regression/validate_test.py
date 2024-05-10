@@ -55,6 +55,12 @@ ENVI_FILES['tssetup'] = {
     'unwrappedPhase_20230829_20230724': 'unwrappedPhase/20230829_20230724',
     'unwrappedPhase_20230829_20230817': 'unwrappedPhase/20230829_20230817',
 }
+ENVI_FILES['nisar_extract'] = {
+    'connectedComponents': 'connectedComponents/20100410_20110111',
+    'ionosphere': 'ionosphere/20100410_20110111',
+    'troposphereTotal': 'troposphereTotal/20100410_20110111',
+    'unwrappedPhase': 'unwrappedPhase/20100410_20110111'
+}
 
 NETCDF_FILES = {}
 NETCDF_FILES['download'] = {
@@ -270,6 +276,11 @@ class TestAriaExtract(AriaToolsScriptTester):
     FLAVOR = 'extract'
 
 
+@pytest.mark.usefixtures('run_nisar_extract_test')
+class TestAriaNISARExtract(AriaToolsScriptTester):
+    FLAVOR = 'nisar_extract'
+
+
 @pytest.mark.usefixtures('run_download_test')
 class TestAriaDownload():
     FLAVOR = 'download'
@@ -304,6 +315,13 @@ def run_extract_test(sync_golden_data):
     if return_code != 0:
         LOGGER.error("Error running ariaExtract test case!")
         raise AssertionError("Error running ariaExtract test case!")
+
+@pytest.fixture(scope='session')
+def run_nisar_extract_test(sync_golden_data):
+    return_code = subprocess.call('./run_nisar_extract_test.py', shell=True)
+    if return_code != 0:
+        LOGGER.error("Error running NISAR ariaExtract test case!")
+        raise AssertionError("Error running NISAR ariaExtract test case!")
 
 
 @pytest.fixture(scope='session')
