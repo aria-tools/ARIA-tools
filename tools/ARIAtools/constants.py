@@ -1,28 +1,27 @@
-#!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author(s): Simran Sangha
 # Copyright 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 """
 Record global variables for use in other scripts
 """
 
 # Create lists of all supported models and all aria layers
 ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
-               'troposphereWet',
-               'troposphereTotal',
-               'solidEarthTide',
-               'gacos_corrections']
+                             'troposphereWet',
+                             'troposphereTotal',
+                             'solidEarthTide',
+                             'gacos_corrections']
 
 ARIA_INTERNAL_CORRECTIONS = ['ionosphere']
 
 ARIA_TROPO_INTERNAL = ['ERA5',
-                     'GMAO',
-                     'HRES',
-                     'HRRR']
+                       'GMAO',
+                       'HRES',
+                       'HRRR']
 
 ARIA_TROPO_MODELS = ARIA_TROPO_INTERNAL + ['GACOS']
 
@@ -54,4 +53,4 @@ ARIA_STACK_OUTFILES = {
     'ionosphere': 'ionoStack',
     'solidEarthTide': 'setStack'
 }
-ARIA_STACK_OUTFILES.update({i:i+'Stack' for i in ARIA_TROPO_MODELS})
+ARIA_STACK_OUTFILES.update({i: i + 'Stack' for i in ARIA_TROPO_MODELS})

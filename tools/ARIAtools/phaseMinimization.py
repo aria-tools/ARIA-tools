@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # Author: Ravi Lanka
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 from __future__ import division
 
@@ -18,42 +17,42 @@ import pulp
 import timeit as T
 
 import logging
-from ARIAtools.logger import logger
-log = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+
+LOGGER = logging.getLogger(__name__)
 
 class Vertex(object):
     '''
     Defines vertex.
     '''
 
-    def __init__(self, x=None, y=None, phase=None, compNumber=None, index=None):
-        self.x          = x
-        self.y          = y
-        self.phase      = phase
+    def __init__(self, x=None, y=None, phase=None,
+                 compNumber=None, index=None):
+        self.x = x
+        self.y = y
+        self.phase = phase
         self.compNumber = compNumber
-        self.index      = index
-        self.pts        = None
-        self.sigma      = None
-        self.source     = None
-        self.dist       = None
-        self.n          = None
+        self.index = index
+        self.pts = None
+        self.sigma = None
+        self.source = None
+        self.dist = None
+        self.n = None
 
     def __str__(self):
-        ostr = 'Location: (%d, %d)'%(self.y, self.x)
+        ostr = 'Location: (%d, %d)' % (self.y, self.x)
         #ostr += '\nComponent: (%d, %d)'%(self.source, self.compNumber)
         return ostr
 
     def __eq__(self, other):
-#        if other is not None:
+        #        if other is not None:
         try:
             return (self.x == other.x) and (self.y == other.y)
-        except:
+        except BaseException:
             pass
         return None
 
     def __hash__(self):
-        return hash((self.x,self.y))
+        return hash((self.x, self.y))
 
     def updatePhase(self, n):
         self.n = n
@@ -66,6 +65,7 @@ class Vertex(object):
 
     def getUnwrappedPhase(self):
         return self.phase - 2 * self.n * np.pi
+
 
 class Edge(object):
     '''
@@ -84,19 +84,19 @@ class Edge(object):
         self.__dist__ = dist
 
         if name is None:
-          name = "E(%d,%d)"%(source.getIndex(), dest.getIndex())
+            name = "E(%d,%d)" % (source.getIndex(), dest.getIndex())
 
         # Using PuLP to define the variable
         self.__var__ = pulp.LpVariable(name, 0, 1, pulp.LpContinuous)
 
     def isBarrier(self):
         if None not in (self.src.compNumber, self.dst.compNumber):
-          return (self.src.compNumber == self.dst.compNumber)
+            return (self.src.compNumber == self.dst.compNumber)
         else:
-          return False
+            return False
 
     def isCorner(self):
-        return self.adjtriIdx == None
+        return self.adjtriIdx is None
 
     def __computeCost(self):
         if self.isBarrier():
@@ -108,30 +108,32 @@ class Edge(object):
         return None not in (self.src.getPhase(), self.dst.getPhase())
 
     def diff(self):
-        return np.int(np.round((self.dst.phase - self.src.phase)/(2*np.pi)))
+        return np.int(
+            np.round((self.dst.phase - self.src.phase) / (2 * np.pi)))
 
     def updateTri(self, index):
         if self.triIdx is not None:
-          self.triIdx.append(index)
+            self.triIdx.append(index)
         else:
-          self.triIdx = [index]
+            self.triIdx = [index]
 
     def updateAdj(self, index):
         if self.adjtriIdx is not None:
-          self.adjtriIdx.append(index)
+            self.adjtriIdx.append(index)
         else:
-          self.adjtriIdx = [index]
+            self.adjtriIdx = [index]
 
     def updateFlow(self, flow):
         if self.isBarrier():
-          # Check if the solver's solution for high cost node is zero
-          if (flow != 0):
-            raise ValueError("Solver Solution Incorrect")
+            # Check if the solver's solution for high cost node is zero
+            if (flow != 0):
+                raise ValueError("Solver Solution Incorrect")
         self.flow = flow
 
     def unwrap(self, rEdge):
         if self.src.getPhase() is not None:
-            self.dst.updatePhase(self.src.getPhase() + (self.flow - rEdge.flow) + self.diff())
+            self.dst.updatePhase(self.src.getPhase() +
+                                 (self.flow - rEdge.flow) + self.diff())
         else:
             return None
 
@@ -142,10 +144,12 @@ class Edge(object):
             plt.plot([self.src.x, self.dst.x], [self.src.y, self.dst.y], c=c)
 
     def getFlow(self, neutralNode):
-        if self.adjtriIdx == None:
-            return 'a %d %d 0 %d %d\n' % (neutralNode, self.triIdx[0], self.__MAXFLOW, self.cost)
+        if self.adjtriIdx is None:
+            return 'a %d %d 0 %d %d\n' % (
+                neutralNode, self.triIdx[0], self.__MAXFLOW, self.cost)
         else:
-            return 'a %d %d 0 %d %d\n' % (self.adjtriIdx[0], self.triIdx[0], self.__MAXFLOW, self.cost)
+            return 'a %d %d 0 %d %d\n' % (
+                self.adjtriIdx[0], self.triIdx[0], self.__MAXFLOW, self.cost)
 
     def getCost(self):
         return self.cost
@@ -153,15 +157,15 @@ class Edge(object):
     def getNeutralWeight(self):
         # Number of times the edge was used with negative weight
         if self.adjtriIdx is None:
-          numReverseLoop = 0
+            numReverseLoop = 0
         else:
-          numReverseLoop = len(self.adjtriIdx)
+            numReverseLoop = len(self.adjtriIdx)
 
         # Number of times the edge was used with positive weight
         if self.triIdx is None:
-          numLoop = 0
+            numLoop = 0
         else:
-          numLoop = len(self.triIdx)
+            numLoop = len(self.triIdx)
 
         return numReverseLoop - numLoop
 
@@ -180,7 +184,7 @@ class Edge(object):
         ostr = 'Edge between : \n'
         ostr += str(self.src) + '\n'
         ostr += str(self.dst) + '\n'
-        ostr += 'with Residue %f'%(self.flow)
+        ostr += 'with Residue %f' % (self.flow)
         return ostr
 
     def __eq__(self, other):
@@ -194,6 +198,7 @@ class Loop(object):
     '''
     Collection of edges in loop - Expects the vertices to be in sequence
     '''
+
     def __init__(self, vertices=None, edges=None, index=None):
         self.edges = None
         self.index = None
@@ -205,15 +210,15 @@ class Loop(object):
         self.__center = None
 
         def_vertices = True
-        if 'any' not in dir(vertices) and vertices == None:
+        if 'any' not in dir(vertices) and vertices is None:
             def_vertices = False
 
         def_edges = True
-        if 'any' not in dir(edges) and edges == None:
+        if 'any' not in dir(edges) and edges is None:
             def_edges = False
 
         def_index = True
-        if 'any' not in dir(index) and index == None:
+        if 'any' not in dir(index) and index is None:
             def_index = False
 
         # initializes only when all the vertices are availables
@@ -231,7 +236,7 @@ class Loop(object):
     def __getReverseEdges(vertices, edges):
         rSeqEdges = []
         for vx, vy in zip(vertices[1:] + [vertices[0]], vertices):
-          rSeqEdges.append(edges[vx, vy])
+            rSeqEdges.append(edges[vx, vy])
         return rSeqEdges
 
     # Edges traversing the vertices in a sequence
@@ -239,12 +244,12 @@ class Loop(object):
     def __getEdges(vertices, edges):
         seqEdges = []
         for vx, vy in zip(vertices, vertices[1:] + [vertices[0]]):
-          seqEdges.append(edges[vx, vy])
+            seqEdges.append(edges[vx, vy])
         return seqEdges
 
     # Returns a string in the RelaxIV format
     def getNodeSupply(self):
-        return "n %d %d\n"%(self.index, self.residue)
+        return "n %d %d\n" % (self.index, self.residue)
 
     # Returns a string in the RelaxIV format for flows
     def getFlowConstraint(self, neutralNode):
@@ -269,12 +274,12 @@ class Loop(object):
     def computeResidue(self):
         isBarrier = map(lambda x: x.isBarrier(), self.edges)
         if any(isBarrier):
-          return 0
+            return 0
         else:
-          residue = 0
-          for edge in self.edges:
-            residue = residue + edge.diff()
-          return residue
+            residue = 0
+            for edge in self.edges:
+                residue = residue + edge.diff()
+            return residue
 
     # Each edge keeps a list of triangles it is part of
     def __updateEdges(self):
@@ -285,23 +290,23 @@ class Loop(object):
 
     def unwrap(self):
         for edge, redge in zip(self.edges, self.__edges):
-          edge.unwrap(redge)
+            edge.unwrap(redge)
 
     # Return None if not corner; else the rEdge
     def Corner(self):
         cornerEdge = []
         for edge, redge in zip(self.edges, self.__edges):
-          if edge.isCorner():
-              cornerEdge.append(redge)
+            if edge.isCorner():
+                cornerEdge.append(redge)
         return cornerEdge
 
     # test function
     @staticmethod
     def __getCenter(vertices):
-        center = (0,0)
+        center = (0, 0)
         for v in vertices:
-          center = center + (v.x, v.y)
-        return (center[0]/len(vertices), center[1]/len(vertices))
+            center = center + (v.x, v.y)
+        return (center[0] / len(vertices), center[1] / len(vertices))
 
     def isUnwrapped(self):
         unWrapped = map(lambda x: x.isUnwrapped(), self.edges)
@@ -309,116 +314,126 @@ class Loop(object):
 
     def printEdges(self):
         for v in self.edges:
-         log.info(v)
+            LOGGER.info(v)
 
     def printFlow(self):
         flow = []
         for edge in self.edges:
-          flow.append(edge.flow)
-        log.info(flow)
+            flow.append(edge.flow)
+        LOGGER.info(flow)
 
     def plot(self, ax):
         if self.residue != 0:
             ax.plot(self.__center[0], self.__center[1], '*', c='r')
 
 # Packs all the traingles together
+
+
 class PhaseUnwrap(object):
     def __init__(self, x=None, y=None, phase=None, compNum=None, redArcs=0):
         # Expects a list of ve:tices
-        self.loops      = None
+        self.loops = None
         self.neutralResidue = None
         self.neutralNodeIdx = None
-        self.__unwrapSeq    = None
-        self.__unwrapped    = None
-        self.__cornerEdges  = []
+        self.__unwrapSeq = None
+        self.__unwrapped = None
+        self.__cornerEdges = []
 
         # used only for plotting, and finally returning in sequence
         # Dont use these variables for computation
-        self.__x             = None
-        self.__y             = None
-        self.__delauneyTri   = None
-        self.__vertices      = None
-        self.__edges         = None
-        self.__compNum       = None
-        self.__adjMat        = None
-        self.__spanningTree  = None
-        self.__CSRspanTree   = None
-        self.__redArcs       = None
+        self.__x = None
+        self.__y = None
+        self.__delauneyTri = None
+        self.__vertices = None
+        self.__edges = None
+        self.__compNum = None
+        self.__adjMat = None
+        self.__spanningTree = None
+        self.__CSRspanTree = None
+        self.__redArcs = None
 
         # Edges used for unwrapping
-        self.__unwrapEdges   = None
+        self.__unwrapEdges = None
 
         # Using PuLP as an interface for defining the LP problem
-        self.__prob__ = pulp.LpProblem("Unwrapping as LP optimization problem", pulp.LpMinimize)
+        self.__prob__ = pulp.LpProblem(
+            "Unwrapping as LP optimization problem",
+            pulp.LpMinimize)
 
         if compNum is None:
-            compNum = [None]*len(x)
+            compNum = [None] * len(x)
         else:
-            self.__compNum  = compNum
+            self.__compNum = compNum
 
         def_x = True
-        if 'any' not in dir(x) and x == None:
+        if 'any' not in dir(x) and x is None:
             def_x = False
 
         def_y = True
-        if 'any' not in dir(y) and y == None:
+        if 'any' not in dir(y) and y is None:
             def_y = False
 
         def_phase = True
-        if 'any' not in dir(phase) and phase == None:
+        if 'any' not in dir(phase) and phase is None:
             def_phase = False
 
 #        if None not in (x, y, phase):
         if def_x and def_y and def_phase:
             # Create
-            vertices                = self.__createVertices(x, y, phase, compNum)
-            self.nVertices          = len(vertices)
-            delauneyTri             = self.__createDelaunay(vertices)
-            self.__adjMat           = self.__getAdjMat(delauneyTri.vertices)
-            self.__spanningTree     = self.__getSpanningTree()
-            edges                   = self.__createEdges(vertices, redArcs)
+            vertices = self.__createVertices(x, y, phase, compNum)
+            self.nVertices = len(vertices)
+            delauneyTri = self.__createDelaunay(vertices)
+            self.__adjMat = self.__getAdjMat(delauneyTri.vertices)
+            self.__spanningTree = self.__getSpanningTree()
+            edges = self.__createEdges(vertices, redArcs)
 
             if (redArcs >= 0):
-              self.loops  = self.__createLoop(vertices, edges)
+                self.loops = self.__createLoop(vertices, edges)
             else:
-              self.loops  = self.__createTriangulation(delauneyTri, vertices, edges)
-              self.neutralResidue, self.neutralNodeIdx = self.__computeNeutralResidue()
+                self.loops = self.__createTriangulation(
+                    delauneyTri, vertices, edges)
+                self.neutralResidue, self.neutralNodeIdx = (
+                    self.__computeNeutralResidue())
 
             # Saving some variables for plotting
-            self.__redArcs      = redArcs
-            self.__x            = x
-            self.__y            = y
-            self.__vertices     = vertices
-            self.__delauneyTri  = delauneyTri
-            self.__edges        = edges
-            self.__unwrapEdges  = []
+            self.__redArcs = redArcs
+            self.__x = x
+            self.__y = y
+            self.__vertices = vertices
+            self.__delauneyTri = delauneyTri
+            self.__edges = edges
+            self.__unwrapEdges = []
 
     def __getSpanningTree(self):
-      '''
-      Computes spanning tree from adjcency matrix
-      '''
-      # Spanning Tree
-      spanningTree = minimum_spanning_tree(csr_matrix(self.__adjMat))
-      spanningTree = spanningTree.toarray().astype(int)
+        '''
+        Computes spanning tree from adjcency matrix
+        '''
+        # Spanning Tree
+        spanningTree = minimum_spanning_tree(csr_matrix(self.__adjMat))
+        spanningTree = spanningTree.toarray().astype(int)
 
-      # Converting into a bi-directional graph
-      spanningTree = np.logical_or(spanningTree, spanningTree.T).astype(int)
-      return spanningTree
+        # Converting into a bi-directional graph
+        spanningTree = np.logical_or(spanningTree, spanningTree.T).astype(int)
+        return spanningTree
 
     @staticmethod
     def __getTriSeq(va, vb, vc):
         '''
         Get Sequence of triangle points
         '''
-        line = lambda va, vb, vc: (((vc.y - va.y)*(vb.x - va.x))) - ((vc.x - va.x)*(vb.y - va.y))
+        def line(va, vb, vc):
+            return (((vc.y - va.y) * (vb.x - va.x)) -
+                    ((vc.x - va.x) * (vb.y - va.y)))
 
         # Line equation through pt0 and pt1
         # Test for pt3 - Does it lie to the left or to the right ?
         pos3 = line(va, vb, vc)
-        if(pos3 > 0):
-            # left
+
+        # left
+        if pos3 > 0:
             return (va, vc, vb)
-        else: # right
+        # right
+        else:
             return (va, vb, vc)
 
     # Create Delaunay Triangulation.
@@ -426,7 +441,7 @@ class PhaseUnwrap(object):
         pts = np.zeros((len(vertices), 2))
 
         for index, point in enumerate(vertices):
-            pts[index,:] = [point.x, ratio*point.y]
+            pts[index, :] = [point.x, ratio * point.y]
 
         return Delaunay(pts)
 
@@ -440,12 +455,17 @@ class PhaseUnwrap(object):
     # Edges indexed with the vertices
     def __createEdges(self, vertices, redArcs):
         edges = {}
-        def add_edge(i,j,dist):
-            if (i,j) not in edges:
-                cand = Edge(i,j,dist,name="E(%d,%d)"%(i.getIndex(),j.getIndex()))
+
+        def add_edge(i, j, dist):
+            if (i, j) not in edges:
+                cand = Edge(
+                    i, j, dist, name="E(%d,%d)" %
+                    (i.getIndex(), j.getIndex()))
                 edges[i, j] = cand
-            if (j,i) not in edges:
-                cand = Edge(j,i,dist,name="E(%d,%d)"%(j.getIndex(),i.getIndex()))
+            if (j, i) not in edges:
+                cand = Edge(
+                    j, i, dist, name="E(%d,%d)" %
+                    (j.getIndex(), i.getIndex()))
                 edges[j, i] = cand
             return
 
@@ -454,28 +474,31 @@ class PhaseUnwrap(object):
 
         # Loop count depending on redArcs or MCF
         if redArcs <= 0:
-          loopCount = 0
+            loopCount = 0
         else:
-          loopCount = redArcs
+            loopCount = redArcs
 
         # Edges are added using the adj Matrix
         distMat = self.__adjMat.copy()
         dist = 1
         while (loopCount >= 0):
-          # Remove self loops
-          np.fill_diagonal(distMat, 0)
+            # Remove self loops
+            np.fill_diagonal(distMat, 0)
 
-          # Add edges with incrementing length
-          Va, Vb = np.where(np.logical_and((distMat > 0), np.invert(mask.astype(bool))))
-          for (va, vb) in zip(Va, Vb):
-              add_edge(vertices[va], vertices[vb], dist)
+            # Add edges with incrementing length
+            Va, Vb = np.where(
+                np.logical_and(
+                    (distMat > 0), np.invert(
+                        mask.astype(bool))))
+            for (va, vb) in zip(Va, Vb):
+                add_edge(vertices[va], vertices[vb], dist)
 
-          # Update mask
-          mask = np.logical_or(self.__adjMat.astype(bool), mask)
+            # Update mask
+            mask = np.logical_or(self.__adjMat.astype(bool), mask)
 
-          # Generating adj matrix with redundant arcs
-          distMat = np.dot(distMat, self.__adjMat.T)
-          loopCount = loopCount-1
+            # Generating adj matrix with redundant arcs
+            distMat = np.dot(distMat, self.__adjMat.T)
+            loopCount = loopCount - 1
 
         return edges
 
@@ -485,8 +508,8 @@ class PhaseUnwrap(object):
         '''
         adjMat = np.zeros((self.nVertices, self.nVertices))
         for ia, ib, ic in vertices:
-          adjMat[ia, ib] = adjMat[ib, ic] = adjMat[ic, ia] = 1
-          adjMat[ib, ia] = adjMat[ic, ib] = adjMat[ia, ic] = 1
+            adjMat[ia, ib] = adjMat[ib, ic] = adjMat[ic, ia] = 1
+            adjMat[ib, ia] = adjMat[ic, ib] = adjMat[ia, ic] = 1
 
         return adjMat
 
@@ -495,34 +518,34 @@ class PhaseUnwrap(object):
         from scipy.sparse.csgraph import depth_first_order
 
         def traverseToRoot(nodeSeq, pred):
-          # scipy uses -9999
-          __SCIPY_END = -9999
-          seqV = [idxB]
-          parent = pred[idxB]
-          while parent != __SCIPY_END:
-            seqV = [parent] + seqV
-            parent = pred[parent]
-          return seqV
+            # scipy uses -9999
+            __SCIPY_END = -9999
+            seqV = [idxB]
+            parent = pred[idxB]
+            while parent != __SCIPY_END:
+                seqV = [parent] + seqV
+                parent = pred[parent]
+            return seqV
 
         if self.__CSRspanTree is None:
             self.__CSRspanTree = csr_matrix(self.__spanningTree)
 
-        (nodeSeq, pred) = depth_first_order(self.__CSRspanTree, i_start=idxA, \
-                                            directed=False, \
+        (nodeSeq, pred) = depth_first_order(self.__CSRspanTree, i_start=idxA,
+                                            directed=False,
                                             return_predecessors=True)
 
         # Traverse through predecessors to the root node
         seqV = traverseToRoot(nodeSeq, pred)
         if (seqV[0] != idxA):
-          raise ValueError("Traversal Incorrect")
+            raise ValueError("Traversal Incorrect")
         else:
-          return seqV
+            return seqV
 
     def __createLoop(self, vertices, edges):
         # Creating the traingle object
         # triangles.append(Loop([va, vb, vc], edges, i+1))
         loops = []
-        zeroVertex = Vertex(0,0)
+        zeroVertex = Vertex(0, 0)
         index = 0
         loopExist = {}
         for (va, vb), edge in edges.items():
@@ -537,7 +560,7 @@ class PhaseUnwrap(object):
 
                 # Reverse SeqV if needed to get proper loop direction
                 if orientV[1] != seqV[1]:
-                  seqV = seqV[::-1]
+                    seqV = seqV[::-1]
 
                 # Get a uniform direction of loop
                 if (seqV[0], seqV[-1]) in loopExist:
@@ -547,7 +570,7 @@ class PhaseUnwrap(object):
                     loopExist[(seqV[0], seqV[-1])] = 1
 
                 # Create Loop
-                loops.append(Loop(seqV, edges, index+1))
+                loops.append(Loop(seqV, edges, index + 1))
                 index = index + 1
 
         return loops
@@ -559,22 +582,24 @@ class PhaseUnwrap(object):
 
         # Generate the points in a sequence
         def getSeq(va, vb, vc):
-          line = lambda va, vb, vc: (((vc.y - va.y)*(vb.x - va.x))) - ((vc.x - va.x)*(vb.y - va.y))
+            def line(va, vb, vc):
+                return (((vc.y - va.y) * (vb.x - va.x)) -
+                        ((vc.x - va.x) * (vb.y - va.y)))
 
-          # Line equation through pt0 and pt1
-          # Test for pt3 - Does it lie to the left or to the right ?
-          pos3 = line(va, vb, vc)
-          if(pos3 > 0):
-            # left
-            return (va, vc, vb)
-          else: # right
-            return (va, vb, vc)
+            # Line equation through pt0 and pt1
+            # Test for pt3 - Does it lie to the left or to the right ?
+            pos3 = line(va, vb, vc)
+            if(pos3 > 0):
+                # left
+                return (va, vc, vb)
+            else:  # right
+                return (va, vb, vc)
 
         loop = []
         for i, triIdx in enumerate(delauneyTri.simplices):
             va, vb, vc = self.__indexList(vertices, triIdx)
             va, vb, vc = getSeq(va, vb, vc)
-            loop.append(Loop([va, vb, vc], edges, i+1))
+            loop.append(Loop([va, vb, vc], edges, i + 1))
         return loop
 
     def __unwrapNode__(self, idx, nodes, predecessors):
@@ -582,8 +607,8 @@ class PhaseUnwrap(object):
         Unwraps a specific node while traversing to the root
         '''
         if self.__unwrapped[predecessors[idx]] == 0:
-          # Go unwrap the predecessor before unwrapping current idx
-          self.__unwrapNode__(predecessors[idx], nodes, predecessors)
+            # Go unwrap the predecessor before unwrapping current idx
+            self.__unwrapNode__(predecessors[idx], nodes, predecessors)
 
         # Unwrap Node
         srcV = self.__vertices[predecessors[idx]]
@@ -610,8 +635,10 @@ class PhaseUnwrap(object):
 
         # Loop until there is a node unwrapped
         while (0 in self.__unwrapped):
-          idx = next((i for i, x in enumerate(self.__unwrapped) if not(x)), None)
-          self.__unwrapNode__(idx, nodes, predecessor)
+            idx = next(
+                (i for i, x in enumerate(
+                    self.__unwrapped) if not(x)), None)
+            self.__unwrapNode__(idx, nodes, predecessor)
 
         # Returns unwrapped vertices n values
         nValue = []
@@ -649,7 +676,8 @@ class PhaseUnwrap(object):
             adjlist = np.array(neighbors[cNode])
             adjNode = adjlist[np.where(adjlist != -1)[0]]
 
-            # adding list of new nodes by carefully removing already existing nodes
+            # adding list of new nodes by carefully removing already existing
+            # nodes
             newNodes = list(set(adjNode) - set(nodeSequence))
             nodeSequence = nodeSequence + newNodes
 
@@ -666,7 +694,9 @@ class PhaseUnwrap(object):
         nodeSupply = []
         for i, loop in enumerate(self.loops):
             nodeSupply.append(loop.getNodeSupply())
-        nodeSupply.append("n %d %d\n"%(self.neutralNodeIdx, self.neutralResidue))
+        nodeSupply.append(
+            "n %d %d\n" %
+            (self.neutralNodeIdx, self.neutralResidue))
         return nodeSupply
 
     def __flowConstraints(self):
@@ -678,13 +708,13 @@ class PhaseUnwrap(object):
         for loop in self.loops:
             cornerEdge = loop.Corner()
             if cornerEdge != []:
-              for rEdge in cornerEdge:
-                # Dirty - To be cleaned later
-                rEdge.updateTri(self.neutralNodeIdx)
+                for rEdge in cornerEdge:
+                    # Dirty - To be cleaned later
+                    rEdge.updateTri(self.neutralNodeIdx)
 
-                # Edge flow constraints for corner edges
-                edgeFlow.append(rEdge.getFlow(self.neutralNodeIdx))
-                self.__cornerEdges.append(rEdge)
+                    # Edge flow constraints for corner edges
+                    edgeFlow.append(rEdge.getFlow(self.neutralNodeIdx))
+                    self.__cornerEdges.append(rEdge)
 
         return edgeFlow
 
@@ -695,7 +725,7 @@ class PhaseUnwrap(object):
         f = open(fileName, "w")
 
         # Prepending nodes and edges
-        f.write("p min %d %d\n"%(len(nodes), len(edges)))
+        f.write("p min %d %d\n" % (len(nodes), len(edges)))
 
         # Write node
         for line in nodes:
@@ -712,47 +742,56 @@ class PhaseUnwrap(object):
     def __MCFRelaxIV(edgeLen, fileName="network.dmx"):
         ''' Uses MCF from RelaxIV '''
         try:
-          from . import unwcomp
-        except:
-          raise Exception("MCF requires RelaxIV solver - Please drop the RelaxIV software \
-                          into the src folder and re-make")
+            from . import unwcomp
+        except BaseException:
+            raise Exception("MCF requires RelaxIV solver - Please drop the "
+                            "RelaxIV software into the src folder and re-make")
         return unwcomp.relaxIVwrapper_Py(fileName)
 
     def solve(self, solver, filename="network.dmx"):
         # Choses LP or Min cost using redArcs
         if (self.__redArcs == -1):
-          self.__solveMinCost__(filename)
+            self.__solveMinCost__(filename)
         else:
-          self.__solveEdgeCost__(solver)
+            self.__solveEdgeCost__(solver)
 
     def __solveEdgeCost__(self, solver, fileName="network.dmx"):
         # Add objective
         objective = []
         for v, edge in self.__edges.items():
-          objective.append(edge.getCost() * edge.getLPVar())
+            objective.append(edge.getCost() * edge.getLPVar())
         self.__prob__ += pulp.lpSum(objective)
 
         # Add Constraints
         for loop in self.loops:
-          self.__prob__.addConstraint(loop.getLPFlowConstraint())
+            self.__prob__.addConstraint(loop.getLPFlowConstraint())
 
         # Solve the objective function
         if solver == 'glpk':
-          log.info('Using GLPK MIP solver')
-          MIPsolver = lambda: self.__prob__.solve(pulp.GLPK(msg=0))
-        elif solver == 'pulp':
-          log.info('Using PuLP MIP solver')
-          MIPsolver = lambda: self.__prob__.solve()
-        elif solver == 'gurobi':
-          log.info('Using Gurobi MIP solver')
-          MIPsolver = lambda: self.__prob__.solve(pulp.GUROBI_CMD())
+            LOGGER.info('Using GLPK MIP solver')
 
-        log.info('Time Taken (in sec) to solve: %f', T.timeit(MIPsolver, number=1))
+            def MIPsolver():
+                return self.__prob__.solve(pulp.GLPK(msg=0))
+
+        elif solver == 'pulp':
+            LOGGER.info('Using PuLP MIP solver')
+
+            def MIPsolver():
+                return self.__prob__.solve()
+
+        elif solver == 'gurobi':
+            LOGGER.info('Using Gurobi MIP solver')
+
+            def MIPsolver():
+                return self.__prob__.solve(pulp.GUROBI_CMD())
+
+        LOGGER.info(
+            'Time Taken (in sec) to solve: %f', T.timeit(MIPsolver, number=1))
 
         # Get solution
         for v, edge in self.__edges.items():
-          flow = pulp.value(edge.getLPVar())
-          edge.updateFlow(flow)
+            flow = pulp.value(edge.getLPVar())
+            edge.updateFlow(flow)
 
     def __writeMPS__(self, filename):
         self.__prob__.writeMPS(filename)
@@ -769,17 +808,17 @@ class PhaseUnwrap(object):
         edgeWeight = self.__MCFRelaxIV(len(edgeFlow), fileName)
 
         # Creating dictionary for interior edges
-        triEdgeCost = zip(*(iter(edgeWeight[:3*len(self.loops)]),) *3)
+        triEdgeCost = zip(*(iter(edgeWeight[:3 * len(self.loops)]),) * 3)
         for triCost, tri in zip(triEdgeCost, self.loops):
             tri.updateEdgeFlow(triCost)
 
         # Dirty - to be changed
-        cornerEdgeCost = edgeWeight[3*len(self.loops):]
+        cornerEdgeCost = edgeWeight[3 * len(self.loops):]
         for rEdge, cost in zip(self.__cornerEdges, cornerEdgeCost):
             rEdge.updateFlow(cost)
 
     @staticmethod
-    def __indexList(a,b):
+    def __indexList(a, b):
         from operator import itemgetter
 
         return itemgetter(*b)(a)
@@ -803,15 +842,26 @@ class PhaseUnwrap(object):
         ax = fig.add_subplot(111, projection='3d')
         for v in self.__vertices:
             ax.scatter(v.x, v.y, v.phase, marker='o', label='Wrapped Phase')
-            ax.scatter(v.x, v.y, v.getUnwrappedPhase(), marker='^', c='r', label='Unwrapped Phase')
+            ax.scatter(
+                v.x,
+                v.y,
+                v.getUnwrappedPhase(),
+                marker='^',
+                c='r',
+                label='Unwrapped Phase')
         plt.savefig(fileName)
 
     def plotDelaunay(self, fileName):
         import matplotlib.pyplot as plt
         fig = plt.figure()
-        ax = fig.add_subplot(1,1,1)
+        ax = fig.add_subplot(1, 1, 1)
         plt.title('Delaunay Traingulation with Residue and non-zero edge cost')
-        ax.triplot(self.__x, self.__y, self.__delauneyTri.simplices.copy(), c='b', linestyle='dotted')
+        ax.triplot(
+            self.__x,
+            self.__y,
+            self.__delauneyTri.simplices.copy(),
+            c='b',
+            linestyle='dotted')
 
         cmap = plt.get_cmap('hsv')
         numComponents = np.unique(self.__compNum).shape[0]
@@ -829,17 +879,19 @@ class PhaseUnwrap(object):
     def plotSpanningTree(self, fileName):
         import matplotlib.pyplot as plt
         fig = plt.figure()
-        ax = fig.add_subplot(1,1,1)
+        ax = fig.add_subplot(1, 1, 1)
         ax.plot(self.__x, self.__y, '.')
 
         for edge, rEdge in self.__unwrapEdges:
-          if edge.flow == rEdge.flow:
-            edge.plot(ax, c='g')
-          else:
-            edge.plot(ax, c='r')
+            if edge.flow == rEdge.flow:
+                edge.plot(ax, c='g')
+            else:
+                edge.plot(ax, c='r')
         plt.savefig(fileName)
 
 # Removes collinear points on the convex hull and removing duplicates
+
+
 def filterPoints(x, y):
     def indexPoints(points):
         # Dirty: To be cleaned later
@@ -853,130 +905,142 @@ def filterPoints(x, y):
     points = list(zip(x, y))
     points = np.array(indexPoints(points))
 
-    return (points[:,0], points[:,1])
+    return (points[:, 0], points[:, 1])
+
 
 def wrapValue(x):
-  if((x <= np.pi) and (x > -np.pi)):
-    return x
-  elif(x > np.pi):
-    return wrapValue(x - 2*np.pi)
-  else:
-    return wrapValue(x + 2*np.pi)
+    if((x <= np.pi) and (x > -np.pi)):
+        return x
+    elif(x > np.pi):
+        return wrapValue(x - 2 * np.pi)
+    else:
+        return wrapValue(x + 2 * np.pi)
 
 # Command Line argument parser
+
+
 def firstPassCommandLine():
-  import argparse
+    import argparse
 
-  # Creating the parser for the input arguments
-  parser = argparse.ArgumentParser(description='Phase Unwrapping')
+    # Creating the parser for the input arguments
+    parser = argparse.ArgumentParser(description='Phase Unwrapping')
 
-  # Positional argument - Input XML file
-  parser.add_argument('--inputType', choices=['plane', 'sinc', 'sine'],
-                      help='Type of input to unwrap', default='plane', dest='inputType')
-  parser.add_argument('--dim', type=int, default=100,
-                      help='Dimension of the image (square)', dest='dim')
-  parser.add_argument('-c', action='store_true',
-                      help='Component-wise unwrap test', dest='compTest')
-  parser.add_argument('-MCF', action='store_true',
-                      help='Minimum Cost Flow', dest='mcf')
-  parser.add_argument('--redArcs', type=int, default=0,
-                      help='Redundant Arcs', dest='redArcs')
-  parser.add_argument('--solver', choices=['glpk', 'pulp', 'gurobi'],
-                      help='Type of solver', default='pulp', dest='solver')
+    # Positional argument - Input XML file
+    parser.add_argument(
+        '--inputType', choices=['plane', 'sinc', 'sine'],
+        help='Type of input to unwrap', default='plane', dest='inputType')
+    parser.add_argument(
+        '--dim', type=int, default=100,
+        help='Dimension of the image (square)', dest='dim')
+    parser.add_argument(
+        '-c', action='store_true',
+        help='Component-wise unwrap test', dest='compTest')
+    parser.add_argument(
+        '-MCF', action='store_true',
+        help='Minimum Cost Flow', dest='mcf')
+    parser.add_argument(
+        '--redArcs', type=int, default=0,
+        help='Redundant Arcs', dest='redArcs')
+    parser.add_argument(
+        '--solver', choices=['glpk', 'pulp', 'gurobi'],
+        help='Type of solver', default='pulp', dest='solver')
 
-  # Parse input
-  args = parser.parse_args()
-  return args
+    # Parse input
+    args = parser.parse_args()
+    return args
+
 
 def main():
-  # Parsing the input arguments
-  args = firstPassCommandLine()
-  inputType   = args.inputType
-  dim         = args.dim
-  compTest    = args.compTest
-  mcf         = args.mcf
+    # Parsing the input arguments
+    args = firstPassCommandLine()
+    inputType = args.inputType
+    dim = args.dim
+    compTest = args.compTest
+    mcf = args.mcf
 
-  log.info("Input Type: %s", inputType)
-  log.info("Dimension: %d", dim)
+    LOGGER.info("Input Type: %s", inputType)
+    LOGGER.info("Dimension: %d", dim)
 
-  # Random seeding to reapeat random numbers in case
-  np.random.seed(100)
+    # Random seeding to reapeat random numbers in case
+    np.random.seed(100)
 
-  inputImg = np.empty((dim, dim))
-  if inputType == 'plane':
-    # z = a*x + b*y
-    a = np.random.randint(0,10,size=1)/50
-    b = np.random.randint(0,10,size=1)/50
-    for i in range(dim):
-      for j in range(dim):
-          inputImg[i,j] = (a*i) + (b*j)
+    inputImg = np.empty((dim, dim))
+    if inputType == 'plane':
+        # z = a*x + b*y
+        a = np.random.randint(0, 10, size=1) / 50
+        b = np.random.randint(0, 10, size=1) / 50
+        for i in range(dim):
+            for j in range(dim):
+                inputImg[i, j] = (a * i) + (b * j)
 
-  elif inputType == 'sinc':
-    mag = np.random.randint(1,10,size=1)
-    n = np.random.randint(1,3,size=1)
-    for i in range(dim):
-      for j in range(dim):
-        inputImg[i,j] = mag * np.sinc(i*n*np.pi/100) * np.sinc(i*n*np.pi/100)
+    elif inputType == 'sinc':
+        mag = np.random.randint(1, 10, size=1)
+        n = np.random.randint(1, 3, size=1)
+        for i in range(dim):
+            for j in range(dim):
+                inputImg[i, j] = mag * \
+                    np.sinc(i * n * np.pi / 100) * np.sinc(i * n * np.pi / 100)
 
-  elif inputType == 'sine':
-    mag = np.random.randint(1,10,size=1)
-    n = np.random.randint(1,3,size=1)
-    for i in range(dim):
-      for j in range(dim):
-        inputImg[i,j] = mag * np.sin(i*n*np.pi/100) * np.sin(i*n*np.pi/100)
+    elif inputType == 'sine':
+        mag = np.random.randint(1, 10, size=1)
+        n = np.random.randint(1, 3, size=1)
+        for i in range(dim):
+            for j in range(dim):
+                inputImg[i, j] = mag * \
+                    np.sin(i * n * np.pi / 100) * np.sin(i * n * np.pi / 100)
 
-  if compTest:
-    # Component wise unwrap testing
-    n1 = np.random.randint(0,10,size=4)
-    n2 = np.random.randint(0,10,size=4)
-    compImg = np.empty((dim, dim))
-    wrapImg = np.empty((dim, dim))
-    for i in range(dim):
-      for j in range(dim):
-        compImg[i,j] = (i > (dim/2)) + 2*(j > (dim/2))
-        n = n1[compImg[i,j]] + n2[compImg[i,j]]
-        wrapImg[i,j] = inputImg[i,j] + n*(2*np.pi)
-    wrapImg = np.array(wrapImg)
-    compImg = np.array(compImg)
-  else:
-    # Wrapping input image
-    wrapImg = np.array([[wrapValue(x) for x in row] for row in inputImg])
-    compImg = None
+    if compTest:
+        # Component wise unwrap testing
+        n1 = np.random.randint(0, 10, size=4)
+        n2 = np.random.randint(0, 10, size=4)
+        compImg = np.empty((dim, dim))
+        wrapImg = np.empty((dim, dim))
+        for i in range(dim):
+            for j in range(dim):
+                compImg[i, j] = (i > (dim / 2)) + 2 * (j > (dim / 2))
+                n = n1[compImg[i, j]] + n2[compImg[i, j]]
+                wrapImg[i, j] = inputImg[i, j] + n * (2 * np.pi)
+        wrapImg = np.array(wrapImg)
+        compImg = np.array(compImg)
+    else:
+        # Wrapping input image
+        wrapImg = np.array([[wrapValue(x) for x in row] for row in inputImg])
+        compImg = None
 
-  # Choosing random samples
-  xidx = np.random.randint(0,dim,size=400).tolist()
-  yidx = np.random.randint(0,dim,size=400).tolist()
-  xidx, yidx = filterPoints(xidx, yidx)
+    # Choosing random samples
+    xidx = np.random.randint(0, dim, size=400).tolist()
+    yidx = np.random.randint(0, dim, size=400).tolist()
+    xidx, yidx = filterPoints(xidx, yidx)
 
-  # Creating the Minimum Cost Flow problem
-  if mcf is True:
-    # We use redArcs to run Minimum Cost Flow
-    redArcs = -1
-    log.info('Relax IV used as the solver for Minimum Cost Flow')
-    solver = None
-  else:
-    redArcs = args.redArcs
-    solver = args.solver
+    # Creating the Minimum Cost Flow problem
+    if mcf is True:
+        # We use redArcs to run Minimum Cost Flow
+        redArcs = -1
+        LOGGER.info('Relax IV used as the solver for Minimum Cost Flow')
+        solver = None
+    else:
+        redArcs = args.redArcs
+        solver = args.solver
 
-  if compImg is None:
-    phaseunwrap = PhaseUnwrap(xidx, yidx, wrapImg[xidx, yidx], redArcs=redArcs)
-  else:
-    phaseunwrap = PhaseUnwrap(xidx, yidx, wrapImg[xidx, yidx], compImg[xidx, yidx], redArcs=redArcs)
+    if compImg is None:
+        phaseunwrap = PhaseUnwrap(
+            xidx, yidx, wrapImg[xidx, yidx], redArcs=redArcs)
+    else:
+        phaseunwrap = PhaseUnwrap(
+            xidx, yidx, wrapImg[xidx, yidx], compImg[xidx, yidx],
+            redArcs=redArcs)
 
-  # Including the neutral node for min cost flow
-  phaseunwrap.solve(solver)
+    # Including the neutral node for min cost flow
+    phaseunwrap.solve(solver)
 
-  # Unwrap
-  phaseunwrap.unwrapLP()
-  #phaseunwrap.plotDelaunay("final%d.png"%(redArcs))
-  #phaseunwrap.plotSpanningTree("spanningTree%d.png"%(redArcs))
-  phaseunwrap.plotResult("final%d.png"%(redArcs))
+    # Unwrap
+    phaseunwrap.unwrapLP()
+    # phaseunwrap.plotDelaunay("final%d.png"%(redArcs))
+    # phaseunwrap.plotSpanningTree("spanningTree%d.png"%(redArcs))
+    phaseunwrap.plotResult("final%d.png" % (redArcs))
 
-  #import pdb; pdb.set_trace()
-  #fig = plt.figure()
-  #ax = fig.add_subplot(111, projection='3d')
 
 if __name__ == '__main__':
 
-  # Main Engine
-  main()
+    # Main Engine
+    main()

@@ -195,3 +195,4 @@ Buzzanga, B., Bekaert, D. P. S., Hamlington, B. D., & Sangha, S. S. (2020). Towa
 -   [other community members](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
 
 We welcome community contributions. For instructions see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md).
+

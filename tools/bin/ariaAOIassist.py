@@ -9,16 +9,16 @@
 # Import modules
 import os
 import argparse
+
+from shapely.geometry import Polygon, MultiPolygon
+from osgeo import ogr
 import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas.plotting import register_matplotlib_converters
-register_matplotlib_converters()
-from osgeo import ogr
-from shapely.geometry import Polygon, MultiPolygon
-from pkg_resources import get_distribution
 
+register_matplotlib_converters()
 
 
 # Parser
@@ -26,68 +26,104 @@ def createParser():
     '''
         Use product metadata to assist in area of interest (AOI) creation.
     '''
-    parser = argparse.ArgumentParser( description='Preparing preliminary plot of frame extents. First go to the ASF search page, push all SLCs over defined search area to cart, download CSV under the metadata option, and pass the CSV through to this script with the -f flag.')
-    parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True,
-            help='Full path to CSV file containing SLC frame metadata.')
-    parser.add_argument('-w', '--workdir', dest='workdir', default='./',
-            help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-t', '--tracks', dest='tracks', type=str, default='all',
-            help='Include only specified track number in results. Can be multiple, separated by spaces. Default : All')
-    parser.add_argument('-l', '--lat_bounds', dest='latBounds', type=str, default=None,
-            help='Specify a search for only frames that fall within these lat bounds. Default : None')
-    parser.add_argument('-s', '--start_date', dest='startDate', type=str, default=None,
-            help='Start date. Default : None')
-    parser.add_argument('-e', '--end_date', dest='endDate', type=str, default=None,
-            help='End date. Default : None')
-    parser.add_argument('-x', '--exclude_dates', dest='excludeDates', type=str, default=None,
-            help='List of dates to exclude from kml generation. This can be provided as space-separated string in format YYYYMMDD (e.g., \'20180101 20181213 20190428\'), or as a text file with one date to exclude per line. Default : None')
-    parser.add_argument('--plot_raw', dest='plotRaw', action='store_true',
-            help='Plot raw frames if included in .csv')
-    parser.add_argument('--flag_partial_coverage', dest='flagPartialCoverage', action='store_true',
-            help='Flag dates that do not cover the full lat/lon extent. This does not remove dates from the lat centers plot, only highlights the dates in red.')
-    parser.add_argument('--remove_incomplete_dates', dest='removeIncomplete', action='store_true',
-            help='Automatically detect and remove dates that do not entirely fill the given latitude bounds. Note that if lat bounds are left as default, only dates with gaps will be automatically excluded.')
-    parser.add_argument('--approximate_AOI', dest='approxAOI', action='store_true',
-            help='Create KML of approximate AOI. NOTE: ~20 km or 1 burst must be removed from either end of the AOI--this must be confirmed by the user.')
-    parser.add_argument('-v','--verbose', dest='verbose', action='store_true',
-            help='Verbose mode')
-
+    parser = argparse.ArgumentParser(
+        description='Preparing preliminary plot of frame extents. First go '
+                    'to the ASF search page, push all SLCs over defined '
+                    'search area to cart, download CSV under the metadata '
+                    'option, and pass the CSV through to this script with '
+                    'the -f flag.')
+    parser.add_argument(
+        '-f', '--file', dest='imgfile', type=str, required=True,
+        help='Full path to CSV file containing SLC frame metadata.')
+    parser.add_argument(
+        '-w', '--workdir', dest='workdir', default='./',
+        help='Specify directory to deposit all outputs. Default is local '
+             'directory where script is launched.')
+    parser.add_argument(
+        '-t', '--tracks', dest='tracks', type=str, default='all',
+        help='Include only specified track number in results. Can be '
+             'multiple, separated by spaces. Default : All')
+    parser.add_argument(
+        '-l', '--lat_bounds', dest='latBounds', type=str, default=None,
+        help='Specify a search for only frames that fall within these lat '
+             'bounds. Default : None')
+    parser.add_argument(
+        '-s', '--start_date', dest='startDate', type=str, default=None,
+        help='Start date. Default : None')
+    parser.add_argument(
+        '-e', '--end_date', dest='endDate', type=str, default=None,
+        help='End date. Default : None')
+    parser.add_argument(
+        '-x', '--exclude_dates', dest='excludeDates', type=str, default=None,
+        help='List of dates to exclude from kml generation. This can be '
+             'provided as space-separated string in format YYYYMMDD '
+             '(e.g., \'20180101 20181213 20190428\'), or as a text file '
+             'with one date to exclude per line. Default : None')
+    parser.add_argument(
+        '--plot_raw', dest='plotRaw', action='store_true',
+        help='Plot raw frames if included in .csv')
+    parser.add_argument(
+        '--flag_partial_coverage', dest='flagPartialCoverage',
+        action='store_true',
+        help='Flag dates that do not cover the full lat/lon extent. This '
+             'does not remove dates from the lat centers plot, only '
+             'highlights the dates in red.')
+    parser.add_argument(
+        '--remove_incomplete_dates', dest='removeIncomplete',
+        action='store_true',
+        help='Automatically detect and remove dates that do not entirely '
+             'fill the given latitude bounds. Note that if lat bounds are '
+             'left as default, only dates with gaps will be automatically '
+             'excluded.')
+    parser.add_argument(
+        '--approximate_AOI', dest='approxAOI', action='store_true',
+        help='Create KML of approximate AOI. NOTE: ~20 km or 1 burst must '
+             'be removed from either end of the AOI--this must be confirmed '
+             'by the user.')
+    parser.add_argument(
+        '-v', '--verbose', dest='verbose', action='store_true',
+        help='Verbose mode')
     return parser
 
-def cmdLineParse(iargs = None):
+
+def cmdLineParse(iargs=None):
     parser = createParser()
     return parser.parse_args(args=iargs)
-
 
 
 # Metadata class
 class SentinelMetadata:
     '''
-        Class for parsing, filting, and displaying metadata from ASF Vertex csv using Pandas
-        functionality. The self.metadata property is a pandas dataframe in which all metadata are
-        carried. Columns are originally those from the ASF csv spreadsheet, and some others will
-        be added for further sorting. Filtering is done in-place using the dataframe. Additional
-        parameters and flags are added without removing metadata entries.
+    Class for parsing, filting, and displaying metadata from ASF Vertex
+    csv using Pandas functionality. The self.metadata property is a pandas
+    dataframe in which all metadata are carried. Columns are originally
+    those from the ASF csv spreadsheet, and some others will be added for
+    further sorting. Filtering is done in-place using the dataframe.
+    Additional parameters and flags are added without removing metadata
+    entries.
     '''
-    ## Load data from csv and pre-format
-    def __init__(self,imgfile,track,workdir='./',excludeDates=None,verbose=False):
+    # Load data from csv and pre-format
+
+    def __init__(self, imgfile, track, workdir='./',
+                 excludeDates=None, verbose=False):
         '''
-            Initialize class for parsing Sentinel-1 metadata downloaded from the ASF archive.
-            See help(SentinelMetadata) for further description.
+        Initialize class for parsing Sentinel-1 metadata downloaded from
+        the ASF archive.
+        See help(SentinelMetadata) for further description.
         '''
         # Record parameters
-        self.track=track
-        self.workdir=os.path.abspath(workdir)
-        self.excludeDates=excludeDates
+        self.track = track
+        self.workdir = os.path.abspath(workdir)
+        self.excludeDates = excludeDates
 
-        self.verbose=verbose
+        self.verbose = verbose
 
         # Defaults
-        self.removeIncompleteDates=False
+        self.removeIncompleteDates = False
 
         # Open ASF Vertex csv file and read meta data as Pandas dataframe
-        csvfile_name=os.path.abspath(imgfile)
-        self.metadata=pd.read_csv(csvfile_name,index_col=False)
+        csvfile_name = os.path.abspath(imgfile)
+        self.metadata = pd.read_csv(csvfile_name, index_col=False)
 
         # Pre-formatting
         # Assign datetimes and common dates
@@ -104,483 +140,540 @@ class SentinelMetadata:
         # Determine lat bounds based on existing data
         self.__determineLatBounds__()
 
+    # Pre-formatting
 
-    ## Pre-formatting
     def __assignFrameID__(self):
         '''
-            Develop a unique "frame identification code" comprising orbit+path+frame
+        Develop a unique "frame identification code" comprising
+        orbit+path+frame
         '''
-        frameIDs=[]
-        for frameNdx,frame in self.metadata.iterrows():
-            frameProperties=list(frame[['Orbit','Path Number','Frame Number']])
-            frameProperties=[str(frameProperty) for frameProperty in frameProperties] # to string
-            frameID=''.join(frameProperties) # concatenate to single string
+        frameIDs = []
+        for frameNdx, frame in self.metadata.iterrows():
+            frameProperties = list(
+                frame[['Orbit', 'Path Number', 'Frame Number']])
+            frameProperties = [
+                str(frameProperty) for frameProperty in frameProperties]
+            frameID = ''.join(frameProperties)
             frameIDs.append(frameID)
-        self.metadata['frameID']=frameIDs
+        self.metadata['frameID'] = frameIDs
 
     def __assignDatetimes__(self):
         '''
-            Add a column with Python datetime objects to represent precisely the date and time at
-            which a frame was captured in a format that can be used computationally.
-            Additionally, assign a "common" date to which all acquisitions closely correspond. This
-            will help with sorting by date, especially in cases where the satellite crosses the
-            midnight boundary.
-            This function assumes that acqusitions within 24 hours of each other correspond to the
-            same date.
+        Add a column with Python datetime objects to represent precisely
+        the date and time at which a frame was captured in a format that
+        can be used computationally. Additionally, assign a "common" date
+        to which all acquisitions closely correspond. This will help with
+        sorting by date, especially in cases where the satellite crosses the
+        midnight boundary. This function assumes that acqusitions within 24
+        hours of each other correspond to the same date.
         '''
         # Reformat Acquistion Date string into datetime object
-        dateFmt='%Y-%m-%dT%H:%M:%S'
-        dates=[datetime.strptime(date.split('.')[0],dateFmt) for date in
-            self.metadata['Acquisition Date']]
-        self.metadata['Datetime']=dates
+        dateFmt = '%Y-%m-%dT%H:%M:%S'
+        dates = [datetime.strptime(date.split('.')[0], dateFmt) for date in
+                 self.metadata['Acquisition Date']]
+        self.metadata['Datetime'] = dates
 
         # Determine a "Common Date" for the satellite pass
-        oneday=timedelta(days=1)
-        commonDatetimes=[]
-        commonDates=[]
+        oneday = timedelta(days=1)
+        commonDatetimes = []
+        commonDates = []
         for date in self.metadata['Datetime']:
             # Find all dates for which time difference is less than 1 day
-            timediffs=date-self.metadata['Datetime'] # calculate difference relative to all dates
-            dateGroup=(self.metadata['Datetime'][timediffs<oneday]).sort_values() # lt 1 day
-            commonDate=dateGroup.to_list()[0] # use first entry of list as common date
-            commonDatetimes.append(commonDate) # datetime class
-            commonDates.append(commonDate.strftime('%Y%m%d')) # string
-        self.metadata['Common Datetime']=commonDatetimes
-        self.metadata['Common Date']=commonDates
+            # calculate difference relative to all dates
+            timediffs = date - self.metadata['Datetime']
+            # lt 1 day
+            dateGroup = (self.metadata['Datetime']
+                         [timediffs < oneday]).sort_values()
+            # use first entry of list as common date
+            commonDate = dateGroup.to_list()[0]
+            commonDatetimes.append(commonDate)  # datetime class
+            commonDates.append(commonDate.strftime('%Y%m%d'))  # string
+        self.metadata['Common Datetime'] = commonDatetimes
+        self.metadata['Common Date'] = commonDates
 
     def __formatExcludeDates__(self):
         '''
-            Determine whether the --exclude_dates input is specified as an input string or a text
-            file. If a text file is given, format and transfer the contents to a list attached to the
-            input object.
+        Determine whether the --exclude_dates input is specified as an
+        input string or a text file. If a text file is given, format and
+        transfer the contents to a list attached to the input object.
         '''
         # Format user-specified dates to exclude
-        # Check whether exclude dates list is given, otherwise, provide an empty list
+        # Check whether exclude dates list is given, otherwise, provide an
+        # empty list
         if self.excludeDates:
             # Check if the provided input is a file or else a list string
             if os.path.exists(self.excludeDates):
                 # Read and format file contents
-                with open(self.excludeDates,'r') as excludeFile:
-                    lines=excludeFile.readlines()
+                with open(self.excludeDates, 'r') as excludeFile:
+                    lines = excludeFile.readlines()
                     excludeFile.close()
-                self.excludeDates=[line.strip('\n') for line in lines] # remove new line formatting
+                # remove new line formatting
+                self.excludeDates = [line.strip('\n') for line in lines]
             else:
-                self.excludeDates=self.excludeDates.split() # split by spaces
+                self.excludeDates = self.excludeDates.split()
         else:
-            self.excludeDates=[]
+            self.excludeDates = []
 
     def __determineLatBounds__(self):
         '''
-            Automatically determine the latitude bounds baesd on the existing data set.
+        Automatically determine the latitude bounds baesd on the existing
+        data set.
         '''
         # Determine min/max of data set
-        self.minLat=self.metadata['Center Lat'].min()
-        self.maxLat=self.metadata['Center Lat'].max()
+        self.minLat = self.metadata['Center Lat'].min()
+        self.maxLat = self.metadata['Center Lat'].max()
 
+    # Filter on initialization
 
-    ## Filter on initialization
     def __filterByTrack__(self):
         '''
-            Remove tracks not specified by user. Modify self.tracks parameter to include only those
-            tracks.
+        Remove tracks not specified by user. Modify self.tracks parameter
+        to include only those tracks.
         '''
-        dropIndicesTrack=self.metadata[self.metadata['Path Number']!=self.track].index
-        self.metadata.drop(dropIndicesTrack,inplace=True)
+        dropIndicesTrack = self.metadata[self.metadata['Path Number']
+                                         != self.track].index
+        self.metadata.drop(dropIndicesTrack, inplace=True)
 
         # Record track direction
-        self.trackDir=list(self.metadata['Ascending or Descending?'])[0]
+        self.trackDir = list(self.metadata['Ascending or Descending?'])[0]
 
         # Short name comprising track number and track direction, e.g., "A41"
-        self.trackCode='{}{}'.format(self.trackDir[0],self.track)
+        self.trackCode = '{}{}'.format(self.trackDir[0], self.track)
 
     def __filterByBeamMode__(self):
         '''
-            Remove frames if beam mode is not IW.
+        Remove frames if beam mode is not IW.
         '''
-        dropIndicesIW=self.metadata[self.metadata['Beam Mode']!='IW'].index
-        self.metadata.drop(dropIndicesIW,inplace=True)
+        dropIndicesIW = self.metadata[self.metadata['Beam Mode'] != 'IW'].index
+        self.metadata.drop(dropIndicesIW, inplace=True)
 
     def __filterByProcessingLevel__(self):
         '''
-            Remove if processing level is not "SLC" or "RAW". Only include "RAW" frames if "SLC" is
-            not available for that location and time.
+        Remove if processing level is not "SLC" or "RAW". Only include
+        "RAW" frames if "SLC" is not available for that location and time.
         '''
         # Ensure that only "RAW" and "SLC" frames are included
-        dropIndicesProc=self.metadata[(self.metadata['Processing Level']!='SLC') & \
-                                    (self.metadata['Processing Level']!='RAW')].index
-        self.metadata.drop(dropIndicesProc,inplace=True)
+        dropIndicesProc = self.metadata[
+            (self.metadata['Processing Level'] != 'SLC') &
+            (self.metadata['Processing Level'] != 'RAW')].index
+        self.metadata.drop(dropIndicesProc, inplace=True)
 
         # SLC frame IDs as integers to compare with RAW frame IDs
-        slcIDs=np.array([int(frame['frameID']) for ndx,frame in self.metadata.iterrows() if \
-            frame['Processing Level']=='SLC'])
+        slcIDs = np.array([
+            int(frame['frameID']) for ndx, frame in self.metadata.iterrows() if
+            frame['Processing Level'] == 'SLC'])
 
-        # Loop through raw frames to check that a similar SLC does not exist, based on frameID
-        dropIndicesRAW=[]
-        for frameNdx,frame in self.metadata.iterrows():
-            if frame['Processing Level']=='RAW':
+        # Loop through raw frames to check that a similar SLC does not exist,
+        # based on frameID
+        dropIndicesRAW = []
+        for frameNdx, frame in self.metadata.iterrows():
+            if frame['Processing Level'] == 'RAW':
                 # Check if SLC acquisition is within the nearest 4 frames
-                ID_differences=abs(int(frame['frameID'])-slcIDs)
-                if np.min(ID_differences)<4: dropIndicesRAW.append(frameNdx)
-        self.metadata.drop(dropIndicesRAW,inplace=True)
+                ID_differences = abs(int(frame['frameID']) - slcIDs)
+                if np.min(ID_differences) < 4:
+                    dropIndicesRAW.append(frameNdx)
+        self.metadata.drop(dropIndicesRAW, inplace=True)
 
-
-    ## Additional filtering
-    def filterByDate(self,startDate=None,endDate=None):
+    # Additional filtering
+    def filterByDate(self, startDate=None, endDate=None):
         '''
-            Clip the data set based on start and end dates if provided. Provide dates in format
-            YYYYMMDD.
+        Clip the data set based on start and end dates if provided. Provide
+        dates in format YYYYMMDD.
         '''
         # Convert start and end dates to datetimes
-        if startDate is not None: startDate=datetime.strptime(startDate,'%Y%m%d')
-        if endDate is not None: endDate=datetime.strptime(endDate,'%Y%m%d')
+        if startDate is not None:
+            startDate = datetime.strptime(startDate, '%Y%m%d')
+        if endDate is not None:
+            endDate = datetime.strptime(endDate, '%Y%m%d')
 
         # Determine which dates to drop
-        dropIndicesDate=[]
-        for frameNdx,frame in self.metadata.iterrows():
+        dropIndicesDate = []
+        for frameNdx, frame in self.metadata.iterrows():
             # Check start/end date criteria
-            if startDate is not None and frame['Datetime']<startDate:
+            if startDate is not None and frame['Datetime'] < startDate:
                 dropIndicesDate.append(frameNdx)
-            if endDate is not None and frame['Datetime']>endDate:
+            if endDate is not None and frame['Datetime'] > endDate:
                 dropIndicesDate.append(frameNdx)
-        self.metadata.drop(dropIndicesDate,inplace=True)
+        self.metadata.drop(dropIndicesDate, inplace=True)
 
-    def filterByLatitude(self,minLat=None,maxLat=None):
+    def filterByLatitude(self, minLat=None, maxLat=None):
         '''
-            Remove scenes if they do not meet the specified latitude requirements.
-            Loop through all IW SLCs frames to confirm which fall within latitude bounds.
+        Remove scenes if they do not meet the specified latitude requirements.
+        Loop through all IW SLCs frames to confirm which fall within latitude
+        bounds.
         '''
         # Update latitude bounds
-        if minLat is not None: self.minLat=minLat
-        if maxLat is not None: self.maxLat=maxLat
+        if minLat is not None:
+            self.minLat = minLat
+        if maxLat is not None:
+            self.maxLat = maxLat
 
         # Filter by latitude
-        dropIndicesLats=[]
-        for frameNdx,frame in self.metadata.iterrows():
+        dropIndicesLats = []
+        for frameNdx, frame in self.metadata.iterrows():
             # All latitude positions
-            frameLats=frame[['Near Start Lat','Far Start Lat','Near End Lat','Far End Lat']]
+            frameLats = frame[[
+                'Near Start Lat', 'Far Start Lat',
+                'Near End Lat', 'Far End Lat']]
 
             # Check that frames are within lat bounds
-            if frameLats.max() < self.minLat: dropIndicesLats.append(frameNdx)
-            if frameLats.min() > self.maxLat: dropIndicesLats.append(frameNdx)
-        self.metadata.drop(dropIndicesLats,inplace=True)
+            if frameLats.max() < self.minLat:
+                dropIndicesLats.append(frameNdx)
+            if frameLats.min() > self.maxLat:
+                dropIndicesLats.append(frameNdx)
+        self.metadata.drop(dropIndicesLats, inplace=True)
 
-
-    ## Spatial checks
-    def checkContinuity(self,removeIncompleteDates=False):
+    # Spatial checks
+    def checkContinuity(self, removeIncompleteDates=False):
         '''
-            Check whether an SLC is missing in the track for any given date. Specifically, we want to
-            see whether the spacing between frames exceeds a threshold (e.g., one and a half frames).
-            If that is the case, we want to assign different colors to the different subsets of frames.
-            This information will be carried through the metadata as new columns: "nGaps" (i.e., the
-            number of gaps with frames missing), and "subGroup".
-            This function also checks whether the frames cover the full latitude extent provided.
-            Dates with incomplete coverage will not be automatically excluded, they will simply
-            be flagged.
-            If the --removeIncompleteDates option is selected, update the self.excludeDates
-            property with the incomplete dates.
+        Check whether an SLC is missing in the track for any given date.
+        Specifically, we want to see whether the spacing between frames
+        exceeds a threshold (e.g., one and a half frames). If that is the
+        case, we want to assign different colors to the different subsets of
+        frames. This information will be carried through the metadata as new
+        columns: "nGaps" (i.e., the number of gaps with frames missing), and
+        "subGroup". This function also checks whether the frames cover the
+        full latitude extent provided. Dates with incomplete coverage will
+        not be automatically excluded, they will simply be flagged.
+        If the --removeIncompleteDates option is selected, update the
+        self.excludeDates property with the incomplete dates.
         '''
         # Add columns for min/max Lat extremes to each frame
         self.__addPassLats__()
 
         # Add empty columns for gaps, subgroups, extents covered
-        self.metadata['gaps']=np.zeros((self.metadata.shape[0],1))
-        self.metadata['subgroup']=np.ones((self.metadata.shape[0],1))
-        self.metadata['Extent Covered']=np.zeros((self.metadata.shape[0],1),dtype=bool)
+        self.metadata['gaps'] = np.zeros((self.metadata.shape[0], 1))
+        self.metadata['subgroup'] = np.ones((self.metadata.shape[0], 1))
+        self.metadata['Extent Covered'] = np.zeros(
+            (self.metadata.shape[0], 1), dtype=bool)
 
         # Use only SLC, not RAW
-        SLCindices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+        SLCindices = self.metadata[self.metadata['Processing Level']
+                                   == 'SLC'].index
 
         # Dates
-        dates=list(set(self.metadata['Common Date']))
+        dates = list(set(self.metadata['Common Date']))
 
         # Loop by date
         for date in dates:
             # Indices of frames matching non-RAW and date
-            dateIndices=self.metadata[self.metadata['Common Date']==date].index
-            passIndices=list(set(SLCindices).intersection(dateIndices))
+            dateIndices = self.metadata[self.metadata['Common Date']
+                                        == date].index
+            passIndices = list(set(SLCindices).intersection(dateIndices))
 
             # Sort tracks south-north and compare latitude extents
-            # "satPass" refers to all the acquisitions from a single satellite pass
-            satPass=self.metadata.loc[passIndices,:].sort_values(by='Center Lat')
+            # "satPass" refers to all the acquisitions from a single satellite
+            # pass
+            satPass = self.metadata.loc[passIndices,
+                                        :].sort_values(by='Center Lat')
 
             # Check that maxLat of southern frame > minLat of northern frame
-            nAcquisitions=len(passIndices) # number of acquisitions in pass
-            currentSubgroup=1
-            for i in range(nAcquisitions-1):
-                ndxSouth=satPass.index[i]
-                ndxNorth=satPass.index[i+1]
+            nAcquisitions = len(passIndices)  # number of acquisitions in pass
+            currentSubgroup = 1
+            for i in range(nAcquisitions - 1):
+                ndxSouth = satPass.index[i]
+                ndxNorth = satPass.index[i + 1]
 
-                # Action required if N extent of south frame < S extent of north frame
-                # i.e., no overlap
-                if satPass.loc[ndxSouth,'maxLat']<satPass.loc[ndxNorth,'minLat']:
+                # Action required if N extent of south frame < S extent of
+                # north frame i.e., no overlap
+                if satPass.loc[ndxSouth,
+                               'maxLat'] < satPass.loc[ndxNorth, 'minLat']:
                     # Update gaps detected for all acquisitions in pass
-                    self.metadata.loc[passIndices,'gaps']+=1
+                    self.metadata.loc[passIndices, 'gaps'] += 1
                     # Update subgroup
-                    self.metadata.loc[satPass.index[i+1],'subgroup']=currentSubgroup+1
+                    self.metadata.loc[satPass.index[i + 1],
+                                      'subgroup'] = currentSubgroup + 1
 
             # Check that max/min latitude extents are covered
-            latExtremesMet=False
-            latMax=satPass['maxLat'].to_numpy().max() # max of all frames at this date
-            latMin=satPass['minLat'].to_numpy().min() # min of all frames at this date
+            latExtremesMet = False
+            # max of all frames at this date
+            latMax = satPass['maxLat'].to_numpy().max()
+            # min of all frames at this date
+            latMin = satPass['minLat'].to_numpy().min()
 
             # Compare min/max values of pass to allowable min/max latitudes
-            if (latMax>=(self.maxLat)) and (latMin<=(self.minLat)):
-                latExtremesMet=True
+            if (latMax >= (self.maxLat)) and (latMin <= (self.minLat)):
+                latExtremesMet = True
 
-            # If there are no gaps and latitude extremes are covered, consider coverage complete
-            if (sum(self.metadata.loc[passIndices,'gaps'])==0) and (latExtremesMet==True):
-                self.metadata.loc[passIndices,'Extent Covered']=True
+            # If there are no gaps and latitude extremes are covered, consider
+            # coverage complete
+            if (sum(self.metadata.loc[passIndices, 'gaps']) == 0) and (
+                    latExtremesMet):
+                self.metadata.loc[passIndices, 'Extent Covered'] = True
 
         # If removeIncompleteDates is specified, update self.excludeDates
-        self.partialDatesRemoved=False
+        self.partialDatesRemoved = False
 
-        if removeIncompleteDates==True:
+        if removeIncompleteDates:
             # Update parameter
-            self.partialDatesRemoved=True
+            self.partialDatesRemoved = True
 
             # Check extent covered
-            for frameNdx,frame in self.metadata.iterrows():
-                if frame['Extent Covered']==False:
+            for frameNdx, frame in self.metadata.iterrows():
+                if not frame['Extent Covered']:
                     self.excludeDates.append(frame['Common Date'])
-            self.excludeDates=list(set(self.excludeDates))
+            self.excludeDates = list(set(self.excludeDates))
             self.excludeDates.sort()
 
             # Save updated date list to text file
-            exclDatesName='{}_auto-excluded_dates.txt'.format(self.trackCode)
-            exclDatesPath=os.path.join(self.workdir,exclDatesName)
-            with open(exclDatesPath,'w') as exclDatesFile:
+            exclDatesName = '{}_auto-excluded_dates.txt'.format(self.trackCode)
+            exclDatesPath = os.path.join(self.workdir, exclDatesName)
+            with open(exclDatesPath, 'w') as exclDatesFile:
                 for date in self.excludeDates:
-                    exclDatesFile.write(date+'\n')
+                    exclDatesFile.write(date + '\n')
                 exclDatesFile.close()
 
-        # Warn user if no dates remain which satisfy all spatial and temporal criteria
-        remainingDates=[date for date in self.metadata['Common Date'] if date not in
+        # Warn user if no dates remain which satisfy all spatial and temporal
+        # criteria
+        remainingDates = [
+            date for date in self.metadata['Common Date'] if date not in
             self.excludeDates]
-        self.nRemainingDates=len(remainingDates)
-        if self.nRemainingDates==0:
-            excludeDates_warning='''
+        self.nRemainingDates = len(remainingDates)
+        if self.nRemainingDates == 0:
+            excludeDates_warning = '''
                 WARNING: No dates meet all spatial and temporal criteria.
 Try modifying the --lat_bounds parameter to be more conservative. Current lat bounds: {:.2f} {:.2f}
-'''.format(self.minLat,self.maxLat)
+'''.format(self.minLat, self.maxLat)
             print(excludeDates_warning)
 
     def __addPassLats__(self):
         '''
-            Add one column each for the minimum and maximum latitude extents. This is designed to ease
-            continuity checks.
+        Add one column each for the minimum and maximum latitude extents.
+        This is designed to ease continuity checks.
         '''
-        minLats=[]
-        maxLats=[]
-        for frameNdx,frame in self.metadata.iterrows():
-            lats=frame[['Near Start Lat','Far Start Lat','Near End Lat','Far End Lat']].to_numpy()
+        minLats = []
+        maxLats = []
+        for frameNdx, frame in self.metadata.iterrows():
+            lats = frame[['Near Start Lat', 'Far Start Lat',
+                          'Near End Lat', 'Far End Lat']].to_numpy()
             minLats.append(lats.min())
             maxLats.append(lats.max())
-        self.metadata['minLat']=minLats
-        self.metadata['maxLat']=maxLats
+        self.metadata['minLat'] = minLats
+        self.metadata['maxLat'] = maxLats
 
-
-    ## Plotting
-    def plotFrameCenters(self,flagPartialCoverage=False,plotRaw=False):
+    # Plotting
+    def plotFrameCenters(self, flagPartialCoverage=False, plotRaw=False):
         '''
             Plot the center of each frame with attributes.
         '''
         # Spawn figure
-        self.Fig=plt.figure(figsize=(80,11))
-        self.ax=self.Fig.add_subplot(111)
+        self.Fig = plt.figure(figsize=(80, 11))
+        self.ax = self.Fig.add_subplot(111)
 
         # Plot SLC frames only
-        SLCindices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+        SLCindices = self.metadata[self.metadata['Processing Level']
+                                   == 'SLC'].index
 
         # Loop through each SLC acqusition
-        labels=[]
-        for frameNdx,frame in self.metadata.loc[SLCindices,:].iterrows():
+        labels = []
+        for frameNdx, frame in self.metadata.loc[SLCindices, :].iterrows():
             # Color based on spatial extent, if extent is not automatic
-            if (flagPartialCoverage==True) and (frame['Extent Covered']==False):
-                color='r'
-                label='Incomplete for lat.s {:.1f}-{:.1f}'.format(self.minLat,self.maxLat)
+            if flagPartialCoverage and not frame['Extent Covered']:
+                color = 'r'
+                label = 'Incomplete for lat.s {:.1f}-{:.1f}'.format(
+                    self.minLat, self.maxLat)
             else:
-                color='k'
-                label='Complete track'
+                color = 'k'
+                label = 'Complete track'
 
             # Color based on gaps
-            if (flagPartialCoverage==True) and (frame['gaps']>0):
-                color=(0.6,0,0) # dark red
-                label='Incomplete due to gaps'
+            if (flagPartialCoverage) and (frame['gaps'] > 0):
+                color = (0.6, 0, 0)  # dark red
+                label = 'Incomplete due to gaps'
 
             # Gray if excluded
             if frame['Common Date'] in self.excludeDates:
-                color=(0.6,0.6,0.6)
-                label='Excluded date'
+                color = (0.6, 0.6, 0.6)
+                label = 'Excluded date'
 
             # Plot frame
-            self.ax.scatter(frame['Common Datetime'],frame['Center Lat'],s=100,color=color,
-                label=label)
+            self.ax.scatter(
+                frame['Common Datetime'], frame['Center Lat'], s=100,
+                color=color, label=label)
 
         # Plot RAW frames if specified
-        if plotRaw==True:
-            RAWindices=self.metadata[self.metadata['Processing Level']=='RAW'].index
+        if plotRaw:
+            RAWindices = self.metadata[self.metadata['Processing Level']
+                                       == 'RAW'].index
 
             # Loop through each RAW acquisition
-            for frameNdx,frame in self.metadata.loc[RAWindices,:].iterrows():
-                self.ax.scatter(frame['Common Datetime'],frame['Center Lat'],s=100,color='m',
-                    label='Raw frame')
+            for frameNdx, frame in self.metadata.loc[RAWindices, :].iterrows():
+                self.ax.scatter(
+                    frame['Common Datetime'], frame['Center Lat'], s=100,
+                    color='m', label='Raw frame')
 
         # Format x-axis
-        dates=list(set(self.metadata['Common Datetime'])); dates.sort()
-        datelabels=list(set(self.metadata['Common Date'])); datelabels.sort()
+        dates = sorted(set(self.metadata['Common Datetime']))
+        datelabels = list(set(self.metadata['Common Date']))
+        datelabels.sort()
         self.ax.set_xticks(dates)
-        self.ax.set_xticklabels(datelabels,rotation=90)
-        self.ax.set_xlim([dates[0]-timedelta(days=6),dates[-1]+timedelta(days=6)])
+        self.ax.set_xticklabels(datelabels, rotation=90)
+        self.ax.set_xlim([dates[0] - timedelta(days=6),
+                         dates[-1] + timedelta(days=6)])
         self.ax.set_xlabel('Date')
 
         # Highlight dates with only partial coverage
-        if flagPartialCoverage==True:
-            slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
-            partialIndices=self.metadata[self.metadata['Extent Covered']==False].index
-            partialIndices=list(set(slcIndices).intersection(partialIndices))
-            partialDates=list(set([date for date in self.metadata.loc[partialIndices,'Common Date']]))
+        if flagPartialCoverage:
+            slcIndices = self.metadata[self.metadata['Processing Level']
+                                       == 'SLC'].index
+            partialIndices = self.metadata[
+                not self.metadata['Extent Covered']].index
+            partialIndices = list(set(slcIndices).intersection(partialIndices))
+            partialDates = list(set([
+                date for date in
+                self.metadata.loc[partialIndices, 'Common Date']]))
 
             # Change date label to red if only partial coverage
-            [self.ax.get_xticklabels()[n].set_color('r') for n,date in enumerate(datelabels) if
-                date in partialDates]
+            [self.ax.get_xticklabels()[n].set_color('r')
+             for n, date in enumerate(datelabels) if date in partialDates]
 
         # Format legend
-        handles,labels=self.ax.get_legend_handles_labels()
-        uniqueLabels = dict(zip(labels,handles))
-        self.ax.legend(uniqueLabels.values(),uniqueLabels.keys(),
-            bbox_to_anchor=(1.005,1),loc='upper left',borderaxespad=0.)
+        handles, labels = self.ax.get_legend_handles_labels()
+        uniqueLabels = dict(zip(labels, handles))
+        self.ax.legend(
+            uniqueLabels.values(), uniqueLabels.keys(),
+            bbox_to_anchor=(1.005, 1), loc='upper left', borderaxespad=0.)
 
         # Other formatting
-        title='Track {}'.format(self.trackCode)
-        self.ax.set_title(title,weight='bold')
+        title = 'Track {}'.format(self.trackCode)
+        self.ax.set_title(title, weight='bold')
         self.ax.set_ylabel('Latitude (degrees)')
         self.ax.margins(x=0)
         self.Fig.tight_layout()
 
         # Save to file
-        figname='{}_lat_extents.eps'.format(self.trackCode)
-        self.Fig.savefig(os.path.join(self.workdir,figname))
+        figname = '{}_lat_extents.eps'.format(self.trackCode)
+        self.Fig.savefig(os.path.join(self.workdir, figname))
 
+    # Save epochs to list
 
-    ## Save epochs to list
     def saveEpochs(self):
         '''
-            Save a list of unique epochs and report if requested.
+        Save a list of unique epochs and report if requested.
         '''
         # Detect number of epochs
-        epochs=self.metadata['Common Date'].to_list()
-        epochs=list(set(epochs)) # unique dates
-        epochs.sort() # sorted
-        Nepochs=len(epochs)
+        epochs = self.metadata['Common Date'].to_list()
+        epochs = sorted(set(epochs))  # unique dates
+        Nepochs = len(epochs)
 
         # Report if requested
-        if self.verbose == True:
+        if self.verbose:
             print('{} unique epochs'.format(Nepochs))
 
         # Save to list
-        outname='{}_epochs.txt'.format(self.trackCode)
-        outpath=os.path.join(self.workdir,outname)
-        with open(outpath,'w') as outfile:
+        outname = '{}_epochs.txt'.format(self.trackCode)
+        outpath = os.path.join(self.workdir, outname)
+        with open(outpath, 'w') as outfile:
             for epoch in epochs:
                 outfile.write('{}\n'.format(epoch))
             outfile.close()
 
+    # Save spatial extents
 
-    ## Save spatial extents
     def save2kml(self):
         '''
-            Save frame boundaries to kml file - use only SLC frames and non-exluded dates.
+        Save frame boundaries to kml file - use only SLC frames and
+        non-exluded dates.
         '''
         # Open KML data set
-        kmlname='track{}_frames.kml'.format(self.trackCode)
-        kmlpath=os.path.join(self.workdir,kmlname)
-        DS=ogr.GetDriverByName('LIBKML').CreateDataSource(kmlpath)
+        kmlname = 'track{}_frames.kml'.format(self.trackCode)
+        kmlpath = os.path.join(self.workdir, kmlname)
+        DS = ogr.GetDriverByName('LIBKML').CreateDataSource(kmlpath)
 
         # Filter by SLC only
-        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+        slcIndices = self.metadata[self.metadata['Processing Level']
+                                   == 'SLC'].index
 
         # Loop by date
-        dates=list(set(self.metadata.loc[slcIndices,'Common Date']))
-        dates=[date for date in dates if date not in self.excludeDates]
-        dates.sort() # sort oldest-most recent
+        dates = list(set(self.metadata.loc[slcIndices, 'Common Date']))
+        dates = sorted(
+            [date for date in dates if date not in self.excludeDates])
 
         for date in dates:
-            dateIndices=self.metadata[self.metadata['Common Date']==date].index
-            dateIndices=list(set(slcIndices).intersection(dateIndices))
+            dateIndices = self.metadata[self.metadata['Common Date']
+                                        == date].index
+            dateIndices = list(set(slcIndices).intersection(dateIndices))
 
             # Create KML layer
-            layer=DS.CreateLayer(date,None,ogr.wkbPolygon)
-            layer.CreateField(ogr.FieldDefn('id',ogr.OFTInteger)) # add 1 attribute
+            layer = DS.CreateLayer(date, None, ogr.wkbPolygon)
+            # add 1 attribute
+            layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
 
             # Add frame polygons
-            for frameNdx,frame in self.metadata.loc[dateIndices,:].iterrows():
-                feat=ogr.Feature(layer.GetLayerDefn())
-                feat.SetField('id',frameNdx)
-                bbox=self.__polygonFromFrame__(frame)
-                geom=ogr.CreateGeometryFromWkb(bbox.wkb)
+            for frameNdx, frame in self.metadata.loc[dateIndices, :].iterrows(
+            ):
+                feat = ogr.Feature(layer.GetLayerDefn())
+                feat.SetField('id', frameNdx)
+                bbox = self.__polygonFromFrame__(frame)
+                geom = ogr.CreateGeometryFromWkb(bbox.wkb)
                 feat.SetGeometry(geom)
                 feat.SetStyleString("PEN(c:#000000)")
                 layer.CreateFeature(feat)
             # Close layer
-            layer=feat=geom=None
+            layer = feat = geom = None
         # Close KML
-        DS=layer=feat=geom=None
+        DS = layer = feat = geom = None
 
-    def __polygonFromFrame__(self,frame):
+    def __polygonFromFrame__(self, frame):
         '''
-            Create a Shapely polygon from the coordinates of a frame.
+        Create a Shapely polygon from the coordinates of a frame.
         '''
-        P=Polygon([(float(frame['Near Start Lon']),float(frame['Near Start Lat'])),
-                    (float(frame['Far Start Lon']),float(frame['Far Start Lat'])),
-                    (float(frame['Far End Lon']),float(frame['Far End Lat'])),
-                    (float(frame['Near End Lon']),float(frame['Near End Lat']))])
+        P = Polygon([
+            (float(frame['Near Start Lon']), float(frame['Near Start Lat'])),
+            (float(frame['Far Start Lon']), float(frame['Far Start Lat'])),
+            (float(frame['Far End Lon']), float(frame['Far End Lat'])),
+            (float(frame['Near End Lon']), float(frame['Near End Lat']))])
         return P
 
+    # Suggested AOI based on intersection of all polygons
 
-    ## Suggested AOI based on intersection of all polygons
     def intersectionAOI(self):
         '''
-            Create a "suggested" AOI based on the intersection of all frame polygons.
-            This function does not guarantee a result.
+        Create a "suggested" AOI based on the intersection of all frame
+        polygons. This function does not guarantee a result.
         '''
         # Exclude dates based on spatial criteria if not already done
-        if self.partialDatesRemoved==False:
+        if not self.partialDatesRemoved:
             self.checkContinuity(removeIncompleteDates=True)
 
         # Use only SLCs
-        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+        slcIndices = self.metadata[self.metadata['Processing Level']
+                                   == 'SLC'].index
 
         # Unique dates
-        dates=list(set(self.metadata.loc[slcIndices,'Common Date']))
-        dates=[date for date in dates if date not in self.excludeDates]
+        dates = list(set(self.metadata.loc[slcIndices, 'Common Date']))
+        dates = [date for date in dates if date not in self.excludeDates]
 
         # Use first date as initial polygon
-        dateUnion=self.__mergeFramesbyDate__(dates[0])
-        sceneIntersection=dateUnion
+        dateUnion = self.__mergeFramesbyDate__(dates[0])
+        sceneIntersection = dateUnion
 
-        validOverlap=True # assume all frames overlap until detected otherwise
+        # assume all frames overlap until detected otherwise
+        validOverlap = True
         for date in dates[1:]:
             # Take union of frames in date
-            dateUnion=self.__mergeFramesbyDate__(date)
+            dateUnion = self.__mergeFramesbyDate__(date)
 
             # Take intersection of dates
-            sceneIntersection=sceneIntersection.intersection(dateUnion)
+            sceneIntersection = sceneIntersection.intersection(dateUnion)
 
-            # Check whether area of intersection remains a single polygon, or if it is broken into
-            # multiple pieces
-            if isinstance(sceneIntersection,MultiPolygon):
+            # Check whether area of intersection remains a single polygon,
+            # or if it is broken into multiple pieces
+            if isinstance(sceneIntersection, MultiPolygon):
                 print('COULD NOT AUTOMATICALLY DETERMINE AOI DUE TO GAPS.')
-                print('Area of frame overlap not continuous, beginning on {}'.format(date))
-                validOverlap=False
+                print(
+                    'Area of frame overlap not continuous, beginning on {}'.format(date))
+                validOverlap = False
                 break
 
         # Remove ~20km from either end and save suggested AOI
-        if validOverlap==True:
-            # Simply polygon by removing points within several hundred meters of each other
-            sceneIntersection=self.__simplifyAOI__(sceneIntersection)
+        if validOverlap:
+            # Simply polygon by removing points within several hundred meters
+            # of each other
+            sceneIntersection = self.__simplifyAOI__(sceneIntersection)
 
             # Remove 20 km from edges
-            sceneIntersection=self.__trimAOIedges__(sceneIntersection)
+            sceneIntersection = self.__trimAOIedges__(sceneIntersection)
 
             # Save AOI to KML
             self.__saveAOI__(sceneIntersection)
@@ -588,195 +681,198 @@ Try modifying the --lat_bounds parameter to be more conservative. Current lat bo
         # Update latitude extents plot
         self.plotFrameCenters(flagPartialCoverage=True)
 
-    def __mergeFramesbyDate__(self,date):
+    def __mergeFramesbyDate__(self, date):
         '''
             For a given date, merge all valid (SLC) frames into a polygon.
         '''
         # Use only SLCs
-        slcIndices=self.metadata[self.metadata['Processing Level']=='SLC'].index
+        slcIndices = self.metadata[self.metadata['Processing Level']
+                                   == 'SLC'].index
 
         # Collect indices of date
-        dateIndices=self.metadata[self.metadata['Common Date']==date].index
-        dateIndices=list(set(slcIndices).intersection(dateIndices))
+        dateIndices = self.metadata[
+            self.metadata['Common Date'] == date].index
+        dateIndices = list(set(slcIndices).intersection(dateIndices))
 
         # Compute polygons
-        datePolygons=[]
-        for frameNdx,frame in self.metadata.loc[dateIndices,:].iterrows():
+        datePolygons = []
+        for frameNdx, frame in self.metadata.loc[dateIndices, :].iterrows():
             # Convert frame coords to polygon
             datePolygons.append(self.__polygonFromFrame__(frame))
 
         # Find union of polygons
-        dateUnion=datePolygons[0]
+        dateUnion = datePolygons[0]
         for datePolygon in datePolygons:
-            dateUnion=dateUnion.union(datePolygon)
+            dateUnion = dateUnion.union(datePolygon)
 
         return dateUnion
 
-    def __simplifyAOI__(self,AOI):
+    def __simplifyAOI__(self, AOI):
         '''
-            Simplify AOI polygon by removing points within several kilometers of each other.
+        Simplify AOI polygon by removing points within several kilometers
+        of each other.
         '''
         # Assign search distance
-        d=0.05 # 0.01 degrees ~ 1 km
-        dsq=d**2
+        d = 0.05  # 0.01 degrees ~ 1 km
+        dsq = d**2
 
         # Convert polygon vertices to "nodes"
-        nodes=np.column_stack(AOI.exterior.xy)
-        N=nodes.shape[0] # number of nodes
+        nodes = np.column_stack(AOI.exterior.xy)
+        N = nodes.shape[0]  # number of nodes
 
         # Start with first node
-        d2all=(nodes[0,0]-nodes[:,0])**2+(nodes[0,1]-nodes[:,1])**2
-        nodeCluster=nodes[d2all<dsq,:]
-        clusterCenter=np.mean(nodeCluster,axis=0)
-        simpleNodes=np.array(clusterCenter).reshape(1,2)
+        d2all = (nodes[0, 0] - nodes[:, 0])**2 + (nodes[0, 1] - nodes[:, 1])**2
+        nodeCluster = nodes[d2all < dsq, :]
+        clusterCenter = np.mean(nodeCluster, axis=0)
+        simpleNodes = np.array(clusterCenter).reshape(1, 2)
 
         # Loop through all nodes to find cluster centers
-        for n in range(1,N):
-            currentNode=nodes[n,:]
+        for n in range(1, N):
+            currentNode = nodes[n, :]
 
             # First, check if a nearby node already exists
-            d2simple=(currentNode[0]-simpleNodes[:,0])**2+(currentNode[1]-simpleNodes[:,1])**2
-            if np.min(d2simple)>dsq:
+            d2simple = (currentNode[0] - simpleNodes[:, 0]
+                        )**2 + (currentNode[1] - simpleNodes[:, 1])**2
+            if np.min(d2simple) > dsq:
                 # Compute distance from given node to all other nodes
-                d2all=(nodes[:,0]-currentNode[0])**2+(nodes[:,1]-currentNode[1])**2
+                d2all = (nodes[:, 0] - currentNode[0])**2 + \
+                    (nodes[:, 1] - currentNode[1])**2
 
                 # Identify cluster of all nodes within squared search distance
-                nodeCluster=nodes[d2all<dsq]
-                clusterCenter=np.mean(nodeCluster,axis=0)
+                nodeCluster = nodes[d2all < dsq]
+                clusterCenter = np.mean(nodeCluster, axis=0)
 
                 # Add to simple nodes
-                simpleNodes=np.vstack([simpleNodes,clusterCenter])
+                simpleNodes = np.vstack([simpleNodes, clusterCenter])
 
         # Convert simplified nodes back to Shapely Polygon
-        simpleNodes=Polygon(simpleNodes)
+        simpleNodes = Polygon(simpleNodes)
 
         return simpleNodes
 
-    def __trimAOIedges__(self,AOI):
+    def __trimAOIedges__(self, AOI):
         '''
-            Remove ~20 km or 1 burst from the N-S edges of the suggested AOI.
-            First, remove data centroid. Then, rotate into a semi-vertical orientation.
-            Remove ~20 km from top and bottom points.
+        Remove ~20 km or 1 burst from the N-S edges of the suggested AOI.
+        First, remove data centroid. Then, rotate into a semi-vertical
+        orientation. Remove ~20 km from top and bottom points.
         '''
         # Assign trim distance
-        trimDist=0.2 # degrees
+        trimDist = 0.2  # degrees
 
         # Convert polygon vertices to "nodes"
-        nodes=np.column_stack(AOI.exterior.xy)
+        nodes = np.column_stack(AOI.exterior.xy)
 
         # Remove centroid
-        nodeMeans=np.mean(nodes,axis=0)
-        nodes-=nodeMeans # temporarily remove centroid
+        nodeMeans = np.mean(nodes, axis=0)
+        nodes -= nodeMeans  # temporarily remove centroid
 
         # Solve for polygon axes and rotate to horizontal
-        U,s,VT=np.linalg.svd(nodes)
+        U, s, VT = np.linalg.svd(nodes)
 
         # Rotate into N-S orientation
-        R=np.array([[0,-1],[1, 0]]) # 90-degree rotation matrix
-        nodes=R.dot(VT).dot(nodes.T).T
+        R = np.array([[0, -1], [1, 0]])  # 90-degree rotation matrix
+        nodes = R.dot(VT).dot(nodes.T).T
 
         # Remove 20 km from top and bottom
-        sortNdx=np.argsort(nodes[:,1])
-        nodes[sortNdx[:2],1]+=trimDist
-        nodes[sortNdx[-2:],1]-=trimDist
+        sortNdx = np.argsort(nodes[:, 1])
+        nodes[sortNdx[:2], 1] += trimDist
+        nodes[sortNdx[-2:], 1] -= trimDist
 
         # Rotate back to original orientation
-        nodes=VT.T.dot(R.T).dot(nodes.T).T
+        nodes = VT.T.dot(R.T).dot(nodes.T).T
 
         # Add centroid back
-        nodes+=nodeMeans
+        nodes += nodeMeans
 
         # Convert back to Shapely Polygon
-        AOI=Polygon(nodes)
+        AOI = Polygon(nodes)
 
         return AOI
 
-    def __saveAOI__(self,AOI):
+    def __saveAOI__(self, AOI):
         '''
             Save AOI to kml file.
         '''
         # Open kml data set
-        kmlname='track{}_suggestedAOI.kml'.format(self.trackCode)
-        kmlpath=os.path.join(self.workdir,kmlname)
-        DS=ogr.GetDriverByName('LIBKML').CreateDataSource(kmlpath)
+        kmlname = 'track{}_suggestedAOI.kml'.format(self.trackCode)
+        kmlpath = os.path.join(self.workdir, kmlname)
+        DS = ogr.GetDriverByName('LIBKML').CreateDataSource(kmlpath)
 
         # Create KML layer
-        layer=DS.CreateLayer('suggestedAOI',None,ogr.wkbPolygon)
-        layer.CreateField(ogr.FieldDefn('id',ogr.OFTInteger))
+        layer = DS.CreateLayer('suggestedAOI', None, ogr.wkbPolygon)
+        layer.CreateField(ogr.FieldDefn('id', ogr.OFTInteger))
 
         # Create feature
-        feat=ogr.Feature(layer.GetLayerDefn())
-        feat.SetField('id',0)
-        geom=ogr.CreateGeometryFromWkb(AOI.wkb)
+        feat = ogr.Feature(layer.GetLayerDefn())
+        feat.SetField('id', 0)
+        geom = ogr.CreateGeometryFromWkb(AOI.wkb)
         feat.SetGeometry(geom)
         feat.SetStyleString('PEN(c:#000000)')
         layer.CreateFeature(feat)
 
         # Close layer
-        layer=feat=geom=None
+        layer = feat = geom = None
 
         # Close KML
-        DS=layer=feat=geom=None
-
+        DS = layer = feat = geom = None
 
 
 # Main
 if __name__ == "__main__":
     """ Main workflow for extracting and visualizing meta data. """
-    try:
-        print ('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except:
-        pass
-
     inps = cmdLineParse(iargs=None)
-
 
     # Setup
     # Create work directory
     if not os.path.exists(inps.workdir):
         os.mkdir(inps.workdir)
 
-
     # Loop by track -- one class instance per track
     # Detect which tracks to analyze
-    if inps.tracks=='all':
-        # If "all" tracks are specified, need to load file to detect which ones are available
-        csv=pd.read_csv(inps.imgfile,index_col=False)
-        tracks=list(set(csv['Path Number']))
-        csv=None
+    if inps.tracks == 'all':
+        # If "all" tracks are specified, need to load file to detect which ones
+        # are available
+        csv = pd.read_csv(inps.imgfile, index_col=False)
+        tracks = list(set(csv['Path Number']))
+        csv = None
     else:
-        tracks=[int(track) for track in inps.tracks.split()] # split into individual numbers
+        # split into individual numbers
+        tracks = [int(track) for track in inps.tracks.split()]
 
     # Loop through tracks
     for track in tracks:
         print('Generating outputs for track: {}'.format(track))
 
         # Instantiate metadata object and load metadata from csv
-        track_metadata=SentinelMetadata(imgfile=inps.imgfile,track=track,workdir=inps.workdir,
-            excludeDates=inps.excludeDates,
-            verbose=inps.verbose)
+        track_metadata = SentinelMetadata(
+            imgfile=inps.imgfile, track=track, workdir=inps.workdir,
+            excludeDates=inps.excludeDates, verbose=inps.verbose)
 
         # Filtering -- remove frames from metadata
         # Clip based on start and end date
-        track_metadata.filterByDate(startDate=inps.startDate,endDate=inps.endDate)
+        track_metadata.filterByDate(
+            startDate=inps.startDate,
+            endDate=inps.endDate)
 
         # Filter by latitude bounds if specified
         if inps.latBounds is not None:
             # Split latitude values and convert to type float
-            inps.latBounds=[float(val) for val in inps.latBounds.split()]
+            inps.latBounds = [float(val) for val in inps.latBounds.split()]
 
             # Filter
-            track_metadata.filterByLatitude(minLat=inps.latBounds[0],maxLat=inps.latBounds[1])
+            track_metadata.filterByLatitude(
+                minLat=inps.latBounds[0], maxLat=inps.latBounds[1])
 
-        # Check spatial criteria -- does not remove scenes, only highlights potentially problematic
-        # ones
+        # Check spatial criteria -- does not remove scenes, only highlights
+        # potentially problematic ones
         # Check for gaps
-        track_metadata.checkContinuity(removeIncompleteDates=inps.removeIncomplete)
+        track_metadata.checkContinuity(
+            removeIncompleteDates=inps.removeIncomplete)
 
         # Outputs
         # Plot frame centers
-        track_metadata.plotFrameCenters(flagPartialCoverage=inps.flagPartialCoverage,
-            plotRaw=inps.plotRaw)
+        track_metadata.plotFrameCenters(
+            flagPartialCoverage=inps.flagPartialCoverage, plotRaw=inps.plotRaw)
 
         # Save epochs to list
         track_metadata.saveEpochs()
@@ -785,8 +881,7 @@ if __name__ == "__main__":
         track_metadata.save2kml()
 
         # Create suggested AOI based on intersection of all polygons
-        if inps.approxAOI==True:
+        if inps.approxAOI:
             track_metadata.intersectionAOI()
-
 
     print('Products generated.')
