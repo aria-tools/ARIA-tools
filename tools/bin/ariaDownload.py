@@ -14,14 +14,15 @@ import datetime
 import argparse
 import logging
 import warnings
+import getpass
 
 import shapely
 import asf_search
+from pkg_resources import get_distribution
 
 import ARIAtools.util.log
 from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
-from pkg_resources import get_distribution
 
 LOGGER = logging.getLogger('ariaDownload.py')
 
@@ -32,16 +33,19 @@ def createParser():
     see: https://github.com/asfadmin/Discovery-asf_search
     """
     parser = argparse.ArgumentParser(
-        description='Command line interface to download GUNW products from '
-                    'the ASF DAAC. GUNW products are hosted at the NASA ASF '
-                    'DAAC.\nDownloading them requires a NASA Earthdata URS '
-                    'user login and requires users to add "GRFN Door (PROD)" '
-                    'and "ASF Datapool Products" to their URS approved '
-                    'applications.',
+        description='Command line interface to download Sentinel-1/NISAR '
+                    'GUNW products from the ASF DAAC. \nDownloading them '
+                    'requires a NASA Earthdata URS user login and requires '
+                    'users to add "GRFN Door (PROD)" and "ASF Datapool '
+                    'Products" to their URS approved applications. Access '
+                    'to NISAR products requires an Earthdata Bearer token '
+                    'from: https://urs.earthdata.nasa.gov/documentation/'
+                    'for_users/user_token',
         epilog='Examples of use:\n'
                '\t ariaDownload.py --track 004 --output count\n'
                '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
-               '\t ariaDownload.py -t 004,077 --start 20190101 -o count',
+               '\t ariaDownload.py -t 004,077 --start 20190101 -o count'
+               '\t ariaDownload.py --mission NISAR -o count',
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument(
@@ -55,8 +59,8 @@ def createParser():
              'comma separated')
     parser.add_argument(
         '-b', '--bbox', default=None, type=str,
-        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing POLYGON '
-             'geometry.')
+        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
+             'POLYGON geometry.')
     parser.add_argument(
         '-w', '--workdir', dest='wd', default='./products', type=str,
         help='Specify directory to deposit all outputs. Default is "products" '
@@ -70,14 +74,17 @@ def createParser():
         help='End date as YYYYMMDD. If none provided, ends today.')
     parser.add_argument(
         '-u', '--user', default=None, type=str,
-        help='NASA Earthdata URS user login. Users must add '
-             '"GRFN Door (PROD)" and "ASF Datapool Products" to their URS '
-             'approved applications.')
+        help='NASA Earthdata URS user login. Users must add "GRFN Door '
+             '(PROD)" and "ASF Datapool Products" to their URS approved '
+             'applications.')
     parser.add_argument(
         '-p', '--pass', dest='passw', default=None, type=str,
         help='NASA Earthdata URS user password. Users must add "GRFN Door '
              '(PROD)" and "ASF Datapool Products" to their URS approved '
              'applications.')
+    parser.add_argument(
+        '--mission', default='S1', type=str.upper, choices=('S1', 'NISAR'),
+        help='Sentinel-1 (S1) or NISAR. Default is S1')
     parser.add_argument(
         '-l', '--daysless', dest='dayslt', default=math.inf, type=int,
         help='Take pairs with a temporal baseline -- days less than this '
@@ -111,6 +118,7 @@ def createParser():
         '--log-level', default='warning', help='Logger log level')
     return parser
 
+
 def make_bbox(inp_bbox):
     """Make a WKT from SNWE or a shapefile"""
     if inp_bbox is None:
@@ -139,9 +147,9 @@ def make_bbox(inp_bbox):
                 LOGGER.info('Adjusted N/S')
 
         except BaseException:
-            raise Exception('Cannot understand the --bbox argument. '
-                            'Input string was entered incorrectly or path '
-                            'does not exist.')
+            raise Exception(
+                'Cannot understand the --bbox argument. Input string was '
+                'entered incorrectly or path does not exist.')
 
     return shapely.geometry.Polygon([(W, N), (W, S), (E, S), (E, N)])
 
@@ -200,8 +208,10 @@ class Downloader(object):
         else:
             LOGGER.setLevel('INFO')
 
+
     def __call__(self):
         scenes = self.query_asf()
+
         urls, ifgs = get_url_ifg(scenes)
 
         # subset everything by version
@@ -280,13 +290,15 @@ class Downloader(object):
                     scenes.download(self.args.wd, processes=nt)
 
             LOGGER.info(
-                'Download complete. Wrote %s products to: %s', len(scenes),
-                self.args.wd)
+                f'Download complete. Wrote -- {len(scenes)} -- products to: '
+                f'{self.args.wd}')
 
-        for scene in scenes:
-            LOGGER.debug(scene.geojson()['properties']['sceneName'])
+        if self.args.verbose:
+            for scene in scenes:
+                LOGGER.info(scene.geojson()['properties']['sceneName'])
 
         return
+
 
     def query_asf(self):
         """Get the scenes from ASF"""
@@ -306,12 +318,38 @@ class Downloader(object):
         else:
             tracks = self.args.track
 
-        dct_kw = dict(platform=asf_search.constants.SENTINEL1,
-                      processingLevel=asf_search.constants.GUNW_STD,
-                      relativeOrbit=tracks,
-                      flightDirection=flight_direction,
-                      intersectsWith=bbox)
-        scenes = asf_search.geo_search(**dct_kw)
+        # buffer a bit for loose subsetting and speedup
+        start = self.args.start + datetime.timedelta(days=-90)
+        end = self.args.end + datetime.timedelta(days=90)
+
+        if self.args.mission.upper() == 'S1':
+            dct_kw = dict(
+                dataset=asf_search.DATASET.ARIA_S1_GUNW,
+                processingLevel=asf_search.constants.GUNW_STD,
+                relativeOrbit=tracks, flightDirection=flight_direction,
+                intersectsWith=bbox, start=start, end=end)
+            scenes = asf_search.geo_search(**dct_kw)
+
+        elif self.args.mission.upper() == 'NISAR':
+            session = asf_search.ASFSession()
+            session.auth_with_token(getpass.getpass('EDL Token:'))
+            LOGGER.info('Token accepted.')
+            # TODO: populate once available on GUNWs are available
+            search_opts = asf_search.ASFSearchOptions(
+                shortName='NISAR_L2_GUNW_BETA_V1', session=session)
+            # processingLevel=asf_search.constants.GUNW_STD,
+            # relativeOrbit=tracks,
+            # flightDirection=flight_direction,
+            # intersectsWith=bbox,
+            # start=self.args.start,
+            # end=self.args.end)
+
+            scenes = asf_search.search(opts=search_opts, maxResults=250)
+            if len(scenes) > 0:
+                LOGGER.info('Found NISAR GUNW Betas.')
+            else:
+                LOGGER.warning('No NISAR GUNW Betas found.')
+            raise Exception('Exiting, NISAR GUNWs not futher supported.')
 
         return scenes
 
