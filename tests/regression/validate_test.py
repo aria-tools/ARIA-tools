@@ -316,6 +316,7 @@ def run_extract_test(sync_golden_data):
         LOGGER.error("Error running ariaExtract test case!")
         raise AssertionError("Error running ariaExtract test case!")
 
+
 @pytest.fixture(scope='session')
 def run_nisar_extract_test(sync_golden_data):
     return_code = subprocess.call('./run_nisar_extract_test.py', shell=True)
