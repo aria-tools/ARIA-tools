@@ -7,6 +7,8 @@ pycodestyle:  # Valid if scanner.linter is pycodestyle
     ignore:
       - E129
       - E125
+      - W503
+      - W504
     exclude: []  # File path patterns to exclude
     count: False
     first: False
