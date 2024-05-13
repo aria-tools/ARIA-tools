@@ -138,12 +138,15 @@ def make_bbox(inp_bbox):
                 S -= 90
                 LOGGER.info('Adjusted N/S')
 
+            # set poly object
+            poly = shapely.geometry.Polygon([(W, N), (W, S), (E, S), (E, N)])
+
         except BaseException:
             raise Exception('Cannot understand the --bbox argument. '
                             'Input string was entered incorrectly or path '
                             'does not exist.')
 
-    return shapely.geometry.Polygon([(W, N), (W, S), (E, S), (E, N)])
+    return poly
 
 
 def get_url_ifg(scenes):
