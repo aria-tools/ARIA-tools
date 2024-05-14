@@ -10,6 +10,7 @@
 from distutils.core import setup, Extension
 import os
 import subprocess
+from setuptools import find_packages
 from datetime import datetime
 
 # setup version; adapted from MintPy
@@ -44,7 +45,7 @@ print('Installing ARIA-tools')
 setup(name='ARIAtools',
       version=version0,
       description='Installing ARIA-tools',
-      packages=['ARIAtools'],
+      packages=find_packages(where='tools'),
       package_dir={'': 'tools'},
       scripts=['tools/bin/ariaPlot.py', 'tools/bin/ariaDownload.py',
                'tools/bin/ariaExtract.py', 'tools/bin/ariaTSsetup.py',
