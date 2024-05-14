@@ -17,7 +17,6 @@ tools/ARIAtools/sequential_stitching.py
 tools/ARIAtools/util/shp.py
 tools/ARIAtools/stitiching_util.py
 tools/ARIAtools/tsSetup.py
-tools/ARIAtools/unwrapStitching.py
 tools/ARIAtools/url_manager.py
 tools/ARIAtools/vrtmanager.py
 tools/ARIAtools.egg-info/PKG-INFO

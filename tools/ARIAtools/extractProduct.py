@@ -30,7 +30,6 @@ import scipy.interpolate
 import shapely.geometry
 
 import ARIAtools.util.ionosphere
-import ARIAtools.unwrapStitching
 import ARIAtools.util.vrt
 import ARIAtools.util.shp
 import ARIAtools.util.misc
