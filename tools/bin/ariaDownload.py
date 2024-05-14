@@ -66,9 +66,9 @@ def createParser():
         help='Specify directory to deposit all outputs. Default is "products" '
              'in local directory where script is launched.')
     parser.add_argument(
-        '-s', '--start', default='20140101', type=str,
+        '-s', '--start', default='20100101', type=str,
         help='Start date as YYYYMMDD; If none provided, starts at beginning '
-             'of Sentinel record (2014).')
+             'of beta NISAR GUNW record (2010).')
     parser.add_argument(
         '-e', '--end', default='21000101', type=str,
         help='End date as YYYYMMDD. If none provided, ends today.')
@@ -162,11 +162,25 @@ def get_url_ifg(scenes):
     urls, ifgs = [], []
     for scene in scenes:
         s = scene.geojson()['properties']
-        f = s['fileID'].split('-')
-        ifgs.append(f[6])
         urls.append(s['url'])
+        # NISAR files are formatted differently
+        if s['fileID'].startswith('NISAR_'):
+            f = s['fileID'].split('_')
+            pairname = f[11][:8] + '_'
+            pairname += f[13][:8]
+            ifgs.append(pairname)
+        else:
+            f = s['fileID'].split('-')
+            pairname = f[6]
+        ifgs.append(pairname)
 
-    return urls, ifgs
+    # determine if NISAR GUNW
+    is_nisar_file = False
+    if urls != []:
+        if '/NISAR_' in urls[0]:
+            is_nisar_file = True
+
+    return urls, ifgs, is_nisar_file
 
 
 def fmt_dst(args):
@@ -215,7 +229,7 @@ class Downloader(object):
     def __call__(self):
         scenes = self.query_asf()
 
-        urls, ifgs = get_url_ifg(scenes)
+        urls, ifgs, is_nisar_file = get_url_ifg(scenes)
 
         # subset everything by version
         urls_new = url_versions(urls, self.args.version, self.args.wd)
@@ -227,8 +241,13 @@ class Downloader(object):
         # loop over ifgs to check for subset options
         idx = []
         for i, ifg in enumerate(ifgs):
-            eni, sti = [datetime.datetime.strptime(
-                d, '%Y%m%d') for d in ifg.split('_')]
+            # if NISAR file, invert date order
+            if is_nisar_file:
+                sti, eni = [datetime.datetime.strptime(
+                    d, '%Y%m%d') for d in ifg.split('_')]
+            else:
+                eni, sti = [datetime.datetime.strptime(
+                    d, '%Y%m%d') for d in ifg.split('_')]
 
             # optionally match a single ifg
             if self.args.ifg is not None:
@@ -322,8 +341,8 @@ class Downloader(object):
             tracks = self.args.track
 
         # buffer a bit for loose subsetting and speedup
-        start = self.args.start + datetime.timedelta(days=-90)
-        end = self.args.end + datetime.timedelta(days=90)
+        start = self.args.start + datetime.timedelta(days=-1)
+        end = self.args.end + datetime.timedelta(days=1)
 
         if self.args.mission.upper() == 'S1':
             dct_kw = dict(
@@ -338,22 +357,17 @@ class Downloader(object):
             session = asf_search.ASFSession()
             session.auth_with_token(getpass.getpass('EDL Token:'))
             LOGGER.info('Token accepted.')
-            # TODO: populate once available on GUNWs are available
+            # TODO: populate more fields GUNWs are officially released
             search_opts = asf_search.ASFSearchOptions(
-                shortName='NISAR_L2_GUNW_BETA_V1', session=session)
-            # processingLevel=asf_search.constants.GUNW_STD,
-            # relativeOrbit=tracks,
-            # flightDirection=flight_direction,
-            # intersectsWith=bbox,
-            # start=self.args.start,
-            # end=self.args.end)
+                shortName='NISAR_L2_GUNW_BETA_V1',
+                intersectsWith=bbox, start=start, end=end,
+                session=session)
 
             scenes = asf_search.search(opts=search_opts, maxResults=250)
             if len(scenes) > 0:
                 LOGGER.info('Found NISAR GUNW Betas.')
             else:
                 LOGGER.warning('No NISAR GUNW Betas found.')
-            raise Exception('Exiting, NISAR GUNWs not futher supported.')
 
         return scenes
 
@@ -371,7 +385,7 @@ def main():
     args.start = datetime.datetime.strptime(args.start, '%Y%m%d')
     args.end = datetime.datetime.strptime(args.end, '%Y%m%d')
 
-    if not args.track and not args.bbox:
+    if not args.track and not args.bbox and args.mission.upper() != 'NISAR':
         raise Exception('Must specify either a bbox or track')
     Downloader(args)()
 
