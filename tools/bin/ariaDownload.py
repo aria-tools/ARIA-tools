@@ -338,22 +338,17 @@ class Downloader(object):
             session = asf_search.ASFSession()
             session.auth_with_token(getpass.getpass('EDL Token:'))
             LOGGER.info('Token accepted.')
-            # TODO: populate once available on GUNWs are available
+            # TODO: populate more fields GUNWs are officially released
             search_opts = asf_search.ASFSearchOptions(
-                shortName='NISAR_L2_GUNW_BETA_V1', session=session)
-            # processingLevel=asf_search.constants.GUNW_STD,
-            # relativeOrbit=tracks,
-            # flightDirection=flight_direction,
-            # intersectsWith=bbox,
-            # start=self.args.start,
-            # end=self.args.end)
+                shortName='NISAR_L2_GUNW_BETA_V1',
+                intersectsWith=bbox, start=start, end=end,
+                session=session)
 
             scenes = asf_search.search(opts=search_opts, maxResults=250)
             if len(scenes) > 0:
                 LOGGER.info('Found NISAR GUNW Betas.')
             else:
                 LOGGER.warning('No NISAR GUNW Betas found.')
-            raise Exception('Exiting, NISAR GUNWs not futher supported.')
 
         return scenes
 
