@@ -437,6 +437,11 @@ class Product:
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]
+            if not basename.endswith('_P_F_J_001.h5'):
+                LOGGER.warning(
+                    'input file %s rejected because it downloaded from asf '
+                    'and not a supported version', fname)
+                return []
 
         else:
             # version accessed differently between URL vs local product
