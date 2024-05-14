@@ -368,7 +368,6 @@ class Downloader(object):
                 LOGGER.info('Found NISAR GUNW Betas.')
             else:
                 LOGGER.warning('No NISAR GUNW Betas found.')
-            #raise Exception('Exiting, NISAR GUNWs not futher supported.')
 
         return scenes
 
