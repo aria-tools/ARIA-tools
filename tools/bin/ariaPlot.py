@@ -17,6 +17,7 @@ import numpy as np
 import ARIAtools.product
 import ARIAtools.util.plot
 import ARIAtools.extractProduct
+import ARIAtools.util.log
 import ARIAtools.util.mask
 
 osgeo.gdal.UseExceptions()
@@ -181,7 +182,7 @@ def main(inps=None):
         # TODO make LHS a tuple
         standardproduct_info.products[0], standardproduct_info.products[1], \
             standardproduct_info.bbox_file, prods_TOTbbox, \
-            prods_TOTbbox_metadatalyr, arrres, proj = \
+            prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file = \
                 ARIAtools.extractProduct.merged_productbbox(
                     standardproduct_info.products[0],
                     standardproduct_info.products[1],
