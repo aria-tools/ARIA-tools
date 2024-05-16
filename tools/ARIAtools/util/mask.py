@@ -90,6 +90,12 @@ def prep_mask(
             resize_col = src.width
             resize_row = src.height
 
+        # remove temporary file
+        for j in glob.glob(ref_file + '*'):
+            if os.path.isfile(j):
+                os.remove(j)
+
+
         # save uncropped raster to file
         with rasterio.open(uncropped_maskfilename, 'w',
                            height=resize_row, width=resize_col, count=1,
@@ -184,11 +190,6 @@ def prep_mask(
     translate_options = osgeo.gdal.TranslateOptions(format="VRT")
     osgeo.gdal.Translate(
         maskfilename + '.vrt', maskfilename, options=translate_options)
-
-    # remove temporary file
-    for j in glob.glob(ref_file + '*'):
-        if os.path.isfile(j):
-            os.remove(j)
 
     # return filename of mask
     return maskfilename
