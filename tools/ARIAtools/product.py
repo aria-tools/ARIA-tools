@@ -997,15 +997,22 @@ class Product:
                     basename_unw = os.path.basename(
                         unw_f.split('"')[1])
                     # parse version from NISAR and S1 GUNWs appropriately
-                    ext = os.path.splitext(unw_f)[1].lower()
+                    ext = os.path.splitext(basename_unw)[1].lower()
                     if ext == '.nc':
                         ver_str = re.search(
                             r'(v\d+_\d+_\d+.*)\.',
                             basename_unw).group(1)
                         ver_num = float(ver_str[1:].replace('_', ''))
-                    if ext == '.h5':
-                        version = unw_f.split('_')[-1][:-3]
-                        version = float(version)
+                    elif ext == '.h5':
+                        ver_str = unw_f.split('_')[-1][:-3]
+                        ver_num = float(ver_str)
+                    else:
+                        LOGGER.error(
+                            "Unable to determine version of product: %s",
+                            basename_unw)
+                        raise Exception(
+                            "Unable to determine version of product: %s" %
+                            basename_unw)
                     vers.append(ver_num)
 
                 use_scene = scenes[np.argmax(vers)]
