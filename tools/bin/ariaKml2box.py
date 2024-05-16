@@ -60,8 +60,4 @@ def main():
     gdal.VectorTranslate(outfile, srcDS, format='GeoJSON', dim='XY')
 
 if __name__ == '__main__':
-    try:
-        print('ARIA-tools Version:', get_distribution('ARIAtools').version)
-    except BaseException:
-        pass
     main()
