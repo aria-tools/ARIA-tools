@@ -1,5 +1,12 @@
 import warnings
+import importlib.metadata
 
-with warnings.catch_warnings():
-    from pkg_resources import get_distribution
-    __version__ = get_distribution('ARIAtools').version
+
+try:
+    __version__ = importlib.metadata.version('ARIAtools')
+except importlib.metadata.PackageNotFoundError:
+    __version__ = None
+    warnings.warn(
+        "ARIA-tools is not installed! Install in editable/develop mode via "
+        "(from the top of this repo): python -m pip install -e .",
+        RuntimeWarning)
