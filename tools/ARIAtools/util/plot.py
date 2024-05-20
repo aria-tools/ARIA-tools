@@ -190,6 +190,7 @@ class PlotClass(object):
             plt.gcf().set_size_inches([plt.gcf().get_size_inches()[
                 0] + 5, plt.gcf().get_size_inches()[1] + 1])
         f = f'bperp_plot{self.mask_ext}'
+        LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(os.path.join(self.workdir, f'{f}.eps'))
         plt.savefig(os.path.join(self.workdir, f'{f}.png'))
         plt.close()
@@ -203,6 +204,7 @@ class PlotClass(object):
         ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
         plt.tight_layout()
         f = f'bperp_histogram{self.mask_ext}.eps'.format(self.mask_ext)
+        LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(os.path.join(self.workdir, f'{f}.eps'))
         plt.savefig(os.path.join(self.workdir, f'{f}.png'))
         plt.close()
@@ -287,6 +289,7 @@ class PlotClass(object):
         plt.tight_layout()
 
         # saving the figure
+        LOGGER.info('Saving figures lat_extents(.eps, .png).')
         plt.savefig(os.path.join(self.workdir, 'lat_extents.eps'))
         plt.savefig(os.path.join(self.workdir, 'lat_extents.png'))
         plt.close()
@@ -358,6 +361,7 @@ class PlotClass(object):
                 0] + 5, plt.gcf().get_size_inches()[1] + 1])
         f = os.path.join(self.workdir, f'avgcoherence_plot{self.mask_ext}')
 
+        LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(f'{f}.eps')
         plt.savefig(f'{f}.png')
         plt.close()
@@ -373,6 +377,7 @@ class PlotClass(object):
         f = os.path.join(
             self.workdir,
             f'avgcoherence_histogram{self.mask_ext}')
+        LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(f'{f}.eps')
         plt.savefig(f'{f}.png')
         plt.close()
@@ -417,6 +422,7 @@ class PlotClass(object):
         cbar_ax.set_ylabel('Average Coherence', rotation=-90, labelpad=17)
         plt.tight_layout()
         f = os.path.join(self.workdir, f'avgcoherence_plot{self.mask_ext}')
+        LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(f'{f}.eps')
         plt.savefig(f'{f}.png')
         plt.close()
@@ -505,6 +511,7 @@ class PlotClass(object):
             plt.gcf().set_size_inches([plt.gcf().get_size_inches()[0] + 5,
                                        plt.gcf().get_size_inches()[1] + 1])
         f = os.path.join(self.workdir, f'bperp_coh_plot{self.mask_ext}')
+        LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(f'{f}.eps')
         plt.savefig(f'{f}.png')
         plt.close()
