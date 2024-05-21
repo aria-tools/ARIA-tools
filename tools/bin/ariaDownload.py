@@ -18,7 +18,6 @@ import getpass
 
 import shapely
 import asf_search
-from pkg_resources import get_distribution
 
 import ARIAtools.util.log
 from ARIAtools.util.shp import open_shp
