@@ -1004,7 +1004,7 @@ class Product:
                             basename_unw).group(1)
                         ver_num = float(ver_str[1:].replace('_', ''))
                     elif ext == '.h5':
-                        ver_str = unw_f.split('_')[-1][:-3]
+                        ver_str = basename_unw.split('_')[-1][:-3]
                         ver_num = float(ver_str)
                     else:
                         LOGGER.error(
