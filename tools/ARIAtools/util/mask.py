@@ -35,6 +35,7 @@ def prep_mask(
 
     # If specified DEM subdirectory exists, delete contents
     workdir = os.path.join(workdir, 'mask')
+    workdir = os.path.abspath(workdir)
     os.makedirs(workdir, exist_ok=True)
 
     # Get bounds of user bbox_file
@@ -95,7 +96,6 @@ def prep_mask(
             if os.path.isfile(j):
                 os.remove(j)
 
-
         # save uncropped raster to file
         with rasterio.open(uncropped_maskfilename, 'w',
                            height=resize_row, width=resize_col, count=1,
@@ -124,7 +124,7 @@ def prep_mask(
     else:
         LOGGER.debug("Using user specified mask %s" % maskfilename)
         # Path to local version of user specified mask
-        user_mask = maskfilename  # for clarity
+        user_mask = os.path.abspath(maskfilename)  # for clarity
         user_mask_n = os.path.basename(os.path.splitext(user_mask)[0])
         local_mask = os.path.join(workdir, f'{user_mask_n}.msk')
         local_mask_unc = os.path.join(workdir, f'{user_mask_n}_uncropped.msk')
@@ -132,7 +132,20 @@ def prep_mask(
             LOGGER.debug(
                 'The mask you specified already exists in %s, '
                 'using the existing one...' % os.path.dirname(local_mask))
-            ds = osgeo.gdal.Open(local_mask)
+
+            # move all original files to temp path to circumvent gdal issues
+            temp_workdir = os.path.join(workdir, 'tmp_dir')
+            os.makedirs(temp_workdir, exist_ok=True)
+            local_mask_noext = os.path.join(workdir, '%s.' %(user_mask_n))
+            for j in glob.glob(local_mask_noext + '*'):
+                shutil.move(j, temp_workdir)
+
+            temp_local_mask = os.path.join(
+                temp_workdir, '%s.msk' %(user_mask_n))
+            ds = osgeo.gdal.Open(temp_local_mask)
+     
+            # remove temporary file
+            shutil.rmtree(temp_workdir)
 
         else:
             # move the mask to the local directory and built a VRT for it
