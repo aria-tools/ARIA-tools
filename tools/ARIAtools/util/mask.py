@@ -136,14 +136,14 @@ def prep_mask(
             # move all original files to temp path to circumvent gdal issues
             temp_workdir = os.path.join(workdir, 'tmp_dir')
             os.makedirs(temp_workdir, exist_ok=True)
-            local_mask_noext = os.path.join(workdir, '%s.' %(user_mask_n))
+            local_mask_noext = os.path.join(workdir, '%s.' % (user_mask_n))
             for j in glob.glob(local_mask_noext + '*'):
                 shutil.move(j, temp_workdir)
 
             temp_local_mask = os.path.join(
-                temp_workdir, '%s.msk' %(user_mask_n))
+                temp_workdir, '%s.msk' % (user_mask_n))
             ds = osgeo.gdal.Open(temp_local_mask)
-     
+
             # remove temporary file
             shutil.rmtree(temp_workdir)
 
