@@ -436,7 +436,7 @@ def layerCheck(
             layers = [i.replace(' ', '') for i in layers]
         if 'troposphereTotal' in layers and \
                 set(RAIDER_TROPO_LAYERS).issubset(all_valid_layers) and \
-                model_names != []:
+                (model_names != [] or is_nisar_file):
             tropo_total = True
 
     # differentiate between extract and TS pipeline
