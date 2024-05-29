@@ -435,7 +435,8 @@ def layerCheck(
             layers = list(layers.split(','))
             layers = [i.replace(' ', '') for i in layers]
         if 'troposphereTotal' in layers and \
-                set(RAIDER_TROPO_LAYERS).issubset(all_valid_layers):
+                set(RAIDER_TROPO_LAYERS).issubset(all_valid_layers) and \
+                (model_names != [] or is_nisar_file):
             tropo_total = True
 
     # differentiate between extract and TS pipeline
@@ -466,8 +467,6 @@ def layerCheck(
     # TS pipeline
     TS_LAYERS_DUP = ['unwrappedPhase', 'coherence', 'incidenceAngle',
                      'lookAngle', 'azimuthAngle', 'bPerpendicular']
-
-    ts_defaults = ['ionosphere', 'solidEarthTide']
     if extract_or_ts == 'tssetup':
         if layers:
             # remove layers already generated in default TS workflow
@@ -475,16 +474,6 @@ def layerCheck(
 
         else:
             layers = []
-
-        # add additional layers for default workflow
-        ts_defaults = list(
-            set.intersection(*map(set, [ts_defaults, all_valid_layers])))
-
-        if ts_defaults != []:
-            tropo_total = True
-            for i in ts_defaults:
-                if i not in layers:
-                    layers.append(i)
 
     # pass intersection of valid layers and track invalid requests
     layer_reject = list(

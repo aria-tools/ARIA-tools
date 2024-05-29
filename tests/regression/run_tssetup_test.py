@@ -54,7 +54,8 @@ def main():
 
     exec_string = (
         'ariaTSsetup.py -f "golden_test_inputs/tssetup/products/*.nc" '
-        '-tm HRRR -d golden_test_inputs/tssetup/DEM/glo_90.dem '
+        '-l "solidEarthTide,ionosphere,troposphereTotal" -tm HRRR '
+        '-d golden_test_inputs/tssetup/DEM/glo_90.dem '
         '-w test_outputs/tssetup/')
     if not args.old:
         exec_string += ' --log-level %s' % args.log_level
