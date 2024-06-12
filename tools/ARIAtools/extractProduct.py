@@ -1195,7 +1195,10 @@ def export_products(
 
             # track valid files
             prev_outname = os.path.abspath(
-                os.path.join(workdir, i, product_dict[1][0][0]))
+                os.path.join(workdir,
+                             i.split('_')[-1],
+                             product_dict[1][0][0])
+            )
             if os.path.exists(prev_outname + '.vrt'):
                 prev_outname_check = copy.deepcopy(prev_outname)
 
@@ -1287,6 +1290,16 @@ def export_products(
             lyr_input_dict['input_iono_files'] = layer
             lyr_input_dict['output_iono'] = outname
             ARIAtools.util.ionosphere.export_ionosphere(**lyr_input_dict)
+
+            # track valid files
+            if os.path.exists(outname + '.vrt'):
+                prev_outname_check = copy.deepcopy(outname)
+
+        # track consistency of dimensions
+        if 'prev_outname_check' in locals():
+            ref_wid, ref_hgt, ref_geotrans, _, _ = \
+                ARIAtools.util.vrt.get_basic_attrs(prev_outname_check + '.vrt')
+            ref_arr = [ref_wid, ref_hgt, ref_geotrans, prev_outname]
 
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
