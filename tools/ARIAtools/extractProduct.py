@@ -1193,10 +1193,12 @@ def export_products(
             # extract layers
             handle_epoch_layers(**lyr_input_dict)
 
+            # remove leading underscore from model name to get subdir name
+            tag = i.split('_')[-1]
             # track valid files
             prev_outname = os.path.abspath(
                 os.path.join(workdir,
-                             i.split('_')[-1],
+                             tag,
                              product_dict[1][0][0])
             )
             if os.path.exists(prev_outname + '.vrt'):
