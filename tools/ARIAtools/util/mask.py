@@ -81,11 +81,12 @@ def prep_mask(
 
         # get output parameters from temp file
         crs = pyproj.CRS.from_wkt(proj)
-        osgeo.gdal.Warp(
-            ref_file, product_dict[0], format=outputFormat,
-            outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-            targetAlignedPixels=True, multithread=True,
-            options=['NUM_THREADS=%s' % (num_threads)])
+        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+            osgeo.gdal.Warp(
+                ref_file, product_dict[0], format=outputFormat,
+                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                targetAlignedPixels=True, multithread=True)
+
         with rasterio.open(ref_file) as src:
             reference_gt = src.transform
             resize_col = src.width
@@ -108,11 +109,12 @@ def prep_mask(
                 resampling=resampling_mode)
 
         # save cropped mask with precise spacing
-        osgeo.gdal.Warp(
-            maskfilename, uncropped_maskfilename, format=outputFormat,
-            outputBounds=bounds, outputType=osgeo.gdal.GDT_Byte,
-            xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-            multithread=True, options=['NUM_THREADS=%s' % (num_threads)])
+        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+            osgeo.gdal.Warp(
+                maskfilename, uncropped_maskfilename, format=outputFormat,
+                outputBounds=bounds, outputType=osgeo.gdal.GDT_Byte,
+                xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+                multithread=True)
 
         update_file = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
         update_file.SetProjection(proj)
@@ -157,11 +159,12 @@ def prep_mask(
             assert ds is not None, f'Could not open user mask: {user_mask}'
 
         # crop the user mask and write
-        osgeo.gdal.Warp(
-            f'{local_mask}', ds, format=outputFormat,
-            cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrres[0],
-            yRes=arrres[1], targetAlignedPixels=True, multithread=True,
-            options=[f'NUM_THREADS={num_threads}'])
+        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+            osgeo.gdal.Warp(
+                f'{local_mask}', ds, format=outputFormat,
+                cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+                xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+                multithread=True)
 
         # set projection of the local mask
         mask_file = osgeo.gdal.Open(local_mask, osgeo.gdal.GA_Update)
@@ -186,11 +189,12 @@ def prep_mask(
         mask_file.GetRasterBand(1).WriteArray(mask_arr * amp_file)
 
     # crop/expand mask to DEM size?
-    osgeo.gdal.Warp(
-        maskfilename, maskfilename, format=outputFormat,
-        cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrres[0],
-        yRes=arrres[1], targetAlignedPixels=True, multithread=True,
-        options=[f'NUM_THREADS={num_threads} -overwrite'])
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        osgeo.gdal.Warp(
+            maskfilename, maskfilename, format=outputFormat,
+            cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrres[0],
+            yRes=arrres[1], targetAlignedPixels=True, multithread=True,
+            options=['-overwrite'])
 
     mask = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
     mask.SetProjection(proj)

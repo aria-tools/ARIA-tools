@@ -479,49 +479,52 @@ def merged_productbbox(
     OG_bounds = list(
         ARIAtools.util.shp.open_shp(bbox_file).bounds)
     gdal_warp_kwargs = {
-        'format': 'MEM', 'multithread': True, 'dstSRS': f'EPSG:{lyr_proj}',
-        'options': [f'NUM_THREADS={num_threads}']}
+        'format': 'MEM', 'multithread': True, 'dstSRS': f'EPSG:{lyr_proj}'}
     vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
-    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-    ds = osgeo.gdal.Warp('', vrt, options=warp_options)
-    arrres = [abs(ds.GetGeoTransform()[1]),
-              abs(ds.GetGeoTransform()[-1])]
-    ds = None
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+        ds = osgeo.gdal.Warp('', vrt, options=warp_options)
+        arrres = [abs(ds.GetGeoTransform()[1]),
+                  abs(ds.GetGeoTransform()[-1])]
+        ds = None
+
     # warp again with fixed transform and bounds
     gdal_warp_kwargs['outputBounds'] = OG_bounds
     gdal_warp_kwargs['xRes'] = arrres[0]
     gdal_warp_kwargs['yRes'] = arrres[1]
     gdal_warp_kwargs['targetAlignedPixels'] = True
     vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
-    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-    ds = osgeo.gdal.Warp('', vrt, options=warp_options)
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+        ds = osgeo.gdal.Warp('', vrt, options=warp_options)
 
-    # Get shape of full res layers
-    arrshape = [ds.RasterYSize, ds.RasterXSize]
-    ds_gt = ds.GetGeoTransform()
-    new_bounds = [ds_gt[0], ds_gt[3] + (ds_gt[-1] * arrshape[0]),
-                  ds_gt[0] + (ds_gt[1] * arrshape[1]), ds_gt[3]]
+        # Get shape of full res layers
+        arrshape = [ds.RasterYSize, ds.RasterXSize]
+        ds_gt = ds.GetGeoTransform()
+        new_bounds = [ds_gt[0], ds_gt[3] + (ds_gt[-1] * arrshape[0]),
+                      ds_gt[0] + (ds_gt[1] * arrshape[1]), ds_gt[3]]
 
-    if OG_bounds != new_bounds:
-        # Use shapely to make list
-        user_bbox = shapely.geometry.Polygon(np.column_stack((
-            np.array([new_bounds[0], new_bounds[2], new_bounds[2],
-                      new_bounds[0], new_bounds[0]]),
-            np.array([new_bounds[1], new_bounds[1], new_bounds[3],
-                      new_bounds[3], new_bounds[1]]))))
+        if OG_bounds != new_bounds:
+            # Use shapely to make list
+            user_bbox = shapely.geometry.Polygon(np.column_stack((
+                np.array([new_bounds[0], new_bounds[2], new_bounds[2],
+                          new_bounds[0], new_bounds[0]]),
+                np.array([new_bounds[1], new_bounds[1], new_bounds[3],
+                          new_bounds[3], new_bounds[1]]))))
 
-        # Save polygon in shapefile
-        bbox_file = os.path.join(os.path.dirname(workdir), 'user_bbox.json')
-        ARIAtools.util.shp.save_shp(
-            bbox_file, user_bbox, lyr_proj)
-        total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
-        user_bbox = user_bbox.intersection(total_bbox)
-        ARIAtools.util.shp.save_shp(
-            prods_TOTbbox, user_bbox, lyr_proj)
+            # Save polygon in shapefile
+            bbox_file = os.path.join(
+                os.path.dirname(workdir), 'user_bbox.json')
+            ARIAtools.util.shp.save_shp(
+                bbox_file, user_bbox, lyr_proj)
+            total_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+            user_bbox = user_bbox.intersection(total_bbox)
+            ARIAtools.util.shp.save_shp(
+                prods_TOTbbox, user_bbox, lyr_proj)
 
-    # Get projection of full res layers
-    proj = ds.GetProjection()
-    ds = None
+        # Get projection of full res layers
+        proj = ds.GetProjection()
+        ds = None
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -915,8 +918,7 @@ def export_product_worker(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj,
-        'options': [f'NUM_THREADS={num_threads}']}
+        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
 
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
@@ -964,25 +966,26 @@ def export_product_worker(
     # Extract/crop full res layers, except for "unw" and "conn_comp"
     # which requires advanced stitching
     elif layer != 'unwrappedPhase' and layer != 'connectedComponents':
-        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        if outputFormat == 'VRT':
-            # building the virtual vrt
-            osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', product)
+        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+            warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+            if outputFormat == 'VRT':
+                # building the virtual vrt
+                osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', product)
 
-            # building the cropped vrt
-            osgeo.gdal.Warp(
-                outname + '.vrt', outname + '_uncropped.vrt',
-                options=warp_options)
-        else:
-            # building the VRT
-            osgeo.gdal.BuildVRT(outname + '.vrt', product)
-            osgeo.gdal.Warp(
-                outname, outname + '.vrt', options=warp_options)
+                # building the cropped vrt
+                osgeo.gdal.Warp(
+                    outname + '.vrt', outname + '_uncropped.vrt',
+                    options=warp_options)
+            else:
+                # building the VRT
+                osgeo.gdal.BuildVRT(outname + '.vrt', product)
+                osgeo.gdal.Warp(
+                    outname, outname + '.vrt', options=warp_options)
 
-            # Update VRT
-            osgeo.gdal.Translate(
-                outname + '.vrt', outname,
-                options=osgeo.gdal.TranslateOptions(format="VRT"))
+                # Update VRT
+                osgeo.gdal.Translate(
+                    outname + '.vrt', outname,
+                    options=osgeo.gdal.TranslateOptions(format="VRT"))
 
     # Extract/crop phs and conn_comp layers
     else:
@@ -1422,9 +1425,9 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
 
     # load layered metadata array
     tmp_name = outname + '.vrt'
-    warp_options = osgeo.gdal.WarpOptions(
-        format="MEM", options=['NUM_THREADS=%s' % (num_threads)])
-    data_array = osgeo.gdal.Warp('', tmp_name, options=warp_options)
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        warp_options = osgeo.gdal.WarpOptions(format="MEM")
+        data_array = osgeo.gdal.Warp('', tmp_name, options=warp_options)
 
     # get minimum version
     version_check = []
@@ -1513,23 +1516,24 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     # it must be cut to conform with these bounds.
     # Crop to track extents
     data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
-    gdal_warp_kwargs = {
-        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
-        'outputBounds': dem_bounds, 'dstNodata': data_array_nodata,
-        'xRes': dem_arrres[0], 'yRes': dem_arrres[1],
-        'targetAlignedPixels': True, 'multithread': True,
-        'options': [f'NUM_THREADS={num_threads}']}
-    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-    osgeo.gdal.Warp(tmp_name + '_temp', tmp_name, options=warp_options)
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        gdal_warp_kwargs = {
+            'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+            'outputBounds': dem_bounds, 'dstNodata': data_array_nodata,
+            'xRes': dem_arrres[0], 'yRes': dem_arrres[1],
+            'targetAlignedPixels': True, 'multithread': True}
+        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+        osgeo.gdal.Warp(tmp_name + '_temp', tmp_name, options=warp_options)
 
     # Adjust shape
-    gdal_warp_kwargs = {
-        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
-        'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
-        'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
-        'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
-    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-    osgeo.gdal.Warp(outname, tmp_name + '_temp', options=warp_options)
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        gdal_warp_kwargs = {
+            'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+            'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
+            'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
+            'multithread': True}
+        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+        osgeo.gdal.Warp(outname, tmp_name + '_temp', options=warp_options)
 
     # remove temp files
     for i in glob.glob(outname + '*_temp*'):
@@ -1847,21 +1851,21 @@ def gacos_correction(full_product_dict, gacos_products, bbox_file,
                                    product_dict[2][i][0])
 
             # Open corresponding tropo products and pass the difference
-            gdal_warp_kwargs = {'format': outputFormat,
-                                'cutlineDSName': prods_TOTbbox,
-                                'outputBounds': bounds,
-                                'xRes': arrres[0],
-                                'yRes': arrres[1],
-                                'targetAlignedPixels': True,
-                                'multithread': True,
-                                'options': [f'NUM_THREADS={num_threads}']}
-            tropo_reference = osgeo.gdal.Warp(
-                '', tropo_reference, options=osgeo.gdal.WarpOptions(
-                    **gdal_warp_kwargs)).ReadAsArray()
-            tropo_secondary = osgeo.gdal.Warp(
-                '', tropo_secondary, options=osgeo.gdal.WarpOptions(
-                    **gdal_warp_kwargs)).ReadAsArray()
-            tropo_product = np.subtract(tropo_secondary, tropo_reference)
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                gdal_warp_kwargs = {'format': outputFormat,
+                                    'cutlineDSName': prods_TOTbbox,
+                                    'outputBounds': bounds,
+                                    'xRes': arrres[0],
+                                    'yRes': arrres[1],
+                                    'targetAlignedPixels': True,
+                                    'multithread': True}
+                tropo_reference = osgeo.gdal.Warp(
+                    '', tropo_reference, options=osgeo.gdal.WarpOptions(
+                        **gdal_warp_kwargs)).ReadAsArray()
+                tropo_secondary = osgeo.gdal.Warp(
+                    '', tropo_secondary, options=osgeo.gdal.WarpOptions(
+                        **gdal_warp_kwargs)).ReadAsArray()
+                tropo_product = np.subtract(tropo_secondary, tropo_reference)
 
             # Convert troposphere from m to rad
             scale = float(metadata_dict[1][i][0]) / (4 * np.pi)
