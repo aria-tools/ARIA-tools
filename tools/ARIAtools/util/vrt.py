@@ -242,7 +242,7 @@ def resampleRaster(
                     targetAlignedPixels=True, resampleAlg='near',
                     multithread=True, options=['-overwrite'])
                 osgeo.gdal.Warp(
-                fnameconcomp, fnameconcomp, options=warp_options)
+                    fnameconcomp, fnameconcomp, options=warp_options)
 
             # update VRT
             vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
