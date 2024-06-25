@@ -306,24 +306,27 @@ class PlotClass(object):
         slaves = []
         for i in enumerate(self.product_dict[0]):
             # Open coherence file
-            coh_file = gdal.Warp('', i[1], format="MEM",
-                                 cutlineDSName=self.prods_TOTbbox,
-                                 outputBounds=self.bbox_file,
-                                 targetAlignedPixels=True,
-                                 xRes=self.arrres[0], yRes=self.arrres[1],
-                                 resampleAlg='average', multithread=True,
-                                 options=[f'NUM_THREADS={self.num_threads}'])
+            with gdal.config_options({"GDAL_NUM_THREADS": self.num_threads}):
+                coh_file = gdal.Warp('', i[1], format="MEM",
+                                     cutlineDSName=self.prods_TOTbbox,
+                                     outputBounds=self.bbox_file,
+                                     targetAlignedPixels=True,
+                                     xRes=self.arrres[0], yRes=self.arrres[1],
+                                     resampleAlg='average', multithread=True)
 
-            # Apply mask (if specified).
-            if self.mask is not None:
-                coh_file.GetRasterBand(1).WriteArray(
-                    self.mask.ReadAsArray() * coh_file.ReadAsArray())
+                # Apply mask (if specified).
+                if self.mask is not None:
+                    coh_file.GetRasterBand(1).WriteArray(
+                        self.mask.ReadAsArray() * coh_file.ReadAsArray())
 
-            # Record average coherence val for histogram
-            coh_hist.append(coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
-            slaves.append(pd.to_datetime(self.product_dict[1][i[0]][0][:8]))
-            masters.append(pd.to_datetime(self.product_dict[1][i[0]][0][9:]))
-            coh_file = None
+                # Record average coherence val for histogram
+                coh_hist.append(
+                    coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
+                slaves.append(
+                    pd.to_datetime(self.product_dict[1][i[0]][0][:8]))
+                masters.append(
+                    pd.to_datetime(self.product_dict[1][i[0]][0][9:]))
+                coh_file = None
 
         # Plot average coherence per IFG
         cols, mapper = self._create_colors_coh(coh_hist)
@@ -464,24 +467,25 @@ class PlotClass(object):
             slaves.append(pd.to_datetime(i[1][:8]))
             masters.append(pd.to_datetime(i[1][9:]))
             # Open coherence file
-            coh_file = gdal.Warp(
-                '', self.product_dict[2][i[0]], format="MEM",
-                cutlineDSName=self.prods_TOTbbox,
-                outputBounds=self.bbox_file, resampleAlg='average',
-                targetAlignedPixels=True,
-                xRes=self.arrres[0], yRes=self.arrres[1], multithread=True,
-                options=[f'NUM_THREADS={self.num_threads}'])
+            with gdal.config_options({"GDAL_NUM_THREADS": self.num_threads}):
+                coh_file = gdal.Warp(
+                    '', self.product_dict[2][i[0]], format="MEM",
+                    cutlineDSName=self.prods_TOTbbox,
+                    outputBounds=self.bbox_file, resampleAlg='average',
+                    targetAlignedPixels=True, xRes=self.arrres[0],
+                    yRes=self.arrres[1], multithread=True)
 
-            # Apply mask (if specified).
-            if self.mask is not None:
-                coh_file.GetRasterBand(1).WriteArray(
-                    self.mask.ReadAsArray() * coh_file.ReadAsArray())
+                # Apply mask (if specified).
+                if self.mask is not None:
+                    coh_file.GetRasterBand(1).WriteArray(
+                        self.mask.ReadAsArray() * coh_file.ReadAsArray())
 
-            # Record average coherence val for histogram
-            coh_vals.append(coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
-            y1.append(offset_dict[i[1][9:]])
-            y2.append(offset_dict[i[1][:8]])
-            coh_file = None
+                # Record average coherence val for histogram
+                coh_vals.append(
+                    coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
+                y1.append(offset_dict[i[1][9:]])
+                y2.append(offset_dict[i[1][:8]])
+                coh_file = None
 
         cols, mapper = self._create_colors_coh(
             coh_vals, 'autumn')  # don't use hot

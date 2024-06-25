@@ -71,24 +71,26 @@ def resampleRaster(
         inputname = osgeo.gdal.Open(fname).GetFileList()[-1]
 
     # Access original shape
-    warp_options = osgeo.gdal.WarpOptions(
-        format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-        multithread=True, options=['NUM_THREADS=%s' % (num_threads)])
-    ds = osgeo.gdal.Warp('', fname, options=warp_options)
-
-    # Get output res
-    arrres = [abs(ds.GetGeoTransform()[1]) * multilooking,
-              abs(ds.GetGeoTransform()[-1]) * multilooking]
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        warp_options = osgeo.gdal.WarpOptions(
+            format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+            multithread=True)
+        ds = osgeo.gdal.Warp('', fname, options=warp_options)
+        # Get output res
+        arrres = [abs(ds.GetGeoTransform()[1]) * multilooking,
+                  abs(ds.GetGeoTransform()[-1]) * multilooking]
+        ds = None
 
     # Get geotrans/proj
-    warp_options = osgeo.gdal.WarpOptions(
-        format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-        xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-        resampleAlg='near', multithread=True,
-        options=['NUM_THREADS=%s' % (num_threads)])
-    ds = osgeo.gdal.Warp('', fname, options=warp_options)
-    geotrans = ds.GetGeoTransform()
-    proj = ds.GetProjection()
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        warp_options = osgeo.gdal.WarpOptions(
+            format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
+            xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+            resampleAlg='near', multithread=True)
+        ds = osgeo.gdal.Warp('', fname, options=warp_options)
+        geotrans = ds.GetGeoTransform()
+        proj = ds.GetProjection()
+        ds = None
 
     # Use pixel function to downsample connected components/unw files
     # based off of frequency of connected components in each window
@@ -179,32 +181,36 @@ def resampleRaster(
                     nodata=ds_unw_nodata)
 
             # Resample connected components
-            warp_options = osgeo.gdal.WarpOptions(
-                format=outputFormat, cutlineDSName=prods_TOTbbox,
-                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, resampleAlg='mode',
-                multithread=True,
-                options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-            osgeo.gdal.Warp(fnameconcomp, fnameconcomp, options=warp_options)
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                warp_options = osgeo.gdal.WarpOptions(
+                    format=outputFormat, cutlineDSName=prods_TOTbbox,
+                    outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                    targetAlignedPixels=True, resampleAlg='mode',
+                    multithread=True,
+                    options=['-overwrite'])
+                osgeo.gdal.Warp(
+                    fnameconcomp, fnameconcomp, options=warp_options)
 
-            # update VRT
-            vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
-            osgeo.gdal.BuildVRT(
-                fnameconcomp + '.vrt', fnameconcomp, options=vrt_options)
+                # update VRT
+                vrt_options = osgeo.gdal.BuildVRTOptions(
+                    options=['-overwrite'])
+                osgeo.gdal.BuildVRT(
+                    fnameconcomp + '.vrt', fnameconcomp, options=vrt_options)
 
         # Default: resample unw phase with gdal average algorithm
         else:
-            # Resample unwphase
             ds_unw_nodata = osgeo.gdal.Open(fnameunw)
             ds_unw_nodata = ds_unw_nodata.GetRasterBand(1).GetNoDataValue()
 
-            warp_options = osgeo.gdal.WarpOptions(
-                format=outputFormat, cutlineDSName=prods_TOTbbox,
-                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, resampleAlg='average',
-                multithread=True,
-                options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-            osgeo.gdal.Warp(fnameunw, fnameunw, options=warp_options)
+            # Resample unwphase
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                warp_options = osgeo.gdal.WarpOptions(
+                    format=outputFormat, cutlineDSName=prods_TOTbbox,
+                    outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                    targetAlignedPixels=True, resampleAlg='average',
+                    multithread=True,
+                    options=['-overwrite'])
+                osgeo.gdal.Warp(fnameunw, fnameunw, options=warp_options)
 
             # update VRT
             vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
@@ -229,12 +235,14 @@ def resampleRaster(
                     nodata=ds_unw_nodata)
 
             # Resample connected components
-            warp_options = osgeo.gdal.WarpOptions(
-                format=outputFormat, cutlineDSName=prods_TOTbbox,
-                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, resampleAlg='near', multithread=True,
-                options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-            osgeo.gdal.Warp(fnameconcomp, fnameconcomp, options=warp_options)
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                warp_options = osgeo.gdal.WarpOptions(
+                    format=outputFormat, cutlineDSName=prods_TOTbbox,
+                    outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                    targetAlignedPixels=True, resampleAlg='near',
+                    multithread=True, options=['-overwrite'])
+                osgeo.gdal.Warp(
+                    fnameconcomp, fnameconcomp, options=warp_options)
 
             # update VRT
             vrt_options = osgeo.gdal.BuildVRTOptions(options=['-overwrite'])
@@ -244,12 +252,13 @@ def resampleRaster(
     # Resample all other files with lanczos
     else:
         # Resample raster
-        warp_options = osgeo.gdal.WarpOptions(
-            format=outputFormat, cutlineDSName=prods_TOTbbox,
-            outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-            targetAlignedPixels=True, resampleAlg='lanczos', multithread=True,
-            options=['NUM_THREADS=%s' % (num_threads) + ' -overwrite'])
-        osgeo.gdal.Warp(fname, inputname, options=warp_options)
+        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+            warp_options = osgeo.gdal.WarpOptions(
+                format=outputFormat, cutlineDSName=prods_TOTbbox,
+                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                targetAlignedPixels=True, resampleAlg='lanczos',
+                multithread=True, options=['-overwrite'])
+            osgeo.gdal.Warp(fname, inputname, options=warp_options)
 
     if outputFormat != 'VRT':
         # update VRT

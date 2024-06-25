@@ -77,14 +77,15 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         ds_aria = osgeo.gdal.Open(aria_dem)
 
     else:
-        gdal_warp_kwargs = {
-            'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
-            'outputBounds': bounds, 'outputType': osgeo.gdal.GDT_Int16,
-            'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
-            'multithread': True, 'options': [f'NUM_THREADS={num_threads}']}
-        osgeo.gdal.Warp(
-            aria_dem, demfilename,
-            options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+            gdal_warp_kwargs = {
+                'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+                'outputBounds': bounds, 'outputType': osgeo.gdal.GDT_Int16,
+                'xRes': arrres[0], 'yRes': arrres[1],
+                'targetAlignedPixels': True, 'multithread': True}
+            osgeo.gdal.Warp(
+                aria_dem, demfilename,
+                options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
         update_file = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_Update)
         update_file.SetProjection(proj)
@@ -99,14 +100,15 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     bounds = list(
         ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr).bounds)
 
-    gdal_warp_kwargs = {
-        'format': outputFormat, 'outputBounds': bounds, 'xRes': arrres[0],
-        'yRes': arrres[1], 'targetAlignedPixels': True, 'multithread': True,
-        'options': ['NUM_THREADS=%s' % (num_threads) + ' -overwrite']}
-    demfile_expanded = aria_dem.replace('.dem', '_expanded.dem')
-    ds_aria_expanded = osgeo.gdal.Warp(
-        demfile_expanded, aria_dem,
-        options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+    with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+        gdal_warp_kwargs = {
+            'format': outputFormat, 'outputBounds': bounds, 'xRes': arrres[0],
+            'yRes': arrres[1], 'targetAlignedPixels': True,
+            'multithread': True, 'options': ['-overwrite']}
+        demfile_expanded = aria_dem.replace('.dem', '_expanded.dem')
+        ds_aria_expanded = osgeo.gdal.Warp(
+            demfile_expanded, aria_dem,
+            options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
     # Delete temporary dem-stitcher directory
     if os.path.exists(f'{dem_name}_tiles'):

@@ -1,7 +1,7 @@
 asf_search
 dask
 dem_stitcher>=2.5.0
-gdal>=3.4.1
+gdal>=3.7.0
 h5py
 joblib
 matplotlib
