@@ -535,16 +535,6 @@ def main():
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
-    layers = ['bPerpendicular']
-    LOGGER.info(
-        'Extracting perpendicular baseline grids for each interferogram pair')
-    prod_arr_record = ARIAtools.extractProduct.export_products(
-        standardproduct_info.products[1], tropo_total=False, layers=layers,
-        multiproc_method='gnu_parallel', **export_dict)
-
-    # Track consistency of dimensions
-    ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
-
     # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
         standardproduct_info.products[1], args.layers, args.nc_version,

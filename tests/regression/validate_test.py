@@ -30,8 +30,6 @@ ENVI_FILES['extract'] = {
 }
 ENVI_FILES['tssetup'] = {
     'azimuthAngle': 'azimuthAngle/20230829_20230724',
-    'bPerpendicular_20230829_20230724': 'bPerpendicular/20230829_20230724',
-    'bPerpendicular_20230829_20230817': 'bPerpendicular/20230829_20230817',
     'connectedComponents_20230829_20230724':
         'connectedComponents/20230829_20230724',
     'connectedComponents_20230829_20230817':
