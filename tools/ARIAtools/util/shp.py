@@ -65,7 +65,7 @@ def save_shp(fname, polygon, projection, drivername='GeoJSON'):
     return
 
 
-def shp_area(file_bbox, projection, bounds=False):
+def shp_are(file_bbox, projection, bounds=False):
     """Compute km\u00b2 area of shapefile."""
     # loop through polygons
     shape_area = 0
@@ -176,7 +176,8 @@ def plot_shp(fname):
         path = mpath.Path(np.column_stack((all_x, all_y)), codes)
         paths.append(path)
 
-    with plt.style.context(('seaborn')):
+    sty = 'seaborn-v0_8' if 'seaborn-v0_8' in plt.style.available else 'classic'
+    with plt.style.context((sty)):
         fig = plt.figure(figsize=(12, 9))
         ax = fig.add_subplot(111)
         ax.set_xlim(ext[0] - xoff, ext[1] + xoff)
