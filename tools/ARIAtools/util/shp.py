@@ -65,7 +65,7 @@ def save_shp(fname, polygon, projection, drivername='GeoJSON'):
     return
 
 
-def shp_are(file_bbox, projection, bounds=False):
+def shp_area(file_bbox, projection, bounds=False):
     """Compute km\u00b2 area of shapefile."""
     # loop through polygons
     shape_area = 0
