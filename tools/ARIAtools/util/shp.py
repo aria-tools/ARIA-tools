@@ -180,6 +180,7 @@ def plot_shp(fname):
     for test_style in ['seaborn-v0_8', 'seaborn']:
         if test_style in plt.style.available:
             plt_style = test_style
+            break
 
     with plt.style.context(plt_style):
         fig = plt.figure(figsize=(12, 9))
