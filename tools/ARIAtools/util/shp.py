@@ -176,7 +176,13 @@ def plot_shp(fname):
         path = mpath.Path(np.column_stack((all_x, all_y)), codes)
         paths.append(path)
 
-    with plt.style.context(('seaborn')):
+    plt_style = 'classic'
+    for test_style in ['seaborn-v0_8', 'seaborn']:
+        if test_style in plt.style.available:
+            plt_style = test_style
+            break
+
+    with plt.style.context(plt_style):
         fig = plt.figure(figsize=(12, 9))
         ax = fig.add_subplot(111)
         ax.set_xlim(ext[0] - xoff, ext[1] + xoff)
