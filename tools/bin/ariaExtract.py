@@ -142,6 +142,31 @@ def main():
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
     LOGGER.info('Extract Product Function')
 
+    # Check whether all necessary inputs were specified.
+    # some products require a DEM to extract -- if any of those are requested,
+    # ensure that a valid DEM is specified
+    if args.layers:
+        # format list of layers
+        layers = list(args.layers.split(','))
+        layers = [i.replace(' ', '') for i in layers]
+        layers = [layer.replace(layer, 'all')
+                  for layer in layers if layer.lower() == 'all']
+
+        # list of layers requiring DEM for extraction
+        layers_requiring_dem = {'all',
+                                'bPerpendicular',
+                                'bParallel',
+                                'incidenceAngle',
+                                'lookAngle',
+                                'azimuthAngle',
+                                'solidEarthTide'}
+
+        # check that DEM is specified depending on layers requested
+        if any(layer in layers_requiring_dem for layer in layers):
+            assert args.demfile is not None, \
+                'A valid DEM must be specified when extracting any of {}'.\
+                    format(' '.join(layer for layer in layers_requiring_dem))
+
     # if user bbox was specified, file(s) not meeting imposed spatial criteria
     # are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
