@@ -149,7 +149,8 @@ def main():
         # format list of layers
         layers = list(args.layers.split(','))
         layers = [i.replace(' ', '') for i in layers]
-        layers = ['all' if layer.lower() == 'all' else layer for layer in layers]
+        layers = ['all' if layer.lower() == 'all'
+                  else layer for layer in layers]
 
         # list of layers requiring DEM for extraction
         layers_requiring_dem = ['all',
