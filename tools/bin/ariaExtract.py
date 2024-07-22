@@ -153,22 +153,21 @@ def main():
                   else layer for layer in layers]
 
         # list of layers requiring DEM for extraction
-        layers_requiring_dem = ['all',
+        LAYERS_REQUIRING_DEM = {'all',
                                 'bPerpendicular',
                                 'bParallel',
                                 'incidenceAngle',
                                 'lookAngle',
                                 'azimuthAngle',
-                                'solidEarthTide']
+                                'solidEarthTide'}
 
         # check that DEM is specified depending on layers requested
-        intersecting_layers = [layer for layer in layers
-                               if layer in layers_requiring_dem]
-        if intersecting_layers != []:
-            assert args.demfile is not None, (
-                'A valid DEM must be specified when extracting any of '
-                f"{' '.join(intersecting_layers)}"
-            )
+        if len(LAYERS_REQUIRING_DEM.intersection(layers)) > 0:
+            if args.demfile is None:
+                error_msg = 'A valid DEM must be specified when extracting ' \
+                            'any of %s' % ', '.join(LAYERS_REQUIRING_DEM)
+                LOGGER.error(error_msg)
+                raise Exception(error_msg)
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria
     # are rejected.
