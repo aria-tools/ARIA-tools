@@ -149,7 +149,7 @@ def main():
         # format list of layers
         layers = list(args.layers.split(','))
         layers = [i.replace(' ', '') for i in layers]
-        layers = ['all' if l.lower() == 'all' else l for l in layers]
+        layers = ['all' if layer.lower() == 'all' else layer for layer in layers]
 
         # list of layers requiring DEM for extraction
         layers_requiring_dem = ['all',
@@ -162,12 +162,12 @@ def main():
 
         # check that DEM is specified depending on layers requested
         intersecting_layers = [layer for layer in layers
-            if layer in layers_requiring_dem]
+                               if layer in layers_requiring_dem]
         if intersecting_layers != []:
             assert args.demfile is not None, (
                 'A valid DEM must be specified when extracting any of '
                 f"{' '.join(intersecting_layers)}"
-                )
+            )
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria
     # are rejected.
