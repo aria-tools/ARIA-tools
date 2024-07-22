@@ -149,23 +149,26 @@ def main():
         # format list of layers
         layers = list(args.layers.split(','))
         layers = [i.replace(' ', '') for i in layers]
-        layers = [layer.replace(layer, 'all')
-                  for layer in layers if layer.lower() == 'all']
+        layers = ['all' if l.lower() == 'all' else l for l in layers]
 
         # list of layers requiring DEM for extraction
-        layers_requiring_dem = {'all',
+        layers_requiring_dem = ['all',
                                 'bPerpendicular',
                                 'bParallel',
                                 'incidenceAngle',
+                                'ionosphere',
                                 'lookAngle',
                                 'azimuthAngle',
-                                'solidEarthTide'}
+                                'solidEarthTide']
 
         # check that DEM is specified depending on layers requested
-        if any(layer in layers_requiring_dem for layer in layers):
-            assert args.demfile is not None, \
-                'A valid DEM must be specified when extracting any of {}'.\
-                    format(' '.join(layer for layer in layers_requiring_dem))
+        intersecting_layers = [layer for layer in layers
+            if layer in layers_requiring_dem]
+        if intersecting_layers != []:
+            assert args.demfile is not None, (
+                'A valid DEM must be specified when extracting any of '
+                f"{' '.join(intersecting_layers)}"
+                )
 
     # if user bbox was specified, file(s) not meeting imposed spatial criteria
     # are rejected.
