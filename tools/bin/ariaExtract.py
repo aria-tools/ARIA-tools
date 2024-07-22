@@ -156,7 +156,6 @@ def main():
                                 'bPerpendicular',
                                 'bParallel',
                                 'incidenceAngle',
-                                'ionosphere',
                                 'lookAngle',
                                 'azimuthAngle',
                                 'solidEarthTide']
