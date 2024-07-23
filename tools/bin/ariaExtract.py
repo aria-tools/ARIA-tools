@@ -151,6 +151,8 @@ def main():
         layers = [i.replace(' ', '') for i in layers]
         layers = ['all' if layer.lower() == 'all'
                   else layer for layer in layers]
+        layers = ['troposphere*' if layer.startswith('troposphere')
+                  else layer for layer in layers]
 
         # list of layers requiring DEM for extraction
         LAYERS_REQUIRING_DEM = {'all',
@@ -159,7 +161,8 @@ def main():
                                 'incidenceAngle',
                                 'lookAngle',
                                 'azimuthAngle',
-                                'solidEarthTide'}
+                                'solidEarthTide',
+                                'troposphere*'}
 
         # check that DEM is specified depending on layers requested
         if len(LAYERS_REQUIRING_DEM.intersection(layers)) > 0:
