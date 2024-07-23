@@ -145,7 +145,7 @@ def main():
     # Check whether all necessary inputs were specified.
     # some products require a DEM to extract -- if any of those are requested,
     # ensure that a valid DEM is specified
-    if args.layers:
+    if args.layers is not None:
         # format list of layers
         layers = list(args.layers.split(','))
         layers = [i.replace(' ', '') for i in layers]
