@@ -145,11 +145,13 @@ def main():
     # Check whether all necessary inputs were specified.
     # some products require a DEM to extract -- if any of those are requested,
     # ensure that a valid DEM is specified
-    if args.layers:
+    if args.layers is not None:
         # format list of layers
         layers = list(args.layers.split(','))
         layers = [i.replace(' ', '') for i in layers]
         layers = ['all' if layer.lower() == 'all'
+                  else layer for layer in layers]
+        layers = ['troposphere*' if layer.startswith('troposphere')
                   else layer for layer in layers]
 
         # list of layers requiring DEM for extraction
@@ -159,7 +161,8 @@ def main():
                                 'incidenceAngle',
                                 'lookAngle',
                                 'azimuthAngle',
-                                'solidEarthTide'}
+                                'solidEarthTide',
+                                'troposphere*'}
 
         # check that DEM is specified depending on layers requested
         if len(LAYERS_REQUIRING_DEM.intersection(layers)) > 0:
