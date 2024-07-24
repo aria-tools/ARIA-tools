@@ -882,6 +882,16 @@ def handle_epoch_layers(
                     dem, lat, lon, hgt_field, prod_ver_list, is_nisar_file,
                     outputFormat, verbose=verbose)
 
+                # Apply mask (if specified)
+                if mask is not None:
+                    update_file = osgeo.gdal.Open(
+                        j[1][:-4], osgeo.gdal.GA_Update)
+                    mask_arr = mask.ReadAsArray() * \
+                        osgeo.gdal.Open(j[1][:-4] + '.vrt').ReadAsArray()
+                    update_file.GetRasterBand(1).WriteArray(mask_arr)
+                    update_file = None
+                    mask_arr = None
+
                 # Track consistency of dimensions
                 if j[0] == 0:
                     ref_wid, ref_hgt, ref_geotrans, _, _ = \

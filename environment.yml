@@ -8,6 +8,8 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - affine
+  - arm_pyart
   - asf_search
   - dask
   - dem_stitcher>=2.5.0
@@ -16,12 +18,14 @@ dependencies:
   - joblib
   - matplotlib
   - netcdf4
+  - numpy
   - pandas
   - parallel
   - pip
   - pyproj
   - pytest
   - python>=3.8
+  - python-dateutil
   - rasterio
   - rioxarray
   - requests
