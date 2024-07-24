@@ -9,7 +9,6 @@
 import os
 import re
 import glob
-import copy
 import logging
 import datetime
 import itertools
@@ -269,13 +268,6 @@ class Product:
         else:
             self.num_threads = int(num_threads)
 
-        # set variables to check for tropo extract logic
-        self.tropo_models = tropo_models
-        self.tropo_extract = False
-        if layers is not None:
-            if 'troposphere' in layers:
-                self.tropo_extract = True
-
         # Determine if file input is single file, a list, or wildcard
         # If list of files
         if len([str(val) for val in filearg.split(',')]) > 1:
@@ -352,14 +344,48 @@ class Product:
         if len(self.files) == 0:
             raise Exception('No file match found')
 
+        # exit if user does not specify a valid tropo model name
+        self.tropo_models = tropo_models
+        fname = self.files[0]
+        basename = os.path.basename(fname)
+        if self.tropo_models is not None:
+            if basename.startswith('S1_'):
+                if isinstance(self.tropo_models, str):
+                    if self.tropo_models.lower() == 'all':
+                        self.tropo_models = (
+                            ARIAtools.constants.ARIA_TROPO_INTERNAL
+                        )
+                    else:
+                        self.tropo_models = list(
+                            self.tropo_models.split(',')
+                        )
+                        self.tropo_models = [
+                            i.replace(' ', '')
+                            for i in self.tropo_models]
+                for i in self.tropo_models:
+                    if i not in ARIAtools.constants.ARIA_TROPO_INTERNAL:
+                        error_msg = 'User-requested tropo model ' \
+                                    '%s will not be generated ' \
+                                    'as it is not one of the ' \
+                                    'following valid models: %s' % \
+                                    (i, ', '.join(
+                                     ARIAtools.constants.ARIA_TROPO_INTERNAL)
+                                    )
+                        LOGGER.error(error_msg)
+                        raise Exception(error_msg)
+
+        # set variables to check for tropo extract logic
+        self.tropo_extract = False
+        if layers is not None:
+            if 'troposphere' in layers:
+                self.tropo_extract = True
+
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
 
         # find native projection, if specified
         if self.projection.lower() == 'native':
-            fname = self.files[0]
-            basename = os.path.basename(fname)
             if basename.startswith('NISAR_'):
                 record_proj = []
                 pol_dict = {}
@@ -721,25 +747,6 @@ class Product:
                 for i in meta.split():
                     if '/science/grids/corrections/external/troposphere/' in i:
                         model_name.append(i.split('/')[-3])
-
-                # exit if user does not specify a valid tropo model name
-                if self.tropo_models is not None:
-                    if self.tropo_models.lower() != 'all':
-                        VALID_TROPO_MODELS = copy.deepcopy(
-                            ARIAtools.constants.ARIA_TROPO_INTERNAL)
-                        self.tropo_models = list(self.tropo_models.split(','))
-                        self.tropo_models = [
-                            i.replace(' ', '')
-                            for i in self.tropo_models]
-                        for i in self.tropo_models:
-                            if i not in VALID_TROPO_MODELS:
-                                error_msg = 'User-requested tropo model ' \
-                                            '%s will not be generated ' \
-                                            'as it is not one of the ' \
-                                            'following valid models: %s' % \
-                                            (i, ', '.join(VALID_TROPO_MODELS))
-                                LOGGER.error(error_msg)
-                                raise Exception(error_msg)
 
                 # exit if user wishes to extract a tropo layer
                 # but no valid tropo model name is specified by user
