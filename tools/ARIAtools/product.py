@@ -364,13 +364,15 @@ class Product:
                             for i in self.tropo_models]
                 for i in self.tropo_models:
                     if i not in ARIAtools.constants.ARIA_TROPO_INTERNAL:
-                        error_msg = 'User-requested tropo model ' \
-                                    '%s will not be generated ' \
-                                    'as it is not one of the ' \
-                                    'following valid models: %s' % \
-                                    (i, ', '.join(
-                                     ARIAtools.constants.ARIA_TROPO_INTERNAL)
-                                    )
+                        error_msg = (
+                            'User-requested tropo model '
+                            '%s will not be generated '
+                            'as it is not one of the '
+                            'following valid models: %s' % (
+                                i, ', '.join(
+                                ARIAtools.constants.ARIA_TROPO_INTERNAL)
+                            )
+                        )
                         LOGGER.error(error_msg)
                         raise Exception(error_msg)
 
