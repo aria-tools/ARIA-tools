@@ -370,7 +370,7 @@ class Product:
                             'as it is not one of the '
                             'following valid models: %s' % (
                                 i, ', '.join(
-                                ARIAtools.constants.ARIA_TROPO_INTERNAL)
+                                    ARIAtools.constants.ARIA_TROPO_INTERNAL)
                             )
                         )
                         LOGGER.error(error_msg)
