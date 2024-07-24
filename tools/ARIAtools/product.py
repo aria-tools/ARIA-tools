@@ -240,7 +240,7 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False):
+                 verbose=False, tropo_models=None, layers=None):
         """
         Parse products and input bounding box (if specified)
         """
@@ -267,6 +267,13 @@ class Product:
 
         else:
             self.num_threads = int(num_threads)
+
+        # set variables to check for tropo extract logic
+        self.tropo_models = tropo_models
+        self.tropo_extract = False
+        if layers is not None:
+            if 'troposphere' in layers:
+                self.tropo_extract = True
 
         # Determine if file input is single file, a list, or wildcard
         # If list of files
@@ -713,6 +720,30 @@ class Product:
                 for i in meta.split():
                     if '/science/grids/corrections/external/troposphere/' in i:
                         model_name.append(i.split('/')[-3])
+
+                # exit if user wishes to extract a tropo layer
+                # but no valid tropo model name is specified by user
+                if self.tropo_extract is True and self.tropo_models is None:
+                    error_msg = 'User specifies extraction of tropo layer, ' \
+                                'but no valid tropo model input specified ' \
+                                'with the --tropo_models option'
+                    LOGGER.error(error_msg)
+                    raise Exception(error_msg)
+
+                # exit if specifies a tropo model name
+                # but does not explicitly specify to extract a tropo layer
+                if (self.tropo_extract is False and
+                        self.tropo_models is not None):
+                    TROPO_OPTIONS = {'troposphereWet',
+                                     'troposphereHydrostatic',
+                                     'troposphereTotal'}
+                    error_msg = 'User specifies tropo model with ' \
+                                'the --tropo_models option, but does not ' \
+                                'specify extraction of a tropo layer ' \
+                                'with the --layers option, specifically ' \
+                                'any of %s' % ', '.join(TROPO_OPTIONS)
+                    LOGGER.error(error_msg)
+                    raise Exception(error_msg)
 
                 model_name = list(set(model_name))
                 for i in model_name:

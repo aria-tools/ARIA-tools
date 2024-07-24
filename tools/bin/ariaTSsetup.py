@@ -411,7 +411,8 @@ def main():
         args.imgfile, bbox=args.bbox, projection=args.projection,
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
-        verbose=args.verbose)
+        verbose=args.verbose, tropo_models=args.tropo_models,
+        layers=args.layers)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
