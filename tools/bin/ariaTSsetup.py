@@ -535,6 +535,15 @@ def main():
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
+    # Extract bPerp to json file
+    for product in standardproduct_info.products[1]:
+        bperp0 = osgeo.gdal.Open(
+            product['bPerpendicular'][0]).ReadAsArray().mean()
+        bperp1 = osgeo.gdal.Open(
+            product['bPerpendicular'][1]).ReadAsArray().mean()
+        LOGGER.info('Pair name: %s, bPerpendicular %s %s' % (
+            product['pair_name'], bperp0, bperp1))
+
     # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
         standardproduct_info.products[1], args.layers, args.nc_version,
