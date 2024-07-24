@@ -20,20 +20,23 @@ import logging
 import argparse
 import datetime
 import collections
+import contextlib
+import json
 
+import numpy as np
 import osgeo.gdal
 import tile_mate
 
-import ARIAtools.product
-import ARIAtools.util.vrt
-import ARIAtools.util.misc
-import ARIAtools.util.mask
-import ARIAtools.util.log
-import ARIAtools.util.dem
 import ARIAtools.extractProduct
-
-from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
-    ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES
+import ARIAtools.product
+import ARIAtools.util.dem
+import ARIAtools.util.log
+import ARIAtools.util.mask
+import ARIAtools.util.misc
+import ARIAtools.util.vrt
+from ARIAtools.constants import (ARIA_EXTERNAL_CORRECTIONS,
+                                 ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES,
+                                 ARIA_TROPO_MODELS)
 
 osgeo.gdal.UseExceptions()
 
@@ -535,14 +538,23 @@ def main():
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
-    # Extract bPerp to json file
+    # Extract bPerpendicular to json file
+    bperp_dict = {}
     for product in standardproduct_info.products[1]:
-        bperp0 = osgeo.gdal.Open(
-            product['bPerpendicular'][0]).ReadAsArray().mean()
-        bperp1 = osgeo.gdal.Open(
-            product['bPerpendicular'][1]).ReadAsArray().mean()
-        LOGGER.info('Pair name: %s, bPerpendicular %s %s' % (
-            product['pair_name'], bperp0, bperp1))
+        mean_bperp_by_frames = [
+            osgeo.gdal.Open(frame).ReadAsArray().mean() for frame in
+            product['bPerpendicular']]
+        LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
+            product['pair_name'][0], mean_bperp_by_frames))
+        bperp_dict[product['pair_name'][0]] = float(
+            np.mean(mean_bperp_by_frames))
+
+    bperp_outdir = os.path.join(args.workdir, 'bPerpendicular')
+    with contextlib.suppress(FileExistsError):
+        os.mkdir(bperp_outdir)
+
+    with open(os.path.join(bperp_outdir, 'bperp.json'), 'w') as ofp:
+        json.dump(bperp_dict, ofp)
 
     # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
