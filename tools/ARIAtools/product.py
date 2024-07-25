@@ -240,7 +240,7 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False):
+                 verbose=False, tropo_models=None, layers=None):
         """
         Parse products and input bounding box (if specified)
         """
@@ -344,14 +344,50 @@ class Product:
         if len(self.files) == 0:
             raise Exception('No file match found')
 
+        # exit if user does not specify a valid tropo model name
+        self.tropo_models = tropo_models
+        fname = self.files[0]
+        basename = os.path.basename(fname)
+        if self.tropo_models is not None:
+            if basename.startswith('S1_'):
+                if isinstance(self.tropo_models, str):
+                    if self.tropo_models.lower() == 'all':
+                        self.tropo_models = (
+                            ARIAtools.constants.ARIA_TROPO_INTERNAL
+                        )
+                    else:
+                        self.tropo_models = list(
+                            self.tropo_models.split(',')
+                        )
+                        self.tropo_models = [
+                            i.replace(' ', '')
+                            for i in self.tropo_models]
+                for i in self.tropo_models:
+                    if i not in ARIAtools.constants.ARIA_TROPO_INTERNAL:
+                        error_msg = (
+                            'User-requested tropo model '
+                            '%s will not be generated '
+                            'as it is not one of the '
+                            'following valid models: %s' % (
+                                i, ', '.join(
+                                    ARIAtools.constants.ARIA_TROPO_INTERNAL)
+                            )
+                        )
+                        LOGGER.error(error_msg)
+                        raise Exception(error_msg)
+
+        # set variables to check for tropo extract logic
+        self.tropo_extract = False
+        if layers is not None:
+            if 'troposphere' in layers:
+                self.tropo_extract = True
+
         # If specified workdir doesn't exist, create it
         if not os.path.exists(workdir):
             os.mkdir(workdir)
 
         # find native projection, if specified
         if self.projection.lower() == 'native':
-            fname = self.files[0]
-            basename = os.path.basename(fname)
             if basename.startswith('NISAR_'):
                 record_proj = []
                 pol_dict = {}
@@ -713,6 +749,30 @@ class Product:
                 for i in meta.split():
                     if '/science/grids/corrections/external/troposphere/' in i:
                         model_name.append(i.split('/')[-3])
+
+                # exit if user wishes to extract a tropo layer
+                # but no valid tropo model name is specified by user
+                if self.tropo_extract is True and self.tropo_models is None:
+                    error_msg = 'User specifies extraction of tropo layer, ' \
+                                'but no valid tropo model input specified ' \
+                                'with the --tropo_models option'
+                    LOGGER.error(error_msg)
+                    raise Exception(error_msg)
+
+                # exit if specifies a tropo model name
+                # but does not explicitly specify to extract a tropo layer
+                if (self.tropo_extract is False and
+                        self.tropo_models is not None):
+                    TROPO_OPTIONS = {'troposphereWet',
+                                     'troposphereHydrostatic',
+                                     'troposphereTotal'}
+                    error_msg = 'User specifies tropo model with ' \
+                                'the --tropo_models option, but does not ' \
+                                'specify extraction of a tropo layer ' \
+                                'with the --layers option, specifically ' \
+                                'any of %s' % ', '.join(TROPO_OPTIONS)
+                    LOGGER.error(error_msg)
+                    raise Exception(error_msg)
 
                 model_name = list(set(model_name))
                 for i in model_name:
