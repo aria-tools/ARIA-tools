@@ -414,7 +414,8 @@ def main():
         args.imgfile, bbox=args.bbox, projection=args.projection,
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
-        verbose=args.verbose)
+        verbose=args.verbose, tropo_models=args.tropo_models,
+        layers=args.layers)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -432,27 +433,24 @@ def main():
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
-    if args.demfile is not None:
-        dem_dict = {
-            'demfilename': args.demfile,
-            'bbox_file': standardproduct_info.bbox_file,
-            'prods_TOTbbox': prods_TOTbbox,
-            'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
-            'proj': proj,
-            'arrres': arrres,
-            'workdir': args.workdir,
-            'outputFormat': args.outputFormat,
-            'num_threads': args.num_threads,
-            'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
-        }
+    dem_dict = {
+        'demfilename': args.demfile,
+        'bbox_file': standardproduct_info.bbox_file,
+        'prods_TOTbbox': prods_TOTbbox,
+        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+        'proj': proj,
+        'arrres': arrres,
+        'workdir': args.workdir,
+        'outputFormat': args.outputFormat,
+        'num_threads': args.num_threads,
+        'multilooking': args.multilooking,
+        'rankedResampling': args.rankedResampling
+    }
 
-        # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        LOGGER.info('Download/cropping DEM')
-        demfile, demfile_expanded, lat, lon = \
-            ARIAtools.util.dem.prep_dem(**dem_dict)
-    else:
-        demfile, demfile_expanded, lat, lon = None, None, None, None
+    # Pass DEM-filename, loaded DEM array, and lat/lon arrays
+    LOGGER.info('Download/cropping DEM')
+    demfile, demfile_expanded, lat, lon = \
+        ARIAtools.util.dem.prep_dem(**dem_dict)
 
     # Load or download mask (if specified).
     if args.mask is not None:

@@ -183,7 +183,8 @@ def main():
         args.imgfile, bbox=args.bbox, projection=args.projection,
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
-        verbose=args.verbose)
+        verbose=args.verbose, tropo_models=args.tropo_models,
+        layers=args.layers)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
