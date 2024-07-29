@@ -130,6 +130,11 @@ To avoid potential issues associated with dependencies when cloning new ARIA-too
 mamba env update --name ARIA-tools --file environment.yml --prune
 ```
 
+GNU Parallel (https://www.gnu.org/software/parallel/) will write output to stdout that requests that the user cite their paper. We can use this command to suppress this output:
+```
+echo 'will cite' | parallel --citation
+```
+
 ### Other installation options
 The following pages might be of use to those trying to build third party packages from source.
 -   [Installing dependencies from source on linux](https://github.com/aria-tools/ARIA-tools/blob/master/LinuxSourceBuild.md)
