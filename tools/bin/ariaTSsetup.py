@@ -270,7 +270,15 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             aztime_list.append(i['azimuthZeroDopplerMidTime'])
 
         # get bperp value
-        b_perp = extract_bperp_dict(domain_name, dlist)
+        b_perp_json_file = os.path.join(
+            workdir, 'bPerpendicular', 'bperp.json')
+
+        if os.path.isfile(b_perp_json_file):
+            LOGGER.debug("Loading bPerpendicular from bperp.json")
+            with open(b_perp_json_file) as ifp:
+                b_perp = json.loads(ifp.read())
+        else:
+            b_perp = extract_bperp_dict(domain_name, dlist)
 
         # Confirm 1-to-1 match between UNW and other derived products
         if ref_dlist and new_dlist != ref_dlist:
@@ -537,15 +545,8 @@ def main():
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
     # Extract bPerpendicular to json file
-    bperp_dict = {}
-    for product in standardproduct_info.products[1]:
-        mean_bperp_by_frames = [
-            osgeo.gdal.Open(frame).ReadAsArray().mean() for frame in
-            product['bPerpendicular']]
-        LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
-            product['pair_name'][0], mean_bperp_by_frames))
-        bperp_dict[product['pair_name'][0]] = float(
-            np.mean(mean_bperp_by_frames))
+    bperp_dict = ARIAtools.extractProduct.extract_bperp_dict(
+        standardproduct_info.products[1], num_threads=args.num_threads)
 
     bperp_outdir = os.path.join(args.workdir, 'bPerpendicular')
     with contextlib.suppress(FileExistsError):
