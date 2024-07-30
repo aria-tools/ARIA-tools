@@ -34,7 +34,8 @@ ARIA_LAYERS += ARIA_INTERNAL_CORRECTIONS
 ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STANDARD_LAYERS = [
-    'unwrappedPhase', 'coherence', 'incidenceAngle', 'azimuthAngle']
+    'unwrappedPhase', 'coherence', 'incidenceAngle', 'lookAngle',
+    'azimuthAngle', 'bPerpendicular']
 
 ARIA_STACK_DEFAULTS = ['unwrappedPhase',
                        'coherence',
