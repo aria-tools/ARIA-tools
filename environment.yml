@@ -12,7 +12,7 @@ dependencies:
   - arm_pyart
   - asf_search
   - dask
-  - dem_stitcher>=2.5.0
+  - dem_stitcher>=2.5.8
   - gdal>=3.7.0
   - h5py
   - joblib

@@ -34,9 +34,10 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
-from ARIAtools.constants import (ARIA_EXTERNAL_CORRECTIONS,
-                                 ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES,
-                                 ARIA_TROPO_MODELS)
+
+from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
+    ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
+    ARIA_STANDARD_LAYERS
 
 osgeo.gdal.UseExceptions()
 
@@ -61,7 +62,7 @@ def create_parser():
         default=None,
         help='Path to director(ies) or tar file(s) containing GACOS products.')
     parser.add_argument(
-        '-l', '--layers', dest='layers', default=None,
+        '-l', '--layers', dest='layers', default='standard',
         help='Specify layers to extract as a comma deliminated list bounded '
              'by single quotes. Allowed keys are: "unwrappedPhase", '
              '"coherence", "amplitude", "bPerpendicular", "bParallel", '
@@ -409,6 +410,10 @@ def main():
     LOGGER.info(
         'Thread count specified for gdal multiprocessing = %s' % (
             args.num_threads))
+
+    if args.layers.lower() == 'standard':
+        LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
+        args.layers = ','.join(ARIA_STANDARD_LAYERS)
 
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
