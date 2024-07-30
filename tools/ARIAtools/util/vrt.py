@@ -474,12 +474,11 @@ def layerCheck(
             layers = [i.replace(' ', '') for i in layers]
 
     # TS pipeline
-    TS_LAYERS_DUP = ['unwrappedPhase', 'coherence', 'incidenceAngle',
-                     'lookAngle', 'azimuthAngle', 'bPerpendicular']
     if extract_or_ts == 'tssetup':
         if layers:
             # remove layers already generated in default TS workflow
-            layers = [i for i in layers if i not in TS_LAYERS_DUP]
+            layers = [i for i in layers if i not in
+                      ARIAtools.constants.ARIA_STANDARD_LAYERS]
 
         else:
             layers = []
