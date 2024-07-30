@@ -59,7 +59,7 @@ def create_parser():
         default=None,
         help='Path to director(ies) or tar file(s) containing GACOS products.')
     parser.add_argument(
-        '-l', '--layers', dest='layers', default=None,
+        '-l', '--layers', dest='layers', default='standard',
         help='Specify layers to extract as a comma deliminated list bounded '
              'by single quotes. Allowed keys are: "unwrappedPhase", '
              '"coherence", "amplitude", "bPerpendicular", "bParallel", '
