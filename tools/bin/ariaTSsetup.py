@@ -34,6 +34,7 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
+import ARIAtools.constants
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
@@ -532,10 +533,8 @@ def main():
     }
 
     # export unwrappedPhase
-    layers = ['unwrappedPhase', 'coherence']
-    LOGGER.info(
-        'Extracting unwrapped phase, coherence, and connected components for '
-        'each interferogram pair')
+    layers = ARIAtools.constants.ARIA_STANDARD_INTF_LAYERS
+    LOGGER.info('Extracting %s for each interferogram pair' % layers)
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
         rankedResampling=args.rankedResampling, multiproc_method='threads',
@@ -549,10 +548,10 @@ def main():
                 for item in list(set(d[key])):
                     extract_dict[key].append(item)
 
-    layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
+    layers = ARIAtools.constants.ARIA_STANDARD_GEOM_LAYERS
     LOGGER.info(
-        'Extracting single incidence angle, look angle and azimuth angle '
-        'files valid over common interferometric grid')
+        'Extracting single %s '
+        'files valid over common interferometric grid' % layers)
     prod_arr_record = ARIAtools.extractProduct.export_products(
         [extract_dict], tropo_total=False, layers=layers,
         multiproc_method='gnu_parallel', **export_dict)

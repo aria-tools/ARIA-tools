@@ -37,7 +37,6 @@ ENVI_FILES['tssetup'] = {
     'incidenceAngle': 'incidenceAngle/20230829_20230724',
     'ionosphere_20230829_20230724': 'ionosphere/20230829_20230724',
     'ionosphere_20230829_20230817': 'ionosphere/20230829_20230817',
-    'lookAngle': 'lookAngle/20230829_20230724',
     'solidEarthTide_20230829_20230724': 'solidEarthTide/20230829_20230724',
     'solidEarthTide_20230829_20230817': 'solidEarthTide/20230829_20230817',
     'troposphereTotal_HRRR_20230829_20230817':
