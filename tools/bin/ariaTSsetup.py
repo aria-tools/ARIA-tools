@@ -411,6 +411,17 @@ def main():
         'Thread count specified for gdal multiprocessing = %s' % (
             args.num_threads))
 
+    # If bPerpendicular specified on command line extract bPerp layer,
+    # otherwise extract the average from GUNWs into json file.
+    extract_bperp_layer = False
+    with contextlib.suppress(TypeError):
+        extract_bperp_layer = 'bPerpendicular' in args.layers
+        if extract_bperp_layer:
+            # Remove bPerpendicular from args.layers
+            layers = args.layers.split(',')
+            layers.pop(layers.index('bPerpendicular'))
+            args.layers = ','.join(layers)
+
     if args.layers.lower() == 'standard':
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
@@ -549,16 +560,28 @@ def main():
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
-    # Extract bPerpendicular to json file
-    bperp_dict = ARIAtools.extractProduct.extract_bperp_dict(
-        standardproduct_info.products[1], num_threads=args.num_threads)
+    if extract_bperp_layer:
+        LOGGER.info(
+            'Extracting perpendicular baseline grids for each interferogram '
+            'pair')
+        prod_arr_record = ARIAtools.extractProduct.export_products(
+            standardproduct_info.products[1], tropo_total=False,
+            layers=['bPerpendicular'], multiproc_method='gnu_parallel',
+            **export_dict)
 
-    bperp_outdir = os.path.join(args.workdir, 'bPerpendicular')
-    with contextlib.suppress(FileExistsError):
-        os.mkdir(bperp_outdir)
+        # Track consistency of dimensions
+        ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
+    else:
+        # Extract bPerpendicular to json file
+        bperp_dict = ARIAtools.extractProduct.extract_bperp_dict(
+            standardproduct_info.products[1], num_threads=args.num_threads)
 
-    with open(os.path.join(bperp_outdir, 'bperp.json'), 'w') as ofp:
-        json.dump(bperp_dict, ofp)
+        bperp_outdir = os.path.join(args.workdir, 'bPerpendicular')
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(bperp_outdir)
+
+        with open(os.path.join(bperp_outdir, 'bperp.json'), 'w') as ofp:
+            json.dump(bperp_dict, ofp)
 
     # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
