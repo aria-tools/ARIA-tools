@@ -700,9 +700,10 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
     return
 
+
 def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
-    def read_and_average_bperp(filename):
+    def read_and_average_bperp(frame):
         """Helper function for dask multiprocessing"""
         return osgeo.gdal.Open(frame).ReadAsArray().mean()
 
@@ -714,6 +715,7 @@ def extract_bperp_dict(products, num_threads):
 
         mean_bperp_by_frames = dask.compute(
             jobs, num_workers=int(num_threads), scheduler='threads')[0]
+
         LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
             product['pair_name'][0], mean_bperp_by_frames))
         bperp_dict[product['pair_name'][0]] = float(
