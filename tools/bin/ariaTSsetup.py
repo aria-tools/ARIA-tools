@@ -419,7 +419,7 @@ def main():
         extract_bperp_layer = 'bPerpendicular' in args.layers
         if extract_bperp_layer:
             # Remove bPerpendicular from args.layers
-            layers = args.layers.split(',')
+            layers = [layer.strip() for layer in args.layers.split(',')]
             layers.pop(layers.index('bPerpendicular'))
             args.layers = ','.join(layers)
 
