@@ -20,17 +20,21 @@ import logging
 import argparse
 import datetime
 import collections
+import contextlib
+import json
 
+import numpy as np
 import osgeo.gdal
 import tile_mate
 
-import ARIAtools.product
-import ARIAtools.util.vrt
-import ARIAtools.util.misc
-import ARIAtools.util.mask
-import ARIAtools.util.log
-import ARIAtools.util.dem
 import ARIAtools.extractProduct
+import ARIAtools.product
+import ARIAtools.util.dem
+import ARIAtools.util.log
+import ARIAtools.util.mask
+import ARIAtools.util.misc
+import ARIAtools.util.vrt
+import ARIAtools.constants
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
@@ -268,7 +272,15 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             aztime_list.append(i['azimuthZeroDopplerMidTime'])
 
         # get bperp value
-        b_perp = extract_bperp_dict(domain_name, dlist)
+        b_perp_json_file = os.path.join(
+            workdir, 'bPerpendicular', 'bperp.json')
+
+        if os.path.isfile(b_perp_json_file):
+            LOGGER.debug("Loading bPerpendicular from bperp.json")
+            with open(b_perp_json_file) as ifp:
+                b_perp = json.loads(ifp.read())
+        else:
+            b_perp = extract_bperp_dict(domain_name, dlist)
 
         # Confirm 1-to-1 match between UNW and other derived products
         if ref_dlist and new_dlist != ref_dlist:
@@ -400,6 +412,17 @@ def main():
         'Thread count specified for gdal multiprocessing = %s' % (
             args.num_threads))
 
+    # If bPerpendicular specified on command line extract bPerp layer,
+    # otherwise extract the average from GUNWs into json file.
+    extract_bperp_layer = False
+    with contextlib.suppress(TypeError):
+        extract_bperp_layer = 'bPerpendicular' in args.layers
+        if extract_bperp_layer:
+            # Remove bPerpendicular from args.layers
+            layers = [layer.strip() for layer in args.layers.split(',')]
+            layers.pop(layers.index('bPerpendicular'))
+            args.layers = ','.join(layers)
+
     if args.layers.lower() == 'standard':
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
@@ -510,10 +533,8 @@ def main():
     }
 
     # export unwrappedPhase
-    layers = ['unwrappedPhase', 'coherence']
-    LOGGER.info(
-        'Extracting unwrapped phase, coherence, and connected components for '
-        'each interferogram pair')
+    layers = ARIAtools.constants.ARIA_STANDARD_INTF_LAYERS
+    LOGGER.info('Extracting %s for each interferogram pair' % layers)
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
         rankedResampling=args.rankedResampling, multiproc_method='threads',
@@ -527,10 +548,10 @@ def main():
                 for item in list(set(d[key])):
                     extract_dict[key].append(item)
 
-    layers = ['incidenceAngle', 'lookAngle', 'azimuthAngle']
+    layers = ARIAtools.constants.ARIA_STANDARD_GEOM_LAYERS
     LOGGER.info(
-        'Extracting single incidence angle, look angle and azimuth angle '
-        'files valid over common interferometric grid')
+        'Extracting single %s '
+        'files valid over common interferometric grid' % layers)
     prod_arr_record = ARIAtools.extractProduct.export_products(
         [extract_dict], tropo_total=False, layers=layers,
         multiproc_method='gnu_parallel', **export_dict)
@@ -538,15 +559,28 @@ def main():
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
-    layers = ['bPerpendicular']
-    LOGGER.info(
-        'Extracting perpendicular baseline grids for each interferogram pair')
-    prod_arr_record = ARIAtools.extractProduct.export_products(
-        standardproduct_info.products[1], tropo_total=False, layers=layers,
-        multiproc_method='gnu_parallel', **export_dict)
+    if extract_bperp_layer:
+        LOGGER.info(
+            'Extracting perpendicular baseline grids for each interferogram '
+            'pair')
+        prod_arr_record = ARIAtools.extractProduct.export_products(
+            standardproduct_info.products[1], tropo_total=False,
+            layers=['bPerpendicular'], multiproc_method='gnu_parallel',
+            **export_dict)
 
-    # Track consistency of dimensions
-    ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
+        # Track consistency of dimensions
+        ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
+    else:
+        # Extract bPerpendicular to json file
+        bperp_dict = ARIAtools.extractProduct.extract_bperp_dict(
+            standardproduct_info.products[1], num_threads=args.num_threads)
+
+        bperp_outdir = os.path.join(args.workdir, 'bPerpendicular')
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(bperp_outdir)
+
+        with open(os.path.join(bperp_outdir, 'bperp.json'), 'w') as ofp:
+            json.dump(bperp_dict, ofp)
 
     # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(

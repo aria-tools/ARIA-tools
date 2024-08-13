@@ -33,9 +33,10 @@ ARIA_LAYERS += ARIA_EXTERNAL_CORRECTIONS
 ARIA_LAYERS += ARIA_INTERNAL_CORRECTIONS
 ARIA_LAYERS += ARIA_TROPO_MODELS
 
-ARIA_STANDARD_LAYERS = [
-    'unwrappedPhase', 'coherence', 'incidenceAngle', 'azimuthAngle',
-    'bPerpendicular']
+ARIA_STANDARD_INTF_LAYERS = ['unwrappedPhase', 'coherence']
+ARIA_STANDARD_GEOM_LAYERS = ['incidenceAngle', 'azimuthAngle']
+ARIA_STANDARD_LAYERS = ARIA_STANDARD_INTF_LAYERS + ARIA_STANDARD_GEOM_LAYERS
+
 
 ARIA_STACK_DEFAULTS = ['unwrappedPhase',
                        'coherence',

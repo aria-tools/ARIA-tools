@@ -701,6 +701,28 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     return
 
 
+def extract_bperp_dict(products, num_threads):
+    """Extracts bPerpendicular mean over frames for each product in products"""
+    def read_and_average_bperp(frame):
+        """Helper function for dask multiprocessing"""
+        return osgeo.gdal.Open(frame).ReadAsArray().mean()
+
+    bperp_dict = {}
+    for product in products:
+        jobs = []
+        for frame in product['bPerpendicular']:
+            jobs.append(dask.delayed(read_and_average_bperp)(frame))
+
+        mean_bperp_by_frames = dask.compute(
+            jobs, num_workers=int(num_threads), scheduler='threads')[0]
+
+        LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
+            product['pair_name'][0], mean_bperp_by_frames))
+        bperp_dict[product['pair_name'][0]] = float(
+            np.mean(mean_bperp_by_frames))
+    return bperp_dict
+
+
 def handle_epoch_layers(
         layers, product_dict, proj, lyr_path, user_lyrs, map_lyrs, key,
         sec_key, ref_key, tropo_total, workdir, prog_bar, bounds, arrres,

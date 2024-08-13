@@ -30,8 +30,6 @@ ENVI_FILES['extract'] = {
 }
 ENVI_FILES['tssetup'] = {
     'azimuthAngle': 'azimuthAngle/20230829_20230724',
-    'bPerpendicular_20230829_20230724': 'bPerpendicular/20230829_20230724',
-    'bPerpendicular_20230829_20230817': 'bPerpendicular/20230829_20230817',
     'connectedComponents_20230829_20230724':
         'connectedComponents/20230829_20230724',
     'connectedComponents_20230829_20230817':
@@ -39,7 +37,6 @@ ENVI_FILES['tssetup'] = {
     'incidenceAngle': 'incidenceAngle/20230829_20230724',
     'ionosphere_20230829_20230724': 'ionosphere/20230829_20230724',
     'ionosphere_20230829_20230817': 'ionosphere/20230829_20230817',
-    'lookAngle': 'lookAngle/20230829_20230724',
     'solidEarthTide_20230829_20230724': 'solidEarthTide/20230829_20230724',
     'solidEarthTide_20230829_20230817': 'solidEarthTide/20230829_20230817',
     'troposphereTotal_HRRR_20230829_20230817':
