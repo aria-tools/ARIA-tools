@@ -30,6 +30,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
     LOGGER.debug('prep_dem')
+
     # If specified DEM subdirectory exists, delete contents
     workdir = os.path.join(workdir, 'DEM')
     aria_dem = os.path.join(workdir, f'{dem_name}.dem')
@@ -49,6 +50,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     if multilooking is not None:
         arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
+    # Download DEM if existing DEM not specified
     if demfilename.lower() == 'download':
         if dem_name not in dem_stitcher.datasets.DATASETS:
             raise ValueError(
@@ -70,8 +72,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         assert epsg is not None, (
             f'No projection information in DEM: {demfilename}')
 
-    # write cropped DEM
-    if demfilename == os.path.abspath(aria_dem):
+    # Write cropped DEM
+    if demfilename == os.path.abspath(aria_dem) or os.path.exists(aria_dem):
         LOGGER.warning('The DEM you specified already exists in %s, '
                        'using the existing one...', os.path.dirname(aria_dem))
         ds_aria = osgeo.gdal.Open(aria_dem)
@@ -91,9 +93,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         update_file.SetProjection(proj)
         ds_aria = osgeo.gdal.Translate(
             f'{aria_dem}.vrt', aria_dem, format='VRT')
-        LOGGER.info(
-            'Applied cutline to produce 3 arc-sec SRTM DEM: %s',
-            aria_dem)
+        LOGGER.info('Applied cutline to produce 3 arc-sec DEM: %s', aria_dem)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
@@ -133,15 +133,24 @@ def download_dem(
     """Download the DEM over product bbox union."""
     LOGGER.debug('download_dem')
     root = os.path.splitext(path_dem)[0]
-    prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
-    extent = prod_shapefile.bounds
-
-    localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
-    dem_tile_paths = dem_stitcher.get_dem_tile_paths(
-        bounds=extent, dem_name=dem_name,
-        localize_tiles_to_gtiff=localize_tiles_to_gtiff,
-        tile_dir=f'{dem_name}_tiles')
-
     vrt_path = f'{root}_uncropped.vrt'
-    ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
+
+    # Check if DEM has already been downloaded
+    if os.path.exists(os.path.abspath(vrt_path)):
+        LOGGER.warning('%s has already been downloaded. Skipping download.',
+                       vrt_path)
+
+    else:
+        # Download DEM
+        prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
+        extent = prod_shapefile.bounds
+
+        localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
+        dem_tile_paths = dem_stitcher.get_dem_tile_paths(
+            bounds=extent, dem_name=dem_name,
+            localize_tiles_to_gtiff=localize_tiles_to_gtiff,
+            tile_dir=f'{dem_name}_tiles')
+
+        ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
+
     return vrt_path
