@@ -110,7 +110,8 @@ def prep_mask(
                                transform=affine.Affine(*reference_gt)) as dst:
                 rasterio.warp.reproject(
                     source=dat_arr, destination=rasterio.band(dst, 1),
-                    src_transform=dat_prof['transform'], src_crs=dat_prof['crs'],
+                    src_transform=dat_prof['transform'],
+                    src_crs=dat_prof['crs'],
                     dst_transform=reference_gt, dst_crs=crs,
                     resampling=resampling_mode)
 
