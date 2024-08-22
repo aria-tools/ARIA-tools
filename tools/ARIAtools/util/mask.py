@@ -65,62 +65,68 @@ def prep_mask(
         maskfilename = os.path.join(workdir, f'{maskfilename}.msk')
         ref_file = os.path.join(workdir, 'tmp_referencefile')
 
-        # download mask
-        dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
-            bounds, tile_shortname=lyr_name)
+        # Check if mask file has already been downloaded
+        if os.path.exists(maskfilename):
+            LOGGER.warning('%s has already been downloaded. '
+                           'Skipping download.', maskfilename)
 
-        # fill permanent water body
-        if lyr_name == 'esa_world_cover_2021':
-            dat_arr[dat_arr == 80] = 0
-            dat_arr[dat_arr != 0] = 1
+        else:
+            # download mask
+            dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
+                bounds, tile_shortname=lyr_name)
 
-        # assign datatype and set resampling mode
-        dat_arr = dat_arr.astype('byte')
-        f_dtype = 'uint8'
-        resampling_mode = rasterio.warp.Resampling.nearest
+            # fill permanent water body
+            if lyr_name == 'esa_world_cover_2021':
+                dat_arr[dat_arr == 80] = 0
+                dat_arr[dat_arr != 0] = 1
 
-        # get output parameters from temp file
-        crs = pyproj.CRS.from_wkt(proj)
-        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-            osgeo.gdal.Warp(
-                ref_file, product_dict[0], format=outputFormat,
-                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, multithread=True)
+            # assign datatype and set resampling mode
+            dat_arr = dat_arr.astype('byte')
+            f_dtype = 'uint8'
+            resampling_mode = rasterio.warp.Resampling.nearest
 
-        with rasterio.open(ref_file) as src:
-            reference_gt = src.transform
-            resize_col = src.width
-            resize_row = src.height
+            # get output parameters from temp file
+            crs = pyproj.CRS.from_wkt(proj)
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                osgeo.gdal.Warp(
+                    ref_file, product_dict[0], format=outputFormat,
+                    outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                    targetAlignedPixels=True, multithread=True)
 
-        # remove temporary file
-        for j in glob.glob(ref_file + '*'):
-            if os.path.isfile(j):
-                os.remove(j)
+            with rasterio.open(ref_file) as src:
+                reference_gt = src.transform
+                resize_col = src.width
+                resize_row = src.height
 
-        # save uncropped raster to file
-        with rasterio.open(uncropped_maskfilename, 'w',
-                           height=resize_row, width=resize_col, count=1,
-                           dtype=f_dtype, crs=crs,
-                           transform=affine.Affine(*reference_gt)) as dst:
-            rasterio.warp.reproject(
-                source=dat_arr, destination=rasterio.band(dst, 1),
-                src_transform=dat_prof['transform'], src_crs=dat_prof['crs'],
-                dst_transform=reference_gt, dst_crs=crs,
-                resampling=resampling_mode)
+            # remove temporary file
+            for j in glob.glob(ref_file + '*'):
+                if os.path.isfile(j):
+                    os.remove(j)
 
-        # save cropped mask with precise spacing
-        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-            osgeo.gdal.Warp(
-                maskfilename, uncropped_maskfilename, format=outputFormat,
-                outputBounds=bounds, outputType=osgeo.gdal.GDT_Byte,
-                xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-                multithread=True)
+            # save uncropped raster to file
+            with rasterio.open(uncropped_maskfilename, 'w',
+                               height=resize_row, width=resize_col, count=1,
+                               dtype=f_dtype, crs=crs,
+                               transform=affine.Affine(*reference_gt)) as dst:
+                rasterio.warp.reproject(
+                    source=dat_arr, destination=rasterio.band(dst, 1),
+                    src_transform=dat_prof['transform'], src_crs=dat_prof['crs'],
+                    dst_transform=reference_gt, dst_crs=crs,
+                    resampling=resampling_mode)
 
-        update_file = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
-        update_file.SetProjection(proj)
-        update_file.GetRasterBand(1).SetNoDataValue(0.)
-        osgeo.gdal.Translate(f'{maskfilename}.vrt',
-                             maskfilename, format='VRT')
+            # save cropped mask with precise spacing
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                osgeo.gdal.Warp(
+                    maskfilename, uncropped_maskfilename, format=outputFormat,
+                    outputBounds=bounds, outputType=osgeo.gdal.GDT_Byte,
+                    xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+                    multithread=True)
+
+            update_file = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
+            update_file.SetProjection(proj)
+            update_file.GetRasterBand(1).SetNoDataValue(0.)
+            osgeo.gdal.Translate(f'{maskfilename}.vrt',
+                                 maskfilename, format='VRT')
 
     # User specified mask
     else:
