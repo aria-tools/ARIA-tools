@@ -484,8 +484,8 @@ def merged_productbbox(
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
         ds = osgeo.gdal.Warp('', vrt, options=warp_options)
-        arrres = [abs(ds.GetGeoTransform()[1]),
-                  abs(ds.GetGeoTransform()[-1])]
+        arrres = [0.000833334,
+                  0.000833334]
         ds = None
 
     # warp again with fixed transform and bounds
