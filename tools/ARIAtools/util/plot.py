@@ -38,7 +38,7 @@ class PlotClass(object):
         self.workdir = os.path.join(workdir, 'figures')
         self.prods_TOTbbox = prods_TOTbbox
         self.arrres = arrres
-        self.mask = gdal.Open(mask)
+        self.mask = gdal.Open(mask) if mask is not None else None
         self.outputFormat = outputFormat
         self.croptounion = croptounion
         self.num_threads = num_threads
