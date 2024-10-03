@@ -25,6 +25,7 @@ from pyproj import Transformer
 import ARIAtools.constants
 import ARIAtools.util.url
 import ARIAtools.util.shp
+from ARIAtools.util.run_logging import RunLog
 
 osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -267,6 +268,9 @@ class Product:
 
         else:
             self.num_threads = int(num_threads)
+
+        # Establish log file if it does not exist
+        self.log = RunLog(workdir=workdir, verbose=verbose)
 
         # Determine if file input is single file, a list, or wildcard
         # If list of files
@@ -1260,9 +1264,16 @@ class Product:
         return sorted_products
 
     def __run__(self):
+        # Grab list of already read GUNWs
+        log_data = self.log.load()
+        past_files = log_data['files'] if 'files' in log_data.keys() else []
+
         # Only populate list of dictionaries if the file intersects with bbox
-        for f in self.files:
-            self.products += self.__readproduct__(f)
+        for file in self.files:
+            if file not in past_files:
+                self.products += self.__readproduct__(file)
+        self.log.write_gunws(self.files)
+        exit()
 
         # Sort by pair, start time, and latitude
         self.products = list(sorted(

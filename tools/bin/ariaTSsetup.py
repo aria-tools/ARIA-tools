@@ -427,6 +427,10 @@ def main():
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
 
+    # Establish log file
+    from ARIAtools.util.run_logging import RunLog
+    RunLog(workdir=args.workdir, verbose=args.verbose)
+
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
@@ -441,6 +445,10 @@ def main():
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
         layers=args.layers)
+    print(type(standardproduct_info))
+    print(dir(standardproduct_info))
+    print(standardproduct_info.files)
+    exit()
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
