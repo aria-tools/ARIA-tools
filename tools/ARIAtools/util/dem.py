@@ -110,10 +110,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
             demfile_expanded, aria_dem,
             options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
-    # Delete temporary dem-stitcher directory
-    if os.path.exists(f'{dem_name}_tiles'):
-        shutil.rmtree(f'{dem_name}_tiles')
-
     # Define lat/lon arrays for fullres layers
     gt = ds_aria_expanded.GetGeoTransform()
     xs, ys = ds_aria_expanded.RasterXSize, ds_aria_expanded.RasterYSize
