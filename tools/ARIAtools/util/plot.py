@@ -38,12 +38,17 @@ class PlotClass(object):
         self.workdir = os.path.join(workdir, 'figures')
         self.prods_TOTbbox = prods_TOTbbox
         self.arrres = arrres
-        self.mask = gdal.Open(mask)
         self.outputFormat = outputFormat
         self.croptounion = croptounion
         self.num_threads = num_threads
         self.pairs = None
-        self.mask_ext = '_mask' if self.mask is not None else ''
+
+        if mask is not None:
+            self.mask = gdal.Open(mask)
+            self.mask_ext = '_mask'
+        else:
+            self.mask = None
+            self.mask_ext = ''
 
         if self.bbox_file:
             self.bbox_file = open_shp(bbox_file, 0, 0).bounds
