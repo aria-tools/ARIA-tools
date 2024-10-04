@@ -429,7 +429,21 @@ def main():
 
     # Establish log file
     from ARIAtools.util.run_logging import RunLog
-    RunLog(workdir=args.workdir, verbose=args.verbose)
+    run_log = RunLog(workdir=args.workdir, verbose=False)
+
+    # Update ARIA version, start time, and routine
+    run_log.update('aria_version', ARIAtools.__version__)
+    run_log.update('run_time',
+                   datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+    run_log.update('aria_routine', 'ariaTSsetup.py')
+    run_log.update('workdir', os.path.abspath(args.workdir))
+    run_log.update('croptounion', args.croptounion)
+    run_log.update('input_params', {'bbox': args.bbox,
+                                    'minimumOverlap': args.minimumOverlap,
+                                    'nc_version': args.nc_version,
+                                    'layers': args.layers})
+    run_log.update('args', args)
+    run_log.update('projection', args.projection)
 
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
@@ -445,10 +459,6 @@ def main():
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
         layers=args.layers)
-    print(type(standardproduct_info))
-    print(dir(standardproduct_info))
-    print(standardproduct_info.files)
-    exit()
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,

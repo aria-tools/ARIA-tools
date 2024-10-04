@@ -245,9 +245,14 @@ class Product:
         """
         Parse products and input bounding box (if specified)
         """
+        # Establish log file if it does not exist and load any data
+        self.run_log = RunLog(workdir=workdir, verbose=verbose)
+        log_data = self.run_log.load()
+
         # Parse through file(s)/bbox input
         self.files = []
-        self.products = []
+        self.products = log_data['products'] if 'products' \
+                in log_data.keys() else []
 
         # Track bbox file
         self.bbox_file = None
@@ -268,9 +273,6 @@ class Product:
 
         else:
             self.num_threads = int(num_threads)
-
-        # Establish log file if it does not exist
-        self.log = RunLog(workdir=workdir, verbose=verbose)
 
         # Determine if file input is single file, a list, or wildcard
         # If list of files
@@ -455,6 +457,8 @@ class Product:
 
         else:
             self.bbox = None
+
+        self.run_log.update('bbox', self.bbox)
 
         # Report dictionaries for all valid products
         self.__run__()
@@ -1265,15 +1269,24 @@ class Product:
 
     def __run__(self):
         # Grab list of already read GUNWs
-        log_data = self.log.load()
+        log_data = self.run_log.load()
         past_files = log_data['files'] if 'files' in log_data.keys() else []
 
         # Only populate list of dictionaries if the file intersects with bbox
         for file in self.files:
             if file not in past_files:
+                print('file', file)
                 self.products += self.__readproduct__(file)
-        self.log.write_gunws(self.files)
-        exit()
+
+        # Remove products not in list of files
+        pairnames = list(set([os.path.basename(file).split('-')[6] for \
+                              file in self.files]))
+        for product in self.products:
+            if product[0]['pair_name'] not in pairnames:
+                self.products.remove(product)
+
+        self.run_log.update('files', self.files)
+        self.run_log.update('products', self.products)
 
         # Sort by pair, start time, and latitude
         self.products = list(sorted(

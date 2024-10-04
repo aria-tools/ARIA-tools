@@ -34,6 +34,7 @@ import ARIAtools.util.vrt
 import ARIAtools.util.shp
 import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
+from ARIAtools.util.run_logging import RunLog
 
 LOGGER = logging.getLogger(__name__)
 # metadata layer quality check, correction applied if necessary
@@ -323,6 +324,12 @@ def merged_productbbox(
     report common track union to accurately interpolate metadata fields,
     and expected shape for DEM.
     """
+    # Define total bounding box
+    prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
+
+    # Define projection
+    lyr_proj = int(metadata_dict[0]['projection'][0])
+
     # If specified workdir doesn't exist, create it
     os.makedirs(workdir, exist_ok=True)
 
@@ -332,8 +339,27 @@ def merged_productbbox(
     if track_fileext.endswith('.h5'):
         is_nisar_file = True
 
+    # Establish log file if it does not exist and load any data
+    run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
+    log_data = run_log.load()
+
+    # Check if productBoundingBox exists
+    if os.path.exists(prods_TOTbbox):
+        # Record before further modifications
+        bbox_shp = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        run_log.update('exist_prods_TOTbbox', bbox_shp)
+
+    # Redefine minimum overlap based on past productBoundingBox
+    if os.path.exists(prods_TOTbbox):
+        bbox_shp =  ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        bbox_area = ARIAtools.util.shp.shp_area(bbox_shp, lyr_proj)
+
+        minimumOverlap = bbox_area * 0.99
+        if verbose:
+            print(f'Setting minimum overlap to {minimumOverlap:.1f} based on '
+                  'previous productBoundingBox')
+
     # If specified, check if user's bounding box meets minimum threshold area
-    lyr_proj = int(metadata_dict[0]['projection'][0])
     if bbox_file is not None:
         user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
         overlap_area = ARIAtools.util.shp.shp_area(user_bbox, lyr_proj)
@@ -358,8 +384,6 @@ def merged_productbbox(
             ARIAtools.util.shp.save_shp(
                 outname, prods_bbox, lyr_proj)
         scene["productBoundingBox"] = [outname]
-
-    prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
 
     # Need to track bounds of max extent
     # to avoid metadata interpolation issues
@@ -525,6 +549,16 @@ def merged_productbbox(
         # Get projection of full res layers
         proj = ds.GetProjection()
         ds = None
+
+    # Write info to log
+    run_log.update('metadata_dict', metadata_dict)
+    run_log.update('product_dict', product_dict)
+    run_log.update('bbox_file', bbox_file)
+    run_log.update('prods_TOTbbox', prods_TOTbbox)
+    run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
+    run_log.update('arrres', arrres)
+    run_log.update('proj', proj)
+    run_log.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -941,7 +975,7 @@ def export_product_worker(
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
         outputFormat, outputFormatPhys, layer, outDir,
         arrres, epsg_code, num_threads, multilooking, verbose, is_nisar_file,
-        range_correction, rankedResampling):
+        range_correction, rankedResampling, update_mode):
     """
     Worker function for export_products for parallel execution with
     multiprocessing package.
@@ -981,103 +1015,121 @@ def export_product_worker(
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
-    # Extract/crop metadata layers
-    if (any(':/science/grids/imagingGeometry' in s for s in product) or
-        any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
-        # make VRT pointing to metadata layers in standard product
-        hgt_field, outname = prep_metadatalayers(
-            outname, product, dem_expanded, layer, layers,
-            is_nisar_file, proj)
+    print(f'** {update_mode.upper()}')
+    if update_mode == 'skip':
+        pass
 
-        # Interpolate/intersect with DEM before cropping
-        finalize_metadata(
-            outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
-            lat, lon, hgt_field, product, is_nisar_file, outputFormatPhys,
-            verbose=verbose)
+    elif update_mode == 'crop_only':
+        # Crop
+        gdal_warp_kwargs['format'] = 'ENVI'
+        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+        osgeo.gdal.Warp(outname+'_crop', outname+'.vrt', options=warp_options)
+        for crop_name in glob.glob(outname+'_crop*'):
+            fname = os.path.basename(crop_name).replace('_crop', '')
+            fname = os.path.join(os.path.dirname(crop_name), fname)
+            os.rename(crop_name, fname)
 
-    # Extract/crop full res layers, except for "unw" and "conn_comp"
-    # which requires advanced stitching
-    elif layer != 'unwrappedPhase' and layer != 'connectedComponents':
-        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-            warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-            if outputFormat == 'VRT':
-                # building the virtual vrt
-                osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', product)
+        # Update VRT
+        osgeo.gdal.Translate(outname+'.vrt', outname, format='VRT')
 
-                # building the cropped vrt
-                osgeo.gdal.Warp(
-                    outname + '.vrt', outname + '_uncropped.vrt',
-                    options=warp_options)
-            else:
-                # building the VRT
-                osgeo.gdal.BuildVRT(outname + '.vrt', product)
-                osgeo.gdal.Warp(
-                    outname, outname + '.vrt', options=warp_options)
+    elif update_mode == 'full_extract':
+        # Extract/crop metadata layers
+        if (any(':/science/grids/imagingGeometry' in s for s in product) or
+            any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
+            # make VRT pointing to metadata layers in standard product
+            hgt_field, outname = prep_metadatalayers(
+                outname, product, dem_expanded, layer, layers,
+                is_nisar_file, proj)
 
-                # Update VRT
-                osgeo.gdal.Translate(
-                    outname + '.vrt', outname,
-                    options=osgeo.gdal.TranslateOptions(format="VRT"))
+            # Interpolate/intersect with DEM before cropping
+            finalize_metadata(
+                outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
+                lat, lon, hgt_field, product, is_nisar_file, outputFormatPhys,
+                verbose=verbose)
 
-    # Extract/crop phs and conn_comp layers
-    else:
-        # get connected component input files
-        conn_files = full_product_dict[ii]['connectedComponents']
-        prod_bbox_files = full_product_dict[ii][
-            'productBoundingBoxFrames']
-        outFileConnComp = os.path.join(
-            outDir, 'connectedComponents', ifg_tag)
+        # Extract/crop full res layers, except for "unw" and "conn_comp"
+        # which requires advanced stitching
+        elif layer != 'unwrappedPhase' and layer != 'connectedComponents':
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+                if outputFormat == 'VRT':
+                    # building the virtual vrt
+                    osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', product)
 
-        # Check if phs phase and conn_comp files are already generated
-        outFilePhs = os.path.join(outDir, 'unwrappedPhase', ifg_tag)
-        if (not os.path.exists(outFilePhs) or
-                not os.path.exists(outFileConnComp)):
+                    # building the cropped vrt
+                    osgeo.gdal.Warp(
+                        outname + '.vrt', outname + '_uncropped.vrt',
+                        options=warp_options)
+                else:
+                    # building the VRT
+                    osgeo.gdal.BuildVRT(outname + '.vrt', product)
+                    osgeo.gdal.Warp(
+                        outname, outname + '.vrt', options=warp_options)
 
-            phs_files = full_product_dict[ii]['unwrappedPhase']
+                    # Update VRT
+                    osgeo.gdal.Translate(
+                        outname + '.vrt', outname,
+                        options=osgeo.gdal.TranslateOptions(format="VRT"))
 
-            # stitching
-            ARIAtools.util.seq_stitch.product_stitch_sequential(
-                phs_files, conn_files, arrres=arrres, epsg=epsg_code,
-                bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
-                output_conn=outFileConnComp,
-                output_format=outputFormatPhys,
-                range_correction=range_correction, save_fig=False,
-                overwrite=True)
+        # Extract/crop phs and conn_comp layers
+        else:
+            # get connected component input files
+            conn_files = full_product_dict[ii]['connectedComponents']
+            prod_bbox_files = full_product_dict[ii][
+                'productBoundingBoxFrames']
+            outFileConnComp = os.path.join(
+                outDir, 'connectedComponents', ifg_tag)
 
-            # If necessary, resample phs/conn_comp file
+            # Check if phs phase and conn_comp files are already generated
+            outFilePhs = os.path.join(outDir, 'unwrappedPhase', ifg_tag)
+            if (not os.path.exists(outFilePhs) or
+                    not os.path.exists(outFileConnComp)):
+
+                phs_files = full_product_dict[ii]['unwrappedPhase']
+
+                # stitching
+                ARIAtools.util.seq_stitch.product_stitch_sequential(
+                    phs_files, conn_files, arrres=arrres, epsg=epsg_code,
+                    bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
+                    output_conn=outFileConnComp,
+                    output_format=outputFormatPhys,
+                    range_correction=range_correction, save_fig=False,
+                    overwrite=True)
+
+                # If necessary, resample phs/conn_comp file
+                if multilooking is not None:
+                    ARIAtools.util.vrt.resampleRaster(
+                        outFilePhs, multilooking, bounds, prods_TOTbbox,
+                        rankedResampling, outputFormat=outputFormatPhys,
+                        num_threads=num_threads)
+
+                # Apply mask (if specified)
+                if mask is not None:
+                    for j in [outFileConnComp, outFilePhs]:
+                        update_file = osgeo.gdal.Open(
+                            j, osgeo.gdal.GA_Update)
+                        mask_arr = mask.ReadAsArray() * \
+                            osgeo.gdal.Open(j + '.vrt').ReadAsArray()
+                        update_file.GetRasterBand(1).WriteArray(mask_arr)
+
+        if layer != 'unwrappedPhase' and layer != 'connectedComponents':
+
+            # If necessary, resample raster
             if multilooking is not None:
                 ARIAtools.util.vrt.resampleRaster(
-                    outFilePhs, multilooking, bounds, prods_TOTbbox,
+                    outname, multilooking, bounds, prods_TOTbbox,
                     rankedResampling, outputFormat=outputFormatPhys,
                     num_threads=num_threads)
 
             # Apply mask (if specified)
             if mask is not None:
-                for j in [outFileConnComp, outFilePhs]:
-                    update_file = osgeo.gdal.Open(
-                        j, osgeo.gdal.GA_Update)
-                    mask_arr = mask.ReadAsArray() * \
-                        osgeo.gdal.Open(j + '.vrt').ReadAsArray()
-                    update_file.GetRasterBand(1).WriteArray(mask_arr)
-
-    if layer != 'unwrappedPhase' and layer != 'connectedComponents':
-
-        # If necessary, resample raster
-        if multilooking is not None:
-            ARIAtools.util.vrt.resampleRaster(
-                outname, multilooking, bounds, prods_TOTbbox,
-                rankedResampling, outputFormat=outputFormatPhys,
-                num_threads=num_threads)
-
-        # Apply mask (if specified)
-        if mask is not None:
-            update_file = osgeo.gdal.Open(
-                outname, osgeo.gdal.GA_Update)
-            mask_arr = mask.ReadAsArray() * \
-                osgeo.gdal.Open(outname + '.vrt').ReadAsArray()
-            update_file.GetRasterBand(1).WriteArray(mask_arr)
-            update_file = None
-            mask_arr = None
+                update_file = osgeo.gdal.Open(
+                    outname, osgeo.gdal.GA_Update)
+                mask_arr = mask.ReadAsArray() * \
+                    osgeo.gdal.Open(outname + '.vrt').ReadAsArray()
+                update_file.GetRasterBand(1).WriteArray(mask_arr)
+                update_file = None
+                mask_arr = None
 
     prod_wid, prod_hgt, prod_geotrans, _, _ = \
         ARIAtools.util.vrt.get_basic_attrs(outname + '.vrt')
@@ -1112,6 +1164,10 @@ def export_products(
             if os.path.isdir(target):
                 LOGGER.warning('Deleting %s to avoid VRT header bug!' % target)
                 shutil.rmtree(target)
+
+    # Establish log file if it does not exist and load any data
+    run_log = RunLog(workdir=outDir, verbose=False)
+    log_data = run_log.load()
 
     if not layers and not tropo_total:
         return  # only bbox
@@ -1346,6 +1402,7 @@ def export_products(
         json.dump(full_product_dict, ofp)
 
     mp_args = []
+    extracted_files = []
     for ilayer, layer in enumerate(layers):
 
         product_dict = [[j[layer] for j in full_product_dict],
@@ -1360,13 +1417,20 @@ def export_products(
         # TODO can we wrap this into funtion and run it
         # with multiprocessing, to gain speed up
         for ii, product in enumerate(product_dict[0]):
+            ifg_tag = product_dict[1][ii][0]
+            outname = os.path.abspath(os.path.join(workdir, ifg_tag))
+            extracted_files.append(outname)
+
+            # Check update mode
+            update_mode = run_log.determine_update_mode(outname)
+
             mp_args.append((
                 ii, ilayer, product, proj, full_product_dict_file, layers,
                 workdir, bounds, prods_TOTbbox, demfile,
                 demfile_expanded, maskfile, outputFormat, outputFormatPhys,
                 layer, outDir, arrres, epsg_code, num_threads,
                 multilooking, verbose, is_nisar_file, range_correction,
-                rankedResampling))
+                rankedResampling, update_mode))
 
     start_time = time.time()
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
@@ -1430,6 +1494,10 @@ def export_products(
     end_time = time.time()
     LOGGER.debug(
         "export_product_worker took %f seconds" % (end_time - start_time))
+
+    run_log.update('extracted_files', extracted_files)
+    exit()
+    # run_log.update('')
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(
