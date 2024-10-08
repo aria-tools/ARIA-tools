@@ -379,7 +379,6 @@ class Downloader:
         if self.args.user:
             session.auth_with_creds(self.args.user, self.args.passw)
 
-
         def download_file(url):
             local_filename = url.split("/")[-1]
             filepath = os.path.join(self.args.wd, local_filename)
