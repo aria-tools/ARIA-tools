@@ -215,7 +215,6 @@ def get_url_ifg(
 
 def fmt_dst(args: argparse.Namespace) -> str:
     """Format the save name."""
-    ext = ".kmz" if args.output == "Kml" else ".txt"
     fn_track = f"track{args.track}".replace(",", "-") if args.track else ""
 
     if args.bbox:
@@ -228,12 +227,12 @@ def fmt_dst(args: argparse.Namespace) -> str:
     else:
         fn_bbox = ""
 
-    base_name = f"{fn_track}{fn_bbox}_0{ext}".lstrip("_")
+    base_name = f"{fn_track}{fn_bbox}_0.txt".lstrip("_")
     dst = os.path.join(args.wd, base_name)
 
     count = 1
     while os.path.exists(dst):
-        base_name = f"{os.path.splitext(base_name)[0][:-1]}{count}{ext}"
+        base_name = f"{os.path.splitext(base_name)[0][:-1]}{count}.txt"
         dst = os.path.join(args.wd, base_name)
         count += 1
 
