@@ -246,7 +246,7 @@ class Product:
         Parse products and input bounding box (if specified)
         """
         # Establish log file if it does not exist and load any data
-        self.run_log = RunLog(workdir=workdir, verbose=verbose)
+        self.run_log = RunLog(workdir=workdir, verbose=False)
         log_data = self.run_log.load()
 
         # Parse through file(s)/bbox input
@@ -1275,7 +1275,6 @@ class Product:
         # Only populate list of dictionaries if the file intersects with bbox
         for file in self.files:
             if file not in past_files:
-                print('file', file)
                 self.products += self.__readproduct__(file)
 
         # Remove products not in list of files

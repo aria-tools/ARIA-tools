@@ -62,14 +62,14 @@ class RunLog:
         if self.verbose:
             print(f'Writing {atr_name} to log file')
 
-        # Write new log data
-        log_data[atr_name] = atr_value
-        with open(self.log_name, 'wb') as log_file:
-            pickle.dump(log_data, log_file)
+        # Check if previous version of attribute should be saved
+        if atr_name in ['total_bbox', 'total_bbox_metadatalyr']:
+            if atr_name in log_data.keys():
+                log_data[f'prev_{atr_name}'] = log_data[atr_name]
 
         # Check if attributes should be written to JSON file
         config_params = ['aria_version', 'run_time', 'aria_routine',
-                         'input_params', 'workdir', 'bbox']
+                         'input_params', 'workdir', 'bbox', 'croptounion']
         if atr_name in config_params:
             self.update_configs(atr_name, atr_value)
 
@@ -78,6 +78,11 @@ class RunLog:
 
         if atr_name == 'extracted_files':
             self.write_extracted_files(atr_value)
+
+        # Write new log data
+        log_data[atr_name] = atr_value
+        with open(self.log_name, 'wb') as log_file:
+            pickle.dump(log_data, log_file)
 
     def update_configs(self, atr_name, atr_value):
         """
@@ -109,31 +114,3 @@ class RunLog:
                      'nb_extracted': len(extracted_files)}
         with open(self.extracted_files_name, 'w') as extr_file:
             json.dump(extr_dict, extr_file)
-
-
-    def determine_update_mode(self, outname):
-        """
-        """
-        # Recall log data
-        log_data = self.load()
-
-        # Compare shape areas
-        if 'exist_prods_TOTbbox' in log_data.keys():
-            exist_shp = log_data['exist_prods_TOTbbox']
-            exist_area = ARIAtools.util.shp.shp_area(exist_shp, projection=int(log_data['projection']))
-            current_shp = ARIAtools.util.shp.open_shp(log_data['prods_TOTbbox'])
-            overlap_shp = exist_shp.intersection(current_shp)
-            ARIAtools.util.shp.save_shp('xx.json', overlap_shp, projection=int(log_data['projection']))
-            overlap_area = ARIAtools.util.shp.shp_area(overlap_shp, projection=int(log_data['projection']))
-            area_ratio = overlap_area / exist_area
-        else:
-            area_ratio = 0
-
-        if area_ratio == 1.0 and os.path.exists(outname+'.vrt'):
-            update_mode = 'skip'
-        elif area_ratio > 0.99 and os.path.exists(outname+'.vrt'):
-            update_mode = 'crop_only'
-        else:
-            update_mode = 'full_extract'
-
-        return update_mode

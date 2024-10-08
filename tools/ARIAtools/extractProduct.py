@@ -343,16 +343,9 @@ def merged_productbbox(
     run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
     log_data = run_log.load()
 
-    # Check if productBoundingBox exists
-    if os.path.exists(prods_TOTbbox):
-        # Record before further modifications
-        bbox_shp = ARIAtools.util.shp.open_shp(prods_TOTbbox)
-        run_log.update('exist_prods_TOTbbox', bbox_shp)
-
     # Redefine minimum overlap based on past productBoundingBox
-    if os.path.exists(prods_TOTbbox):
-        bbox_shp =  ARIAtools.util.shp.open_shp(prods_TOTbbox)
-        bbox_area = ARIAtools.util.shp.shp_area(bbox_shp, lyr_proj)
+    if (log_data['croptounion'] == False) and ('total_bbox' in log_data.keys()):
+        bbox_area = ARIAtools.util.shp.shp_area(log_data['total_bbox'], lyr_proj)
 
         minimumOverlap = bbox_area * 0.99
         if verbose:
@@ -551,14 +544,16 @@ def merged_productbbox(
         ds = None
 
     # Write info to log
-    run_log.update('metadata_dict', metadata_dict)
-    run_log.update('product_dict', product_dict)
-    run_log.update('bbox_file', bbox_file)
-    run_log.update('prods_TOTbbox', prods_TOTbbox)
-    run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
-    run_log.update('arrres', arrres)
-    run_log.update('proj', proj)
-    run_log.update('is_nisar_file', is_nisar_file)
+    run_log.update('total_bbox', total_bbox)
+    run_log.update('total_bbox_metadatalyr', total_bbox_metadatalyr)
+    # run_log.update('metadata_dict', metadata_dict)
+    # run_log.update('product_dict', product_dict)
+    # run_log.update('bbox_file', bbox_file)
+    # run_log.update('prods_TOTbbox', prods_TOTbbox)
+    # run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
+    # run_log.update('arrres', arrres)
+    # run_log.update('proj', proj)
+    # run_log.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -1015,11 +1010,12 @@ def export_product_worker(
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
-    print(f'** {update_mode.upper()}')
-    if update_mode == 'skip':
+    if update_mode == 'skip' and os.path.exists(outname+'.vrt'):
+        print('** SKIP')
         pass
 
-    elif update_mode == 'crop_only':
+    elif update_mode == 'crop_only' and os.path.exists(outname+'.vrt'):
+        print('** CROP ONLY')
         # Crop
         gdal_warp_kwargs['format'] = 'ENVI'
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
@@ -1032,7 +1028,8 @@ def export_product_worker(
         # Update VRT
         osgeo.gdal.Translate(outname+'.vrt', outname, format='VRT')
 
-    elif update_mode == 'full_extract':
+    else:
+        print('** FULL EXTRACTION')
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
             any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
@@ -1401,6 +1398,47 @@ def export_products(
     with open(full_product_dict_file, 'w') as ofp:
         json.dump(full_product_dict, ofp)
 
+
+    def determine_update_mode(log_data):
+        """
+        Consider moving this to merge_productBbox section.
+        """
+        # Pre-set update mode
+        update_mode = 'full_extract'
+
+        # Check current shape against previous shape
+        area_ratio_to_prev = 0.0
+        if log_data['croptounion'] == False:
+            if 'prev_total_bbox' in log_data.keys():
+                current_area = ARIAtools.util.shp.shp_area(
+                                                log_data['total_bbox'], proj)
+                prev_area = ARIAtools.util.shp.shp_area(
+                                            log_data['prev_total_bbox'], proj)
+                area_ratio_to_prev = current_area / prev_area
+        elif log_data['croptounion'] == True:
+            if 'prev_total_bbox_metadatalyr' in log_data.keys():
+                current_area = ARIAtools.util.shp.shp_area(
+                                    log_data['total_bbox_metadatalyr'], proj)
+                prev_area = ARIAtools.util.shp.shp_area(
+                                log_data['prev_total_bbox_metadatalyr'], proj)
+                area_ratio_to_prev = current_area / prev_area
+
+        if area_ratio_to_prev != 0.0:
+            print(f'The current area is {area_ratio_to_prev:.2f} that of the '
+                  f'previous run.')
+
+        if area_ratio_to_prev == 1.0:
+            update_mode = 'skip'
+        elif area_ratio_to_prev > 0.99:
+            update_mode = 'crop_only'
+        else:
+            update_mode = 'full_extract'
+
+        return update_mode
+
+    update_mode = determine_update_mode(log_data)
+    print(f'Update mode: {update_mode}')
+
     mp_args = []
     extracted_files = []
     for ilayer, layer in enumerate(layers):
@@ -1422,7 +1460,7 @@ def export_products(
             extracted_files.append(outname)
 
             # Check update mode
-            update_mode = run_log.determine_update_mode(outname)
+            # update_mode = run_log.determine_update_mode(outname)
 
             mp_args.append((
                 ii, ilayer, product, proj, full_product_dict_file, layers,
@@ -1496,8 +1534,6 @@ def export_products(
         "export_product_worker took %f seconds" % (end_time - start_time))
 
     run_log.update('extracted_files', extracted_files)
-    exit()
-    # run_log.update('')
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(

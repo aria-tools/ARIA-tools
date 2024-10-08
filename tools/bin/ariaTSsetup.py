@@ -35,6 +35,7 @@ import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
 import ARIAtools.constants
+from ARIAtools.util.run_logging import RunLog
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
@@ -428,7 +429,6 @@ def main():
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
 
     # Establish log file
-    from ARIAtools.util.run_logging import RunLog
     run_log = RunLog(workdir=args.workdir, verbose=False)
 
     # Update ARIA version, start time, and routine
@@ -439,6 +439,7 @@ def main():
     run_log.update('workdir', os.path.abspath(args.workdir))
     run_log.update('croptounion', args.croptounion)
     run_log.update('input_params', {'bbox': args.bbox,
+                                    'multilooking': args.multilooking,
                                     'minimumOverlap': args.minimumOverlap,
                                     'nc_version': args.nc_version,
                                     'layers': args.layers})
