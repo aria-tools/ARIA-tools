@@ -379,8 +379,6 @@ class Downloader:
         if self.args.user:
             session.auth_with_creds(self.args.user, self.args.passw)
 
-        # Create a progress bar
-        pbar = tqdm(total=len(scenes), unit="file", desc="Downloading")
 
         def download_file(url):
             local_filename = url.split("/")[-1]
@@ -388,6 +386,7 @@ class Downloader:
 
             # Skip download if file already exists
             if os.path.exists(filepath):
+                LOGGER.info("Product already in directory: %s", filepath)
                 pbar.update(1)
                 return filepath
 
@@ -399,9 +398,10 @@ class Downloader:
                     if chunk:
                         f.write(chunk)
 
-            pbar.update(1)
             return filepath
 
+        # Create a progress bar
+        pbar = tqdm(total=len(scenes), unit="file", desc="Downloading")
         try:
             urls = [scene.properties["url"] for scene in scenes]
             with ThreadPoolExecutor(max_workers=nt) as executor:
@@ -413,6 +413,7 @@ class Downloader:
                     try:
                         filepath = future.result()
                         LOGGER.debug(f"Downloaded: {filepath}")
+                        pbar.update(1)
                     except Exception as exc:
                         LOGGER.error(f"{url} generated an exception: {exc}")
         finally:
