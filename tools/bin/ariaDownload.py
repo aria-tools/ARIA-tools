@@ -1,393 +1,448 @@
 #!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Brett A. Buzzanga
+# Author: Brett A. Buzzanga, Emre Havazli
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-import os
-import re
-import math
-import datetime
 import argparse
-import logging
-import warnings
 import getpass
-
-import shapely
-import asf_search
+import logging
+import math
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
+from typing import List, Tuple
 
 import ARIAtools.util.log
+import asf_search
+import shapely
 from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
+from tqdm import tqdm
 
-LOGGER = logging.getLogger('ariaDownload.py')
+logging.getLogger("asf_search").setLevel("ERROR")
+LOGGER = logging.getLogger("ariaDownload.py")
 
-def createParser():
-    """
-    Download ARIA products using asf_search
 
-    see: https://github.com/asfadmin/Discovery-asf_search
-    """
+def create_parser() -> argparse.ArgumentParser:
+    """Create and return the argument parser."""
     parser = argparse.ArgumentParser(
-        description='Command line interface to download Sentinel-1/NISAR '
-                    'GUNW products from the ASF DAAC. \nDownloading them '
-                    'requires a NASA Earthdata URS user login and requires '
-                    'users to add "GRFN Door (PROD)" and "ASF Datapool '
-                    'Products" to their URS approved applications. Access '
-                    'to NISAR products requires an Earthdata Bearer token '
-                    'from: https://urs.earthdata.nasa.gov/documentation/'
-                    'for_users/user_token',
-        epilog='Examples of use:\n'
-               '\t ariaDownload.py --track 004 --output count\n'
-               '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
-               '\t ariaDownload.py -t 004,077 --start 20190101 -o count'
-               '\t ariaDownload.py --mission NISAR -o count',
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        description='Download ARIA products using asf_search',
+        epilog="Examples of use:\n"
+        '\t ariaDownload.py --track 004 --output count\n'
+        '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
+        '\t ariaDownload.py -t 004,077 --start 20190101 -o count\n'
+        '\t ariaDownload.py --mission NISAR -o count',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
     parser.add_argument(
-        '-o', '--output', default='Download', type=str.title,
-        choices=('Download', 'Count', 'Url'),
-        help='Output type. Default="Download". Use "Url" for ingestion to '
-             'aria*.py')
+        "-o",
+        "--output",
+        default="Download",
+        type=str.title,
+        choices=("Download", "Count", "Url"),
+        help='Output type. Default="Download".',
+    )
     parser.add_argument(
-        '-t', '--track', default=None, type=str,
-        help='track to download; single number (including leading zeros) or '
-             'comma separated')
+        "-t",
+        "--track",
+        default=None,
+        type=str,
+        help='Track to download; single number or comma separated.',
+    )
     parser.add_argument(
-        '-b', '--bbox', default=None, type=str,
-        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
-             'POLYGON geometry.')
+        "-b",
+        "--bbox",
+        default=None,
+        type=str,
+        help=(
+            'Lat/Lon Bounding SNWE, or GDAL-readable file containing '
+            'POLYGON geometry.'
+        ),
+    )
     parser.add_argument(
-        '-w', '--workdir', dest='wd', default='./products', type=str,
-        help='Specify directory to deposit all outputs. Default is "products" '
-             'in local directory where script is launched.')
+        "-w",
+        "--workdir",
+        dest="wd",
+        default="./products",
+        type=str,
+        help=(
+            'Directory to deposit outputs. Default is "products" '
+            'in local directory.'
+        ),
+    )
     parser.add_argument(
-        '-s', '--start', default='20100101', type=str,
-        help='Start date as YYYYMMDD; If none provided, starts at beginning '
-             'of beta NISAR GUNW record (2010).')
+        "-s",
+        "--start",
+        default="20100101",
+        type=str,
+        help='Start date as YYYYMMDD.'
+    )
     parser.add_argument(
-        '-e', '--end', default='21000101', type=str,
-        help='End date as YYYYMMDD. If none provided, ends today.')
+        "-e",
+        "--end",
+        default="21000101",
+        type=str,
+        help='End date as YYYYMMDD.'
+    )
     parser.add_argument(
-        '-u', '--user', default=None, type=str,
-        help='NASA Earthdata URS user login. Users must add "GRFN Door '
-             '(PROD)" and "ASF Datapool Products" to their URS approved '
-             'applications.')
+        "-u",
+        "--user",
+        default=None,
+        type=str,
+        help='NASA Earthdata URS user login.'
+    )
     parser.add_argument(
-        '-p', '--pass', dest='passw', default=None, type=str,
-        help='NASA Earthdata URS user password. Users must add "GRFN Door '
-             '(PROD)" and "ASF Datapool Products" to their URS approved '
-             'applications.')
+        "-p",
+        "--pass",
+        dest="passw",
+        default=None,
+        type=str,
+        help='NASA Earthdata URS user password.',
+    )
     parser.add_argument(
-        '--mission', default='S1', type=str.upper, choices=('S1', 'NISAR'),
-        help='Sentinel-1 (S1) or NISAR. Default is S1')
+        "--mission",
+        default="S1",
+        type=str.upper,
+        choices=("S1", "NISAR"),
+        help='Sentinel-1 (S1) or NISAR. Default is S1',
+    )
     parser.add_argument(
-        '-l', '--daysless', dest='dayslt', default=math.inf, type=int,
-        help='Take pairs with a temporal baseline -- days less than this '
-             'value.')
+        "-l",
+        "--daysless",
+        dest="dayslt",
+        default=math.inf,
+        type=int,
+        help='Take pairs with temporal baseline less than this value.',
+    )
     parser.add_argument(
-        '-m', '--daysmore', dest='daysgt', default=0, type=int,
-        help='Take pairs with a temporal baseline -- days greater than this '
-             'value. Example, annual pairs: ariaDownload.py -t 004 '
-             '--daysmore 364.')
+        "-m",
+        "--daysmore",
+        dest="daysgt",
+        default=0,
+        type=int,
+        help='Take pairs with temporal baseline greater than this value.',
+    )
     parser.add_argument(
-        '-nt', '--num_threads', default='1', type=str,
-        help='Specify number of threads for multiprocessing download. By '
-             'default "1". Can also specify "All" to use all available '
-             'threads.')
+        "-nt",
+        "--num_threads",
+        default="1",
+        type=str,
+        help='Number of threads for download. Default="1". Can specify "All".',
+    )
     parser.add_argument(
-        '-i', '--ifg', default=None, type=str,
-        help='Retrieve one interferogram by its start/end date, specified as '
-             'YYYYMMDD_YYYYMMDD (order independent)')
+        "-i",
+        "--ifg",
+        default=None,
+        type=str,
+        help=(
+            'Retrieve one interferogram by its start/end date, '
+            'as YYYYMMDD_YYYYMMDD.'
+        ),
+    )
     parser.add_argument(
-        '-d', '--direction', dest='flightdir', default=None, type=str,
-        help='Flight direction, options: ascending, a, descending, d')
+        "-d",
+        "--direction",
+        dest="flightdir",
+        default=None,
+        type=str,
+        help='Flight direction, options: ascending, a, descending, d',
+    )
     parser.add_argument(
-        '--version', default=None,
-        help='Specify version as str, e.g. 2_0_4 or all prods. All products '
-             'are downloaded by default. If version is specified, only '
-             'products which match that version are downloaded.')
+        "--version",
+        default=None,
+        help='Specify version as str, e.g. 2_0_4 or all prods.',
+    )
     parser.add_argument(
-        '-v', '--verbose', action='store_true',
-        help='Print products to be downloaded to stdout')
+        "-v",
+        "--verbose",
+        action="store_true",
+        help='Print products to be downloaded to stdout',
+    )
     parser.add_argument(
-        '--log-level', default='warning', help='Logger log level')
+        "--log-level",
+        default="warning",
+        help="Logger log level"
+    )
+
     return parser
 
 
-def make_bbox(inp_bbox):
-    """Make a WKT from SNWE or a shapefile"""
+def make_bbox(inp_bbox: str) -> shapely.geometry.Polygon:
+    """Make a WKT from SNWE or a shapefile."""
     if inp_bbox is None:
         return None
 
     if os.path.exists(os.path.abspath(inp_bbox)):
         ring = open_shp(inp_bbox, 0, 0).exterior
-        poly = shapely.geometry.Polygon(ring)
+        return shapely.geometry.Polygon(ring)
 
-    else:
-        try:
-            S, N, W, E = [float(i) for i in inp_bbox.split()]
-
-            # adjust for degrees easting / northing (0 - 360 / 0:180)
-            if W > 180:
-                W -= 360
-                LOGGER.info('AdjustedW')
-
-            if E > 180:
-                E -= 360
-                LOGGER.info('AdjustedE')
-
-            if N > 90:
-                N -= 90
-                S -= 90
-                LOGGER.info('Adjusted N/S')
-
-            # set poly object
-            poly = shapely.geometry.Polygon([(W, N), (W, S), (E, S), (E, N)])
-
-        except BaseException:
-            raise Exception(
-                'Cannot understand the --bbox argument. Input string was '
-                'entered incorrectly or path does not exist.')
-
-    return poly
+    try:
+        S, N, W, E = map(float, inp_bbox.split())
+        W, E = [x - 360 if x > 180 else x for x in (W, E)]
+        N, S = [x - 90 if x > 90 else x for x in (N, S)]
+        return shapely.geometry.Polygon([(W, N), (W, S), (E, S), (E, N)])
+    except ValueError:
+        raise ValueError(
+            "Invalid bbox format. Use 'S N W E' or a valid shapefile path."
+        )
 
 
-def get_url_ifg(scenes):
-    """Get url, ifg of fetched ASF scene"""
+def get_url_ifg(
+    scenes: List[asf_search.ASFProduct],
+) -> Tuple[List[str], List[str], bool]:
+    """Get url, ifg of fetched ASF scene."""
     urls, ifgs = [], []
     for scene in scenes:
-        s = scene.geojson()['properties']
-        urls.append(s['url'])
-        # NISAR files are formatted differently
-        if s['fileID'].startswith('NISAR_'):
-            f = s['fileID'].split('_')
-            pairname = f[11][:8] + '_'
-            pairname += f[13][:8]
-            ifgs.append(pairname)
+        s = scene.geojson()["properties"]
+        urls.append(s["url"])
+
+        if s["fileID"].startswith("NISAR_"):
+            f = s["fileID"].split("_")
+            pairname = f"{f[11][:8]}_{f[13][:8]}"
         else:
-            f = s['fileID'].split('-')
+            f = s["fileID"].split("-")
             pairname = f[6]
         ifgs.append(pairname)
 
-    # determine if NISAR GUNW
-    is_nisar_file = False
-    if urls != []:
-        if '/NISAR_' in urls[0]:
-            is_nisar_file = True
-
+    is_nisar_file = any("/NISAR_" in url for url in urls)
     return urls, ifgs, is_nisar_file
 
 
-def fmt_dst(args):
-    """Format the save name"""
-    ext = '.kmz' if args.output == 'Kml' else '.txt'
+def fmt_dst(args: argparse.Namespace) -> str:
+    """Format the save name."""
+    ext = ".kmz" if args.output == "Kml" else ".txt"
+    fn_track = f"track{args.track}".replace(",", "-") if args.track else ""
 
-    if args.track is not None:
-        fn_track = f'track{args.track}'.replace(',', '-')
+    if args.bbox:
+        bbox = make_bbox(args.bbox)
+        WSEN = [
+            math.floor(bbox.bounds[i]) if i < 2 else math.ceil(bbox.bounds[i])
+            for i in range(4)
+        ]
+        fn_bbox = f"_bbox{WSEN[0]}W{WSEN[1]}S{WSEN[2]}E{WSEN[3]}N"
     else:
-        fn_track = ''
+        fn_bbox = ""
 
-    if args.bbox is not None:
-        WSEN = make_bbox(args.bbox).bounds
-        WSEN_fmt = []
-        for i, coord in enumerate(WSEN):
-            if i < 2:
-                WSEN_fmt.append(math.floor(float(coord)))
-            else:
-                WSEN_fmt.append(math.ceil(float(coord)))
-        fn_bbox = f'_bbox{WSEN_fmt[0]}W{WSEN_fmt[1]}S{WSEN_fmt[2]}E{WSEN_fmt[3]}N'
-    else:
-        fn_bbox = ''
+    base_name = f"{fn_track}{fn_bbox}_0{ext}".lstrip("_")
+    dst = os.path.join(args.wd, base_name)
 
-    dst = os.path.join(args.wd, f'{fn_track}{fn_bbox}_0{ext}'.lstrip('_'))
-    count = 1  # don't overwrite if already exists
+    count = 1
     while os.path.exists(dst):
-        basen = f'{re.split(str(count-1)+ext, os.path.basename(dst))[0]}' \
-                f'{count}{ext}'
-        dst = os.path.join(os.path.dirname(dst), basen)
+        base_name = f"{os.path.splitext(base_name)[0][:-1]}{count}{ext}"
+        dst = os.path.join(args.wd, base_name)
         count += 1
+
     return dst
 
 
-class Downloader(object):
-    def __init__(self, args):
+class Downloader:
+    def __init__(self, args: argparse.Namespace):
         self.args = args
         self.args.output = self.args.output.title()
         self.args.wd = os.path.abspath(self.args.wd)
         os.makedirs(self.args.wd, exist_ok=True)
-        if self.args.verbose:
-            LOGGER.setLevel('DEBUG')
-        else:
-            LOGGER.setLevel('INFO')
-
+        LOGGER.setLevel(logging.DEBUG if self.args.verbose else logging.INFO)
 
     def __call__(self):
         scenes = self.query_asf()
-
         urls, ifgs, is_nisar_file = get_url_ifg(scenes)
 
-        # subset everything by version
-        urls_new = url_versions(urls, self.args.version, self.args.wd)
-        idx = [urls.index(url) for url in urls_new]
-        scenes = [scenes[i] for i in idx]
-        urls = [urls[i] for i in idx]
-        ifgs = [ifgs[i] for i in idx]
+        # Subset everything by version
+        urls = url_versions(urls, self.args.version, self.args.wd)
+        scenes = [scene for scene, url in zip(scenes, urls) if url in urls]
+        ifgs = [ifg for ifg, url in zip(ifgs, urls) if url in urls]
 
-        # loop over ifgs to check for subset options
-        idx = []
-        for i, ifg in enumerate(ifgs):
-            # if NISAR file, invert date order
-            if is_nisar_file:
-                sti, eni = [datetime.datetime.strptime(
-                    d, '%Y%m%d') for d in ifg.split('_')]
-            else:
-                eni, sti = [datetime.datetime.strptime(
-                    d, '%Y%m%d') for d in ifg.split('_')]
+        # Filter scenes based on date and elapsed time criteria
+        scenes, urls, ifgs = self.filter_scenes(
+            scenes,
+            urls,
+            ifgs,
+            is_nisar_file
+        )
 
-            # optionally match a single ifg
-            if self.args.ifg is not None:
-                dates1 = [datetime.datetime.strptime(i, '%Y%m%d').date() for
-                          i in self.args.ifg.split('_')]
-                st1, en1 = sorted(dates1)
-                if st1 == sti.date() and en1 == eni.date():
-                    idx.append(i)
-                else:
-                    continue
-
-            # optionally match other conditions (st/end date, elapsed time)
-            else:
-                sten_chk = sti >= self.args.start and eni <= self.args.end
-                elap = (eni - sti).days
-                elap_chk = (
-                    elap >= self.args.daysgt and elap <= self.args.dayslt)
-                if sten_chk and elap_chk:
-                    idx.append(i)
-                else:
-                    continue
-
-        scenes = [scenes[i] for i in idx]
-        urls = [urls[i] for i in idx]
-        ifgs = [ifgs[i] for i in idx]
-
-        if self.args.output == 'Count':
-            LOGGER.info('Found -- %d -- products', len(scenes))
-
-        # elif self.args.output == 'Kml':
-        #     dst    = fmt_dst(inps)
-        #     LOGGER.error('Kml option is not yet supported. '\
-        #                    'Revert to an older version of ARIAtools')
-
-        elif self.args.output == 'Url':
-            dst = fmt_dst(self.args)
-            with open(dst, 'w') as fh:
-                for url in urls:
-                    print(url, sep='\n', file=fh)
-            LOGGER.info(f'Wrote -- {len(urls)} -- product urls to: {dst}')
-
-        elif self.args.output == 'Download':
-            # turn the list back into an ASF object
-            scenes = asf_search.ASFSearchResults(scenes)
-            nt = int(self.args.num_threads)  # so legacy works
-            # allow a user to specify username / password
-            LOGGER.info(f'Downloading {len(scenes)} products...')
-            if self.args.user is not None:
-                session = asf_search.ASFSession()
-                session.auth_with_creds(self.args.user, self.args.passw)
-
-                # Suppress warnings on files already downloaded
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    scenes.download(
-                        self.args.wd, processes=nt, session=session)
-
-            else:
-                # Suppress warnings on files already downloaded
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    scenes.download(self.args.wd, processes=nt)
-
-            LOGGER.info(
-                f'Download complete. Wrote -- {len(scenes)} -- products to: '
-                f'{self.args.wd}')
+        if self.args.output == "Count":
+            LOGGER.info("Found -- %d -- products", len(scenes))
+        elif self.args.output == "Url":
+            self.write_urls(urls)
+        elif self.args.output == "Download":
+            self.download_scenes(scenes)
 
         if self.args.verbose:
             for scene in scenes:
-                LOGGER.info(scene.geojson()['properties']['sceneName'])
+                LOGGER.info(scene.geojson()["properties"]["sceneName"])
 
-        return
-
-
-    def query_asf(self):
-        """Get the scenes from ASF"""
+    def query_asf(self) -> List[asf_search.ASFProduct]:
+        """Query ASF for scenes."""
         bbox = make_bbox(self.args.bbox)
-        bbox = bbox.wkt if bbox is not None else None
-        if self.args.flightdir is not None:
-            if self.args.flightdir.lower()[0] == 'a':
-                flight_direction = 'ascending'
-            elif self.args.flightdir == 'd':
-                self.args.flightdir.lower()[0] = 'descending'
-        else:
-            flight_direction = None
+        bbox_wkt = bbox.wkt if bbox else None
 
-        if self.args.track is not None:
-            tracks = self.args.track.split(',')
-            tracks = [int(track) for track in tracks]
-        else:
-            tracks = self.args.track
+        flight_direction = None
+        if self.args.flightdir:
+            flight_direction = (
+                "ascending"
+                if self.args.flightdir.lower().startswith("a")
+                else "descending"
+            )
 
-        # buffer a bit for loose subsetting and speedup
-        start = self.args.start + datetime.timedelta(days=-1)
-        end = self.args.end + datetime.timedelta(days=1)
+        tracks = (
+            [int(track) for track in self.args.track.split(",")]
+            if self.args.track
+            else None
+        )
 
-        if self.args.mission.upper() == 'S1':
-            dct_kw = dict(
+        start = self.args.start - timedelta(days=1)
+        end = self.args.end + timedelta(days=1)
+
+        if self.args.mission.upper() == "S1":
+            return asf_search.geo_search(
                 collections=["C2859376221-ASF", "C1261881077-ASF"],
                 dataset=asf_search.DATASET.ARIA_S1_GUNW,
                 processingLevel=asf_search.constants.GUNW_STD,
-                relativeOrbit=tracks, flightDirection=flight_direction,
-                intersectsWith=bbox, start=start, end=end)
-            scenes = asf_search.geo_search(**dct_kw)
-
-        elif self.args.mission.upper() == 'NISAR':
+                relativeOrbit=tracks,
+                flightDirection=flight_direction,
+                intersectsWith=bbox_wkt,
+                start=start,
+                end=end,
+            )
+        elif self.args.mission.upper() == "NISAR":
             session = asf_search.ASFSession()
-            session.auth_with_token(getpass.getpass('EDL Token:'))
-            LOGGER.info('Token accepted.')
-            # TODO: populate more fields GUNWs are officially released
+            session.auth_with_token(getpass.getpass("EDL Token:"))
+            LOGGER.info("Token accepted.")
+
             search_opts = asf_search.ASFSearchOptions(
-                shortName='NISAR_L2_GUNW_BETA_V1',
-                intersectsWith=bbox, start=start, end=end,
-                session=session)
-
+                shortName="NISAR_L2_GUNW_BETA_V1",
+                intersectsWith=bbox_wkt,
+                start=start,
+                end=end,
+                session=session,
+            )
             scenes = asf_search.search(opts=search_opts, maxResults=250)
-            if len(scenes) > 0:
-                LOGGER.info('Found NISAR GUNW Betas.')
-            else:
-                LOGGER.warning('No NISAR GUNW Betas found.')
 
-        return scenes
+            LOGGER.info("Found %d NISAR GUNW Betas.", len(scenes))
+            return scenes
+
+    def filter_scenes(self, scenes, urls, ifgs, is_nisar_file):
+        filtered_scenes, filtered_urls, filtered_ifgs = [], [], []
+        for scene, url, ifg in zip(scenes, urls, ifgs):
+            eni, sti = self.parse_dates(ifg, is_nisar_file)
+
+            if self.args.ifg:
+                if self.match_single_ifg(sti, eni):
+                    filtered_scenes.append(scene)
+                    filtered_urls.append(url)
+                    filtered_ifgs.append(ifg)
+            elif self.match_date_criteria(sti, eni):
+                filtered_scenes.append(scene)
+                filtered_urls.append(url)
+                filtered_ifgs.append(ifg)
+
+        return filtered_scenes, filtered_urls, filtered_ifgs
+
+    def parse_dates(self, ifg, is_nisar_file):
+        if is_nisar_file:
+            sti, eni = [datetime.strptime(d, "%Y%m%d") for d in ifg.split("_")]
+        else:
+            eni, sti = [datetime.strptime(d, "%Y%m%d") for d in ifg.split("_")]
+        return eni, sti
+
+    def match_single_ifg(self, sti, eni):
+        dates = [
+            datetime.strptime(i, "%Y%m%d").date()
+            for i in self.args.ifg.split("_")
+        ]
+        st1, en1 = sorted(dates)
+        return st1 == sti.date() and en1 == eni.date()
+
+    def match_date_criteria(self, sti, eni):
+        sten_chk = sti >= self.args.start and eni <= self.args.end
+        elap = (eni - sti).days
+        elap_chk = self.args.daysgt <= elap <= self.args.dayslt
+        return sten_chk and elap_chk
+
+    def write_urls(self, urls):
+        dst = fmt_dst(self.args)
+        with open(dst, "w") as fh:
+            for url in urls:
+                print(url, file=fh)
+        LOGGER.info("Wrote -- %d -- product urls to: %s", len(urls), dst)
+
+    def download_scenes(self, scenes):
+        scenes = asf_search.ASFSearchResults(scenes)
+        nt = int(self.args.num_threads)
+        LOGGER.info("Downloading %d products...", len(scenes))
+
+        session = asf_search.ASFSession()
+        if self.args.user:
+            session.auth_with_creds(self.args.user, self.args.passw)
+
+        # Create a progress bar
+        pbar = tqdm(total=len(scenes), unit="file", desc="Downloading")
+
+        def download_file(url):
+            local_filename = url.split("/")[-1]
+            filepath = os.path.join(self.args.wd, local_filename)
+
+            # Skip download if file already exists
+            if os.path.exists(filepath):
+                pbar.update(1)
+                return filepath
+
+            response = session.get(url, stream=True)
+            response.raise_for_status()
+
+            with open(filepath, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            pbar.update(1)
+            return filepath
+
+        try:
+            urls = [scene.properties["url"] for scene in scenes]
+            with ThreadPoolExecutor(max_workers=nt) as executor:
+                future_to_url = {
+                    executor.submit(download_file, url): url for url in urls
+                }
+                for future in as_completed(future_to_url):
+                    url = future_to_url[future]
+                    try:
+                        filepath = future.result()
+                        LOGGER.debug(f"Downloaded: {filepath}")
+                    except Exception as exc:
+                        LOGGER.error(f"{url} generated an exception: {exc}")
+        finally:
+            pbar.close()
+
+        LOGGER.info(
+            "Download complete. Wrote -- %d -- products to: %s",
+            len(scenes),
+            self.args.wd,
+        )
 
 
 def main():
-    parser = createParser()
+    parser = create_parser()
     args = parser.parse_args()
 
-    log_level = {
-        'debug': logging.DEBUG, 'info': logging.INFO,
-        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+    log_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(log_level, int):
+        raise ValueError(f"Invalid log level: {args.log_level}")
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
 
-    # format dates
-    args.start = datetime.datetime.strptime(args.start, '%Y%m%d')
-    args.end = datetime.datetime.strptime(args.end, '%Y%m%d')
+    args.start = datetime.strptime(args.start, "%Y%m%d")
+    args.end = datetime.strptime(args.end, "%Y%m%d")
 
-    if not args.track and not args.bbox and args.mission.upper() != 'NISAR':
-        raise Exception('Must specify either a bbox or track')
+    if not args.track and not args.bbox and args.mission.upper() != "NISAR":
+        raise ValueError("Must specify either a bbox or track")
+
     Downloader(args)()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
