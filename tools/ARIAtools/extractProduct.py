@@ -339,19 +339,6 @@ def merged_productbbox(
     if track_fileext.endswith('.h5'):
         is_nisar_file = True
 
-    # Establish log file if it does not exist and load any data
-    run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
-    log_data = run_log.load()
-
-    # Redefine minimum overlap based on past productBoundingBox
-    if (log_data['croptounion'] == False) and ('total_bbox' in log_data.keys()):
-        bbox_area = ARIAtools.util.shp.shp_area(log_data['total_bbox'], lyr_proj)
-
-        minimumOverlap = bbox_area * 0.99
-        if verbose:
-            print(f'Setting minimum overlap to {minimumOverlap:.1f} based on '
-                  'previous productBoundingBox')
-
     # If specified, check if user's bounding box meets minimum threshold area
     if bbox_file is not None:
         user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
@@ -361,6 +348,45 @@ def merged_productbbox(
                             f'{overlap_area}km\u00b2, below specified '
                             f'minimum threshold area '
                             f'{minimumOverlap}km\u00b2')
+
+    # Establish log file if it does not exist and load any data
+    run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
+    log_data = run_log.load()
+
+    # Redefine minimum overlap based on past productBoundingBox
+    if (log_data['croptounion'] == False) and os.path.exists(prods_TOTbbox):
+        # Area of previous bounding box
+        prev_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        prev_area = ARIAtools.util.shp.shp_area(prev_bbox, lyr_proj)
+
+        if bbox_file is None:
+            # Prompt user
+            set_overlap = input('Previous productBoundingBox detected. '
+                                'Keep previous dims? [y/n] ')
+            if set_overlap.lower() == 'y':
+                minimumOverlap = prev_area * 0.99
+                print(f'Setting minimum overlap to {minimumOverlap:.1f} '
+                      'km\u00b2based on previous productBoundingBox')
+                update_mode = 'crop_only'
+            else:
+                update_mode = 'full_extract'
+            run_log.update('update_mode', update_mode)
+
+        elif bbox_file is not None:
+            # Retrieve current bbox polygon and area
+            current_bbox = ARIAtools.util.shp.open_shp(bbox_file)
+            current_area = ARIAtools.util.shp.shp_area(current_bbox, lyr_proj)
+
+            if current_bbox == prev_bbox:
+                log_data['update_mode'] = 'skip'
+            else:
+                overlap_bbox = current_bbox.intersection(prev_bbox)
+                overlap_area = ARIAtools.util.shp.shp_area(overlap_bbox, lyr_proj)
+                area_ratio = overlap_area/prev_area
+                crop = input(f'Current bbox is {area_ratio:.2f} '
+                             'previous bbox. Use smaller bbox? [y/n] ')
+                update_mode = 'crop_only' if crop.lower() == 'y' else 'full_extract'
+            run_log.update('update_mode', update_mode)
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
@@ -543,16 +569,23 @@ def merged_productbbox(
         proj = ds.GetProjection()
         ds = None
 
+    # Check other parameters
+    if ('arrres' in log_data.keys()) and (arrres != log_data['arrres']):
+        run_log.update('update_mode', 'full_extract')
+
+    if ('lyr_proj' in log_data.keys()) and (lyr_proj != log_data['lyr_proj']):
+        run_log.update('update_mode', 'full_extract')
+
     # Write info to log
-    run_log.update('total_bbox', total_bbox)
-    run_log.update('total_bbox_metadatalyr', total_bbox_metadatalyr)
+    run_log.update('prods_TOTbbox', prods_TOTbbox)
+    run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
+    run_log.update('arrres', arrres)
+    run_log.update('lyr_proj', lyr_proj)
+
     # run_log.update('metadata_dict', metadata_dict)
     # run_log.update('product_dict', product_dict)
     # run_log.update('bbox_file', bbox_file)
-    # run_log.update('prods_TOTbbox', prods_TOTbbox)
-    # run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
-    # run_log.update('arrres', arrres)
-    # run_log.update('proj', proj)
+
     # run_log.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
@@ -1079,35 +1112,35 @@ def export_product_worker(
 
             # Check if phs phase and conn_comp files are already generated
             outFilePhs = os.path.join(outDir, 'unwrappedPhase', ifg_tag)
-            if (not os.path.exists(outFilePhs) or
-                    not os.path.exists(outFileConnComp)):
+            # if (not os.path.exists(outFilePhs) or
+            #         not os.path.exists(outFileConnComp)):
 
-                phs_files = full_product_dict[ii]['unwrappedPhase']
+            phs_files = full_product_dict[ii]['unwrappedPhase']
 
-                # stitching
-                ARIAtools.util.seq_stitch.product_stitch_sequential(
-                    phs_files, conn_files, arrres=arrres, epsg=epsg_code,
-                    bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
-                    output_conn=outFileConnComp,
-                    output_format=outputFormatPhys,
-                    range_correction=range_correction, save_fig=False,
-                    overwrite=True)
+            # stitching
+            ARIAtools.util.seq_stitch.product_stitch_sequential(
+                phs_files, conn_files, arrres=arrres, epsg=epsg_code,
+                bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
+                output_conn=outFileConnComp,
+                output_format=outputFormatPhys,
+                range_correction=range_correction, save_fig=False,
+                overwrite=True)
 
-                # If necessary, resample phs/conn_comp file
-                if multilooking is not None:
-                    ARIAtools.util.vrt.resampleRaster(
-                        outFilePhs, multilooking, bounds, prods_TOTbbox,
-                        rankedResampling, outputFormat=outputFormatPhys,
-                        num_threads=num_threads)
+            # If necessary, resample phs/conn_comp file
+            if multilooking is not None:
+                ARIAtools.util.vrt.resampleRaster(
+                    outFilePhs, multilooking, bounds, prods_TOTbbox,
+                    rankedResampling, outputFormat=outputFormatPhys,
+                    num_threads=num_threads)
 
-                # Apply mask (if specified)
-                if mask is not None:
-                    for j in [outFileConnComp, outFilePhs]:
-                        update_file = osgeo.gdal.Open(
-                            j, osgeo.gdal.GA_Update)
-                        mask_arr = mask.ReadAsArray() * \
-                            osgeo.gdal.Open(j + '.vrt').ReadAsArray()
-                        update_file.GetRasterBand(1).WriteArray(mask_arr)
+            # Apply mask (if specified)
+            if mask is not None:
+                for j in [outFileConnComp, outFilePhs]:
+                    update_file = osgeo.gdal.Open(
+                        j, osgeo.gdal.GA_Update)
+                    mask_arr = mask.ReadAsArray() * \
+                        osgeo.gdal.Open(j + '.vrt').ReadAsArray()
+                    update_file.GetRasterBand(1).WriteArray(mask_arr)
 
         if layer != 'unwrappedPhase' and layer != 'connectedComponents':
 
@@ -1399,45 +1432,46 @@ def export_products(
         json.dump(full_product_dict, ofp)
 
 
-    def determine_update_mode(log_data):
-        """
-        Consider moving this to merge_productBbox section.
-        """
-        # Pre-set update mode
-        update_mode = 'full_extract'
+    # def determine_update_mode(log_data):
+    #     """
+    #     Consider moving this to merge_productBbox section.
+    #     """
+    #     # Pre-set update mode
+    #     update_mode = 'full_extract'
 
-        # Check current shape against previous shape
-        area_ratio_to_prev = 0.0
-        if log_data['croptounion'] == False:
-            if 'prev_total_bbox' in log_data.keys():
-                current_area = ARIAtools.util.shp.shp_area(
-                                                log_data['total_bbox'], proj)
-                prev_area = ARIAtools.util.shp.shp_area(
-                                            log_data['prev_total_bbox'], proj)
-                area_ratio_to_prev = current_area / prev_area
-        elif log_data['croptounion'] == True:
-            if 'prev_total_bbox_metadatalyr' in log_data.keys():
-                current_area = ARIAtools.util.shp.shp_area(
-                                    log_data['total_bbox_metadatalyr'], proj)
-                prev_area = ARIAtools.util.shp.shp_area(
-                                log_data['prev_total_bbox_metadatalyr'], proj)
-                area_ratio_to_prev = current_area / prev_area
+    #     # Check current shape against previous shape
+    #     area_ratio_to_prev = 0.0
+    #     if log_data['croptounion'] == False:
+    #         if 'prev_total_bbox' in log_data.keys():
+    #             current_area = ARIAtools.util.shp.shp_area(
+    #                                             log_data['total_bbox'], proj)
+    #             prev_area = ARIAtools.util.shp.shp_area(
+    #                                         log_data['prev_total_bbox'], proj)
+    #             area_ratio_to_prev = current_area / prev_area
+    #     elif log_data['croptounion'] == True:
+    #         if 'prev_total_bbox_metadatalyr' in log_data.keys():
+    #             current_area = ARIAtools.util.shp.shp_area(
+    #                                 log_data['total_bbox_metadatalyr'], proj)
+    #             prev_area = ARIAtools.util.shp.shp_area(
+    #                             log_data['prev_total_bbox_metadatalyr'], proj)
+    #             area_ratio_to_prev = current_area / prev_area
 
-        if area_ratio_to_prev != 0.0:
-            print(f'The current area is {area_ratio_to_prev:.2f} that of the '
-                  f'previous run.')
+    #     if area_ratio_to_prev != 0.0:
+    #         print(f'The current area is {area_ratio_to_prev:.2f} that of the '
+    #               f'previous run.')
 
-        if area_ratio_to_prev == 1.0:
-            update_mode = 'skip'
-        elif area_ratio_to_prev > 0.99:
-            update_mode = 'crop_only'
-        else:
-            update_mode = 'full_extract'
+    #     if area_ratio_to_prev == 1.0:
+    #         update_mode = 'skip'
+    #     elif area_ratio_to_prev > 0.99:
+    #         update_mode = 'crop_only'
+    #     else:
+    #         update_mode = 'full_extract'
 
-        return update_mode
+    #     return update_mode
 
-    update_mode = determine_update_mode(log_data)
-    print(f'Update mode: {update_mode}')
+    # update_mode = determine_update_mode(log_data)
+    update_mode = log_data['update_mode'] if 'update_mode' in log_data.keys() \
+            else 'full_extract'
 
     mp_args = []
     extracted_files = []

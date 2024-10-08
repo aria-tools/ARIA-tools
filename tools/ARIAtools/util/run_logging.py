@@ -69,22 +69,24 @@ class RunLog:
 
         # Check if attributes should be written to JSON file
         config_params = ['aria_version', 'run_time', 'aria_routine',
-                         'input_params', 'workdir', 'bbox', 'croptounion']
+                         'input_params', 'workdir', 'bbox', 'croptounion',
+                         'multilooking', 'minimumOveralp', 'nc_version',
+                         'projection']
         if atr_name in config_params:
-            self.update_configs(atr_name, atr_value)
+            self.__update_configs__(atr_name, atr_value)
 
         if atr_name == 'files':
-            self.write_file_list(atr_value)
+            self.__write_file_list__(atr_value)
 
         if atr_name == 'extracted_files':
-            self.write_extracted_files(atr_value)
+            self.__write_extracted_files__(atr_value)
 
         # Write new log data
         log_data[atr_name] = atr_value
         with open(self.log_name, 'wb') as log_file:
             pickle.dump(log_data, log_file)
 
-    def update_configs(self, atr_name, atr_value):
+    def __update_configs__(self, atr_name, atr_value):
         """
         """
         # Convert shapely polygon to WKT
@@ -100,14 +102,14 @@ class RunLog:
         with open(self.config_name, 'w') as config_file:
             json.dump(config_data, config_file)
 
-    def write_file_list(self, files):
+    def __write_file_list__(self, files):
         """
         """
         # Write new data
         with open(self.file_list_name, 'w') as list_file:
             json.dump({'files': files}, list_file)
 
-    def write_extracted_files(self, extracted_files):
+    def __write_extracted_files__(self, extracted_files):
         """
         """
         extr_dict = {'extracted_files': extracted_files,
