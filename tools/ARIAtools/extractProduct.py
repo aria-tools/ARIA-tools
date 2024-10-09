@@ -339,16 +339,6 @@ def merged_productbbox(
     if track_fileext.endswith('.h5'):
         is_nisar_file = True
 
-    # If specified, check if user's bounding box meets minimum threshold area
-    if bbox_file is not None:
-        user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
-        overlap_area = ARIAtools.util.shp.shp_area(user_bbox, lyr_proj)
-        if overlap_area < minimumOverlap:
-            raise Exception(f'User bound box {bbox_file} has an area of only '
-                            f'{overlap_area}km\u00b2, below specified '
-                            f'minimum threshold area '
-                            f'{minimumOverlap}km\u00b2')
-
     # Establish log file if it does not exist and load any data
     run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
     log_data = run_log.load()
@@ -382,11 +372,37 @@ def merged_productbbox(
             else:
                 overlap_bbox = current_bbox.intersection(prev_bbox)
                 overlap_area = ARIAtools.util.shp.shp_area(overlap_bbox, lyr_proj)
-                area_ratio = overlap_area/prev_area
-                crop = input(f'Current bbox is {area_ratio:.2f} '
-                             'previous bbox. Use smaller bbox? [y/n] ')
-                update_mode = 'crop_only' if crop.lower() == 'y' else 'full_extract'
+                overlap_ratio = overlap_area/prev_area
+
+                if overlap_ratio < 1.0:
+                    # For smaller bbox
+                    print(f'Warning: Current bbox is {overlap_ratio:.2f} previous bbox.')
+                    use_larger = input('Use previous (larger) bbox? [y/n] ')
+                    if use_larger.lower() == 'y':
+                        update_mode = 'full_extract'
+                        bbox_file = prods_TOTbbox
+                    else:
+                        update_mode = 'crop_only'
+                elif (overlap_ratio == 1.0) and (current_area > prev_area):
+                    # For larger bbox
+                    print('Warning: Current bbox is larger than previous bbox.')
+                    use_smaller = input('Use previous (smaller) bbox? [y/n] ')
+                    if use_smaller.lower() == 'y':
+                        update_mode = 'crop_only'
+                        user_bbox = prods_TOTbbox
+                    else:
+                        update_mode = 'full_extract'
             run_log.update('update_mode', update_mode)
+
+    # If specified, check if user's bounding box meets minimum threshold area
+    if bbox_file is not None:
+        user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
+        overlap_area = ARIAtools.util.shp.shp_area(user_bbox, lyr_proj)
+        if overlap_area < minimumOverlap:
+            raise Exception(f'User bound box {bbox_file} has an area of only '
+                            f'{overlap_area}km\u00b2, below specified '
+                            f'minimum threshold area '
+                            f'{minimumOverlap}km\u00b2')
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
