@@ -23,7 +23,7 @@ from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
 from tqdm import tqdm
 
-logging.getLogger("asf_search").setLevel("ERROR")
+
 LOGGER = logging.getLogger("ariaDownload.py")
 
 

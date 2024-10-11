@@ -17,6 +17,7 @@ FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 for logger in ['botocore', 'urllib3', 'rasterio', 'asyncio']:
     logging.getLogger(logger).setLevel(logging.WARNING)
 
+logging.getLogger("asf_search").setLevel("ERROR")
 
 # Inspired by
 # https://stackoverflow.com/questions/384076/how-can-i-color-python-logging-output
