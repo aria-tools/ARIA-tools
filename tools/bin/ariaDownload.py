@@ -240,6 +240,7 @@ def fmt_dst(args: argparse.Namespace) -> str:
 
 
 class Downloader:
+    """Product Downloading Class."""
     def __init__(self, args: argparse.Namespace):
         self.args = args
         self.args.output = self.args.output.title()
@@ -411,10 +412,10 @@ class Downloader:
                     url = future_to_url[future]
                     try:
                         filepath = future.result()
-                        LOGGER.debug(f"Downloaded: {filepath}")
+                        LOGGER.debug("Downloaded: %s", filepath)
                         pbar.update(1)
                     except Exception as exc:
-                        LOGGER.error(f"{url} generated an exception: {exc}")
+                        LOGGER.error("%s generated an exception: %s", url, exc)
         finally:
             pbar.close()
 
