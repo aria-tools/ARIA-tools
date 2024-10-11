@@ -78,7 +78,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-s",
         "--start",
-        default="20100101",
+        default="20080101",
         type=str,
         help='Start date as YYYYMMDD.'
     )
