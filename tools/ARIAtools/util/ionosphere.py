@@ -219,6 +219,11 @@ def export_ionosphere(input_iono_files: typing.List[str],
                       verbose: typing.Optional[bool] = False,
                       overwrite: typing.Optional[bool] = True) -> None:
 
+    if output_format == 'VRT':
+        LOGGER.warning(
+            "Cannot proceed with VRT format, using ENVI format instead")
+        output_format = 'ENVI'
+
     # Outputs
     output_iono = pathlib.Path(output_iono).absolute()
     if not output_iono.parent.exists():
@@ -237,18 +242,14 @@ def export_ionosphere(input_iono_files: typing.List[str],
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_iono_files) == 1:
+        osgeo.gdal.Translate(
+            str(temp_iono_out), input_iono_files[0], format=output_format)
         osgeo.gdal.BuildVRT(str(temp_iono_out.with_suffix('.vrt')),
-                            input_iono_files[0])
+                            str(temp_iono_out))
 
     else:
         (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(
             input_iono_files, proj=f'EPSG:{ref_proj}', direction_N_S=True)
-
-        # write stitched ionosphere
-        # outputformat
-        # vrt is not support for stitched
-        if output_format == 'VRT':
-            output_format = 'ISCE'
 
         ARIAtools.util.stitch.write_GUNW_array(
             temp_iono_out, combined_iono, snwe, format=output_format,
