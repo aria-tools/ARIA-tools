@@ -35,6 +35,7 @@ import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
 import ARIAtools.constants
+from ARIAtools.util.run_logging import RunLog
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
@@ -426,6 +427,25 @@ def main():
     if args.layers.lower() == 'standard':
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
+
+    # Establish log file
+    run_log = RunLog(workdir=args.workdir, verbose=False)
+
+    # Update ARIA version, start time, and routine
+    run_log.update('update_mode', 'full_extract')
+    run_log.update('aria_version', ARIAtools.__version__)
+    run_log.update('run_time',
+                   datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+    run_log.update('aria_routine', 'ariaTSsetup.py')
+    run_log.update('workdir', os.path.abspath(args.workdir))
+    run_log.update('croptounion', args.croptounion)
+    run_log.update('multilooking', args.multilooking)
+    run_log.update('minimumOverlap', args.minimumOverlap)
+    run_log.update('nc_version', args.nc_version)
+    run_log.update('input_params', {'bbox': args.bbox,
+                                    'layers': args.layers})
+    run_log.update('args', args)
+    run_log.update('projection', args.projection)
 
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.

@@ -111,8 +111,8 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
             options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
     # Delete temporary dem-stitcher directory
-    if os.path.exists(f'{dem_name}_tiles'):
-        shutil.rmtree(f'{dem_name}_tiles')
+    # if os.path.exists(f'{dem_name}_tiles'):
+    #     shutil.rmtree(f'{dem_name}_tiles')
 
     # Define lat/lon arrays for fullres layers
     gt = ds_aria_expanded.GetGeoTransform()
@@ -133,15 +133,27 @@ def download_dem(
     """Download the DEM over product bbox union."""
     LOGGER.debug('download_dem')
     root = os.path.splitext(path_dem)[0]
-    prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
-    extent = prod_shapefile.bounds
-
-    localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
-    dem_tile_paths = dem_stitcher.get_dem_tile_paths(
-        bounds=extent, dem_name=dem_name,
-        localize_tiles_to_gtiff=localize_tiles_to_gtiff,
-        tile_dir=f'{dem_name}_tiles')
-
     vrt_path = f'{root}_uncropped.vrt'
-    ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
+
+    # Check if DEM has already been downloaded
+    if os.path.exists(os.path.abspath(vrt_path)):
+        LOGGER.warning('%s has already been downloaded. Skipping download.',
+                       vrt_path)
+
+    else:
+        dirname = os.path.dirname(path_dem)
+        tile_dir = os.path.join(dirname, f'{dem_name}_tiles')
+
+        # Download DEM
+        prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
+        extent = prod_shapefile.bounds
+
+        localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
+        dem_tile_paths = dem_stitcher.get_dem_tile_paths(
+            bounds=extent, dem_name=dem_name,
+            localize_tiles_to_gtiff=localize_tiles_to_gtiff,
+            tile_dir=tile_dir)
+
+        ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
+
     return vrt_path
