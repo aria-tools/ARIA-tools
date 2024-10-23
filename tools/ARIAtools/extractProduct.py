@@ -10,6 +10,7 @@ Extract and organize specified layer(s).
 If no layer is specified, extract product bounding box shapefile(s)
 """
 import os
+import sys
 import glob
 import time
 import copy
@@ -19,6 +20,7 @@ import logging
 import datetime
 import tarfile
 import subprocess
+import tqdm
 
 import dask
 import rioxarray
@@ -40,7 +42,6 @@ LOGGER = logging.getLogger(__name__)
 # only apply to geometry layers and prods derived from older ISCE versions
 GEOM_LYRS = ['bPerpendicular', 'bParallel', 'incidenceAngle',
              'lookAngle', 'azimuthAngle']
-
 
 class MetadataQualityCheck:
     """
@@ -725,7 +726,7 @@ def extract_bperp_dict(products, num_threads):
 
 def handle_epoch_layers(
         layers, product_dict, proj, lyr_path, user_lyrs, map_lyrs, key,
-        sec_key, ref_key, tropo_total, workdir, prog_bar, bounds, arrres,
+        sec_key, ref_key, tropo_total, workdir, bounds, arrres,
         dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose,
         multilooking, rankedResampling, num_threads, is_nisar_file):
     """
@@ -791,9 +792,6 @@ def handle_epoch_layers(
             hgt_field, ref_outname = prep_metadatalayers(
                 ref_outname, i[1], dem, ref_key, layers, is_nisar_file, proj,
                 outputFormat, model_name)
-
-        # Update progress bar
-        prog_bar.update(i[0] + 1, suffix=ifg)
 
         # record output directories
         if model_name is not None:
@@ -884,9 +882,6 @@ def handle_epoch_layers(
     all_outputs = list(set(all_outputs))
     for i in enumerate(all_outputs):
         if os.path.exists(i[1]):
-            # Update progress bar
-            prog_bar.update(i[0] + 1, suffix=ifg)
-
             record_epochs = []
             record_epochs.extend(
                 glob.glob(os.path.join(i[1], '*[0-9].vrt')))
@@ -927,7 +922,6 @@ def handle_epoch_layers(
                     ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
                 prev_outname = j[1][:-4]
 
-    prog_bar.close()
     return
 
 
@@ -1219,10 +1213,6 @@ def export_products(
 
             # set iterative keys
             prev_outname = os.path.abspath(os.path.join(workdir, i))
-            prog_bar = ARIAtools.util.misc.ProgressBar(
-                maxValue=len(product_dict[0]),
-                prefix=f'Generating: {model} {key} - ')
-            lyr_input_dict['prog_bar'] = prog_bar
             lyr_input_dict['product_dict'] = product_dict
 
             # extract layers
@@ -1263,11 +1253,8 @@ def export_products(
 
         workdir = os.path.join(outDir, key)
         prev_outname = copy.deepcopy(workdir)
-        prog_bar = ARIAtools.util.misc.ProgressBar(
-            maxValue=len(product_dict[0]), prefix='Generating: ' + key + ' - ')
 
         # set input keys
-        lyr_input_dict['prog_bar'] = prog_bar
         lyr_input_dict['product_dict'] = product_dict
         lyr_input_dict['lyr_path'] = lyr_prefix
         lyr_input_dict['user_lyrs'] = ['solidEarthTide']
@@ -1299,8 +1286,6 @@ def export_products(
 
         workdir = os.path.join(outDir, key)
         prev_outname = copy.deepcopy(workdir)
-        prog_bar = ARIAtools.util.misc.ProgressBar(
-            maxValue=len(product_dict[0]), prefix='Generating: ' + key + ' - ')
 
         # Set output res
         if multilooking is not None:
@@ -1371,17 +1356,26 @@ def export_products(
     start_time = time.time()
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
         if multiproc_method == 'single':
-            outputs = [export_product_worker_helper(arg) for arg in mp_args]
-
+            outputs = []
+            for arg in tqdm.tqdm(mp_args, total=len(mp_args), desc='Exporting'):
+                outputs.append(export_product_worker_helper(arg))
+                sys.stdout.flush()
         else:
-            LOGGER.debug('Running %d total jobs in with threads' %
-                         len(mp_args))
-            jobs = []
-            for arg in mp_args:
-                job = dask.delayed(export_product_worker)(*arg)
-                jobs.append(job)
-            outputs = dask.compute(
-                jobs, num_workers=int(num_threads), scheduler='threads')[0]
+            LOGGER.debug('Running %d total jobs with threads' % len(mp_args))
+
+            # Create a progress bar
+            with tqdm.tqdm(total=len(mp_args), desc='Exporting') as pbar:
+                # Create jobs with a wrapper function that includes progress update
+                jobs = []
+                for arg in mp_args:
+                    # Create a delayed job that includes both work and progress update
+                    job = dask.delayed(lambda x: (export_product_worker(*x),
+                                                  pbar.update(1))[0])(arg)
+                    jobs.append(job)
+
+                # Compute all jobs
+                outputs = dask.compute(jobs, num_workers=int(num_threads),
+                                       scheduler='threads')[0]
 
         for ii, ilayer, outname, prod_arr in outputs:
             if ii == 0 and ilayer == 0:
