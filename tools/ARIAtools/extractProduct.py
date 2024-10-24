@@ -1357,7 +1357,8 @@ def export_products(
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
         if multiproc_method == 'single':
             outputs = []
-            for arg in tqdm.tqdm(mp_args, total=len(mp_args), desc='Exporting'):
+            for arg in tqdm.tqdm(mp_args, total=len(mp_args),
+                                 desc='Exporting'):
                 outputs.append(export_product_worker_helper(arg))
                 sys.stdout.flush()
         else:
@@ -1365,10 +1366,10 @@ def export_products(
 
             # Create a progress bar
             with tqdm.tqdm(total=len(mp_args), desc='Exporting') as pbar:
-                # Create jobs with a wrapper function that includes progress update
+                # Create jobs with a wrapper that includes progress update
                 jobs = []
                 for arg in mp_args:
-                    # Create a delayed job that includes both work and progress update
+                    # Create a delayed job including work and progress update
                     job = dask.delayed(lambda x: (export_product_worker(*x),
                                                   pbar.update(1))[0])(arg)
                     jobs.append(job)
