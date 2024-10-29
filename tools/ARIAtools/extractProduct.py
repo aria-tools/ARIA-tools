@@ -324,12 +324,6 @@ def merged_productbbox(
     report common track union to accurately interpolate metadata fields,
     and expected shape for DEM.
     """
-    # Define total bounding box
-    prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
-
-    # Define projection
-    lyr_proj = int(metadata_dict[0]['projection'][0])
-
     # If specified workdir doesn't exist, create it
     os.makedirs(workdir, exist_ok=True)
 
@@ -343,58 +337,8 @@ def merged_productbbox(
     run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
     log_data = run_log.load()
 
-    # Redefine minimum overlap based on past productBoundingBox
-    if (log_data['croptounion'] == False) and os.path.exists(prods_TOTbbox):
-        # Area of previous bounding box
-        prev_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
-        prev_area = ARIAtools.util.shp.shp_area(prev_bbox, lyr_proj)
-
-        if bbox_file is None:
-            # Prompt user
-            set_overlap = input('Previous productBoundingBox detected. '
-                                'Keep previous dims? [y/n] ')
-            if set_overlap.lower() == 'y':
-                minimumOverlap = prev_area * 0.99
-                print(f'Setting minimum overlap to {minimumOverlap:.1f} '
-                      'km\u00b2based on previous productBoundingBox')
-                update_mode = 'crop_only'
-            else:
-                update_mode = 'full_extract'
-            run_log.update('update_mode', update_mode)
-
-        elif bbox_file is not None:
-            # Retrieve current bbox polygon and area
-            current_bbox = ARIAtools.util.shp.open_shp(bbox_file)
-            current_area = ARIAtools.util.shp.shp_area(current_bbox, lyr_proj)
-
-            if current_bbox == prev_bbox:
-                log_data['update_mode'] = 'skip'
-            else:
-                overlap_bbox = current_bbox.intersection(prev_bbox)
-                overlap_area = ARIAtools.util.shp.shp_area(overlap_bbox, lyr_proj)
-                overlap_ratio = overlap_area/prev_area
-
-                if overlap_ratio < 1.0:
-                    # For smaller bbox
-                    print(f'Warning: Current bbox is {overlap_ratio:.2f} previous bbox.')
-                    use_larger = input('Use previous (larger) bbox? [y/n] ')
-                    if use_larger.lower() == 'y':
-                        update_mode = 'full_extract'
-                        bbox_file = prods_TOTbbox
-                    else:
-                        update_mode = 'crop_only'
-                elif (overlap_ratio == 1.0) and (current_area > prev_area):
-                    # For larger bbox
-                    print('Warning: Current bbox is larger than previous bbox.')
-                    use_smaller = input('Use previous (smaller) bbox? [y/n] ')
-                    if use_smaller.lower() == 'y':
-                        update_mode = 'crop_only'
-                        user_bbox = prods_TOTbbox
-                    else:
-                        update_mode = 'full_extract'
-            run_log.update('update_mode', update_mode)
-
     # If specified, check if user's bounding box meets minimum threshold area
+    lyr_proj = int(metadata_dict[0]['projection'][0])
     if bbox_file is not None:
         user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
         overlap_area = ARIAtools.util.shp.shp_area(user_bbox, lyr_proj)
@@ -403,6 +347,33 @@ def merged_productbbox(
                             f'{overlap_area}km\u00b2, below specified '
                             f'minimum threshold area '
                             f'{minimumOverlap}km\u00b2')
+
+    # Establish log file if it does not exist and load any data
+    run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
+    log_data = run_log.load()
+
+    # Check if product bounding box exists from previous run
+    prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
+    prods_TOTbbox_metadatalyr = os.path.join(
+            workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
+    if os.path.exists(prods_TOTbbox) and os.path.exists(prods_TOTbbox_metadatalyr):
+        exist_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        exist_metadatalyr = ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr)
+
+        # Save copy of file to disk
+        copy_ext = f'{log_data['run_times'][-1]}.json'
+        bbox_copyname = prods_TOTbbox.replace('.json', copy_ext)
+        shutil.copyfile(prods_TOTbbox, bbox_copyname)
+
+        metadatalyr_copyname = prods_TOTbbox_metadatalyr.replace('.json', copy_ext)
+        shutil.copyfile(prods_TOTbbox_metadatalyr, metadatalyr_copyname)
+
+        if verbose:
+            print(f'Copying existing productBoundingBox to {bbox_copyname}')
+            print(f'Copying existing metadatalyr to {metadatalyr_copyname}')
+
+    else:
+        exist_bbox = None
 
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
@@ -422,8 +393,6 @@ def merged_productbbox(
 
     # Need to track bounds of max extent
     # to avoid metadata interpolation issues
-    prods_TOTbbox_metadatalyr = os.path.join(
-        workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     sceneareas = [
         ARIAtools.util.shp.open_shp(i['productBoundingBox'][0]).area
         for i in product_dict]
@@ -532,6 +501,48 @@ def merged_productbbox(
     else:
         bbox_file = prods_TOTbbox
 
+    # Compare current bbox to existing bbox
+    if exist_bbox:
+        exist_area = ARIAtools.util.shp.shp_area(exist_bbox, lyr_proj)
+
+        # Calculate overlap area
+        new_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        new_area = ARIAtools.util.shp.shp_area(new_bbox, lyr_proj)
+        area_ratio = new_area / exist_area
+
+        olap_bbox = exist_bbox.intersection(new_bbox)
+        olap_area = ARIAtools.util.shp.shp_area(olap_bbox, lyr_proj)
+
+        # Compare areas
+        delta_area = np.abs(olap_area - exist_area)
+        delta_area = np.round(delta_area*1E7) * 1E-7
+
+        olap_ratio = olap_area / exist_area
+        olap_ratio = np.round(olap_ratio*1E7) * 1E-7
+
+        if verbose:
+            print(f'Area difference (|prev - new|): {delta_area:.7f} km\u00b2')
+            print(f'Area ratio (new/prev): {area_ratio:.7f}')
+            print(f'Overlap ratio (new/prev): {olap_ratio:.7f}')
+
+        if (delta_area != 0.0) or (olap_ratio != 1.0):
+            LOGGER.debug(f'Product bbox changed in size from previous run '
+                         f'{new_area} vs {exist_area}')
+
+        if shapely.equals(new_bbox, exist_bbox):
+            # Same bbox within machine precision
+            update_mode = 'skip'
+        elif olap_ratio < 1.0:
+            # For smaller bbox, need to crop
+            update_mode = 'crop_only'
+        else:
+            # If no prior products exist, or new AOI is larger
+            update_mode = 'full_extract'
+        run_log.update('update_mode', update_mode)
+
+        if verbose:
+            print(f'Update mode: {update_mode:s}')
+
     # Warp the first scene with the output-bounds defined above
     # ensure output-bounds are an integer multiple of interferometric grid
     # and adjust if necessary
@@ -597,12 +608,10 @@ def merged_productbbox(
     run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
     run_log.update('arrres', arrres)
     run_log.update('lyr_proj', lyr_proj)
-
-    # run_log.update('metadata_dict', metadata_dict)
-    # run_log.update('product_dict', product_dict)
-    # run_log.update('bbox_file', bbox_file)
-
-    # run_log.update('is_nisar_file', is_nisar_file)
+    run_log.update('metadata_dict', metadata_dict)
+    run_log.update('product_dict', product_dict)
+    run_log.update('bbox_file', bbox_file)
+    run_log.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -1060,11 +1069,13 @@ def export_product_worker(
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
     if update_mode == 'skip' and os.path.exists(outname+'.vrt'):
-        print('** SKIP')
-        pass
+        LOGGER.debug(f'Skipping {ifg_tag} - '
+                     f'{os.path.dirname(outname).split('/')[-1]}')
 
     elif update_mode == 'crop_only' and os.path.exists(outname+'.vrt'):
-        print('** CROP ONLY')
+        LOGGER.debug(f'Cropping {ifg_tag} - '
+                     f'{os.path.dirname(outname).split('/')[-1]}')
+
         # Crop
         gdal_warp_kwargs['format'] = 'ENVI'
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
@@ -1078,7 +1089,9 @@ def export_product_worker(
         osgeo.gdal.Translate(outname+'.vrt', outname, format='VRT')
 
     else:
-        print('** FULL EXTRACTION')
+        LOGGER.debug(f'Extracting {ifg_tag} - '
+                     f'{os.path.dirname(outname).split('/')[-1]}')
+
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
             any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
@@ -1447,45 +1460,6 @@ def export_products(
     with open(full_product_dict_file, 'w') as ofp:
         json.dump(full_product_dict, ofp)
 
-
-    # def determine_update_mode(log_data):
-    #     """
-    #     Consider moving this to merge_productBbox section.
-    #     """
-    #     # Pre-set update mode
-    #     update_mode = 'full_extract'
-
-    #     # Check current shape against previous shape
-    #     area_ratio_to_prev = 0.0
-    #     if log_data['croptounion'] == False:
-    #         if 'prev_total_bbox' in log_data.keys():
-    #             current_area = ARIAtools.util.shp.shp_area(
-    #                                             log_data['total_bbox'], proj)
-    #             prev_area = ARIAtools.util.shp.shp_area(
-    #                                         log_data['prev_total_bbox'], proj)
-    #             area_ratio_to_prev = current_area / prev_area
-    #     elif log_data['croptounion'] == True:
-    #         if 'prev_total_bbox_metadatalyr' in log_data.keys():
-    #             current_area = ARIAtools.util.shp.shp_area(
-    #                                 log_data['total_bbox_metadatalyr'], proj)
-    #             prev_area = ARIAtools.util.shp.shp_area(
-    #                             log_data['prev_total_bbox_metadatalyr'], proj)
-    #             area_ratio_to_prev = current_area / prev_area
-
-    #     if area_ratio_to_prev != 0.0:
-    #         print(f'The current area is {area_ratio_to_prev:.2f} that of the '
-    #               f'previous run.')
-
-    #     if area_ratio_to_prev == 1.0:
-    #         update_mode = 'skip'
-    #     elif area_ratio_to_prev > 0.99:
-    #         update_mode = 'crop_only'
-    #     else:
-    #         update_mode = 'full_extract'
-
-    #     return update_mode
-
-    # update_mode = determine_update_mode(log_data)
     update_mode = log_data['update_mode'] if 'update_mode' in log_data.keys() \
             else 'full_extract'
 
@@ -1509,9 +1483,6 @@ def export_products(
             outname = os.path.abspath(os.path.join(workdir, ifg_tag))
             extracted_files.append(outname)
 
-            # Check update mode
-            # update_mode = run_log.determine_update_mode(outname)
-
             mp_args.append((
                 ii, ilayer, product, proj, full_product_dict_file, layers,
                 workdir, bounds, prods_TOTbbox, demfile,
@@ -1519,6 +1490,10 @@ def export_products(
                 layer, outDir, arrres, epsg_code, num_threads,
                 multilooking, verbose, is_nisar_file, range_correction,
                 rankedResampling, update_mode))
+
+    # print(mp_args[0])
+    # for arg in map_args:
+    # exit()
 
     start_time = time.time()
     if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:

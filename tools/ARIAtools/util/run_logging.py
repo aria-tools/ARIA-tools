@@ -67,8 +67,16 @@ class RunLog:
             if atr_name in log_data.keys():
                 log_data[f'prev_{atr_name}'] = log_data[atr_name]
 
+        # Keep list of run times
+        if atr_name == 'run_time':
+            if 'run_times' in log_data.keys():
+                log_data['run_times'].append(atr_value)
+            else:
+                log_data['run_times'] = [atr_value]
+            self.__update_configs__('run_times', log_data['run_times'])
+
         # Check if attributes should be written to JSON file
-        config_params = ['aria_version', 'run_time', 'aria_routine',
+        config_params = ['aria_version', 'aria_routine',
                          'input_params', 'workdir', 'bbox', 'croptounion',
                          'multilooking', 'minimumOveralp', 'nc_version',
                          'projection']
