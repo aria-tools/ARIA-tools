@@ -114,7 +114,7 @@ def createParser():
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
     parser.add_argument(
-        '--log-level', default='warning', help='Logger log level')
+        '--log-level', default='info', help='Logger log level')
     return parser
 
 

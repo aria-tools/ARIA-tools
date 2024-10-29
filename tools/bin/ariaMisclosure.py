@@ -146,7 +146,7 @@ def create_parser():
         '--plot-time-intervals', dest='plotTimeIntervals', action='store_true',
         help='Plot triplet intervals in misclosure analysis figure.')
     parser.add_argument(
-        '--log-level', default='warning', help='Logger log level')
+        '--log-level', default='info', help='Logger log level')
     return parser
 
 
