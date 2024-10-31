@@ -396,6 +396,7 @@ def main():
     """Run time series prepation."""
     parser = create_parser()
     args = parser.parse_args()
+    args.workdir = os.path.abspath(args.workdir)
 
     log_level = {
         'debug': logging.DEBUG, 'info': logging.INFO,
@@ -428,24 +429,11 @@ def main():
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
 
-    # Establish log file
+    # Establish log file and update with basic parameters
     run_log = RunLog(workdir=args.workdir, verbose=False)
-
-    # Update ARIA version, start time, and routine
-    run_log.update('update_mode', 'full_extract')
     run_log.update('aria_version', ARIAtools.__version__)
-    run_log.update('run_time',
-                   datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     run_log.update('aria_routine', 'ariaTSsetup.py')
-    run_log.update('workdir', os.path.abspath(args.workdir))
-    run_log.update('croptounion', args.croptounion)
-    run_log.update('multilooking', args.multilooking)
-    run_log.update('minimumOverlap', args.minimumOverlap)
-    run_log.update('nc_version', args.nc_version)
-    run_log.update('input_params', {'bbox': args.bbox,
-                                    'layers': args.layers})
     run_log.update('args', args)
-    run_log.update('projection', args.projection)
 
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
@@ -460,7 +448,7 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers)
+        layers=args.layers, run_log=run_log)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -474,7 +462,7 @@ def main():
             os.path.join(args.workdir, 'productBoundingBox'),
             standardproduct_info.bbox_file, args.croptounion,
             num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
-            verbose=args.verbose)
+            verbose=args.verbose, run_log=run_log)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
@@ -495,7 +483,7 @@ def main():
     # Pass DEM-filename, loaded DEM array, and lat/lon arrays
     LOGGER.info('Download/cropping DEM')
     demfile, demfile_expanded, lat, lon = \
-        ARIAtools.util.dem.prep_dem(**dem_dict)
+        ARIAtools.util.dem.prep_dem(**dem_dict, run_log=run_log)
 
     # Load or download mask (if specified).
     if args.mask is not None:
@@ -558,7 +546,7 @@ def main():
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
         rankedResampling=args.rankedResampling, multiproc_method='threads',
-        **export_dict)
+        **export_dict, run_log=run_log)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = collections.defaultdict(list)

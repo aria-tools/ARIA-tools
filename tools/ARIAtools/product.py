@@ -241,18 +241,19 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False, tropo_models=None, layers=None):
+                 verbose=False, tropo_models=None, layers=None, run_log=None):
         """
         Parse products and input bounding box (if specified)
         """
-        # Establish log file if it does not exist and load any data
-        self.run_log = RunLog(workdir=workdir, verbose=False)
-        log_data = self.run_log.load()
-
         # Parse through file(s)/bbox input
         self.files = []
-        self.products = log_data['products'] if 'products' \
-                in log_data.keys() else []
+
+        self.run_log = run_log
+        self.products = []
+        if self.run_log:
+            log_data = self.run_log.load()
+            if 'products' in log_data:
+                self.products = log_data['products']
 
         # Track bbox file
         self.bbox_file = None
@@ -458,7 +459,8 @@ class Product:
         else:
             self.bbox = None
 
-        self.run_log.update('bbox', self.bbox)
+        if self.run_log:
+            self.run_log.update('bbox', self.bbox)
 
         # Report dictionaries for all valid products
         self.__run__()
@@ -1269,8 +1271,11 @@ class Product:
 
     def __run__(self):
         # Grab list of already read GUNWs
-        log_data = self.run_log.load()
-        past_files = log_data['files'] if 'files' in log_data.keys() else []
+        past_files = []
+        if self.run_log:
+            log_data = self.run_log.load()
+            if 'files' in log_data:
+                past_files = log_data['files']
 
         # Only populate list of dictionaries if the file intersects with bbox
         for file in self.files:
@@ -1284,8 +1289,9 @@ class Product:
             if product[0]['pair_name'] not in pairnames:
                 self.products.remove(product)
 
-        self.run_log.update('files', self.files)
-        self.run_log.update('products', self.products)
+        if self.run_log:
+            self.run_log.update('files', self.files)
+            self.run_log.update('products', self.products)
 
         # Sort by pair, start time, and latitude
         self.products = list(sorted(

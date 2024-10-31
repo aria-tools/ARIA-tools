@@ -316,7 +316,7 @@ class MetadataQualityCheck:
 def merged_productbbox(
         metadata_dict, product_dict, workdir='./', bbox_file=None,
         croptounion=False, num_threads='2', minimumOverlap=0.0081,
-        verbose=None):
+        verbose=None, run_log=None):
     """
     Extract/merge productBoundingBox layers for each pair.
     Also update dict, report common track bbox
@@ -333,10 +333,6 @@ def merged_productbbox(
     if track_fileext.endswith('.h5'):
         is_nisar_file = True
 
-    # Establish log file if it does not exist and load any data
-    run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
-    log_data = run_log.load()
-
     # If specified, check if user's bounding box meets minimum threshold area
     lyr_proj = int(metadata_dict[0]['projection'][0])
     if bbox_file is not None:
@@ -348,10 +344,6 @@ def merged_productbbox(
                             f'minimum threshold area '
                             f'{minimumOverlap}km\u00b2')
 
-    # Establish log file if it does not exist and load any data
-    run_log = RunLog(workdir=os.path.join(workdir, '..'), verbose=False)
-    log_data = run_log.load()
-
     # Check if product bounding box exists from previous run
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
     prods_TOTbbox_metadatalyr = os.path.join(
@@ -361,7 +353,13 @@ def merged_productbbox(
         exist_metadatalyr = ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr)
 
         # Save copy of file to disk
-        copy_ext = f'{log_data['run_times'][-1]}.json'
+        if run_log:
+            log_data = run_log.load()
+            run_time = log_data['run_times'][-1]
+        else:
+            run_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+
+        copy_ext = f'{run_time}.json'
         bbox_copyname = prods_TOTbbox.replace('.json', copy_ext)
         shutil.copyfile(prods_TOTbbox, bbox_copyname)
 
@@ -502,7 +500,7 @@ def merged_productbbox(
         bbox_file = prods_TOTbbox
 
     # Compare current bbox to existing bbox
-    if exist_bbox:
+    if exist_bbox and run_log:
         exist_area = ARIAtools.util.shp.shp_area(exist_bbox, lyr_proj)
 
         # Calculate overlap area
@@ -597,21 +595,25 @@ def merged_productbbox(
         ds = None
 
     # Check other parameters
-    if ('arrres' in log_data.keys()) and (arrres != log_data['arrres']):
-        run_log.update('update_mode', 'full_extract')
+    if run_log:
+        log_data = run_log.load()
+        if ('arrres' in log_data.keys()) \
+                and (arrres != log_data['arrres']):
+            run_log.update('update_mode', 'full_extract')
 
-    if ('lyr_proj' in log_data.keys()) and (lyr_proj != log_data['lyr_proj']):
-        run_log.update('update_mode', 'full_extract')
+        if ('lyr_proj' in log_data.keys()) \
+                and (lyr_proj != log_data['lyr_proj']):
+            run_log.update('update_mode', 'full_extract')
 
-    # Write info to log
-    run_log.update('prods_TOTbbox', prods_TOTbbox)
-    run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
-    run_log.update('arrres', arrres)
-    run_log.update('lyr_proj', lyr_proj)
-    run_log.update('metadata_dict', metadata_dict)
-    run_log.update('product_dict', product_dict)
-    run_log.update('bbox_file', bbox_file)
-    run_log.update('is_nisar_file', is_nisar_file)
+        # Write info to log
+        run_log.update('prods_TOTbbox', prods_TOTbbox)
+        run_log.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
+        run_log.update('arrres', arrres)
+        run_log.update('lyr_proj', lyr_proj)
+        run_log.update('metadata_dict', metadata_dict)
+        run_log.update('product_dict', product_dict)
+        run_log.update('bbox_file', bbox_file)
+        run_log.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -1204,7 +1206,7 @@ def export_products(
         is_nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
         outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
-        tropo_total=False, model_names=[], multiproc_method='single'):
+        tropo_total=False, model_names=[], multiproc_method='single', run_log=None):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
@@ -1223,10 +1225,6 @@ def export_products(
             if os.path.isdir(target):
                 LOGGER.warning('Deleting %s to avoid VRT header bug!' % target)
                 shutil.rmtree(target)
-
-    # Establish log file if it does not exist and load any data
-    run_log = RunLog(workdir=outDir, verbose=False)
-    log_data = run_log.load()
 
     if not layers and not tropo_total:
         return  # only bbox
@@ -1460,8 +1458,12 @@ def export_products(
     with open(full_product_dict_file, 'w') as ofp:
         json.dump(full_product_dict, ofp)
 
-    update_mode = log_data['update_mode'] if 'update_mode' in log_data.keys() \
-            else 'full_extract'
+    # Recall update mode
+    update_mode = 'full_extract'
+    if run_log:
+        log_data = run_log.load()
+        if 'update_mode' in log_data.keys():
+            update_mode = log_data['update_mode']
 
     mp_args = []
     extracted_files = []
@@ -1558,7 +1560,8 @@ def export_products(
     LOGGER.debug(
         "export_product_worker took %f seconds" % (end_time - start_time))
 
-    run_log.update('extracted_files', extracted_files)
+    if run_log:
+        run_log.update('extracted_files', extracted_files)
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(
