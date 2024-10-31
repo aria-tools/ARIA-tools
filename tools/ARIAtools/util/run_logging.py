@@ -2,7 +2,7 @@
 import os
 import pickle
 import json
-from datetime import datetime
+import datetime
 import shapely
 
 import ARIAtools
@@ -15,8 +15,8 @@ class RunLog:
         """
         """
         # Record parameters
+        self.run_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         self.workdir = os.path.abspath(workdir)
-
         self.verbose = verbose
 
         # Automatically establish log directory and files
@@ -44,6 +44,11 @@ class RunLog:
             with open(self.extracted_files_name, 'w') as extr_file:
                 json.dump({}, extr_file)
 
+        # Automatically update core parameters
+        self.__update_runtimes__()
+        self.update('workdir', self.workdir)
+        self.update('update_mode', 'full_extract')
+
 
     def load(self):
         """
@@ -67,21 +72,19 @@ class RunLog:
             if atr_name in log_data.keys():
                 log_data[f'prev_{atr_name}'] = log_data[atr_name]
 
-        # Keep list of run times
-        if atr_name == 'run_time':
-            if 'run_times' in log_data.keys():
-                log_data['run_times'].append(atr_value)
-            else:
-                log_data['run_times'] = [atr_value]
-            self.__update_configs__('run_times', log_data['run_times'])
-
         # Check if attributes should be written to JSON file
-        config_params = ['aria_version', 'aria_routine',
-                         'input_params', 'workdir', 'bbox', 'croptounion',
-                         'multilooking', 'minimumOveralp', 'nc_version',
-                         'projection']
-        if atr_name in config_params:
-            self.__update_configs__(atr_name, atr_value)
+        if atr_name == 'run_times':
+            self.__update_configs__('run_times', atr_value)
+
+        elif atr_name == 'args':
+            attrs = atr_value.__dict__
+            config_params = ['aria_version', 'aria_routine',
+                             'input_params', 'workdir', 'bbox', 'croptounion',
+                             'multilooking', 'minimumOveralp', 'nc_version',
+                             'projection']
+            for param in config_params:
+                if param in attrs.keys():
+                    self.__update_configs__(param, attrs[param])
 
         if atr_name == 'files':
             self.__write_file_list__(atr_value)
@@ -93,6 +96,19 @@ class RunLog:
         log_data[atr_name] = atr_value
         with open(self.log_name, 'wb') as log_file:
             pickle.dump(log_data, log_file)
+
+    def __update_runtimes__(self):
+        """
+        """
+        # Retrieve existing data
+        log_data = self.load()
+
+        if 'run_times' in log_data.keys():
+            log_data['run_times'].append(self.run_time)
+        else:
+            log_data['run_times'] = [self.run_time]
+
+        self.update('run_times', log_data['run_times'])
 
     def __update_configs__(self, atr_name, atr_value):
         """
