@@ -379,6 +379,8 @@ def merged_productbbox(
         # Get pair name, expected in dictionary
         pair_name = scene["pair_name"][0]
         outname = os.path.join(workdir, pair_name + '.json')
+        if os.path.exists(outname):
+            os.remove(outname)
 
         # Create union of productBoundingBox layers
         for prods_bbox in scene["productBoundingBox"]:
