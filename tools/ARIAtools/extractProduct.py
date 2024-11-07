@@ -44,6 +44,7 @@ LOGGER = logging.getLogger(__name__)
 GEOM_LYRS = ['bPerpendicular', 'bParallel', 'incidenceAngle',
              'lookAngle', 'azimuthAngle']
 
+
 class MetadataQualityCheck:
     """
     Metadata quality control function.
@@ -246,13 +247,16 @@ class MetadataQualityCheck:
                         # mask all values above mean
                         if maj_percent > 50:
                             self.data_array_band = np.ma.masked_where(
-                                self.data_array_band > self.data_array_band.mean(),
-                                self.data_array_band)
+                                (self.data_array_band >
+                                 self.data_array_band.mean()),
+                                self.data_array_band,
+                            )
 
                         # mask all values below mean
                         else:
                             self.data_array_band = np.ma.masked_where(
-                                self.data_array_band < self.data_array_band.mean(),
+                                (self.data_array_band <
+                                 self.data_array_band.mean()),
                                 self.data_array_band)
 
                     # Mask columns/rows which are entirely made up of 0s
@@ -348,10 +352,14 @@ def merged_productbbox(
     # Check if product bounding box exists from previous run
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
     prods_TOTbbox_metadatalyr = os.path.join(
-            workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
-    if os.path.exists(prods_TOTbbox) and os.path.exists(prods_TOTbbox_metadatalyr):
-        exist_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
-        exist_metadatalyr = ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr)
+        workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
+    if os.path.exists(prods_TOTbbox) and \
+        os.path.exists(prods_TOTbbox_metadatalyr):
+
+        exist_bbox = ARIAtools.util.shp.open_shp(
+            prods_TOTbbox)
+        exist_metadatalyr = ARIAtools.util.shp.open_shp(
+            prods_TOTbbox_metadatalyr)
 
         # Save copy of file to disk
         if run_log:
@@ -364,7 +372,8 @@ def merged_productbbox(
         bbox_copyname = prods_TOTbbox.replace('.json', copy_ext)
         shutil.copyfile(prods_TOTbbox, bbox_copyname)
 
-        metadatalyr_copyname = prods_TOTbbox_metadatalyr.replace('.json', copy_ext)
+        metadatalyr_copyname = prods_TOTbbox_metadatalyr.replace('.json',
+                                                                 copy_ext)
         shutil.copyfile(prods_TOTbbox_metadatalyr, metadatalyr_copyname)
 
         if verbose:
@@ -1092,7 +1101,8 @@ def export_product_worker(
 
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
-            any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
+            any(':/science/LSAR/GUNW/metadata/radarGrid/' in s
+                for s in product)):
             # make VRT pointing to metadata layers in standard product
             hgt_field, outname = prep_metadatalayers(
                 outname, product, dem_expanded, layer, layers,
@@ -1100,9 +1110,10 @@ def export_product_worker(
 
             # Interpolate/intersect with DEM before cropping
             finalize_metadata(
-                outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
-                lat, lon, hgt_field, product, is_nisar_file, outputFormatPhys,
-                verbose=verbose)
+                outname, bounds, arrres, dem_bounds, prods_TOTbbox,
+                dem_expanded, lat, lon, hgt_field, product,
+                is_nisar_file, outputFormatPhys, verbose=verbose
+            )
 
         # Extract/crop full res layers, except for "unw" and "conn_comp"
         # which requires advanced stitching
@@ -1111,7 +1122,8 @@ def export_product_worker(
                 warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
                 if outputFormat == 'VRT':
                     # building the virtual vrt
-                    osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', product)
+                    osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt',
+                                        product)
 
                     # building the cropped vrt
                     osgeo.gdal.Warp(
@@ -1202,7 +1214,8 @@ def export_products(
         is_nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
         outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
-        tropo_total=False, model_names=[], multiproc_method='single', run_log=None):
+        tropo_total=False, model_names=[], multiproc_method='single',
+        run_log=None):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
