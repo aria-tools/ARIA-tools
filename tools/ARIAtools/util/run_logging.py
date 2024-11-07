@@ -8,6 +8,7 @@ import shapely
 import ARIAtools
 import ARIAtools.util.shp
 
+
 class RunLog:
     """
     """
@@ -48,7 +49,6 @@ class RunLog:
         self.__update_runtimes__()
         self.update('workdir', self.workdir)
         self.update('update_mode', 'full_extract')
-
 
     def load(self):
         """
