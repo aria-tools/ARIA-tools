@@ -525,10 +525,10 @@ def merged_productbbox(
 
         # Compare areas
         delta_area = np.abs(olap_area - exist_area)
-        delta_area = np.round(delta_area*1E7) * 1E-7
+        delta_area = np.round(delta_area * 1E7) * 1E-7
 
         olap_ratio = olap_area / exist_area
-        olap_ratio = np.round(olap_ratio*1E7) * 1E-7
+        olap_ratio = np.round(olap_ratio * 1E7) * 1E-7
 
         if verbose:
             print(f'Area difference (|prev - new|): {delta_area:.7f} km\u00b2')
@@ -1075,25 +1075,26 @@ def export_product_worker(
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
-    if update_mode == 'skip' and os.path.exists(outname+'.vrt'):
+    if update_mode == 'skip' and os.path.exists(outname + '.vrt'):
         LOGGER.debug(f'Skipping {ifg_tag} - '
                      f'{os.path.dirname(outname).split('/')[-1]}')
 
-    elif update_mode == 'crop_only' and os.path.exists(outname+'.vrt'):
+    elif update_mode == 'crop_only' and os.path.exists(outname + '.vrt'):
         LOGGER.debug(f'Cropping {ifg_tag} - '
                      f'{os.path.dirname(outname).split('/')[-1]}')
 
         # Crop
         gdal_warp_kwargs['format'] = 'ENVI'
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        osgeo.gdal.Warp(outname+'_crop', outname+'.vrt', options=warp_options)
-        for crop_name in glob.glob(outname+'_crop*'):
+        osgeo.gdal.Warp(outname + '_crop', outname + '.vrt',
+                        options=warp_options)
+        for crop_name in glob.glob(outname + '_crop*'):
             fname = os.path.basename(crop_name).replace('_crop', '')
             fname = os.path.join(os.path.dirname(crop_name), fname)
             os.rename(crop_name, fname)
 
         # Update VRT
-        osgeo.gdal.Translate(outname+'.vrt', outname, format='VRT')
+        osgeo.gdal.Translate(outname + '.vrt', outname, format='VRT')
 
     else:
         LOGGER.debug(f'Extracting {ifg_tag} - '

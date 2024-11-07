@@ -307,7 +307,8 @@ def main():
 
     # Extract user expected layers
     LOGGER.info('Extracting products')
-    arrshape = ARIAtools.extractProduct.export_products(**export_dict, run_log=run_log)
+    arrshape = ARIAtools.extractProduct.export_products(**export_dict,
+                                                        run_log=run_log)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if args.gacos_products:
