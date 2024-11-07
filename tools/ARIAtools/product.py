@@ -1283,7 +1283,7 @@ class Product:
                 self.products += self.__readproduct__(file)
 
         # Remove products not in list of files
-        pairnames = list(set([os.path.basename(file).split('-')[6] for \
+        pairnames = list(set([os.path.basename(file).split('-')[6] for
                               file in self.files]))
         for product in self.products:
             if product[0]['pair_name'] not in pairnames:
