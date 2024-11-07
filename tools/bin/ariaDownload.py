@@ -114,7 +114,7 @@ def createParser():
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
     parser.add_argument(
-        '--log-level', default='warning', help='Logger log level')
+        '--log-level', default='info', help='Logger log level')
     return parser
 
 
@@ -346,7 +346,7 @@ class Downloader(object):
         if self.args.mission.upper() == 'S1':
             dct_kw = dict(
                 collections=["C2859376221-ASF", "C1261881077-ASF"],
-                dataset=asf_search.DATASET.ARIA_S1_GUNW,
+                dataset=asf_search.constants.ARIA_S1_GUNW,
                 processingLevel=asf_search.constants.GUNW_STD,
                 relativeOrbit=tracks, flightDirection=flight_direction,
                 intersectsWith=bbox, start=start, end=end)

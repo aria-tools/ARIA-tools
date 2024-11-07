@@ -6,6 +6,8 @@ dem_stitcher>=2.5.8
 gdal>=3.7.0
 h5py
 joblib
+libgdal-hdf5
+libgdal-netcdf
 matplotlib
 netcdf4
 numpy
