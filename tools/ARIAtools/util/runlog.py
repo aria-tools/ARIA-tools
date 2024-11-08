@@ -73,8 +73,7 @@ class RunLog:
         self.update('update_mode', 'full_extract')
 
     def load(self):
-        """
-        """
+        """ Load all data from PICKLE file. """
         with open(self.log_name, 'rb') as log_file:
             log_data = pickle.load(log_file)
 
@@ -82,6 +81,9 @@ class RunLog:
 
     def update(self, attr_name, attr_value):
         """
+        Write (serialize) the specified parameter to PICKLE file.
+        attr_name is the name of the attribute to be recorded (string)
+        attr_value is the attibute to be written (can be any type for PICKLE)
         """
         # Recall existing log data
         log_data = self.load()
@@ -122,6 +124,10 @@ class RunLog:
 
     def __update_runtimes__(self):
         """
+        Append a new run date and time list of previous runtimes, for both
+        the PICKLE file and the user-readable YAML file.
+        In most cases, this function will only be called once at the time
+        of object instantiation.
         """
         # Retrieve existing data
         log_data = self.load()
@@ -135,6 +141,8 @@ class RunLog:
 
     def __update_configs__(self, attr_name, attr_value):
         """
+        Update the YAML configuration file with the specified attribute and
+        value.
         """
         # Convert shapely polygon to WKT
         if type(attr_value) == shapely.Polygon:
@@ -150,15 +158,13 @@ class RunLog:
             yaml.dump(config_data, config_file)
 
     def __write_file_list__(self, files):
-        """
-        """
+        """ Write list of files read in to YAML. """
         # Write new data
         with open(self.file_list_name, 'w') as list_file:
             yaml.dump({'files': files}, list_file)
 
     def __write_extracted_files__(self, extracted_files):
-        """
-        """
+        """ Write list of extracted files to YAML. """
         extr_dict = {'extracted_files': extracted_files,
                      'nb_extracted': len(extracted_files)}
         with open(self.extracted_files_name, 'w') as extr_file:
