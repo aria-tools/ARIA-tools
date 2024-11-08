@@ -24,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
              proj, arrres=None, workdir='./',
              outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
-             multilooking=None, rankedResampling=False):
+             multilooking=None, rankedResampling=False, runlog=None):
     """
     Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.

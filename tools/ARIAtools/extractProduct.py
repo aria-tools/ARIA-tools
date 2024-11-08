@@ -316,7 +316,7 @@ class MetadataQualityCheck:
 def merged_productbbox(
         metadata_dict, product_dict, workdir='./', bbox_file=None,
         croptounion=False, num_threads='2', minimumOverlap=0.0081,
-        verbose=None):
+        verbose=None, runlog=None):
     """
     Extract/merge productBoundingBox layers for each pair.
     Also update dict, report common track bbox
@@ -526,6 +526,18 @@ def merged_productbbox(
         # Get projection of full res layers
         proj = ds.GetProjection()
         ds = None
+
+    # Update runlog if provided
+    if runlog:
+        logdata = runlog.load()
+        runlog.update('prods_TOTbbox', prods_TOTbbox)
+        runlog.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
+        runlog.update('arrres', arrres)
+        runlog.update('lyr_proj', lyr_proj)
+        runlog.update('metadata_dict', metadata_dict)
+        runlog.update('product_dict', product_dict)
+        runlog.update('bbox_file', bbox_file)
+        runlog.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
             prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
@@ -1087,7 +1099,8 @@ def export_products(
         is_nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
         outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
-        tropo_total=False, model_names=[], multiproc_method='single'):
+        tropo_total=False, model_names=[], multiproc_method='single',
+        runlog=None):
     """
     Export layer and 2D meta-data layers (at the product resolution).
     The function finalize_metadata is called to derive the 2D metadata layer.
@@ -1331,6 +1344,7 @@ def export_products(
         json.dump(full_product_dict, ofp)
 
     mp_args = []
+    extracted_files = []
     for ilayer, layer in enumerate(layers):
 
         product_dict = [[j[layer] for j in full_product_dict],
@@ -1345,6 +1359,10 @@ def export_products(
         # TODO can we wrap this into funtion and run it
         # with multiprocessing, to gain speed up
         for ii, product in enumerate(product_dict[0]):
+            ifg_tag = product_dict[1][ii][0]
+            outname = os.path.abspath(os.path.join(workdir, ifg_tag))
+            extracted_files.append(outname)
+
             mp_args.append((
                 ii, ilayer, product, proj, full_product_dict_file, layers,
                 workdir, bounds, prods_TOTbbox, demfile,
@@ -1425,6 +1443,10 @@ def export_products(
     end_time = time.time()
     LOGGER.debug(
         "export_product_worker took %f seconds" % (end_time - start_time))
+
+    # Update runlog if provided
+    if runlog:
+        runlog.update('extracted_files', extracted_files)
 
     # delete directory for quality control plots if empty
     plots_subdir = os.path.abspath(

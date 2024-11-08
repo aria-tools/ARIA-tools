@@ -27,7 +27,8 @@ LOGGER = logging.getLogger(__name__)
 def prep_mask(
         product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
         amp_thresh=None, arrres=None, workdir='./', outputFormat='ENVI',
-        num_threads='2', multilooking=None, rankedResampling=False):
+        num_threads='2', multilooking=None, rankedResampling=False,
+        runlog=None):
     """
     Function to load and export mask file with tile_mate
     """
