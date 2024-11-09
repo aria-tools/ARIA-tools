@@ -174,8 +174,7 @@ def main():
                 raise Exception(error_msg)
 
     # Establish log file and update with basic parameters
-    runlog = ARIAtools.util.runlog.RunLog(
-        args.workdir, log_level=args.log_level)
+    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
     runlog.update('aria_version', ARIAtools.__version__)
     runlog.update('aria_routine', 'ariaExtract.py')
     runlog.update('args', args)

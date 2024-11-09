@@ -1266,7 +1266,7 @@ class Product:
         for f in self.files:
             self.products += self.__readproduct__(f)
 
-        if self.runlog:
+        if self.runlog is not None:
             self.runlog.update('files', self.files)
             self.runlog.update('products', self.products)
 

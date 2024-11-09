@@ -16,7 +16,7 @@ import ARIAtools
 import ARIAtools.util.log
 import ARIAtools.util.shp
 
-LOGGER = logging.getLogger('runlog.py')
+LOGGER = logging.getLogger(__name__)
 
 
 class RunLog:
@@ -25,18 +25,13 @@ class RunLog:
     Parameters relevant to a user for future use will be recorded in a
     human-readable YAML file.
     """
-    def __init__(self, workdir, log_level='info'):
+    def __init__(self, workdir):  #, log_level='info'):
         """
         Initialize log directory and files.
         Record basic information such as date and time of run.
         Initialize core parameters.
         """
-        # Establish logger
-        log_level = {
-            'debug': logging.DEBUG, 'info': logging.INFO,
-            'warning': logging.WARNING, 'error': logging.ERROR}[log_level]
-        logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
-        LOGGER.info('RunLog')
+        LOGGER.info('Run log initiated')
 
         # Record parameters
         self.run_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')

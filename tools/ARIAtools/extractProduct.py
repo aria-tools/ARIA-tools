@@ -344,12 +344,48 @@ def merged_productbbox(
                             f'minimum threshold area '
                             f'{minimumOverlap}km\u00b2')
 
+    # Check if product bounding box exists from previous run
+    prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
+    prods_TOTbbox_metadatalyr = os.path.join(
+            workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
+    if os.path.exists(prods_TOTbbox) \
+            and os.path.exists(prods_TOTbbox_metadatalyr):
+        exist_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        exist_metadatalyr = ARIAtools.util.shp.open_shp(
+            prods_TOTbbox_metadatalyr)
+
+        # Save copy of file to disk
+        if runlog is not None:
+            logdata = runlog.load()
+            run_time = logdata['run_times'][-1]
+        else:
+            run_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+
+        copy_ext = f'{run_time}.json'
+        bbox_copyname = prods_TOTbbox.replace('.json', copy_ext)
+        shutil.copyfile(prods_TOTbbox, bbox_copyname)
+
+        metadatalyr_copyname = \
+            prods_TOTbbox_metadatalyr.replace('.json', copy_ext)
+        shutil.copyfile(prods_TOTbbox_metadatalyr, metadatalyr_copyname)
+
+        if verbose:
+            print(f'Copying existing productBoundingBox to {bbox_copyname}')
+            print(f'Copying existing metadatalyr to {metadatalyr_copyname}')
+
+    else:
+        exist_bbox = None
+
     # Extract/merge productBoundingBox layers
     for scene in product_dict:
 
         # Get pair name, expected in dictionary
         pair_name = scene["pair_name"][0]
         outname = os.path.join(workdir, pair_name + '.json')
+
+        # Remove existing pair.json to avoid rounding errors
+        if os.path.exists(outname):
+            os.remove(outname)
 
         # Create union of productBoundingBox layers
         for prods_bbox in scene["productBoundingBox"]:
@@ -364,8 +400,6 @@ def merged_productbbox(
 
     # Need to track bounds of max extent
     # to avoid metadata interpolation issues
-    prods_TOTbbox_metadatalyr = os.path.join(
-        workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     sceneareas = [
         ARIAtools.util.shp.open_shp(i['productBoundingBox'][0]).area
         for i in product_dict]
@@ -474,6 +508,48 @@ def merged_productbbox(
     else:
         bbox_file = prods_TOTbbox
 
+    # Compare current bbox to existing bbox
+    if exist_bbox is not None and runlog is not None:
+        exist_area = ARIAtools.util.shp.shp_area(exist_bbox, lyr_proj)
+
+        # Calculate overlap area
+        new_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
+        new_area = ARIAtools.util.shp.shp_area(new_bbox, lyr_proj)
+        area_ratio = new_area / exist_area
+
+        olap_bbox = exist_bbox.intersection(new_bbox)
+        olap_area = ARIAtools.util.shp.shp_area(olap_bbox, lyr_proj)
+
+        # Compare areas
+        delta_area = np.abs(olap_area - exist_area)
+        delta_area = np.round(delta_area*1E7) * 1E-7
+
+        olap_ratio = olap_area / exist_area
+        olap_ratio = np.round(olap_ratio*1E7) * 1E-7
+
+        LOGGER.info('''Comparison new productBoundingBox to old:
+Area difference (|prev - new|): %f km\u00b2
+Area ratio (new/prev): %f
+Overlap ratio (new/prev): %f''', delta_area, area_ratio, olap_ratio)
+
+        if (delta_area != 0.0) or (olap_ratio != 1.0):
+            LOGGER.debug(
+                'Product bbox changed in size from previous run %f vs %f',
+                new_area, exist_area)
+
+        if shapely.equals(new_bbox, exist_bbox):
+            # Same bbox within machine precision
+            update_mode = 'skip'
+        elif olap_ratio < 1.0:
+            # For smaller bbox, need to crop
+            update_mode = 'crop_only'
+        else:
+            # If no prior products exist, or new AOI is larger
+            update_mode = 'full_extract'
+
+        LOGGER.info('Update mode: %s', update_mode)
+        runlog.update('update_mode', update_mode)
+
     # Warp the first scene with the output-bounds defined above
     # ensure output-bounds are an integer multiple of interferometric grid
     # and adjust if necessary
@@ -527,8 +603,23 @@ def merged_productbbox(
         proj = ds.GetProjection()
         ds = None
 
+    # Additional checks for update mode
+    if runlog is not None:
+        logdata = runlog.load()
+        if ('arrres' in logdata.keys()) \
+                and (arrres != logdata['arrres']):
+            runlog.update('update_mode', 'full_extract')
+
+        if ('lyr_proj' in logdata.keys()) \
+                and (lyr_proj != logdata['lyr_proj']):
+            runlog.update('update_mode', 'full_extract')
+
+        if ('croptounion' in logdata.keys()) \
+                and (croptounion != logdata['croptounion']):
+            runlog.update('update_mode', 'full_extract')
+
     # Update runlog if provided
-    if runlog:
+    if runlog is not None:
         logdata = runlog.load()
         runlog.update('prods_TOTbbox', prods_TOTbbox)
         runlog.update('prods_TOTbbox_metadatalyr', prods_TOTbbox_metadatalyr)
@@ -1445,7 +1536,7 @@ def export_products(
         "export_product_worker took %f seconds" % (end_time - start_time))
 
     # Update runlog if provided
-    if runlog:
+    if runlog is not None:
         runlog.update('extracted_files', extracted_files)
 
     # delete directory for quality control plots if empty

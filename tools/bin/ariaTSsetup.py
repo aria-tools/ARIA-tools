@@ -430,8 +430,7 @@ def main():
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
 
     # Establish log file and update with basic parameters
-    runlog = ARIAtools.util.runlog.RunLog(
-        args.workdir, log_level=args.log_level)
+    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
     runlog.update('aria_version', ARIAtools.__version__)
     runlog.update('aria_routine', 'ariaTSsetup.py')
     runlog.update('args', args)
@@ -673,7 +672,7 @@ def main():
         else:
             msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
             LOGGER.warning(
-                'Selected %s not supported in tsSetup' % layer + msg)
+                'Selected %s not supported in tsSetup', layer + msg)
 
 
 if __name__ == '__main__':
