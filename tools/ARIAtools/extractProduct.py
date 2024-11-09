@@ -347,7 +347,7 @@ def merged_productbbox(
     # Check if product bounding box exists from previous run
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
     prods_TOTbbox_metadatalyr = os.path.join(
-            workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
+        workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     if os.path.exists(prods_TOTbbox) \
             and os.path.exists(prods_TOTbbox_metadatalyr):
         exist_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
@@ -522,10 +522,10 @@ def merged_productbbox(
 
         # Compare areas
         delta_area = np.abs(olap_area - exist_area)
-        delta_area = np.round(delta_area*1E7) * 1E-7
+        delta_area = np.round(delta_area * 1E7) * 1E-7
 
         olap_ratio = olap_area / exist_area
-        olap_ratio = np.round(olap_ratio*1E7) * 1E-7
+        olap_ratio = np.round(olap_ratio * 1E7) * 1E-7
 
         LOGGER.info('''Comparison new productBoundingBox to old:
 Area difference (|prev - new|): %f km\u00b2

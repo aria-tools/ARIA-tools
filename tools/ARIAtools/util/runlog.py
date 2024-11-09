@@ -25,7 +25,7 @@ class RunLog:
     Parameters relevant to a user for future use will be recorded in a
     human-readable YAML file.
     """
-    def __init__(self, workdir):  #, log_level='info'):
+    def __init__(self, workdir):
         """
         Initialize log directory and files.
         Record basic information such as date and time of run.
