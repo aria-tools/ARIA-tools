@@ -94,13 +94,14 @@ class RunLog:
         if attr_name == 'run_times':
             self.__update_configs__('run_times', attr_value)
 
-        elif attr_name in ['aria_version', 'aria_routine']:
+        elif attr_name in ['aria_version', 'aria_routine',
+                           'prods_TOTbbox', 'prods_TOTbbox_metadatalyr']:
             self.__update_configs__(attr_name, attr_value)
 
         elif attr_name == 'args':
             attrs = attr_value.__dict__
-            config_params = ['input_params', 'workdir', 'bbox', 'croptounion',
-                             'multilooking', 'minimumOveralp', 'nc_version',
+            config_params = ['workdir', 'bbox', 'croptounion',
+                             'multilooking', 'minimumOverlap', 'nc_version',
                              'projection']
             for param in config_params:
                 if param in attrs.keys():
