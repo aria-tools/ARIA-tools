@@ -670,7 +670,7 @@ def main():
                     **stack_dict)
 
         else:
-            msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
+            msg = f'Available layers are: {list(ARIA_STACK_OUTFILES.keys())}'
             LOGGER.warning(
                 'Selected layer %s not supported in tsSetup' + msg, layer)
 
