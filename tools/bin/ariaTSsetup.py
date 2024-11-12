@@ -672,7 +672,7 @@ def main():
         else:
             msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
             LOGGER.warning(
-                'Selected %s not supported in tsSetup', layer + msg)
+                'Selected layer %s not supported in tsSetup' + msg, layer)
 
 
 if __name__ == '__main__':
