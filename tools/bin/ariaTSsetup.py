@@ -34,6 +34,7 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
+import ARIAtools.util.runlog
 import ARIAtools.constants
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
@@ -395,6 +396,7 @@ def main():
     """Run time series prepation."""
     parser = create_parser()
     args = parser.parse_args()
+    args.workdir = os.path.abspath(args.workdir)
 
     log_level = {
         'debug': logging.DEBUG, 'info': logging.INFO,
@@ -427,6 +429,12 @@ def main():
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
 
+    # Establish log file and update with basic parameters
+    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
+    runlog.update('aria_version', ARIAtools.__version__)
+    runlog.update('aria_routine', 'ariaTSsetup.py')
+    runlog.update('args', args)
+
     # if user bbox was specified, file(s) not meeting imposed spatial
     # criteria are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
@@ -440,7 +448,7 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers)
+        layers=args.layers, runlog=runlog)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -475,7 +483,7 @@ def main():
     # Pass DEM-filename, loaded DEM array, and lat/lon arrays
     LOGGER.info('Download/cropping DEM')
     demfile, demfile_expanded, lat, lon = \
-        ARIAtools.util.dem.prep_dem(**dem_dict)
+        ARIAtools.util.dem.prep_dem(**dem_dict, runlog=runlog)
 
     # Load or download mask (if specified).
     if args.mask is not None:
@@ -509,7 +517,8 @@ def main():
             'rankedResampling': args.rankedResampling
         }
         LOGGER.info('Download/cropping mask')
-        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
+        maskfilename = ARIAtools.util.mask.prep_mask(
+            **mask_dict, runlog=runlog)
     else:
         maskfilename = None
 
@@ -538,7 +547,7 @@ def main():
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
         rankedResampling=args.rankedResampling, multiproc_method='threads',
-        **export_dict)
+        **export_dict, runlog=runlog)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = collections.defaultdict(list)
@@ -554,7 +563,7 @@ def main():
         'files valid over common interferometric grid' % layers)
     prod_arr_record = ARIAtools.extractProduct.export_products(
         [extract_dict], tropo_total=False, layers=layers,
-        multiproc_method='gnu_parallel', **export_dict)
+        multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -566,7 +575,7 @@ def main():
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=False,
             layers=['bPerpendicular'], multiproc_method='gnu_parallel',
-            **export_dict)
+            **export_dict, runlog=runlog)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -600,7 +609,7 @@ def main():
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=args.tropo_total,
             model_names=model_names, layers=layers,
-            multiproc_method='gnu_parallel', **export_dict)
+            multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -661,7 +670,7 @@ def main():
                     **stack_dict)
 
         else:
-            msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
+            msg = f'Available layers are: {list(ARIA_STACK_OUTFILES.keys())}'
             LOGGER.warning(
                 'Selected layer %s not supported in tsSetup' + msg, layer)
 

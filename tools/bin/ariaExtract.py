@@ -18,6 +18,7 @@ import ARIAtools.util.dem
 import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.product
+import ARIAtools.util.runlog
 
 LOGGER = logging.getLogger('ariaExtract.py')
 
@@ -172,6 +173,12 @@ def main():
                 LOGGER.error(error_msg)
                 raise Exception(error_msg)
 
+    # Establish log file and update with basic parameters
+    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
+    runlog.update('aria_version', ARIAtools.__version__)
+    runlog.update('aria_routine', 'ariaExtract.py')
+    runlog.update('args', args)
+
     # if user bbox was specified, file(s) not meeting imposed spatial criteria
     # are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
@@ -184,7 +191,7 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers)
+        layers=args.layers, runlog=runlog)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
@@ -212,7 +219,7 @@ def main():
         os.path.join(args.workdir, 'productBoundingBox'),
         standardproduct_info.bbox_file, args.croptounion,
         num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
-        verbose=args.verbose)
+        verbose=args.verbose, runlog=runlog)
 
     # Load or download mask (if specified).
     if args.mask is not None:
@@ -300,7 +307,8 @@ def main():
 
     # Extract user expected layers
     LOGGER.info('Extracting products')
-    arrshape = ARIAtools.extractProduct.export_products(**export_dict)
+    arrshape = ARIAtools.extractProduct.export_products(**export_dict,
+                                                        runlog=runlog)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if args.gacos_products:

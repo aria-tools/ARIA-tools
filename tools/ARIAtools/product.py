@@ -240,10 +240,12 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False, tropo_models=None, layers=None):
+                 verbose=False, tropo_models=None, layers=None, runlog=None):
         """
         Parse products and input bounding box (if specified)
         """
+        self.runlog = runlog
+
         # Parse through file(s)/bbox input
         self.files = []
         self.products = []
@@ -1263,6 +1265,10 @@ class Product:
         # Only populate list of dictionaries if the file intersects with bbox
         for f in self.files:
             self.products += self.__readproduct__(f)
+
+        if self.runlog is not None:
+            self.runlog.update('files', self.files)
+            self.runlog.update('products', self.products)
 
         # Sort by pair, start time, and latitude
         self.products = list(sorted(
