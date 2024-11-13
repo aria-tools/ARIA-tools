@@ -196,7 +196,6 @@ class RunLog:
             # Determine files from relevant layer
             extr_dict[layer] = [
                 fname for fname in extracted_files if layer in fname]
-            extr_dict[layer+'_nb_extracted'] = len(extr_dict[layer])
 
             # Remove accounted-for files from list
             extracted_files = [
