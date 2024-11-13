@@ -116,10 +116,10 @@ class RunLog:
                     self.__update_configs__(param, attrs[param])
 
         if attr_name == 'files':
-            self.__write_file_list__(attr_value)
+            self.__update_file_list__(attr_value)
 
         if attr_name == 'extracted_files':
-            self.__write_extracted_files__(attr_value)
+            self.__update_extracted_files__(attr_value)
 
         # Write new log data
         log_data[attr_name] = attr_value
@@ -167,24 +167,31 @@ class RunLog:
 # replicate the previous run.\n''')
             yaml.dump(config_data, config_file)
 
-    def __write_file_list__(self, files):
-        """ Write list of files read in to YAML. """
-        # Define parameters to write
-        file_dict = {'run_time': self.run_time,
-                     'files': files}
+    def __update_file_list__(self, files):
+        """
+        """
+        # Organize files by run time
+        file_dict = {f"run_time {self.run_time}": files}
 
-        # Write parameters
+        # Recall existing config data
+        with open(self.file_list_name, 'r') as list_file:
+            run_dict = yaml.safe_load(list_file)
+
+        if 'runs' in run_dict.keys():
+            run_dict['runs'].append(file_dict)
+        else:
+            run_dict['runs'] = [file_dict]
+
+        # Write to YAML file
         with open(self.file_list_name, 'w') as list_file:
             list_file.write('# Files passed to previous ARIA-tools run.\n')
-            yaml.dump(file_dict, list_file)
+            yaml.dump(run_dict, list_file)
 
-    def __write_extracted_files__(self, extracted_files):
+    def __update_extracted_files__(self, extracted_files):
         """ Write list of extracted files to YAML. """
-        # Define parameters to write
-        extr_dict = {'total_nb_extracted': len(extracted_files),
-                     'run_time': self.run_time}
-
         # Parse extracted files
+        extr_dict = {'total_nb_extracted': len(extracted_files)}
+
         for layer in ARIA_STACK_DEFAULTS:
             # Determine files from relevant layer
             extr_dict[layer] = [
@@ -196,7 +203,19 @@ class RunLog:
                 fname for fname in extracted_files if layer not in fname]
         extr_dict['other'] = extracted_files
 
+        # Organize files by run time
+        extr_lyr_dict = {f"run_time {self.run_time}": extr_dict}
+
+        # Recall existing config data
+        with open(self.extracted_files_name, 'r') as extr_file:
+            run_dict = yaml.safe_load(extr_file)
+
+        if 'runs' in run_dict.keys():
+            run_dict['runs'].append(extr_lyr_dict)
+        else:
+            run_dict['runs'] = [extr_lyr_dict]
+
         # Write parameters
         with open(self.extracted_files_name, 'w') as extr_file:
             extr_file.write('# Files extracted by previous ARIA-tools run.\n')
-            yaml.dump(extr_dict, extr_file)
+            yaml.dump(run_dict, extr_file)
