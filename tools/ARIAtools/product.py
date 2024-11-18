@@ -1262,9 +1262,34 @@ class Product:
         return sorted_products
 
     def __run__(self):
+        # Grab list of already read GUNWs for deduplication
+        prev_files = []
+        prev_products = []
+        if self.runlog:
+            log_data = self.runlog.load()
+            if 'files' in log_data and 'products' in log_data:
+                prev_files = log_data['files']
+                prev_products = log_data['products']
+
+        # Check which past files are included in the current list
+        for product in prev_products:
+            # Isolate product file name
+            _, datalyr_dict = product
+            prod_name = datalyr_dict['productBoundingBoxFrames'].split('"')[1]
+
+            # Ensure product still exists where originally found
+            if prod_name in self.files and os.path.exists(prod_name):
+                self.products += [product]
+            else:
+                LOGGER.warning(f"Product not found: {prod_name}")
+
         # Only populate list of dictionaries if the file intersects with bbox
-        for f in self.files:
-            self.products += self.__readproduct__(f)
+        # and is not included in list of already-processed products
+        for file in self.files:
+            if file not in prev_files:
+                self.products += self.__readproduct__(file)
+            else:
+                LOGGER.info(f"Product already read: {prod_name}")
 
         if self.runlog:
             self.runlog.update('files', self.files)
