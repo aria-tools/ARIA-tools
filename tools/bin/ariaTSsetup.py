@@ -35,7 +35,7 @@ import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
 import ARIAtools.constants
-from ARIAtools.util.run_logging import RunLog
+import ARIAtools.util.runlog
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
@@ -398,62 +398,80 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
 
 def main():
-    """Run time series prepation."""
-    parser = create_parser()
+    """Main workflow for extracting layers from ARIA products."""
+    # Parse command line args
+    parser = createParser()
     args = parser.parse_args()
-    args.workdir = os.path.abspath(args.workdir)
 
     log_level = {
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
-
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
+    LOGGER.info('Extract Product Function')
 
-    # pass number of threads for gdal multiprocessing computation
-    if args.num_threads.lower() == 'all':
-        args.num_threads = 'ALL_CPUS'
+    # Check whether all necessary inputs were specified.
+    # some products require a DEM to extract -- if any of those are requested,
+    # ensure that a valid DEM is specified
+    if args.layers is not None:
+        # format list of layers
+        layers = list(args.layers.split(','))
+        layers = [i.replace(' ', '') for i in layers]
+        layers = ['all' if layer.lower() == 'all'
+                  else layer for layer in layers]
+        layers = ['troposphere*' if layer.startswith('troposphere')
+                  else layer for layer in layers]
 
-    LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
-    LOGGER.info('Time-series Preparation Function')
-    LOGGER.info(
-        'Thread count specified for gdal multiprocessing = %s' % (
-            args.num_threads))
+        # list of layers requiring DEM for extraction
+        LAYERS_REQUIRING_DEM = {'all',
+                                'bPerpendicular',
+                                'bParallel',
+                                'incidenceAngle',
+                                'lookAngle',
+                                'azimuthAngle',
+                                'solidEarthTide',
+                                'troposphere*'}
 
-    # If bPerpendicular specified on command line extract bPerp layer,
-    # otherwise extract the average from GUNWs into json file.
-    extract_bperp_layer = False
-    with contextlib.suppress(TypeError):
-        extract_bperp_layer = 'bPerpendicular' in args.layers
-        if extract_bperp_layer:
-            # Remove bPerpendicular from args.layers
-            layers = [layer.strip() for layer in args.layers.split(',')]
-            layers.pop(layers.index('bPerpendicular'))
-            args.layers = ','.join(layers)
-
-    if args.layers.lower() == 'standard':
-        LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
-        args.layers = ','.join(ARIA_STANDARD_LAYERS)
+        # check that DEM is specified depending on layers requested
+        if len(LAYERS_REQUIRING_DEM.intersection(layers)) > 0:
+            if args.demfile is None:
+                error_msg = 'A valid DEM must be specified when extracting ' \
+                            'any of %s' % ', '.join(LAYERS_REQUIRING_DEM)
+                LOGGER.error(error_msg)
+                raise Exception(error_msg)
 
     # Establish log file and update with basic parameters
-    run_log = RunLog(workdir=args.workdir, verbose=False)
-    run_log.update('aria_version', ARIAtools.__version__)
-    run_log.update('aria_routine', 'ariaTSsetup.py')
-    run_log.update('args', args)
+    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
+    runlog.update('aria_version', ARIAtools.__version__)
+    runlog.update('aria_routine', 'ariaExtract.py')
+    runlog.update('args', args)
 
-    # if user bbox was specified, file(s) not meeting imposed spatial
-    # criteria are rejected.
+    # if user bbox was specified, file(s) not meeting imposed spatial criteria
+    # are rejected.
     # Outputs = arrays ['standardproduct_info.products'] containing grouped
     # “radarmetadata info” and “data layer keys+paths” dictionaries for each
     # standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file']
-    # (if bbox specified)
-    LOGGER.info('Building ARIA product instance')
+    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
+    # bbox specified)
     standardproduct_info = ARIAtools.product.Product(
         args.imgfile, bbox=args.bbox, projection=args.projection,
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, run_log=run_log)
+        layers=args.layers, runlog=runlog)
+
+    # Perform initial layer, product, and correction sanity checks
+    args.layers, args.tropo_total, \
+        model_names = ARIAtools.util.vrt.layerCheck(
+            standardproduct_info.products[1], args.layers, args.nc_version,
+            args.gacos_products, args.tropo_models, extract_or_ts='extract')
+
+    # pass number of threads for gdal multiprocessing computation
+    if args.num_threads.lower() == 'all':
+        args.num_threads = 'ALL_CPUS'
+
+    LOGGER.info(
+        'Thread count specified for gdal multiprocessing = %s' % (
+            args.num_threads))
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -461,38 +479,16 @@ def main():
     LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file) = \
-        ARIAtools.extractProduct.merged_productbbox(
-            standardproduct_info.products[0], standardproduct_info.products[1],
-            os.path.join(args.workdir, 'productBoundingBox'),
-            standardproduct_info.bbox_file, args.croptounion,
-            num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
-            verbose=args.verbose, run_log=run_log)
-
-    # Download/Load DEM & Lat/Lon arrays, providing bbox,
-    # expected DEM shape, and output dir as input.
-    dem_dict = {
-        'demfilename': args.demfile,
-        'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_TOTbbox,
-        'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
-        'proj': proj,
-        'arrres': arrres,
-        'workdir': args.workdir,
-        'outputFormat': args.outputFormat,
-        'num_threads': args.num_threads,
-        'multilooking': args.multilooking,
-        'rankedResampling': args.rankedResampling
-    }
-
-    # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-    LOGGER.info('Download/cropping DEM')
-    demfile, demfile_expanded, lat, lon = \
-        ARIAtools.util.dem.prep_dem(**dem_dict, run_log=run_log)
+     prods_TOTbbox_metadatalyr, arrres,
+     proj, is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
+        standardproduct_info.products[0], standardproduct_info.products[1],
+        os.path.join(args.workdir, 'productBoundingBox'),
+        standardproduct_info.bbox_file, args.croptounion,
+        num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
+        verbose=args.verbose, runlog=runlog)
 
     # Load or download mask (if specified).
     if args.mask is not None:
-
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
@@ -507,6 +503,7 @@ def main():
                     for item in list(set(d['amplitude'])):
                         amplitude_products.append(item)
 
+        # mask parms
         mask_dict = {
             'product_dict': amplitude_products,
             'maskfilename': args.mask,
@@ -526,15 +523,42 @@ def main():
     else:
         maskfilename = None
 
+    # Download/Load DEM & Lat/Lon arrays, providing bbox,
+    # expected DEM shape, and output dir as input.
+    if args.demfile is not None:
+        dem_dict = {
+            'demfilename': args.demfile,
+            'bbox_file': standardproduct_info.bbox_file,
+            'prods_TOTbbox': prods_TOTbbox,
+            'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
+            'proj': proj,
+            'arrres': arrres,
+            'workdir': args.workdir,
+            'outputFormat': args.outputFormat,
+            'num_threads': args.num_threads,
+            'multilooking': args.multilooking,
+            'rankedResampling': args.rankedResampling
+        }
+        # Pass DEM-filename, loaded DEM array, and lat/lon arrays
+        LOGGER.info('Download/cropping DEM')
+        demfile, demfile_expanded, lat, lon = \
+            ARIAtools.util.dem.prep_dem(**dem_dict)
+    else:
+        demfile, demfile_expanded, lat, lon = None, None, None, None
+
     # Extract
+    # aria_extract default parms
     export_dict = {
-        'proj': proj,
+        'full_product_dict': standardproduct_info.products[1],
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
-        'demfile': demfile,
-        'demfile_expanded': demfile_expanded,
+        'proj': proj,
+        'layers': args.layers,
         'is_nisar_file': is_nisar_file,
         'arrres': arrres,
+        'rankedResampling': args.rankedResampling,
+        'demfile': demfile,
+        'demfile_expanded': demfile_expanded,
         'lat': lat,
         'lon': lon,
         'maskfile': maskfilename,
@@ -542,140 +566,24 @@ def main():
         'outputFormat': args.outputFormat,
         'verbose': args.verbose,
         'num_threads': args.num_threads,
-        'multilooking': args.multilooking
+        'multilooking': args.multilooking,
+        'tropo_total': args.tropo_total,
+        'model_names': model_names
     }
 
-    # export unwrappedPhase
-    layers = ARIAtools.constants.ARIA_STANDARD_INTF_LAYERS
-    LOGGER.info('Extracting %s for each interferogram pair' % layers)
-    ref_arr_record = ARIAtools.extractProduct.export_products(
-        standardproduct_info.products[1], tropo_total=False, layers=layers,
-        rankedResampling=args.rankedResampling, multiproc_method='threads',
-        **export_dict, run_log=run_log)
-
-    # Remove pairing and pass combined dictionary of all layers
-    extract_dict = collections.defaultdict(list)
-    for d in standardproduct_info.products[1]:
-        for key in standardproduct_info.products[1][0].keys():
-            if key in d.keys():
-                for item in list(set(d[key])):
-                    extract_dict[key].append(item)
-
-    layers = ARIAtools.constants.ARIA_STANDARD_GEOM_LAYERS
-    LOGGER.info(
-        'Extracting single %s '
-        'files valid over common interferometric grid' % layers)
-    prod_arr_record = ARIAtools.extractProduct.export_products(
-        [extract_dict], tropo_total=False, layers=layers,
-        multiproc_method='gnu_parallel', **export_dict)
-
-    # Track consistency of dimensions
-    ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
-
-    if extract_bperp_layer:
-        LOGGER.info(
-            'Extracting perpendicular baseline grids for each interferogram '
-            'pair')
-        prod_arr_record = ARIAtools.extractProduct.export_products(
-            standardproduct_info.products[1], tropo_total=False,
-            layers=['bPerpendicular'], multiproc_method='gnu_parallel',
-            **export_dict)
-
-        # Track consistency of dimensions
-        ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
-    else:
-        # Extract bPerpendicular to json file
-        bperp_dict = ARIAtools.extractProduct.extract_bperp_dict(
-            standardproduct_info.products[1], num_threads=args.num_threads)
-
-        bperp_outdir = os.path.join(args.workdir, 'bPerpendicular')
-        with contextlib.suppress(FileExistsError):
-            os.mkdir(bperp_outdir)
-
-        with open(os.path.join(bperp_outdir, 'bperp.json'), 'w') as ofp:
-            json.dump(bperp_dict, ofp)
-
-    # Extracting other layers, if specified
-    (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
-        standardproduct_info.products[1], args.layers, args.nc_version,
-        args.gacos_products, args.tropo_models, extract_or_ts='tssetup')
-
-    if layers != [] or args.tropo_total is True:
-        if layers != []:
-            LOGGER.info(
-                'Extracting optional, user-specified layers %s for each '
-                'interferogram pair' % (layers))
-
-        if args.tropo_total is True:
-            LOGGER.info(
-                'Extracting, %s for each applicable interferogram pair' % (
-                    'troposphereTotal'))
-        prod_arr_record = ARIAtools.extractProduct.export_products(
-            standardproduct_info.products[1], tropo_total=args.tropo_total,
-            model_names=model_names, layers=layers,
-            multiproc_method='gnu_parallel', **export_dict)
-
-        # Track consistency of dimensions
-        ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
+    # Extract user expected layers
+    LOGGER.info('Extracting products')
+    arrshape = ARIAtools.extractProduct.export_products(**export_dict,
+                                                        runlog=runlog)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if args.gacos_products:
+        LOGGER.info('Applying gacos_correction')
         ARIAtools.extractProduct.gacos_correction(
             standardproduct_info.products, args.gacos_products,
-            standardproduct_info.bbox_file, prods_TOTbbox, outDir=args.workdir,
-            outputFormat=args.outputFormat, verbose=args.verbose,
-            num_threads=args.num_threads)
-
-    # Generate UNW stack
-    ref_dlist = generate_stack(
-        standardproduct_info, 'unwrappedPhase', 'unwrapStack',
-        workdir=args.workdir)
-
-    # prepare additional stacks for other layers
-    layers += ARIA_STACK_DEFAULTS
-    layers.remove('unwrappedPhase')
-
-    remove_lyrs = []
-    for i in layers:
-        lyr_dir = os.path.join(args.workdir, i)
-        if not os.path.exists(lyr_dir):
-            if i in layers:
-                remove_lyrs.append(i)
-
-    layers = [i for i in layers if i not in remove_lyrs]
-    if args.tropo_total is False:
-        if 'troposphereTotal' in layers:
-            layers.remove('troposphereTotal')
-
-    if args.gacos_products:
-        layers += ['gacos_corrections']
-
-    # generate other stack layers
-    # generate stack default parms
-    stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist}
-    for layer in layers:
-        if layer in ARIA_STACK_OUTFILES.keys():
-
-            # iterate through model dirs if necessary
-            if 'tropo' in layer:
-                model_dirs = glob.glob(
-                    args.workdir + f'/{layer}/*', recursive=True)
-                model_dirs = [os.path.basename(i) for i in model_dirs]
-
-                for sublyr in model_dirs:
-                    generate_stack(
-                        standardproduct_info, sublyr,
-                        ARIA_STACK_OUTFILES[sublyr], ref_tropokey=layer,
-                        **stack_dict)
-
-            else:
-                generate_stack(
-                    standardproduct_info, layer, ARIA_STACK_OUTFILES[layer],
-                    **stack_dict)
-
-        else:
-            msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
-            LOGGER.warning('Selected %s not supported in tsSetup' % layer + msg)
+            standardproduct_info.bbox_file, prods_TOTbbox,
+            outDir=args.workdir, outputFormat=args.outputFormat,
+            verbose=args.verbose, num_threads=args.num_threads)
 
 
 if __name__ == '__main__':
