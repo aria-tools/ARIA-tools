@@ -339,10 +339,10 @@ def merged_productbbox(
         user_bbox = ARIAtools.util.shp.open_shp(bbox_file)
         overlap_area = ARIAtools.util.shp.shp_area(user_bbox, lyr_proj)
         if overlap_area < minimumOverlap:
-            raise Exception(f'User bound box {bbox_file} has an area of only '
-                            f'{overlap_area}km\u00b2, below specified '
-                            f'minimum threshold area '
-                            f'{minimumOverlap}km\u00b2')
+            raise Exception(f"User bound box {bbox_file} has an area of only "
+                            f"{overlap_area}km\u00b2, below specified "
+                            f"minimum threshold area "
+                            f"{minimumOverlap}km\u00b2")
 
     # Check if product bounding box exists from previous run
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
@@ -359,7 +359,7 @@ def merged_productbbox(
         else:
             run_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
-        copy_ext = f'{run_time}.json'
+        copy_ext = f"{run_time}.json"
         bbox_copyname = prods_TOTbbox.replace('.json', copy_ext)
         shutil.copyfile(prods_TOTbbox, bbox_copyname)
 
@@ -520,14 +520,14 @@ def merged_productbbox(
         olap_ratio = olap_area / exist_area
         olap_ratio = np.round(olap_ratio*1E7) * 1E-7
 
-        if verbose:
-            print(f'Area difference (|prev - new|): {delta_area:.7f} km\u00b2')
-            print(f'Area ratio (new/prev): {area_ratio:.7f}')
-            print(f'Overlap ratio (new/prev): {olap_ratio:.7f}')
+        LOGGER.debug(f"Area difference (|prev - new|): {delta_area:.7f} "
+                     f"km\u00b2")
+        LOGGER.debug(f"Area ratio (new/prev): {area_ratio:.7f}")
+        LOGGER.debug(f"Overlap ratio (new/prev): {olap_ratio:.7f}")
 
         if (delta_area != 0.0) or (olap_ratio != 1.0):
-            LOGGER.debug(f'Product bbox changed in size from previous run '
-                         f'{new_area} vs {exist_area}')
+            LOGGER.warning(f"Product bbox changed in size from previous run "
+                           f"{new_area} vs {exist_area}")
 
         if shapely.equals(new_bbox, exist_bbox):
             # Same bbox within machine precision
