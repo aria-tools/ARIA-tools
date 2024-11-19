@@ -379,6 +379,8 @@ def merged_productbbox(
         # Get pair name, expected in dictionary
         pair_name = scene["pair_name"][0]
         outname = os.path.join(workdir, pair_name + '.json')
+        if os.path.exists(outname):
+            os.remove(outname)
 
         # Create union of productBoundingBox layers
         for prods_bbox in scene["productBoundingBox"]:
@@ -540,8 +542,7 @@ def merged_productbbox(
             update_mode = 'full_extract'
         runlog.update('update_mode', update_mode)
 
-        if verbose:
-            print(f'Update mode: {update_mode:s}')
+        LOGGER.info(f"Update mode: {update_mode:s}")
 
     # Warp the first scene with the output-bounds defined above
     # ensure output-bounds are an integer multiple of interferometric grid
