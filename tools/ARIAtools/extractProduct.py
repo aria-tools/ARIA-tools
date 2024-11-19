@@ -598,7 +598,7 @@ def merged_productbbox(
 
     # Run additional checks and update runlog if provided
     if runlog:
-        logdata = runlog.load()
+        log_data = runlog.load()
 
         # Check other parameters
         if ('arrres' in log_data.keys()) \
