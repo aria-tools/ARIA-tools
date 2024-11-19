@@ -245,6 +245,8 @@ class Product:
         """
         Parse products and input bounding box (if specified)
         """
+        self.runlog = runlog
+
         # Parse through file(s)/bbox input
         self.files = []
 
@@ -1292,6 +1294,10 @@ class Product:
         if self.run_log:
             self.run_log.update('files', self.files)
             self.run_log.update('products', self.products)
+
+        if self.runlog is not None:
+            self.runlog.update('files', self.files)
+            self.runlog.update('products', self.products)
 
         # Sort by pair, start time, and latitude
         self.products = list(sorted(

@@ -34,6 +34,7 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
+import ARIAtools.util.runlog
 import ARIAtools.constants
 from ARIAtools.util.run_logging import RunLog
 
@@ -517,7 +518,8 @@ def main():
             'rankedResampling': args.rankedResampling
         }
         LOGGER.info('Download/cropping mask')
-        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
+        maskfilename = ARIAtools.util.mask.prep_mask(
+            **mask_dict, runlog=runlog)
     else:
         maskfilename = None
 
@@ -562,7 +564,7 @@ def main():
         'files valid over common interferometric grid' % layers)
     prod_arr_record = ARIAtools.extractProduct.export_products(
         [extract_dict], tropo_total=False, layers=layers,
-        multiproc_method='gnu_parallel', **export_dict)
+        multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -574,7 +576,7 @@ def main():
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=False,
             layers=['bPerpendicular'], multiproc_method='gnu_parallel',
-            **export_dict)
+            **export_dict, runlog=runlog)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -608,7 +610,7 @@ def main():
         prod_arr_record = ARIAtools.extractProduct.export_products(
             standardproduct_info.products[1], tropo_total=args.tropo_total,
             model_names=model_names, layers=layers,
-            multiproc_method='gnu_parallel', **export_dict)
+            multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
@@ -669,8 +671,9 @@ def main():
                     **stack_dict)
 
         else:
-            msg = f'Available layers are: {ARIA_STACK_OUTFILES.keys()}'
-            raise Exception(f'Selected {layer} not supported in tsSetup' + msg)
+            msg = f'Available layers are: {list(ARIA_STACK_OUTFILES.keys())}'
+            LOGGER.warning(
+                'Selected layer %s not supported in tsSetup' + msg, layer)
 
 
 if __name__ == '__main__':

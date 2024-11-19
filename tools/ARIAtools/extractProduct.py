@@ -1485,6 +1485,9 @@ def export_products(
             ifg_tag = product_dict[1][ii][0]
             outname = os.path.abspath(os.path.join(workdir, ifg_tag))
             extracted_files.append(outname)
+            if layer == 'unwrappedPhase':
+                extracted_files.append(outname.replace(
+                    'unwrappedPhase', 'connectedComponents'))
 
             mp_args.append((
                 ii, ilayer, product, proj, full_product_dict_file, layers,
