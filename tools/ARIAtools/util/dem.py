@@ -57,7 +57,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
         LOGGER.info("Downloading DEM...")
         demfilename = download_dem(
-            aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name)
+            aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name, runlog)
 
     else:  # checks for user specified DEM, ensure it's georeferenced
         demfilename = os.path.abspath(demfilename)
@@ -110,10 +110,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
             demfile_expanded, aria_dem,
             options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
 
-    # Delete temporary dem-stitcher directory
-    if os.path.exists(f'{dem_name}_tiles'):
-        shutil.rmtree(f'{dem_name}_tiles')
-
     # Define lat/lon arrays for fullres layers
     gt = ds_aria_expanded.GetGeoTransform()
     xs, ys = ds_aria_expanded.RasterXSize, ds_aria_expanded.RasterYSize
@@ -129,19 +125,48 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
 
 def download_dem(
-        path_dem, path_prod_union, num_threads, dem_name: str = 'glo_90'):
+        path_dem, path_prod_union, num_threads, dem_name='glo_90',
+        runlog=None):
     """Download the DEM over product bbox union."""
     LOGGER.debug('download_dem')
     root = os.path.splitext(path_dem)[0]
-    prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
-    extent = prod_shapefile.bounds
+    vrt_path = f"{root}_uncropped.vrt"
 
-    localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
-    dem_tile_paths = dem_stitcher.get_dem_tile_paths(
-        bounds=extent, dem_name=dem_name,
-        localize_tiles_to_gtiff=localize_tiles_to_gtiff,
-        tile_dir=f'{dem_name}_tiles')
+    # Check that VRT tiles exist
+    tiles_exist = False
+    if os.path.exists(vrt_path):
+        ds = osgeo.gdal.Open(vrt_path, osgeo.gdal.GA_ReadOnly)
+        tile_names = ds.GetFileList()
+        tile_checks = [os.path.exists(tile_name) for tile_name in tile_names]
+        if not False in tile_checks:
+            tiles_exist = True
 
-    vrt_path = f'{root}_uncropped.vrt'
-    ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
+    # Retrieve update mode
+    update_mode = 'full_extract'
+    if runlog is not None:
+        log_data = runlog.load()
+        if 'update_mode' in log_data.keys():
+            update_mode = log_data['update_mode']
+
+    # Check if DEM has already been downloaded and overlaps necessary area
+    if tiles_exist and update_mode is not 'full_extract':
+        LOGGER.warning(f"{vrt_path} has already been downloaded. "
+                       f"Skipping download.")
+
+    else:
+        dirname = os.path.dirname(path_dem)
+        tile_dir = os.path.join(dirname, f"{dem_name}_tiles")
+
+        # Download DEM
+        prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
+        extent = prod_shapefile.bounds
+
+        localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
+        dem_tile_paths = dem_stitcher.get_dem_tile_paths(
+            bounds=extent, dem_name=dem_name,
+            localize_tiles_to_gtiff=localize_tiles_to_gtiff,
+            tile_dir=f'{dem_name}_tiles')
+
+        ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
+
     return vrt_path
