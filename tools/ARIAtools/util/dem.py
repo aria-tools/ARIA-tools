@@ -165,7 +165,7 @@ def download_dem(
         dem_tile_paths = dem_stitcher.get_dem_tile_paths(
             bounds=extent, dem_name=dem_name,
             localize_tiles_to_gtiff=localize_tiles_to_gtiff,
-            tile_dir=f'{dem_name}_tiles')
+            tile_dir=tile_dir)
 
         ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
 
