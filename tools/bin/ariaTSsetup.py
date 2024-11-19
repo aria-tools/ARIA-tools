@@ -467,7 +467,7 @@ def main():
             os.path.join(args.workdir, 'productBoundingBox'),
             standardproduct_info.bbox_file, args.croptounion,
             num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
-            verbose=args.verbose)
+            verbose=args.verbose, runlog=runlog)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
