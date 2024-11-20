@@ -1499,7 +1499,7 @@ def export_products(
                 outputs.append(export_product_worker_helper(arg))
                 sys.stdout.flush()
         else:
-            LOGGER.debug('Running %d total jobs with threads' % len(mp_args))
+            LOGGER.debug('Running %d total jobs with threads', len(mp_args))
 
             # Create a progress bar
             with tqdm.tqdm(total=len(mp_args), desc='Exporting') as pbar:

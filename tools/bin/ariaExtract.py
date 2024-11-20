@@ -174,8 +174,7 @@ def main():
                 raise Exception(error_msg)
 
     # Establish log file and update with basic parameters
-    runlog = ARIAtools.util.runlog.RunLog(
-        args.workdir, log_level=args.log_level)
+    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
     runlog.update('aria_version', ARIAtools.__version__)
     runlog.update('aria_routine', 'ariaExtract.py')
     runlog.update('args', args)
@@ -251,7 +250,8 @@ def main():
             'outputFormat': args.outputFormat,
             'num_threads': args.num_threads,
             'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
+            'rankedResampling': args.rankedResampling,
+            'runlog': runlog
         }
         LOGGER.info('Download/cropping mask')
         maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
@@ -272,7 +272,8 @@ def main():
             'outputFormat': args.outputFormat,
             'num_threads': args.num_threads,
             'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
+            'rankedResampling': args.rankedResampling,
+            'runlog': runlog
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')

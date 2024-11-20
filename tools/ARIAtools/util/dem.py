@@ -92,8 +92,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
         ds_aria = osgeo.gdal.Translate(
             f'{aria_dem}.vrt', aria_dem, format='VRT')
         LOGGER.info(
-            'Applied cutline to produce 3 arc-sec SRTM DEM: %s',
-            aria_dem)
+            'Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
@@ -150,8 +149,8 @@ def download_dem(
 
     # Check if DEM has already been downloaded and overlaps necessary area
     if tiles_exist and update_mode is not 'full_extract':
-        LOGGER.warning(f"{vrt_path} has already been downloaded. "
-                       f"Skipping download.")
+        LOGGER.warning(
+            '%s has already been downloaded. Skipping download.', vrt_path)
 
     else:
         dirname = os.path.dirname(path_dem)

@@ -1281,7 +1281,7 @@ class Product:
             if prod_name in self.files and os.path.exists(prod_name):
                 self.products += [product]
             else:
-                LOGGER.warning(f"Product not found: {prod_name}")
+                LOGGER.warning('Product not found: %s', prod_name)
 
         # Only populate list of dictionaries if the file intersects with bbox
         # and is not included in list of already-processed products
@@ -1289,7 +1289,7 @@ class Product:
             if file not in prev_files:
                 self.products += self.__readproduct__(file)
             else:
-                LOGGER.info(f"Product already read: {prod_name}")
+                LOGGER.info('Product already read: %s', prod_name)
 
         if self.runlog:
             self.runlog.update('files', self.files)

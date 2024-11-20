@@ -482,13 +482,14 @@ def main():
         'outputFormat': args.outputFormat,
         'num_threads': args.num_threads,
         'multilooking': args.multilooking,
-        'rankedResampling': args.rankedResampling
+        'rankedResampling': args.rankedResampling,
+        'runlog': runlog
     }
 
     # Pass DEM-filename, loaded DEM array, and lat/lon arrays
     LOGGER.info('Download/cropping DEM')
     demfile, demfile_expanded, lat, lon = \
-        ARIAtools.util.dem.prep_dem(**dem_dict, runlog=runlog)
+        ARIAtools.util.dem.prep_dem(**dem_dict)
 
     # Load or download mask (if specified).
     if args.mask is not None:
@@ -519,11 +520,11 @@ def main():
             'outputFormat': args.outputFormat,
             'num_threads': args.num_threads,
             'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
+            'rankedResampling': args.rankedResampling,
+            'runlog': runlog
         }
         LOGGER.info('Download/cropping mask')
-        maskfilename = ARIAtools.util.mask.prep_mask(
-            **mask_dict, runlog=runlog)
+        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
     else:
         maskfilename = None
 
