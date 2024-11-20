@@ -522,14 +522,14 @@ def merged_productbbox(
         olap_ratio = olap_area / exist_area
         olap_ratio = np.round(olap_ratio*1E7) * 1E-7
 
-        LOGGER.debug(f"Area difference (|prev - new|): {delta_area:.7f} "
-                     f"km\u00b2")
-        LOGGER.debug(f"Area ratio (new/prev): {area_ratio:.7f}")
-        LOGGER.debug(f"Overlap ratio (new/prev): {olap_ratio:.7f}")
+        LOGGER.debug(
+            'Area difference (|prev - new|): %f km\u00b2', delta_area)
+        LOGGER.debug('Area ratio (new/prev): %f', area_ratio)
+        LOGGER.debug('Overlap ratio (new/prev): %f', olap_ratio)
 
         if (delta_area != 0.0) or (olap_ratio != 1.0):
-            LOGGER.warning(f"Product bbox changed in size from previous run "
-                           f"{new_area} vs {exist_area}")
+            LOGGER.warning('Product bbox changed in size from previous '
+                           'run %f vs %f', new_area, exist_area)
 
         if shapely.equals(new_bbox, exist_bbox):
             # Same bbox within machine precision
@@ -542,7 +542,7 @@ def merged_productbbox(
             update_mode = 'full_extract'
         runlog.update('update_mode', update_mode)
 
-        LOGGER.info(f"Update mode: {update_mode:s}")
+        LOGGER.info('Update mode: %s', update_mode)
 
     # Warp the first scene with the output-bounds defined above
     # ensure output-bounds are an integer multiple of interferometric grid
