@@ -304,13 +304,13 @@ def main():
         'num_threads': args.num_threads,
         'multilooking': args.multilooking,
         'tropo_total': args.tropo_total,
-        'model_names': model_names
+        'model_names': model_names,
+        'runlog': runlog
     }
 
     # Extract user expected layers
     LOGGER.info('Extracting products')
-    arrshape = ARIAtools.extractProduct.export_products(**export_dict,
-                                                        runlog=runlog)
+    arrshape = ARIAtools.extractProduct.export_products(**export_dict)
 
     # Perform GACOS-based tropospheric corrections (if specified).
     if args.gacos_products:

@@ -366,9 +366,10 @@ def merged_productbbox(
         metadatalyr_copyname = prods_TOTbbox_metadatalyr.replace('.json', copy_ext)
         shutil.copyfile(prods_TOTbbox_metadatalyr, metadatalyr_copyname)
 
-        if verbose:
-            print(f'Copying existing productBoundingBox to {bbox_copyname}')
-            print(f'Copying existing metadatalyr to {metadatalyr_copyname}')
+        LOGGER.debug(
+            'Copying existing productBoundingBox to %s', bbox_copyname)
+        LOGGER.debug(
+            'Copying existing metadatalyr to %s', metadatalyr_copyname)
 
     else:
         exist_bbox = None
@@ -559,6 +560,10 @@ def merged_productbbox(
                   abs(ds.GetGeoTransform()[-1])]
         ds = None
 
+    # Adjust arrres to multiple of 3 arcsec
+    base = 0.000833334
+    arrres = [base * round(pxres / base) for pxres in arrres]
+
     # warp again with fixed transform and bounds
     gdal_warp_kwargs['outputBounds'] = OG_bounds
     gdal_warp_kwargs['xRes'] = arrres[0]
@@ -604,11 +609,16 @@ def merged_productbbox(
         # Check other parameters
         if ('arrres' in log_data.keys()) \
                 and (arrres != log_data['arrres']):
+            print('from', log_data['arrres'], 'to', arrres)
             runlog.update('update_mode', 'full_extract')
+            LOGGER.warning('arrres has changed. '
+                           'Setting update mode to full_extract.')
 
         if ('lyr_proj' in log_data.keys()) \
                 and (lyr_proj != log_data['lyr_proj']):
             runlog.update('update_mode', 'full_extract')
+            LOGGER.warning('lyr_proj has changed. '
+                           'Setting update mode to full_extract.')
 
         # Update log
         runlog.update('prods_TOTbbox', prods_TOTbbox)
@@ -1067,6 +1077,7 @@ def export_product_worker(
 
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
+    print('UPDATE_MODE', update_mode)
 
     if update_mode == 'skip' \
             and os.path.exists(outname) \
