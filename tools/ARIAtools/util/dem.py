@@ -137,7 +137,7 @@ def download_dem(
         ds = osgeo.gdal.Open(vrt_path, osgeo.gdal.GA_ReadOnly)
         tile_names = ds.GetFileList()
         tile_checks = [os.path.exists(tile_name) for tile_name in tile_names]
-        if not False in tile_checks:
+        if False not in tile_checks:
             tiles_exist = True
 
     # Retrieve update mode

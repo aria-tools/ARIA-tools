@@ -251,7 +251,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # get dates
-    aria_dates = sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
+    aria_dates = \
+        sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
         domain_name in ARIA_TROPO_MODELS):
         aria_indiv_dates = []
@@ -261,7 +262,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         aria_dates = sorted(list(set(aria_indiv_dates)))
 
     # Find files
-    int_list = [os.path.join(workdir, stack_layer, aria_date+'.vrt') for aria_date in aria_dates]
+    int_list = [os.path.join(workdir, stack_layer, aria_date + '.vrt') \
+        for aria_date in aria_dates]
     dlist = sorted(int_list)
     LOGGER.info(
         'Number of %s files discovered: %d' % (stack_layer, len(int_list)))

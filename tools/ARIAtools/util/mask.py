@@ -119,9 +119,9 @@ def prep_mask(
                                transform=affine.Affine(*reference_gt)) as dst:
                 rasterio.warp.reproject(
                     source=dat_arr, destination=rasterio.band(dst, 1),
-                    src_transform=dat_prof['transform'], src_crs=dat_prof['crs'],
-                    dst_transform=reference_gt, dst_crs=crs,
-                    resampling=resampling_mode)
+                    src_transform=dat_prof['transform'],
+                    src_crs=dat_prof['crs'], dst_transform=reference_gt,
+                    dst_crs=crs, resampling=resampling_mode)
 
         # save cropped mask with precise spacing
         with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):

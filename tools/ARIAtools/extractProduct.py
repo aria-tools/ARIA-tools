@@ -348,9 +348,11 @@ def merged_productbbox(
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
     prods_TOTbbox_metadatalyr = os.path.join(
             workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
-    if os.path.exists(prods_TOTbbox) and os.path.exists(prods_TOTbbox_metadatalyr):
+    if os.path.exists(prods_TOTbbox) \
+        and os.path.exists(prods_TOTbbox_metadatalyr):
         exist_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
-        exist_metadatalyr = ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr)
+        exist_metadatalyr = \
+            ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr)
 
         # Save copy of file to disk
         if runlog:
@@ -363,7 +365,8 @@ def merged_productbbox(
         bbox_copyname = prods_TOTbbox.replace('.json', copy_ext)
         shutil.copyfile(prods_TOTbbox, bbox_copyname)
 
-        metadatalyr_copyname = prods_TOTbbox_metadatalyr.replace('.json', copy_ext)
+        metadatalyr_copyname = \
+            prods_TOTbbox_metadatalyr.replace('.json', copy_ext)
         shutil.copyfile(prods_TOTbbox_metadatalyr, metadatalyr_copyname)
 
         LOGGER.debug(
@@ -518,10 +521,10 @@ def merged_productbbox(
 
         # Compare areas
         delta_area = np.abs(olap_area - exist_area)
-        delta_area = np.round(delta_area*1E7) * 1E-7
+        delta_area = np.round(delta_area * 1E7) * 1E-7
 
         olap_ratio = olap_area / exist_area
-        olap_ratio = np.round(olap_ratio*1E7) * 1E-7
+        olap_ratio = np.round(olap_ratio * 1E7) * 1E-7
 
         LOGGER.debug(
             'Area difference (|prev - new|): %f km\u00b2', delta_area)
@@ -603,7 +606,7 @@ def merged_productbbox(
         ds = None
 
     # Run additional checks and update runlog if provided
-    if runlog:
+    if runlog is not None:
         log_data = runlog.load()
 
         # Check other parameters
@@ -1080,27 +1083,28 @@ def export_product_worker(
 
     if update_mode == 'skip' \
             and os.path.exists(outname) \
-            and os.path.exists(outname+'.vrt'):
+            and os.path.exists(outname + '.vrt'):
         LOGGER.debug(f'Skipping {ifg_tag} - '
                      f'{os.path.dirname(outname).split('/')[-1]}')
 
     elif update_mode == 'crop_only' \
             and os.path.exists(outname) \
-            and os.path.exists(outname+'.vrt'):
+            and os.path.exists(outname + '.vrt'):
         LOGGER.debug(f'Cropping {ifg_tag} - '
                      f'{os.path.dirname(outname).split('/')[-1]}')
 
         # Crop
         gdal_warp_kwargs['format'] = 'ENVI'
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        osgeo.gdal.Warp(outname+'_crop', outname+'.vrt', options=warp_options)
-        for crop_name in glob.glob(outname+'_crop*'):
+        osgeo.gdal.Warp(
+            outname+'_crop', outname + '.vrt', options=warp_options)
+        for crop_name in glob.glob(outname + '_crop*'):
             fname = os.path.basename(crop_name).replace('_crop', '')
             fname = os.path.join(os.path.dirname(crop_name), fname)
             os.rename(crop_name, fname)
 
         # Update VRT
-        osgeo.gdal.Translate(outname+'.vrt', outname, format='VRT')
+        osgeo.gdal.Translate(outname + '.vrt', outname, format='VRT')
 
     else:
         LOGGER.debug(f'Extracting {ifg_tag} - '
@@ -1108,7 +1112,8 @@ def export_product_worker(
 
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
-            any(':/science/LSAR/GUNW/metadata/radarGrid/' in s for s in product)):
+            any(':/science/LSAR/GUNW/metadata/radarGrid/' in s \
+                for s in product)):
             # make VRT pointing to metadata layers in standard product
             hgt_field, outname = prep_metadatalayers(
                 outname, product, dem_expanded, layer, layers,
@@ -1116,9 +1121,9 @@ def export_product_worker(
 
             # Interpolate/intersect with DEM before cropping
             finalize_metadata(
-                outname, bounds, arrres, dem_bounds, prods_TOTbbox, dem_expanded,
-                lat, lon, hgt_field, product, is_nisar_file, outputFormatPhys,
-                verbose=verbose)
+                outname, bounds, arrres, dem_bounds, prods_TOTbbox,
+                dem_expanded, lat, lon, hgt_field, product, is_nisar_file,
+                outputFormatPhys, verbose=verbose)
 
         # Extract/crop full res layers, except for "unw" and "conn_comp"
         # which requires advanced stitching
@@ -1127,7 +1132,8 @@ def export_product_worker(
                 warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
                 if outputFormat == 'VRT':
                     # building the virtual vrt
-                    osgeo.gdal.BuildVRT(outname + "_uncropped" + '.vrt', product)
+                    osgeo.gdal.BuildVRT(
+                        outname + "_uncropped" + '.vrt', product)
 
                     # building the cropped vrt
                     osgeo.gdal.Warp(
