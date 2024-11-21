@@ -561,8 +561,8 @@ def merged_productbbox(
         ds = None
 
     # Adjust arrres to multiple of 3 arcsec
-    base = 0.000833334
-    arrres = [base * round(pxres / base) for pxres in arrres]
+    base_res = 0.000833334
+    arrres = [base_res * round(px_res / base_res) for px_res in arrres]
 
     # warp again with fixed transform and bounds
     gdal_warp_kwargs['outputBounds'] = OG_bounds
@@ -1077,7 +1077,6 @@ def export_product_worker(
 
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
-    print('UPDATE_MODE', update_mode)
 
     if update_mode == 'skip' \
             and os.path.exists(outname) \
@@ -1463,12 +1462,39 @@ def export_products(
     with open(full_product_dict_file, 'w') as ofp:
         json.dump(full_product_dict, ofp)
 
-    # Recall update mode
-    update_mode = 'full_extract'
-    if runlog:
+    # Recall update mode and conduct final checks for extraction
+    if runlog is None:
+        update_mode = 'full_extract'
+    else:
         log_data = runlog.load()
+        update_mode = log_data['update_mode']
         if 'update_mode' in log_data.keys():
             update_mode = log_data['update_mode']
+
+        # Check water mask
+        prev_maskfile = log_data['maskfilename'] if 'maskfilename' \
+            in log_data.keys() else None
+
+        if maskfile != prev_maskfile:
+            update_mode = 'full_extract'
+            LOGGER.warning(
+                'Mask file has changed. Setting update mode to full_extract.')
+
+        runlog.update('maskfilename', maskfile)
+
+        # Check DEM
+        prev_demfile = log_data['demfile'] if 'demfile' \
+            in log_data.keys() else None
+
+        if demfile != prev_demfile:
+            update_mode = 'full_extract'
+            LOGGER.warning(
+                'DEM file has changed. Setting update mode to full_extract.')
+
+        runlog.update('demfile', demfile)
+
+        # Update final mode
+        runlog.update('update_mode', update_mode)
 
     mp_args = []
     extracted_files = []
