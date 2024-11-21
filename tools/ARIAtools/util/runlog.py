@@ -159,7 +159,8 @@ class RunLog:
         # Write new data
         config_data[attr_name] = attr_value
         with open(self.config_name, 'w') as config_file:
-            config_file.write('''# Configuration parameters for prior invocation of ARIA-tools.
+            config_file.write(
+'''# Configuration parameters for prior invocation of ARIA-tools.
 # These parameters describe the function invoked and arguments passed in a
 # previous run, presented in human-readable format.
 # Passing these arguments to the specified function can be used to

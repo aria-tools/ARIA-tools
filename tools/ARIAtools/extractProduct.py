@@ -347,7 +347,7 @@ def merged_productbbox(
     # Check if product bounding box exists from previous run
     prods_TOTbbox = os.path.join(workdir, 'productBoundingBox.json')
     prods_TOTbbox_metadatalyr = os.path.join(
-            workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
+        workdir, 'productBoundingBox_croptounion_formetadatalyr.json')
     if os.path.exists(prods_TOTbbox) \
         and os.path.exists(prods_TOTbbox_metadatalyr):
         exist_bbox = ARIAtools.util.shp.open_shp(prods_TOTbbox)
@@ -1097,7 +1097,7 @@ def export_product_worker(
         gdal_warp_kwargs['format'] = 'ENVI'
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
         osgeo.gdal.Warp(
-            outname+'_crop', outname + '.vrt', options=warp_options)
+            outname + '_crop', outname + '.vrt', options=warp_options)
         for crop_name in glob.glob(outname + '_crop*'):
             fname = os.path.basename(crop_name).replace('_crop', '')
             fname = os.path.join(os.path.dirname(crop_name), fname)
@@ -1112,7 +1112,7 @@ def export_product_worker(
 
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
-            any(':/science/LSAR/GUNW/metadata/radarGrid/' in s \
+            any(':/science/LSAR/GUNW/metadata/radarGrid' in s \
                 for s in product)):
             # make VRT pointing to metadata layers in standard product
             hgt_field, outname = prep_metadatalayers(
