@@ -1085,13 +1085,13 @@ def export_product_worker(
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
         LOGGER.debug('Skipping %s - %s', ifg_tag,
-                {os.path.dirname(outname).split('/')[-1]})
+                     {os.path.dirname(outname).split('/')[-1]})
 
     elif update_mode == 'crop_only' \
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
         LOGGER.debug('Cropping %s - %s', ifg_tag,
-                {os.path.dirname(outname).split('/')[-1]})
+                     {os.path.dirname(outname).split('/')[-1]})
 
         # Crop
         gdal_warp_kwargs['format'] = 'ENVI'
@@ -1108,7 +1108,7 @@ def export_product_worker(
 
     else:
         LOGGER.debug('Extracting %s - %s', ifg_tag,
-                {os.path.dirname(outname).split('/')[-1]})
+                     {os.path.dirname(outname).split('/')[-1]})
 
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
