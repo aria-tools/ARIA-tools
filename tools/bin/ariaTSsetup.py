@@ -263,7 +263,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # Find files
     int_list = [os.path.join(workdir, stack_layer, aria_date + '.vrt')
-            for aria_date in aria_dates]
+                for aria_date in aria_dates]
     dlist = sorted(int_list)
     LOGGER.info(
         'Number of %s files discovered: %d' % (stack_layer, len(int_list)))
