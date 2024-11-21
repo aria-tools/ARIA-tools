@@ -1291,7 +1291,7 @@ class Product:
             else:
                 LOGGER.info('Product already read: %s', prod_name)
 
-        if self.runlog:
+        if self.runlog is not None:
             self.runlog.update('files', self.files)
             self.runlog.update('products', self.products)
 

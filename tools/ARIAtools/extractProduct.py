@@ -1607,7 +1607,7 @@ def export_products(
         "export_product_worker took %f seconds" % (end_time - start_time))
 
     # Update runlog if provided
-    if runlog:
+    if runlog is not None:
         runlog.update('extracted_files', extracted_files)
 
     # delete directory for quality control plots if empty
