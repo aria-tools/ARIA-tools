@@ -1084,14 +1084,14 @@ def export_product_worker(
     if update_mode == 'skip' \
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
-        LOGGER.debug(f'Skipping {ifg_tag} - '
-                     f'{os.path.dirname(outname).split('/')[-1]}')
+        LOGGER.debug('Skipping %s - %s', ifg_tag,
+            {os.path.dirname(outname).split('/')[-1]})
 
     elif update_mode == 'crop_only' \
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
-        LOGGER.debug(f'Cropping {ifg_tag} - '
-                     f'{os.path.dirname(outname).split('/')[-1]}')
+        LOGGER.debug('Cropping %s - %s', ifg_tag,
+            {os.path.dirname(outname).split('/')[-1]})
 
         # Crop
         gdal_warp_kwargs['format'] = 'ENVI'
@@ -1112,7 +1112,7 @@ def export_product_worker(
 
         # Extract/crop metadata layers
         if (any(':/science/grids/imagingGeometry' in s for s in product) or
-            any(':/science/LSAR/GUNW/metadata/radarGrid' in s \
+            any(':/science/LSAR/GUNW/metadata/radarGrid' in s
                 for s in product)):
             # make VRT pointing to metadata layers in standard product
             hgt_field, outname = prep_metadatalayers(
