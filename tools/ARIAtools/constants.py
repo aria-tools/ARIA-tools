@@ -9,6 +9,10 @@
 Record global variables for use in other scripts
 """
 
+# List of supported pixel sizes (in arcseconds)
+ARIA_PX_SIZES = [0.000277778,
+                 0.000833334]
+
 # Create lists of all supported models and all aria layers
 ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
                              'troposphereWet',

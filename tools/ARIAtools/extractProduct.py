@@ -563,9 +563,9 @@ def merged_productbbox(
                   abs(ds.GetGeoTransform()[-1])]
         ds = None
 
-    # Adjust arrres to multiple of 3 arcsec
-    base_res = 0.000833334
-    arrres = [base_res * round(px_res / base_res) for px_res in arrres]
+    # Adjust arrres to supported resolution
+    res_ndx = np.argmin([np.abs(p-px_size) for px_size in ARIA_PX_SIZES])
+    arrres = ARIA_PX_SIZES[res_ndx]
 
     # warp again with fixed transform and bounds
     gdal_warp_kwargs['outputBounds'] = OG_bounds
