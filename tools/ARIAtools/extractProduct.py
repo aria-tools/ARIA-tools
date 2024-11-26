@@ -37,6 +37,8 @@ import ARIAtools.util.shp
 import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
 
+from ARIAtools.constants import ARIA_PX_SIZES
+
 LOGGER = logging.getLogger(__name__)
 # metadata layer quality check, correction applied if necessary
 # only apply to geometry layers and prods derived from older ISCE versions
@@ -564,8 +566,9 @@ def merged_productbbox(
         ds = None
 
     # Adjust arrres to supported resolution
-    res_ndx = np.argmin([np.abs(p-px_size) for px_size in ARIA_PX_SIZES])
-    arrres = ARIA_PX_SIZES[res_ndx]
+    for i, res in enumerate(arrres):
+        res_ndx = np.argmin([np.abs(res-px_size) for px_size in ARIA_PX_SIZES])
+        arrres[i] = ARIA_PX_SIZES[res_ndx]
 
     # warp again with fixed transform and bounds
     gdal_warp_kwargs['outputBounds'] = OG_bounds
