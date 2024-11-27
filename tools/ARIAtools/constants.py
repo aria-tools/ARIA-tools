@@ -13,8 +13,7 @@ Record global variables for use in other scripts
 ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
                              'troposphereWet',
                              'troposphereTotal',
-                             'solidEarthTide',
-                             'gacos_corrections']
+                             'solidEarthTide']
 
 ARIA_INTERNAL_CORRECTIONS = ['ionosphere']
 
@@ -23,7 +22,7 @@ ARIA_TROPO_INTERNAL = ['ERA5',
                        'HRES',
                        'HRRR']
 
-ARIA_TROPO_MODELS = ARIA_TROPO_INTERNAL + ['GACOS']
+ARIA_TROPO_MODELS = ARIA_TROPO_INTERNAL
 
 ARIA_LAYERS = ['unwrappedPhase',
                'coherence',
@@ -47,7 +46,6 @@ ARIA_STACK_DEFAULTS = ['unwrappedPhase',
 
 ARIA_STACK_OUTFILES = {
     'unwrappedPhase': 'unwrapStack',
-    'gacos_corrections': 'gacosStack',
     'coherence': 'cohStack',
     'connectedComponents': 'connCompStack',
     'bParallel': 'bParStack',

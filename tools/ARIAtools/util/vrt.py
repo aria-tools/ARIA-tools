@@ -324,66 +324,9 @@ def rasterAverage(
     return arr_file
 
 
-# Generate GACOS rsc
-def rscGacos(outvrt, merged_rsc, tropo_date_dict):
-    """Generate GACOS product .rsc files"""
-    in_file = osgeo.gdal.Open(outvrt)
-    date = os.path.basename(outvrt[:-4]).split('.tif')[0].split('.ztd')[0]
-
-    # Create merge rsc file
-    with open(outvrt[:-4] + '.rsc', 'w') as ofp:
-        ofp.write('WIDTH %s\n' % (in_file.RasterXSize))
-        ofp.write('FILE_LENGTH %s\n' % (in_file.RasterYSize))
-        ofp.write('XMIN %s\n' % (0))
-        ofp.write('XMAX %s\n' % (in_file.RasterXSize))
-        ofp.write('YMIN %s\n' % (0))
-        ofp.write('YMAX %s\n' % (in_file.RasterYSize))
-        ofp.write('X_FIRST %f\n' % (in_file.GetGeoTransform()[0]))
-        ofp.write('Y_FIRST %f\n' % (in_file.GetGeoTransform()[3]))
-        ofp.write('X_STEP %f\n' % (in_file.GetGeoTransform()[1]))
-        ofp.write('Y_STEP %f\n' % (in_file.GetGeoTransform()[-1]))
-        ofp.write('X_UNIT %s\n' % ('degres'))
-        ofp.write('Y_UNIT %s\n' % ('degres'))
-        ofp.write('Z_OFFSET %s\n' % (0))
-        ofp.write('Z_SCALE %s\n' % (1))
-        ofp.write('PROJECTION %s\n' % ('LATLON'))
-        ofp.write('DATUM %s\n' % ('WGS84'))
-        ofp.write('TIME_OF_DAY %s\n' % (''.join(
-            tropo_date_dict[date + "_UTC"])))
-
-    return
-
-
-# Parse GACOS metadata from TIF
-def tifGacos(intif):
-    """Pass GACOS metadata as dict from TIF"""
-    tropo_rsc_dict = {}
-    in_file = osgeo.gdal.Open(intif)
-
-    # Populate dict
-    tropo_rsc_dict['WIDTH'] = in_file.RasterXSize
-    tropo_rsc_dict['FILE_LENGTH'] = in_file.RasterYSize
-    tropo_rsc_dict['XMIN'] = 0
-    tropo_rsc_dict['XMAX'] = in_file.RasterXSize
-    tropo_rsc_dict['YMIN'] = 0
-    tropo_rsc_dict['YMAX'] = in_file.RasterYSize
-    tropo_rsc_dict['X_FIRST'] = in_file.GetGeoTransform()[0]
-    tropo_rsc_dict['Y_FIRST'] = in_file.GetGeoTransform()[3]
-    tropo_rsc_dict['X_STEP'] = in_file.GetGeoTransform()[1]
-    tropo_rsc_dict['Y_STEP'] = in_file.GetGeoTransform()[-1]
-    tropo_rsc_dict['X_UNIT'] = 'degres'
-    tropo_rsc_dict['Y_UNIT'] = 'degres'
-    tropo_rsc_dict['Z_OFFSET'] = 0
-    tropo_rsc_dict['Z_SCALE'] = 1
-    tropo_rsc_dict['PROJECTION'] = 'LATLON'
-    tropo_rsc_dict['DATUM'] = 'WGS84'
-    tropo_rsc_dict['TIME_OF_DAY'] = 'NoneUTC'
-    return tropo_rsc_dict
-
-
 # Perform initial layer, product, and correction sanity checks
 def layerCheck(
-        products, layers, nc_version, gacos_products, tropo_models,
+        products, layers, nc_version, tropo_models,
         extract_or_ts):
     """Check if any conflicts between netcdf versions and expected layers."""
     # track if product stack is NISAR GUNW or not
@@ -451,25 +394,11 @@ def layerCheck(
     # differentiate between extract and TS pipeline
     # extract pipeline
     if extract_or_ts == 'extract':
-        if not layers and not gacos_products:
+        if not layers:
             LOGGER.info(
                 'No layers specified; only creating bounding box shapes')
             return [], [], []
 
-        elif gacos_products:
-            LOGGER.info(
-                'Tropospheric corrections will be applied, making sure at '
-                'least unwrappedPhase and incidenceAngle are extracted.')
-
-            # If no input layers specified, initialize list
-            if not layers:
-                layers = []
-
-            if 'incidenceAngle' not in layers:
-                layers.append('incidenceAngle')
-
-            if 'unwrappedPhase' not in layers:
-                layers.append('unwrappedPhase')
         else:
             layers = [i.replace(' ', '') for i in layers]
 

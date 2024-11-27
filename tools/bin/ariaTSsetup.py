@@ -60,10 +60,6 @@ def create_parser():
         help='Specify directory to deposit all outputs. Default is local '
              'directory where script is launched.')
     parser.add_argument(
-        '-gp', '--gacos_products', dest='gacos_products', type=str,
-        default=None,
-        help='Path to director(ies) or tar file(s) containing GACOS products.')
-    parser.add_argument(
         '-l', '--layers', dest='layers', default='standard',
         help='Specify layers to extract as a comma deliminated list bounded '
              'by single quotes. Allowed keys are: "unwrappedPhase", '
@@ -594,7 +590,7 @@ def main():
     # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
         standardproduct_info.products[1], args.layers, args.nc_version,
-        args.gacos_products, args.tropo_models, extract_or_ts='tssetup')
+        args.tropo_models, extract_or_ts='tssetup')
 
     if layers != [] or args.tropo_total is True:
         if layers != []:
@@ -613,14 +609,6 @@ def main():
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
-
-    # Perform GACOS-based tropospheric corrections (if specified).
-    if args.gacos_products:
-        ARIAtools.extractProduct.gacos_correction(
-            standardproduct_info.products, args.gacos_products,
-            standardproduct_info.bbox_file, prods_TOTbbox, outDir=args.workdir,
-            outputFormat=args.outputFormat, verbose=args.verbose,
-            num_threads=args.num_threads)
 
     # Generate UNW stack
     ref_dlist = generate_stack(
@@ -642,9 +630,6 @@ def main():
     if args.tropo_total is False:
         if 'troposphereTotal' in layers:
             layers.remove('troposphereTotal')
-
-    if args.gacos_products:
-        layers += ['gacos_corrections']
 
     # generate other stack layers
     # generate stack default parms

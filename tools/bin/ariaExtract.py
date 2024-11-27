@@ -42,10 +42,6 @@ def createParser():
         help='Specify directory to deposit all outputs. Default is local '
              'directory where script is launched.')
     parser.add_argument(
-        '-gp', '--gacos_products', dest='gacos_products', type=str,
-        default=None,
-        help='Path to director(ies) or tar file(s) containing GACOS products.')
-    parser.add_argument(
         '-l', '--layers', dest='layers', default=None,
         help='Specify layers to extract as a comma deliminated list bounded '
              'by single quotes. Allowed keys are: "unwrappedPhase", '
@@ -197,7 +193,7 @@ def main():
     args.layers, args.tropo_total, \
         model_names = ARIAtools.util.vrt.layerCheck(
             standardproduct_info.products[1], args.layers, args.nc_version,
-            args.gacos_products, args.tropo_models, extract_or_ts='extract')
+            args.tropo_models, extract_or_ts='extract')
 
     # pass number of threads for gdal multiprocessing computation
     if args.num_threads.lower() == 'all':
@@ -309,15 +305,6 @@ def main():
     LOGGER.info('Extracting products')
     arrshape = ARIAtools.extractProduct.export_products(**export_dict,
                                                         runlog=runlog)
-
-    # Perform GACOS-based tropospheric corrections (if specified).
-    if args.gacos_products:
-        LOGGER.info('Applying gacos_correction')
-        ARIAtools.extractProduct.gacos_correction(
-            standardproduct_info.products, args.gacos_products,
-            standardproduct_info.bbox_file, prods_TOTbbox,
-            outDir=args.workdir, outputFormat=args.outputFormat,
-            verbose=args.verbose, num_threads=args.num_threads)
 
 
 if __name__ == '__main__':
