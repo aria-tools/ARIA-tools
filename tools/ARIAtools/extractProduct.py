@@ -567,7 +567,9 @@ def merged_productbbox(
 
     # Adjust arrres to supported resolution
     for i, res in enumerate(arrres):
-        res_ndx = np.argmin([np.abs(res-px_size) for px_size in ARIA_PX_SIZES])
+        res_ndx = np.argmin([
+            np.abs(res - px_size) for px_size in ARIA_PX_SIZES
+        ])
         arrres[i] = ARIA_PX_SIZES[res_ndx]
 
     # warp again with fixed transform and bounds
