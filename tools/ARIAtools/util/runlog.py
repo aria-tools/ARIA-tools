@@ -52,13 +52,13 @@ class RunLog:
         self.file_list_name = os.path.join(self.log_dir, 'files.yaml')
         if not os.path.exists(self.file_list_name):
             with open(self.file_list_name, 'w') as list_file:
-                yaml.dump({}, list_file)
+                yaml.dump({'runs': []}, list_file)
 
         self.extracted_files_name = os.path.join(self.log_dir,
                                                  'extracted_files.yaml')
         if not os.path.exists(self.extracted_files_name):
             with open(self.extracted_files_name, 'w') as extr_file:
-                yaml.dump({}, extr_file)
+                yaml.dump({'runs': []}, extr_file)
 
         # Automatically update core parameters
         self.__update_runtimes__()
@@ -177,10 +177,8 @@ class RunLog:
         with open(self.file_list_name, 'r') as list_file:
             run_dict = yaml.safe_load(list_file)
 
-        if 'runs' in run_dict.keys():
-            run_dict['runs'].append(file_dict)
-        else:
-            run_dict['runs'] = [file_dict]
+        # Add current run to list
+        run_dict['runs'].append(file_dict)
 
         # Write to YAML file
         with open(self.file_list_name, 'w') as list_file:
@@ -203,16 +201,30 @@ class RunLog:
         extr_dict['other'] = extracted_files
 
         # Organize files by run time
-        extr_lyr_dict = {f"run_time {self.run_time}": extr_dict}
+        run_time = f"run_time {self.run_time}"
+        extr_lyr_dict = {run_time: extr_dict}
 
         # Recall existing config data
         with open(self.extracted_files_name, 'r') as extr_file:
             run_dict = yaml.safe_load(extr_file)
 
-        if 'runs' in run_dict.keys():
-            run_dict['runs'].append(extr_lyr_dict)
+        runs = run_dict['runs']
+        run_times = []
+        [run_times.extend(run.keys()) for run in runs]
+
+        # Check if there is already an entry for this run time
+        if run_time in run_times:
+            for run in runs:
+                if run_time in run.keys():
+                    # Recall existing entry
+                    exist_entry = run[run_time]
+                    # Merge new and existing dictionary entries
+                    for key, value in exist_entry.items():
+                        run[run_time][key] = \
+                            value + extr_lyr_dict[run_time][key]
         else:
-            run_dict['runs'] = [extr_lyr_dict]
+            # Start new entry for this run time
+            run_dict['runs'].append(extr_lyr_dict)
 
         # Write parameters
         with open(self.extracted_files_name, 'w') as extr_file:
