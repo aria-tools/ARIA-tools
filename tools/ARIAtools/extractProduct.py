@@ -315,6 +315,29 @@ class MetadataQualityCheck:
         return self.data_array
 
 
+def crop_only_manager(outname, ifg_tag, gdal_warp_kwargs):
+    """
+    Manage cropping of existing, extracted layers
+    """
+    LOGGER.debug('Cropping %s - %s', ifg_tag,
+                 {os.path.dirname(outname).split('/')[-1]})
+
+    # Crop
+    gdal_warp_kwargs['format'] = 'ENVI'
+    warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
+    osgeo.gdal.Warp(
+        outname + '_crop', outname + '.vrt', options=warp_options)
+    for crop_name in glob.glob(outname + '_crop*'):
+        fname = os.path.basename(crop_name).replace('_crop', '')
+        fname = os.path.join(os.path.dirname(crop_name), fname)
+        os.rename(crop_name, fname)
+
+    # Update VRT
+    osgeo.gdal.Translate(outname + '.vrt', outname, format='VRT')
+
+    return
+
+
 def merged_productbbox(
         metadata_dict, product_dict, workdir='./', bbox_file=None,
         croptounion=False, num_threads='2', minimumOverlap=0.0081,
@@ -1095,21 +1118,19 @@ def export_product_worker(
     elif update_mode == 'crop_only' \
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
-        LOGGER.debug('Cropping %s - %s', ifg_tag,
-                     {os.path.dirname(outname).split('/')[-1]})
+        crop_only_manager(outname, ifg_tag, gdal_warp_kwargs)
+        # make sure to update conn comp file(s)
+        if os.path.dirname(outname).split('/')[-1] == 'unwrappedPhase':
+            # Split the path into components
+            path_parts = outname.split('/')
 
-        # Crop
-        gdal_warp_kwargs['format'] = 'ENVI'
-        warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        osgeo.gdal.Warp(
-            outname + '_crop', outname + '.vrt', options=warp_options)
-        for crop_name in glob.glob(outname + '_crop*'):
-            fname = os.path.basename(crop_name).replace('_crop', '')
-            fname = os.path.join(os.path.dirname(crop_name), fname)
-            os.rename(crop_name, fname)
+            # Replace "unwrappedPhase" only at the second-to-last index
+            if path_parts[-2] == 'unwrappedPhase':
+                path_parts[-2] = 'connectedComponents'
 
-        # Update VRT
-        osgeo.gdal.Translate(outname + '.vrt', outname, format='VRT')
+            # Rejoin the path
+            outname = '/'.join(path_parts)
+            crop_only_manager(outname, ifg_tag, gdal_warp_kwargs)
 
     else:
         LOGGER.debug('Extracting %s - %s', ifg_tag,
