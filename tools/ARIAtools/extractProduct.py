@@ -1241,14 +1241,6 @@ def export_products(
     Optionally, a user may pass a mask-file.
     """
     LOGGER.debug('export_products, layers: {}'.format(layers))
-    # Remove these directories to avoid state dependent VRT parsing bug
-    # with pre-existing files (TODO to fix this)
-    for layer in layers:
-        if layer in GEOM_LYRS:
-            target = os.path.join(outDir, layer)
-            if os.path.isdir(target):
-                LOGGER.warning('Deleting %s to avoid VRT header bug!' % target)
-                shutil.rmtree(target)
 
     if not layers and not tropo_total:
         return  # only bbox
