@@ -33,7 +33,7 @@ dependencies:
   - requests
   - scipy>1.10.0
   - shapely
-  - tile_mate
+  - tile_mate>=0.0.12
   - xarray
   #for ARIA-tools-docs
   #- jupyterlab
