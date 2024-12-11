@@ -39,7 +39,7 @@ import ARIAtools.util.runlog
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
-    ARIA_STANDARD_LAYERS
+    ARIA_STANDARD_LAYERS, ARIA_LAYERS
 
 osgeo.gdal.UseExceptions()
 
@@ -455,7 +455,7 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, runlog=runlog)
+        layers=args.layers, croptounion=args.croptounion, runlog=runlog)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -463,9 +463,10 @@ def main():
     LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file) = \
+     prods_TOTbbox_metadatalyr, arrres, proj, update_mode, is_nisar_file) = \
         ARIAtools.extractProduct.merged_productbbox(
-            standardproduct_info.products[0], standardproduct_info.products[1],
+            standardproduct_info.products[0],
+            standardproduct_info.products[1],
             os.path.join(args.workdir, 'productBoundingBox'),
             standardproduct_info.bbox_file, args.croptounion,
             num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
@@ -603,6 +604,13 @@ def main():
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
         standardproduct_info.products[1], args.layers, args.nc_version,
         args.gacos_products, args.tropo_models, extract_or_ts='tssetup')
+
+    # Capture existing output layers not captured in cmdline
+    if update_mode == 'crop_only':
+        ignore_names = ['unwrappedPhase', 'connectedComponents',
+            'incidenceAngle', 'azimuthAngle', 'coherence', 'bPerpendicular']
+        layers = ARIAtools.extractProduct.track_existing_outputs(
+            args.workdir, layers, ARIA_LAYERS, ignore_names)
 
     if layers != [] or args.tropo_total is True:
         if layers != []:

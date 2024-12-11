@@ -20,6 +20,8 @@ import ARIAtools.util.mask
 import ARIAtools.product
 import ARIAtools.util.runlog
 
+from ARIAtools.constants import ARIA_LAYERS
+
 LOGGER = logging.getLogger('ariaExtract.py')
 
 
@@ -191,7 +193,7 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, runlog=runlog)
+        layers=args.layers, croptounion=args.croptounion, runlog=runlog)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
@@ -214,7 +216,8 @@ def main():
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
      prods_TOTbbox_metadatalyr, arrres,
-     proj, is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
+     proj, update_mode,
+     is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
         standardproduct_info.products[0], standardproduct_info.products[1],
         os.path.join(args.workdir, 'productBoundingBox'),
         standardproduct_info.bbox_file, args.croptounion,
@@ -281,6 +284,11 @@ def main():
             ARIAtools.util.dem.prep_dem(**dem_dict)
     else:
         demfile, demfile_expanded, lat, lon = None, None, None, None
+
+    # Capture existing output layers not captured in cmdline
+    if update_mode == 'crop_only':
+        args.layers = ARIAtools.extractProduct.track_existing_outputs(
+            args.workdir, args.layers, ARIA_LAYERS, [])
 
     # Extract
     # aria_extract default parms

@@ -35,7 +35,6 @@ ARIA_LAYERS = ['unwrappedPhase',
                'amplitude']
 ARIA_LAYERS += ARIA_EXTERNAL_CORRECTIONS
 ARIA_LAYERS += ARIA_INTERNAL_CORRECTIONS
-ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STANDARD_INTF_LAYERS = ['unwrappedPhase', 'coherence']
 ARIA_STANDARD_GEOM_LAYERS = ['incidenceAngle', 'azimuthAngle']
@@ -63,3 +62,4 @@ ARIA_STACK_OUTFILES = {
     'solidEarthTide': 'setStack'
 }
 ARIA_STACK_OUTFILES.update({i: i + 'Stack' for i in ARIA_TROPO_MODELS})
+

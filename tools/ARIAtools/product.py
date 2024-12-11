@@ -240,7 +240,8 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False, tropo_models=None, layers=None, runlog=None):
+                 verbose=False, tropo_models=None, layers=None, croptounion=False,
+                 runlog=None):
         """
         Parse products and input bounding box (if specified)
         """
@@ -261,6 +262,9 @@ class Product:
 
         # enforced projection for output rasters
         self.projection = projection
+
+        # determine which product bbox to use for dedup
+        self.croptounion = croptounion
 
         # pass number of threads for multiprocessing computation
         if num_threads == 'all':
@@ -414,6 +418,17 @@ class Product:
             self.projection = int(self.projection)
 
         # Check if bbox input is valid list or shapefile.
+        prod_bbox = os.path.join(workdir, 'productBoundingBox')
+        if self.croptounion is True:
+            prod_bbox = os.path.join(prod_bbox,
+                'productBoundingBox_croptounion_formetadatalyr.json')
+        else:
+            prod_bbox = os.path.join(prod_bbox,
+                'productBoundingBox.json')
+
+        if bbox is None and os.path.exists(prod_bbox):
+            bbox = prod_bbox
+
         if bbox is not None:
             # If list
             bbox_is_list = isinstance(

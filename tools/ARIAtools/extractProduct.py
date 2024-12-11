@@ -315,12 +315,11 @@ class MetadataQualityCheck:
         return self.data_array
 
 
-def crop_only_manager(outname, ifg_tag, gdal_warp_kwargs):
+def crop_only_manager(outname, lyrname, ifg_tag, gdal_warp_kwargs):
     """
     Manage cropping of existing, extracted layers
     """
-    LOGGER.debug('Cropping %s - %s', ifg_tag,
-                 {os.path.dirname(outname).split('/')[-1]})
+    LOGGER.debug('Cropping %s - %s', ifg_tag, lyrname)
 
     # Crop
     gdal_warp_kwargs['format'] = 'ENVI'
@@ -634,8 +633,11 @@ def merged_productbbox(
         ds = None
 
     # Run additional checks and update runlog if provided
-    if runlog is not None:
+    if runlog is None:
+        update_mode = 'full_extract'
+    else:
         log_data = runlog.load()
+        update_mode = log_data['update_mode']
 
         # Check other parameters
         if ('arrres' in log_data.keys()) \
@@ -662,7 +664,8 @@ def merged_productbbox(
         runlog.update('is_nisar_file', is_nisar_file)
 
     return (metadata_dict, product_dict, bbox_file, prods_TOTbbox,
-            prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file)
+            prods_TOTbbox_metadatalyr, arrres, proj, update_mode,
+            is_nisar_file)
 
 
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
@@ -858,11 +861,45 @@ def extract_bperp_dict(products, num_threads):
     return bperp_dict
 
 
+def track_existing_outputs(workdir, layers, valid_layers, ignore_names=[]):
+    """Track existing layer outputs to assist dedup"""
+    extracted_lyrnames = []
+    for d in os.listdir(workdir):
+        subdir_path = os.path.join(workdir, d)
+        if os.path.isdir(subdir_path) and d not in ignore_names and \
+            d not in layers and d in valid_layers:
+            extracted_lyrnames.append(d)
+
+    layers.extend(extracted_lyrnames)
+
+    return layers
+
+
+def track_correction_outputs(all_workdirs):
+    """Track correction layer outputs to assist dedup"""
+    existing_outputs = []
+    for i in all_workdirs:
+        if os.path.exists(i):
+            existing_outputs.extend(
+                glob.glob(os.path.join(i, '*/*[0-9].vrt')))
+            existing_outputs.extend(
+                glob.glob(os.path.join(i, '*/dates/*[0-9].vrt')))
+            existing_outputs.extend(
+                glob.glob(os.path.join(i, '*[0-9].vrt')))
+            existing_outputs.extend(
+                glob.glob(os.path.join(i, 'dates/*[0-9].vrt')))
+
+    existing_outputs = list(set(existing_outputs))
+
+    return existing_outputs
+
+
 def handle_epoch_layers(
-        layers, product_dict, proj, lyr_path, user_lyrs, map_lyrs, key,
-        sec_key, ref_key, tropo_total, workdir, bounds, arrres,
-        dem_bounds, prods_TOTbbox, dem, lat, lon, mask, outputFormat, verbose,
-        multilooking, rankedResampling, num_threads, is_nisar_file):
+        layers, product_dict, update_mode, gdal_warp_kwargs, proj, lyr_path,
+        user_lyrs, map_lyrs, key, sec_key, ref_key, tropo_total, workdir,
+        bounds, arrres, dem_bounds, prods_TOTbbox, dem, lat, lon, mask,
+        outputFormat, verbose, multilooking, rankedResampling, num_threads,
+        is_nisar_file):
     """
     Manage reference/secondary components for correction layers.
     Specifically record reference/secondary components within a `dates` subdir
@@ -885,24 +922,22 @@ def handle_epoch_layers(
     if multilooking is not None:
         arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
-    # If specified workdir doesn't exist, create it
     all_workdirs = [workdir, sec_workdir, ref_workdir]
     all_workdirs = list(set(all_workdirs))
-    existing_outputs = []
+    existing_outputs = track_correction_outputs(all_workdirs)
+
+    # update existing outputs, if necessary
+    if update_mode == 'crop_only' and existing_outputs != []:
+        for outname in existing_outputs:
+            ifg_tag = os.path.basename(outname).split('.vrt')[0]
+            crop_only_manager(outname[:-4], key, ifg_tag, gdal_warp_kwargs)
+
+        return existing_outputs
+
+    # If specified workdirs do not exist, create them
     for i in all_workdirs:
         if not os.path.exists(i):
             os.mkdir(i)
-
-        # for dedup, record previous outputs to avoid reprocessing
-        existing_outputs.extend(
-            glob.glob(os.path.join(i, '*/*[0-9].vrt')))
-        existing_outputs.extend(
-            glob.glob(os.path.join(i, '*/dates/*[0-9].vrt')))
-        existing_outputs.extend(
-            glob.glob(os.path.join(i, '*[0-9].vrt')))
-        existing_outputs.extend(
-            glob.glob(os.path.join(i, 'dates/*[0-9].vrt')))
-    existing_outputs = list(set(existing_outputs))
 
     # Iterate through all IFGs
     all_outputs = []
@@ -917,8 +952,13 @@ def handle_epoch_layers(
             if not is_nisar_file:
                 model_name = i[1][0].split('/')[-3]
                 out_dir = os.path.join(out_dir, model_name)
+                outname = os.path.join(out_dir, ifg)
             if not os.path.exists(out_dir):
                 os.mkdir(out_dir)
+
+        # skip if product exists
+        if os.path.exists(outname):
+            continue
 
         # create temp files for ref/sec components
         if ref_key in user_lyrs or tropo_total:
@@ -1056,7 +1096,10 @@ def handle_epoch_layers(
                     ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
                 prev_outname = j[1][:-4]
 
-    return
+    # pass final list of outputs
+    existing_outputs = track_correction_outputs(all_workdirs)
+
+    return existing_outputs
 
 
 def export_product_worker_helper(args):
@@ -1109,7 +1152,7 @@ def export_product_worker(
     ifg_tag = product_dict[1][ii][0]
     outname = os.path.abspath(os.path.join(workdir, ifg_tag))
 
-    if update_mode == 'skip' \
+    if update_mode != 'crop_only' \
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
         LOGGER.debug('Skipping %s - %s', ifg_tag,
@@ -1118,19 +1161,21 @@ def export_product_worker(
     elif update_mode == 'crop_only' \
             and os.path.exists(outname) \
             and os.path.exists(outname + '.vrt'):
-        crop_only_manager(outname, ifg_tag, gdal_warp_kwargs)
+        lyrname = os.path.dirname(outname).split('/')[-1]
+        crop_only_manager(outname, lyrname, ifg_tag, gdal_warp_kwargs)
         # make sure to update conn comp file(s)
         if os.path.dirname(outname).split('/')[-1] == 'unwrappedPhase':
+            lyrname = 'connectedComponents'
             # Split the path into components
             path_parts = outname.split('/')
 
             # Replace "unwrappedPhase" only at the second-to-last index
             if path_parts[-2] == 'unwrappedPhase':
-                path_parts[-2] = 'connectedComponents'
+                path_parts[-2] = lyrname
 
             # Rejoin the path
             outname = '/'.join(path_parts)
-            crop_only_manager(outname, ifg_tag, gdal_warp_kwargs)
+            crop_only_manager(outname, lyrname, ifg_tag, gdal_warp_kwargs)
 
     else:
         LOGGER.debug('Extracting %s - %s', ifg_tag,
@@ -1324,6 +1369,53 @@ def export_products(
         outputFormatPhys = outputFormat
     lyr_input_dict['outputFormat'] = outputFormatPhys
 
+    # Recall update mode and conduct final checks for extraction
+    if runlog is None:
+        update_mode = 'full_extract'
+    else:
+        log_data = runlog.load()
+        update_mode = log_data['update_mode']
+        if 'update_mode' in log_data.keys():
+            update_mode = log_data['update_mode']
+
+        # Check water mask
+        prev_maskfile = log_data['maskfilename'] if 'maskfilename' \
+            in log_data.keys() else None
+
+        if maskfile != prev_maskfile:
+            update_mode = 'full_extract'
+            LOGGER.warning(
+                'Mask file has changed. Setting update mode to full_extract.')
+
+        runlog.update('maskfilename', maskfile)
+
+        # Check DEM
+        prev_demfile = log_data['demfile'] if 'demfile' \
+            in log_data.keys() else None
+
+        if demfile != prev_demfile:
+            update_mode = 'full_extract'
+            LOGGER.warning(
+                'DEM file has changed. Setting update mode to full_extract.')
+
+        runlog.update('demfile', demfile)
+
+        # Update final mode
+        runlog.update('update_mode', update_mode)
+
+    # track extracted layers
+    extracted_files = []
+
+    # Initialize warp dict
+    gdal_warp_kwargs = {
+        'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
+        'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
+        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
+
+    # track if files need to be updated
+    lyr_input_dict['update_mode'] = update_mode
+    lyr_input_dict['gdal_warp_kwargs'] = gdal_warp_kwargs
+
     # If specified, extract tropo layers
     tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
     user_lyrs = list(set(layers).intersection(tropo_lyrs))
@@ -1368,11 +1460,10 @@ def export_products(
             lyr_input_dict['map_lyrs'] = map_lyrs
 
             # set iterative keys
-            prev_outname = os.path.abspath(os.path.join(workdir, i))
             lyr_input_dict['product_dict'] = product_dict
 
             # extract layers
-            handle_epoch_layers(**lyr_input_dict)
+            extracted_files.extend(handle_epoch_layers(**lyr_input_dict))
 
             # remove leading underscore from model name to get subdir name
             tag = i.split('_')[-1]
@@ -1421,7 +1512,7 @@ def export_products(
         lyr_input_dict['workdir'] = workdir
 
         # extract layers
-        handle_epoch_layers(**lyr_input_dict)
+        extracted_files.extend(handle_epoch_layers(**lyr_input_dict))
 
         # Track consistency of dimensions
         prev_outname = os.path.abspath(os.path.join(workdir,
@@ -1467,7 +1558,18 @@ def export_products(
                     product_dict[1][i][0]))
             lyr_input_dict['input_iono_files'] = layer
             lyr_input_dict['output_iono'] = outname
-            ARIAtools.util.ionosphere.export_ionosphere(**lyr_input_dict)
+
+            # if file exists and needs to be cropped, avoid iono routine
+            if os.path.exists(outname) and update_mode == 'crop_only':
+                crop_only_manager(outname, 'ionosphere',
+                    product_dict[1][i][0], gdal_warp_kwargs)
+
+            # only extract if file does not exist
+            if not os.path.exists(outname):
+                ARIAtools.util.ionosphere.export_ionosphere(**lyr_input_dict)
+
+            # track output
+            extracted_files.append(outname)
 
             # track valid files
             if os.path.exists(outname + '.vrt'):
@@ -1479,46 +1581,16 @@ def export_products(
                 ARIAtools.util.vrt.get_basic_attrs(prev_outname_check + '.vrt')
             ref_arr = [ref_wid, ref_hgt, ref_geotrans, prev_outname]
 
+    # Update runlog if provided
+    if runlog is not None:
+        runlog.update('extracted_files', extracted_files)
+
     # Loop through other user expected layers
     layers = [i for i in layers if i not in ext_corr_lyrs]
 
     full_product_dict_file = os.path.join(outDir, 'full_product_dict.json')
     with open(full_product_dict_file, 'w') as ofp:
         json.dump(full_product_dict, ofp)
-
-    # Recall update mode and conduct final checks for extraction
-    if runlog is None:
-        update_mode = 'full_extract'
-    else:
-        log_data = runlog.load()
-        update_mode = log_data['update_mode']
-        if 'update_mode' in log_data.keys():
-            update_mode = log_data['update_mode']
-
-        # Check water mask
-        prev_maskfile = log_data['maskfilename'] if 'maskfilename' \
-            in log_data.keys() else None
-
-        if maskfile != prev_maskfile:
-            update_mode = 'full_extract'
-            LOGGER.warning(
-                'Mask file has changed. Setting update mode to full_extract.')
-
-        runlog.update('maskfilename', maskfile)
-
-        # Check DEM
-        prev_demfile = log_data['demfile'] if 'demfile' \
-            in log_data.keys() else None
-
-        if demfile != prev_demfile:
-            update_mode = 'full_extract'
-            LOGGER.warning(
-                'DEM file has changed. Setting update mode to full_extract.')
-
-        runlog.update('demfile', demfile)
-
-        # Update final mode
-        runlog.update('update_mode', update_mode)
 
     mp_args = []
     extracted_files = []
