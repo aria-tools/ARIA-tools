@@ -1296,7 +1296,7 @@ class Product:
             if prod_name in self.files and os.path.exists(prod_name):
                 self.products += [product]
             else:
-                LOGGER.warning('Product not found: %s', prod_name)
+                raise Exception('Product not found: %s', prod_name)
 
         # Only populate list of dictionaries if the file intersects with bbox
         # and is not included in list of already-processed products
