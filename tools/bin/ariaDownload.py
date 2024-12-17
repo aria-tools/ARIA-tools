@@ -321,10 +321,10 @@ class Downloader:
 
     def parse_dates(self, ifg, is_nisar_file):
         if is_nisar_file:
-            sti, eni = [datetime.datetime.strptime(d, "%Y%m%d") \
+            sti, eni = [datetime.datetime.strptime(d, "%Y%m%d")
                         for d in ifg.split("_")]
         else:
-            eni, sti = [datetime.datetime.strptime(d, "%Y%m%d") \
+            eni, sti = [datetime.datetime.strptime(d, "%Y%m%d")
                         for d in ifg.split("_")]
         return eni, sti
 
@@ -382,7 +382,8 @@ class Downloader:
         pbar = tqdm.tqdm(total=len(scenes), unit="file", desc="Downloading")
         try:
             urls = [scene.properties["url"] for scene in scenes]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=nt) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=nt) \
+                as executor:
                 future_to_url = {
                     executor.submit(download_file, url): url for url in urls
                 }
