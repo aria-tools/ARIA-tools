@@ -119,7 +119,7 @@ class RunLog:
             self.__update_file_list__(attr_value)
 
         if attr_name == 'extracted_files':
-            self.__update_extracted_files__(attr_value)
+            attr_value = self.__update_extracted_files__(attr_value)
 
         # Write new log data
         log_data[attr_name] = attr_value
@@ -231,3 +231,5 @@ class RunLog:
         with open(self.extracted_files_name, 'w') as extr_file:
             extr_file.write('# Files extracted by previous ARIA-tools run.\n')
             yaml.dump(run_dict, extr_file)
+
+        return run_dict
