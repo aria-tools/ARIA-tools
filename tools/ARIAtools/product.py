@@ -1293,7 +1293,8 @@ class Product:
                 prev_products = log_data['products']
 
             # dedup DEM file
-            if self.demfile != log_data['demfile']:
+            if 'demfile' in log_data.keys() \
+                and self.demfile != log_data['demfile']:
                 if self.demfile is None:
                     self.demfile = log_data['demfile']
                 if self.demfile.lower() == 'download':
@@ -1303,7 +1304,8 @@ class Product:
                     self.demfile = log_data['demfile']
 
             # dedup mask file
-            if self.mask != log_data['maskfilename']:
+            if 'maskfilename' in log_data.keys() \
+                and self.mask != log_data['maskfilename']:
                 if self.mask is None:
                     self.mask = log_data['maskfilename']
                 if self.mask.lower() == 'download':
