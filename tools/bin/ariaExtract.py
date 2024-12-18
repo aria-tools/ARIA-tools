@@ -193,7 +193,8 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, croptounion=args.croptounion, runlog=runlog)
+        layers=args.layers, croptounion=args.croptounion, runlog=runlog,
+        demfile=args.demfile, mask=args.mask)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
@@ -225,7 +226,7 @@ def main():
         verbose=args.verbose, runlog=runlog)
 
     # Load or download mask (if specified).
-    if args.mask is not None:
+    if standardproduct_info.mask is not None:
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
@@ -243,7 +244,7 @@ def main():
         # mask parms
         mask_dict = {
             'product_dict': amplitude_products,
-            'maskfilename': args.mask,
+            'maskfilename': standardproduct_info.mask,
             'bbox_file': standardproduct_info.bbox_file,
             'prods_TOTbbox': prods_TOTbbox,
             'proj': proj,
@@ -263,9 +264,9 @@ def main():
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
-    if args.demfile is not None:
+    if standardproduct_info.demfile is not None:
         dem_dict = {
-            'demfilename': args.demfile,
+            'demfilename': standardproduct_info.demfile,
             'bbox_file': standardproduct_info.bbox_file,
             'prods_TOTbbox': prods_TOTbbox,
             'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,

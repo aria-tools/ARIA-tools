@@ -241,7 +241,7 @@ class Product:
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
                  verbose=False, tropo_models=None, layers=None, croptounion=False,
-                 runlog=None):
+                 runlog=None, demfile=None, mask=None):
         """
         Parse products and input bounding box (if specified)
         """
@@ -265,6 +265,12 @@ class Product:
 
         # determine which product bbox to use for dedup
         self.croptounion = croptounion
+
+        # Track dem file
+        self.demfile = demfile
+
+        # Track mask file
+        self.mask = mask
 
         # pass number of threads for multiprocessing computation
         if num_threads == 'all':
@@ -1285,6 +1291,26 @@ class Product:
             if 'files' in log_data and 'products' in log_data:
                 prev_files = log_data['files']
                 prev_products = log_data['products']
+
+            # dedup DEM file
+            if self.demfile != log_data['demfile']:
+                if self.demfile is None:
+                    self.demfile = log_data['demfile']
+                if self.demfile.lower() == 'download':
+                    LOGGER.warning(
+                        'specified DEM download, when DEM %s already exists',
+                    log_data['demfile'])
+                    self.demfile = log_data['demfile']
+
+            # dedup mask file
+            if self.mask != log_data['maskfilename']:
+                if self.mask is None:
+                    self.mask = log_data['maskfilename']
+                if self.mask.lower() == 'download':
+                    LOGGER.warning(
+                        'specified msk download, when msk %s already exists',
+                    log_data['maskfilename'])
+                    self.mask = log_data['maskfilename']
 
         # Check which past files are included in the current list
         for product in prev_products:

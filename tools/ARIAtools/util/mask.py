@@ -51,6 +51,16 @@ def prep_mask(
     if multilooking is not None:
         arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
+    # Retrieve update mode
+    update_mode = 'full_extract'
+    if runlog is not None:
+        log_data = runlog.load()
+        if 'update_mode' in log_data.keys():
+            update_mode = log_data['update_mode']
+
+    # set temp directory
+    temp_workdir = os.path.join(workdir, 'tmp_dir')
+
     # Download mask
     if maskfilename.lower() == 'download' or \
             maskfilename.lower() in tile_mate.stitcher.DATASET_SHORTNAMES:
@@ -59,13 +69,6 @@ def prep_mask(
             maskfilename = 'esa_world_cover_2021'
         lyr_name = copy.deepcopy(maskfilename)
         LOGGER.debug('Downloading water mask: %s', lyr_name)
-
-        # Retrieve update mode
-        update_mode = 'full_extract'
-        if runlog is not None:
-            log_data = runlog.load()
-            if 'update_mode' in log_data.keys():
-                update_mode = log_data['update_mode']
 
         # set file names
         uncropped_maskfilename = os.path.join(workdir,
@@ -151,7 +154,6 @@ def prep_mask(
                 'using the existing one...' % os.path.dirname(local_mask))
 
             # move all original files to temp path to circumvent gdal issues
-            temp_workdir = os.path.join(workdir, 'tmp_dir')
             os.makedirs(temp_workdir, exist_ok=True)
             local_mask_noext = os.path.join(workdir, '%s.' % (user_mask_n))
             for j in glob.glob(local_mask_noext + '*'):
@@ -160,9 +162,6 @@ def prep_mask(
             temp_local_mask = os.path.join(
                 temp_workdir, '%s.msk' % (user_mask_n))
             ds = osgeo.gdal.Open(temp_local_mask)
-
-            # remove temporary file
-            shutil.rmtree(temp_workdir)
 
         else:
             # move the mask to the local directory and built a VRT for it
