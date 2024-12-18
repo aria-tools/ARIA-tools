@@ -9,6 +9,7 @@ import glob
 import logging
 import os
 import shutil
+from time import sleep
 
 import affine
 import copy
@@ -60,6 +61,10 @@ def prep_mask(
 
     # set temp directory
     temp_workdir = os.path.join(workdir, 'tmp_dir')
+
+    # delete temporary directory
+    if os.path.exists(temp_workdir):
+        shutil.rmtree(temp_workdir)
 
     # Download mask
     if maskfilename.lower() == 'download' or \

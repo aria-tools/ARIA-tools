@@ -1062,11 +1062,12 @@ def handle_epoch_layers(
             record_epochs.extend(
                 glob.glob(os.path.join(i[1], 'dates/*[0-9].vrt')))
 
-            # dedup check for interpolating only new files
-            record_epochs = [
-                j for j in record_epochs if j not in existing_outputs]
-
             for j in enumerate(record_epochs):
+                # dedup check for interpolating only new files
+                band_count = osgeo.gdal.Open(j[1]).RasterCount
+                if band_count == 1:
+                    continue
+
                 # Interpolate/intersect with DEM before cropping
                 finalize_metadata(
                     j[1][:-4], bounds, arrres, dem_bounds, prods_TOTbbox,
