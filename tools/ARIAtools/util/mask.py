@@ -9,6 +9,7 @@ import glob
 import logging
 import os
 import shutil
+from time import sleep
 
 import affine
 import copy
@@ -51,6 +52,20 @@ def prep_mask(
     if multilooking is not None:
         arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
+    # Retrieve update mode
+    update_mode = 'full_extract'
+    if runlog is not None:
+        log_data = runlog.load()
+        if 'update_mode' in log_data.keys():
+            update_mode = log_data['update_mode']
+
+    # set temp directory
+    temp_workdir = os.path.join(workdir, 'tmp_dir')
+
+    # delete temporary directory
+    if os.path.exists(temp_workdir):
+        shutil.rmtree(temp_workdir)
+
     # Download mask
     if maskfilename.lower() == 'download' or \
             maskfilename.lower() in tile_mate.stitcher.DATASET_SHORTNAMES:
@@ -66,48 +81,55 @@ def prep_mask(
         maskfilename = os.path.join(workdir, f'{maskfilename}.msk')
         ref_file = os.path.join(workdir, 'tmp_referencefile')
 
-        # download mask
-        dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
-            bounds, tile_shortname=lyr_name)
+        # Check if mask has already been downloaded and covers necessary area
+        if os.path.exists(uncropped_maskfilename) \
+            and update_mode is not 'full_extract':
+            LOGGER.warning(
+                '%s has already been downloaded. Skipping download.',
+                uncropped_maskfilename)
+        else:
+            # download mask
+            dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
+                bounds, tile_shortname=lyr_name)
 
-        # fill permanent water body
-        if lyr_name == 'esa_world_cover_2021':
-            dat_arr[dat_arr == 80] = 0
-            dat_arr[dat_arr != 0] = 1
+            # fill permanent water body
+            if lyr_name == 'esa_world_cover_2021':
+                dat_arr[dat_arr == 80] = 0
+                dat_arr[dat_arr != 0] = 1
 
-        # assign datatype and set resampling mode
-        dat_arr = dat_arr.astype('byte')
-        f_dtype = 'uint8'
-        resampling_mode = rasterio.warp.Resampling.nearest
+            # assign datatype and set resampling mode
+            dat_arr = dat_arr.astype('byte')
+            f_dtype = 'uint8'
+            resampling_mode = rasterio.warp.Resampling.nearest
 
-        # get output parameters from temp file
-        crs = pyproj.CRS.from_wkt(proj)
-        with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-            osgeo.gdal.Warp(
-                ref_file, product_dict[0], format=outputFormat,
-                outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                targetAlignedPixels=True, multithread=True)
+            # get output parameters from temp file
+            crs = pyproj.CRS.from_wkt(proj)
+            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
+                osgeo.gdal.Warp(
+                    ref_file, product_dict[0], format=outputFormat,
+                    outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
+                    targetAlignedPixels=True, multithread=True)
 
-        with rasterio.open(ref_file) as src:
-            reference_gt = src.transform
-            resize_col = src.width
-            resize_row = src.height
+            with rasterio.open(ref_file) as src:
+                reference_gt = src.transform
+                resize_col = src.width
+                resize_row = src.height
 
-        # remove temporary file
-        for j in glob.glob(ref_file + '*'):
-            if os.path.isfile(j):
-                os.remove(j)
+            # remove temporary file
+            for j in glob.glob(ref_file + '*'):
+                if os.path.isfile(j):
+                    os.remove(j)
 
-        # save uncropped raster to file
-        with rasterio.open(uncropped_maskfilename, 'w',
-                           height=resize_row, width=resize_col, count=1,
-                           dtype=f_dtype, crs=crs,
-                           transform=affine.Affine(*reference_gt)) as dst:
-            rasterio.warp.reproject(
-                source=dat_arr, destination=rasterio.band(dst, 1),
-                src_transform=dat_prof['transform'], src_crs=dat_prof['crs'],
-                dst_transform=reference_gt, dst_crs=crs,
-                resampling=resampling_mode)
+            # save uncropped raster to file
+            with rasterio.open(uncropped_maskfilename, 'w',
+                               height=resize_row, width=resize_col, count=1,
+                               dtype=f_dtype, crs=crs,
+                               transform=affine.Affine(*reference_gt)) as dst:
+                rasterio.warp.reproject(
+                    source=dat_arr, destination=rasterio.band(dst, 1),
+                    src_transform=dat_prof['transform'],
+                    src_crs=dat_prof['crs'], dst_transform=reference_gt,
+                    dst_crs=crs, resampling=resampling_mode)
 
         # save cropped mask with precise spacing
         with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
@@ -137,7 +159,6 @@ def prep_mask(
                 'using the existing one...' % os.path.dirname(local_mask))
 
             # move all original files to temp path to circumvent gdal issues
-            temp_workdir = os.path.join(workdir, 'tmp_dir')
             os.makedirs(temp_workdir, exist_ok=True)
             local_mask_noext = os.path.join(workdir, '%s.' % (user_mask_n))
             for j in glob.glob(local_mask_noext + '*'):
@@ -146,9 +167,6 @@ def prep_mask(
             temp_local_mask = os.path.join(
                 temp_workdir, '%s.msk' % (user_mask_n))
             ds = osgeo.gdal.Open(temp_local_mask)
-
-            # remove temporary file
-            shutil.rmtree(temp_workdir)
 
         else:
             # move the mask to the local directory and built a VRT for it

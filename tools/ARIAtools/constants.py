@@ -9,6 +9,10 @@
 Record global variables for use in other scripts
 """
 
+# List of supported pixel sizes (in arcseconds)
+ARIA_PX_SIZES = [0.000277778,
+                 0.000833334]
+
 # Create lists of all supported models and all aria layers
 ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
                              'troposphereWet',
@@ -30,7 +34,6 @@ ARIA_LAYERS = ['unwrappedPhase',
                'amplitude']
 ARIA_LAYERS += ARIA_EXTERNAL_CORRECTIONS
 ARIA_LAYERS += ARIA_INTERNAL_CORRECTIONS
-ARIA_LAYERS += ARIA_TROPO_MODELS
 
 ARIA_STANDARD_INTF_LAYERS = ['unwrappedPhase', 'coherence']
 ARIA_STANDARD_GEOM_LAYERS = ['incidenceAngle', 'azimuthAngle']
@@ -57,3 +60,4 @@ ARIA_STACK_OUTFILES = {
     'solidEarthTide': 'setStack'
 }
 ARIA_STACK_OUTFILES.update({i: i + 'Stack' for i in ARIA_TROPO_MODELS})
+

@@ -20,6 +20,8 @@ import ARIAtools.util.mask
 import ARIAtools.product
 import ARIAtools.util.runlog
 
+from ARIAtools.constants import ARIA_LAYERS
+
 LOGGER = logging.getLogger('ariaExtract.py')
 
 
@@ -187,7 +189,8 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, runlog=runlog)
+        layers=args.layers, croptounion=args.croptounion, runlog=runlog,
+        demfile=args.demfile, mask=args.mask)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
@@ -210,7 +213,8 @@ def main():
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
      prods_TOTbbox_metadatalyr, arrres,
-     proj, is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
+     proj, update_mode,
+     is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
         standardproduct_info.products[0], standardproduct_info.products[1],
         os.path.join(args.workdir, 'productBoundingBox'),
         standardproduct_info.bbox_file, args.croptounion,
@@ -218,7 +222,7 @@ def main():
         verbose=args.verbose, runlog=runlog)
 
     # Load or download mask (if specified).
-    if args.mask is not None:
+    if standardproduct_info.mask is not None:
         # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
@@ -236,7 +240,7 @@ def main():
         # mask parms
         mask_dict = {
             'product_dict': amplitude_products,
-            'maskfilename': args.mask,
+            'maskfilename': standardproduct_info.mask,
             'bbox_file': standardproduct_info.bbox_file,
             'prods_TOTbbox': prods_TOTbbox,
             'proj': proj,
@@ -246,7 +250,8 @@ def main():
             'outputFormat': args.outputFormat,
             'num_threads': args.num_threads,
             'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
+            'rankedResampling': args.rankedResampling,
+            'runlog': runlog
         }
         LOGGER.info('Download/cropping mask')
         maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
@@ -255,9 +260,9 @@ def main():
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
-    if args.demfile is not None:
+    if standardproduct_info.demfile is not None:
         dem_dict = {
-            'demfilename': args.demfile,
+            'demfilename': standardproduct_info.demfile,
             'bbox_file': standardproduct_info.bbox_file,
             'prods_TOTbbox': prods_TOTbbox,
             'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
@@ -267,7 +272,8 @@ def main():
             'outputFormat': args.outputFormat,
             'num_threads': args.num_threads,
             'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
+            'rankedResampling': args.rankedResampling,
+            'runlog': runlog
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
         LOGGER.info('Download/cropping DEM')
@@ -275,6 +281,11 @@ def main():
             ARIAtools.util.dem.prep_dem(**dem_dict)
     else:
         demfile, demfile_expanded, lat, lon = None, None, None, None
+
+    # Capture existing output layers not captured in cmdline
+    if update_mode == 'crop_only':
+        args.layers = ARIAtools.extractProduct.track_existing_outputs(
+            args.workdir, args.layers, ARIA_LAYERS, [])
 
     # Extract
     # aria_extract default parms
@@ -298,13 +309,13 @@ def main():
         'num_threads': args.num_threads,
         'multilooking': args.multilooking,
         'tropo_total': args.tropo_total,
-        'model_names': model_names
+        'model_names': model_names,
+        'runlog': runlog
     }
 
     # Extract user expected layers
     LOGGER.info('Extracting products')
-    arrshape = ARIAtools.extractProduct.export_products(**export_dict,
-                                                        runlog=runlog)
+    arrshape = ARIAtools.extractProduct.export_products(**export_dict)
 
 
 if __name__ == '__main__':

@@ -240,7 +240,8 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False, tropo_models=None, layers=None, runlog=None):
+                 verbose=False, tropo_models=None, layers=None, croptounion=False,
+                 runlog=None, demfile=None, mask=None):
         """
         Parse products and input bounding box (if specified)
         """
@@ -261,6 +262,15 @@ class Product:
 
         # enforced projection for output rasters
         self.projection = projection
+
+        # determine which product bbox to use for dedup
+        self.croptounion = croptounion
+
+        # Track dem file
+        self.demfile = demfile
+
+        # Track mask file
+        self.mask = mask
 
         # pass number of threads for multiprocessing computation
         if num_threads == 'all':
@@ -414,6 +424,17 @@ class Product:
             self.projection = int(self.projection)
 
         # Check if bbox input is valid list or shapefile.
+        prod_bbox = os.path.join(workdir, 'productBoundingBox')
+        if self.croptounion is True:
+            prod_bbox = os.path.join(prod_bbox,
+                'productBoundingBox_croptounion_formetadatalyr.json')
+        else:
+            prod_bbox = os.path.join(prod_bbox,
+                'productBoundingBox.json')
+
+        if bbox is None and os.path.exists(prod_bbox):
+            bbox = prod_bbox
+
         if bbox is not None:
             # If list
             bbox_is_list = isinstance(
@@ -1262,9 +1283,62 @@ class Product:
         return sorted_products
 
     def __run__(self):
+        # Grab list of already read GUNWs for deduplication
+        prev_files = []
+        prev_products = []
+        if self.runlog:
+            log_data = self.runlog.load()
+            if 'files' in log_data and 'products' in log_data:
+                prev_files = log_data['files']
+                prev_products = log_data['products']
+
+            # dedup DEM file
+            if 'demfile' in log_data.keys() \
+                and self.demfile != log_data['demfile']:
+                if self.demfile is None:
+                    self.demfile = log_data['demfile']
+                if self.demfile.lower() == 'download':
+                    LOGGER.warning(
+                        'specified DEM download, when DEM %s already exists',
+                    log_data['demfile'])
+                    self.demfile = log_data['demfile']
+
+            # dedup mask file
+            if 'maskfilename' in log_data.keys() \
+                and self.mask != log_data['maskfilename']:
+                if self.mask is None:
+                    self.mask = log_data['maskfilename']
+                if self.mask.lower() == 'download':
+                    LOGGER.warning(
+                        'specified msk download, when msk %s already exists',
+                    log_data['maskfilename'])
+                    self.mask = log_data['maskfilename']
+
+            # check for crop to union inconsistency
+            if ('croptounion' in log_data.keys()) \
+                    and (self.croptounion != log_data['croptounion']):
+                raise Exception('croptounion has changed since previous run. '
+                                'Necessary to run from scratch.')
+
+        # Check which past files are included in the current list
+        for product in prev_products:
+            # Isolate product file name
+            _, datalyr_dict = product
+            prod_name = datalyr_dict['productBoundingBoxFrames'].split('"')[1]
+
+            # Ensure product still exists where originally found
+            if prod_name in self.files and os.path.exists(prod_name):
+                self.products += [product]
+            else:
+                raise Exception('Product not found: %s', prod_name)
+
         # Only populate list of dictionaries if the file intersects with bbox
-        for f in self.files:
-            self.products += self.__readproduct__(f)
+        # and is not included in list of already-processed products
+        for file in self.files:
+            if file not in prev_files:
+                self.products += self.__readproduct__(file)
+            else:
+                LOGGER.info('Product already read: %s', prod_name)
 
         if self.runlog is not None:
             self.runlog.update('files', self.files)

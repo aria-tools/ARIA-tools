@@ -34,12 +34,12 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
-import ARIAtools.util.runlog
 import ARIAtools.constants
+import ARIAtools.util.runlog
 
 from ARIAtools.constants import ARIA_EXTERNAL_CORRECTIONS, \
     ARIA_TROPO_MODELS, ARIA_STACK_DEFAULTS, ARIA_STACK_OUTFILES, \
-    ARIA_STANDARD_LAYERS
+    ARIA_STANDARD_LAYERS, ARIA_LAYERS
 
 osgeo.gdal.UseExceptions()
 
@@ -141,7 +141,7 @@ def create_parser():
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
-        '--log-level', default='info', help='Logger log level')
+        '--log-level', default='warning', help='Logger log level')
     return parser
 
 
@@ -246,16 +246,23 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         domain_name in ARIA_TROPO_MODELS):
         stack_layer = f'{stack_layer}/' + 'dates'
 
+    # get dates
+    aria_dates = \
+        sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
+    if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
+        domain_name in ARIA_TROPO_MODELS):
+        aria_indiv_dates = []
+        for aria_date in aria_dates:
+            dates = aria_date.split('_')
+            aria_indiv_dates += dates
+        aria_dates = sorted(list(set(aria_indiv_dates)))
+
     # Find files
-    int_list = glob.glob(
-        os.path.join(workdir, stack_layer, '[0-9]*[0-9].vrt'))
+    int_list = [os.path.join(workdir, stack_layer, aria_date + '.vrt')
+                for aria_date in aria_dates]
     dlist = sorted(int_list)
     LOGGER.info(
         'Number of %s files discovered: %d' % (stack_layer, len(int_list)))
-
-    # get dates
-    aria_dates = [
-        os.path.basename(i).split('.vrt')[0] for i in int_list]
 
     # only perform following checks if a differential layer
     b_perp = []
@@ -444,7 +451,8 @@ def main():
         workdir=args.workdir, num_threads=args.num_threads,
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, runlog=runlog)
+        layers=args.layers, croptounion=args.croptounion, runlog=runlog,
+        demfile=args.demfile, mask=args.mask)
 
     # extract/merge productBoundingBox layers for each pair and update dict,
     # report common track bbox (default is to take common intersection,
@@ -452,18 +460,19 @@ def main():
     LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file) = \
+     prods_TOTbbox_metadatalyr, arrres, proj, update_mode, is_nisar_file) = \
         ARIAtools.extractProduct.merged_productbbox(
-            standardproduct_info.products[0], standardproduct_info.products[1],
+            standardproduct_info.products[0],
+            standardproduct_info.products[1],
             os.path.join(args.workdir, 'productBoundingBox'),
             standardproduct_info.bbox_file, args.croptounion,
             num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
-            verbose=args.verbose)
+            verbose=args.verbose, runlog=runlog)
 
     # Download/Load DEM & Lat/Lon arrays, providing bbox,
     # expected DEM shape, and output dir as input.
     dem_dict = {
-        'demfilename': args.demfile,
+        'demfilename': standardproduct_info.demfile,
         'bbox_file': standardproduct_info.bbox_file,
         'prods_TOTbbox': prods_TOTbbox,
         'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
@@ -473,16 +482,17 @@ def main():
         'outputFormat': args.outputFormat,
         'num_threads': args.num_threads,
         'multilooking': args.multilooking,
-        'rankedResampling': args.rankedResampling
+        'rankedResampling': args.rankedResampling,
+        'runlog': runlog
     }
 
     # Pass DEM-filename, loaded DEM array, and lat/lon arrays
     LOGGER.info('Download/cropping DEM')
     demfile, demfile_expanded, lat, lon = \
-        ARIAtools.util.dem.prep_dem(**dem_dict, runlog=runlog)
+        ARIAtools.util.dem.prep_dem(**dem_dict)
 
     # Load or download mask (if specified).
-    if args.mask is not None:
+    if standardproduct_info.mask is not None:
 
         # Extract amplitude layers
         amplitude_products = []
@@ -500,7 +510,7 @@ def main():
 
         mask_dict = {
             'product_dict': amplitude_products,
-            'maskfilename': args.mask,
+            'maskfilename': standardproduct_info.mask,
             'bbox_file': standardproduct_info.bbox_file,
             'prods_TOTbbox': prods_TOTbbox,
             'proj': proj,
@@ -510,11 +520,11 @@ def main():
             'outputFormat': args.outputFormat,
             'num_threads': args.num_threads,
             'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling
+            'rankedResampling': args.rankedResampling,
+            'runlog': runlog
         }
         LOGGER.info('Download/cropping mask')
-        maskfilename = ARIAtools.util.mask.prep_mask(
-            **mask_dict, runlog=runlog)
+        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
     else:
         maskfilename = None
 
@@ -591,6 +601,13 @@ def main():
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
         standardproduct_info.products[1], args.layers, args.nc_version,
         args.tropo_models, extract_or_ts='tssetup')
+
+    # Capture existing output layers not captured in cmdline
+    if update_mode == 'crop_only':
+        ignore_names = ['unwrappedPhase', 'connectedComponents',
+            'incidenceAngle', 'azimuthAngle', 'coherence', 'bPerpendicular']
+        layers = ARIAtools.extractProduct.track_existing_outputs(
+            args.workdir, layers, ARIA_LAYERS, ignore_names)
 
     if layers != [] or args.tropo_total is True:
         if layers != []:
