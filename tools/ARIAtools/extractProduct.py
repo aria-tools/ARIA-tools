@@ -1066,6 +1066,12 @@ def handle_epoch_layers(
                 # dedup check for interpolating only new files
                 band_count = osgeo.gdal.Open(j[1]).RasterCount
                 if band_count == 1:
+                    # Track consistency of dimensions
+                    if j[0] == 0:
+                        ref_wid, ref_hgt, ref_geotrans, _, _ = \
+                            ARIAtools.util.vrt.get_basic_attrs(j[1][:-4])
+                        ref_arr = [ref_wid, ref_hgt, ref_geotrans, j[1][:-4]]
+
                     continue
 
                 # Interpolate/intersect with DEM before cropping
