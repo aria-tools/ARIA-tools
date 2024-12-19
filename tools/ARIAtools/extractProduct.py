@@ -653,11 +653,6 @@ def merged_productbbox(
             LOGGER.warning('lyr_proj has changed. '
                            'Setting update mode to full_extract.')
 
-        if ('croptounion' in log_data.keys()) \
-                and (croptounion != log_data['croptounion']):
-            raise Exception('croptounion has changed since previous run.'
-                            'Necessary to run from scratch.')
-
         # Update log
         runlog.update('croptounion', croptounion)
         runlog.update('prods_TOTbbox', prods_TOTbbox)
