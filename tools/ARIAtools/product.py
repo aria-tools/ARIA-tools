@@ -1317,7 +1317,7 @@ class Product:
             # check for crop to union inconsistency
             if ('croptounion' in log_data.keys()) \
                     and (self.croptounion != log_data['croptounion']):
-                raise Exception('croptounion has changed since previous run.'
+                raise Exception('croptounion has changed since previous run. '
                                 'Necessary to run from scratch.')
 
         # Check which past files are included in the current list
