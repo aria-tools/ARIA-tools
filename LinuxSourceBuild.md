@@ -6,39 +6,11 @@ For **Mac** see the respective installation instructions provided on the [ARIA-t
 ------
 ## Contents
 
-1.  [Anaconda3](#anaconda3)
-2.  [PROJ 4 SETUP](#proj-4-setup)
-3.  [GDAL SETUP](#gdal-setup)
-4.  [Jupyter Notebooks SETUP](#jupyter-notebooks-setup)
-5.  [Setting of environment variables](#setting-of-environment-variables)
-6.  [Return to back to ARIA-tools page](https://github.com/aria-tools/ARIA-tools)
-
-------
-## Anaconda3
-First install **python3** using either [Anaconda3](https://www.anaconda.com/distribution/) or [Miniconda3](https://docs.conda.io/en/latest/miniconda.html).
-
-Below we use a clean installation of Miniconda3. First we will download Miniconda3:
-```.tcsh
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-```
-Next execute the installer script and follow the instructions as provided by the installer.
-
-The miniconda installation does not contain all the python module we need.
-Use the **conda** excecutable to install the compiler tools that are needed for PROJ 4 installation and ARIA-tools.
-We can add the conda-forge channel to our installation so the packages in conda-forge are indexed.
-
-```.tcsh
-conda config --add channels conda-forge
-```
-After adding conda-forge we can make the installation of required packages
-
-```.tcsh
-conda install autoconf automake libtool numpy netcdf4 matplotlib pandas sqlite pkg-config shapely postgresql libcxx lapack --yes
-```
-As soon as conda is done with the installation you can run update command below and finish conda installation
-```.tcsh
-conda update --all
-```
+1.  [PROJ 4 SETUP](#proj-4-setup)
+2.  [GDAL SETUP](#gdal-setup)
+3.  [Jupyter Notebooks SETUP](#jupyter-notebooks-setup)
+4.  [Setting of environment variables](#setting-of-environment-variables)
+5.  [Return to back to ARIA-tools page](https://github.com/aria-tools/ARIA-tools)
 
 ------
 ## PROJ 4 SETUP
