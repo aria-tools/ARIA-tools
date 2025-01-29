@@ -368,9 +368,9 @@ def layerCheck(
             set.intersection(*map(set, [model_names, tropo_models])))
         for i in tropo_models:
             if i not in model_names:
-                LOGGER.warning(
-                    f'User-requested tropo model {i} will not be generated as '
-                    'it does not exist in any of the input products')
+                LOGGER.warning('%s tropo model not found in product', i)
+            else:
+                LOGGER.info('Generating tropo model %s', i)
     else:
         model_names = []
 
