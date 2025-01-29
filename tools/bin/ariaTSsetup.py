@@ -69,7 +69,7 @@ def create_parser():
              '"solidEarthTide". If "all" specified, then all layers are '
              'extracted. If blank, will only extract bounding box.')
     parser.add_argument(
-        '-tm', '--tropo_models', dest='tropo_models', type=str, default=None,
+        '-tm', '--tropo_models', dest='tropo_models', type=str, default='all',
         help='Provide list of weather models you wish to extract. Refer to '
              'ARIA_TROPO_INTERNAL for list of supported models')
     parser.add_argument(
@@ -431,6 +431,9 @@ def main():
     if args.layers.lower() == 'standard':
         LOGGER.debug("Using standard layers: %s" % ARIA_STANDARD_LAYERS)
         args.layers = ','.join(ARIA_STANDARD_LAYERS)
+
+    if 'tropo' not in args.layers:
+        args.tropo_models = None
 
     # Establish log file and update with basic parameters
     runlog = ARIAtools.util.runlog.RunLog(args.workdir)
