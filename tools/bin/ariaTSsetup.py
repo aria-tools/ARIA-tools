@@ -61,17 +61,18 @@ def create_parser():
              'directory where script is launched.')
     parser.add_argument(
         '-l', '--layers', dest='layers', default='standard',
-        help='Specify layers to extract as a comma deliminated list bounded '
-             'by single quotes. Allowed keys are: "unwrappedPhase", '
+        help='Specify the layers to extract as a comma-separated list enclosed '
+             'in single quotes. Allowed values include: "unwrappedPhase", '
              '"coherence", "amplitude", "bPerpendicular", "bParallel", '
              '"incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere", '
              '"troposphereWet", "troposphereHydrostatic", "troposphereTotal", '
-             '"solidEarthTide". If "all" specified, then all layers are '
-             'extracted. If blank, will only extract bounding box.')
+             '"solidEarthTide". Use "all" to extract all interferometry and '
+             'geometry layers. Correction layers must be explicitly specified '
+             'to be extracted. If left blank, only the bounding box will be extracted.')
     parser.add_argument(
         '-tm', '--tropo_models', dest='tropo_models', type=str, default='all',
-        help='Provide list of weather models you wish to extract. Refer to '
-             'ARIA_TROPO_INTERNAL for list of supported models')
+        help='Specify the weather model(s) to extract. '
+             'The default is "all", which extracts all models in the product.')
     parser.add_argument(
         '-d', '--demfile', dest='demfile', type=str, default='download',
         help='DEM file. Default is to download new DEM.')
