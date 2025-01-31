@@ -20,6 +20,8 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 1.  [Software Dependencies](#software-dependencies)
 2.  [Installation](#installation)
     -   [Conda](#conda)
+    -   [Installing a stable release from conda](#installing-a-stable-release-from-conda)
+    -   [Installing the latest development branch](#installing-the-latest-development-branch)
     -   [Other installation options](#other-installation-options)
     -   [ARIA-tools with support for S3 virtual data access](#aria-tools-with-support-for-s3-virtual-data-access)
 3.  [Running ARIA-tools](#running-aria-tools)
@@ -85,12 +87,31 @@ Run the commands below to download and setup your Miniforge environment manager:
 
 ```.tcsh
 cd ~/tools
-wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
-bash Miniforge3-Linux-x86_64.sh -b -p miniforge
+wget "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+
+# specify a new directory when prompted
+bash "Miniforge3-$(uname)-$(uname -m).sh" -b -p miniforge
 miniforge/bin/mamba init tcsh
+
 # reset shell
 csh
 ```
+
+### Installing a stable release from conda
+To install a stable release of aria-tools from conda, refer to these instructions and disregard the rest of the installation section.
+```.tcsh
+# OPTIONAL: create/activate new env
+# highly recommended to avoid potential conflicts with other packages
+conda create --name ARIA-tools-conda
+conda activate ARIA-tools-conda
+
+# install aria tools
+mamba install aria-tools
+```
+
+
+### Installing the latest development branch
+To access and install the latest development branch from github, refer instead to these installation instructions.
 
 Run the commands below to download/clone the ARIA-tools package to your local directory:
 
