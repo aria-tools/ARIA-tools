@@ -215,10 +215,6 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
                    workdir='./', ref_tropokey=None, ref_dlist=None):
     """Generate time series stack."""
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
-    # Progress bar
-    prog_bar = ARIAtools.util.misc.ProgressBar(
-        maxValue=len(aria_prod.products[1]), print_msg='Creating stack: ')
-
     # Set up single stack file
     stack_dir = os.path.join(workdir, 'stack')
     if not os.path.exists(stack_dir):
@@ -254,7 +250,12 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         aria_indiv_dates = []
         for aria_date in aria_dates:
             dates = aria_date.split('_')
-            aria_indiv_dates += dates
+            dt1_fname = os.path.join(workdir, stack_layer, dates[0] + '.vrt')
+            if os.path.exists(dt1_fname):
+                aria_indiv_dates += [dates[0]]
+            dt2_fname = os.path.join(workdir, stack_layer, dates[1] + '.vrt')
+            if os.path.exists(dt2_fname):
+                aria_indiv_dates += [dates[1]]
         aria_dates = sorted(list(set(aria_indiv_dates)))
 
     # Find files
@@ -263,6 +264,10 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     dlist = sorted(int_list)
     LOGGER.info(
         'Number of %s files discovered: %d' % (stack_layer, len(int_list)))
+
+    # Progress bar
+    prog_bar = ARIAtools.util.misc.ProgressBar(
+        maxValue=len(int_list), print_msg='Creating stack: ')
 
     # only perform following checks if a differential layer
     b_perp = []
