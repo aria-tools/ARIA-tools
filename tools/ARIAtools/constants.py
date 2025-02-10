@@ -22,8 +22,7 @@ ARIA_EXTERNAL_CORRECTIONS = ['troposphereHydrostatic',
 ARIA_INTERNAL_CORRECTIONS = ['ionosphere']
 
 ARIA_TROPO_INTERNAL = ['ERA5',
-                       'GMAO',
-                       'HRES',
+                    #    'HRES', # HRES model currently not available
                        'HRRR']
 
 ARIA_TROPO_MODELS = ARIA_TROPO_INTERNAL
