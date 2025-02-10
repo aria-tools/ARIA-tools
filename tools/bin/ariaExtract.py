@@ -45,17 +45,16 @@ def createParser():
              'directory where script is launched.')
     parser.add_argument(
         '-l', '--layers', dest='layers', default=None,
-        help='Specify layers to extract as a comma deliminated list bounded '
-             'by single quotes. Allowed keys are: "unwrappedPhase", '
+        help='Specify the layers to extract as a comma-separated list enclosed '
+             'in single quotes. Allowed values include: "unwrappedPhase", '
              '"coherence", "amplitude", "bPerpendicular", "bParallel", '
              '"incidenceAngle", "lookAngle", "azimuthAngle", "ionosphere", '
              '"troposphereWet", "troposphereHydrostatic", "troposphereTotal", '
-             '"solidEarthTide". If "all" specified, then all layers are '
-             'extracted. If blank, will only extract bounding box.')
+             '"solidEarthTide". If left blank, only the bounding box will be extracted.')
     parser.add_argument(
-        '-tm', '--tropo_models', dest='tropo_models', type=str, default=None,
-        help='Provide list ofweather models you wish to extract. Refer to '
-             'ARIA_TROPO_MODELS for list of supported models')
+        '-tm', '--tropo_models', dest='tropo_models', type=str, default='all',
+        help='Specify the weather model(s) to extract. '
+             'The default is "all", which extracts all models in the product.')
     parser.add_argument(
         '-d', '--demfile', dest='demfile', type=str, default=None,
         help='DEM file. To download new DEM, specify "Download".')
@@ -140,7 +139,9 @@ def main():
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
     LOGGER.info('Extract Product Function')
-
+    # Switch tropo models to None if troposphere isn't specified
+    if args.layers == None or 'tropo' not in args.layers:
+        args.tropo_models = None
     # Check whether all necessary inputs were specified.
     # some products require a DEM to extract -- if any of those are requested,
     # ensure that a valid DEM is specified
