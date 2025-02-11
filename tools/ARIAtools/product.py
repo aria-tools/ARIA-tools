@@ -496,7 +496,7 @@ class Product:
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]
-            if not basename.endswith('_P_F_J_001.h5'):
+            if not basename.endswith('_J_001.h5'):
                 LOGGER.warning(
                     'input file %s rejected because it downloaded from asf '
                     'and not a supported version', fname)
@@ -922,7 +922,7 @@ class Product:
             # get slant range info
             rdr_slant_range = hdf_gunw[
                 '/science/LSAR/GUNW/metadata/' +
-                'radarGrid/slantRange'][()].flatten()
+                'radarGrid/referenceSlantRange'][()].flatten()
             min_range = min(rdr_slant_range)
             max_range = max(rdr_slant_range)
             rdr_slant_range_spac = hdf_gunw['/science/LSAR/GUNW/grids/' +
@@ -970,7 +970,6 @@ class Product:
         # track and add additional correction layers, if they exist
         sdskeys_addlyrs = [
             lyr_pref + 'slantRangeSolidEarthTidesPhase',
-            lyr_pref + 'alongTrackSolidEarthTidesPhase',
             lyr_pref + 'hydrostaticTroposphericPhaseScreen',
             lyr_pref + 'wetTroposphericPhaseScreen'
         ]
@@ -1001,7 +1000,6 @@ class Product:
             'ionospherePhaseScreenUncertainty', 'bPerpendicular', 'bParallel',
             'incidenceAngle', 'losUnitVectorX', 'losUnitVectorY',
             'elevationAngle', 'slantRangeSolidEarthTidesPhase',
-            'alongTrackSolidEarthTidesPhase',
             'hydrostaticTroposphericPhaseScreen', 'wetTroposphericPhaseScreen']
 
         # Setup datalyr_dict
