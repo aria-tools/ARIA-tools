@@ -248,15 +248,32 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
         domain_name in ARIA_TROPO_MODELS):
         aria_indiv_dates = []
+        rejected_dates = []
         for aria_date in aria_dates:
             dates = aria_date.split('_')
+            # check reference date
             dt1_fname = os.path.join(workdir, stack_layer, dates[0] + '.vrt')
             if os.path.exists(dt1_fname):
                 aria_indiv_dates += [dates[0]]
+            else:
+                rejected_dates += [dates[0]]
+
+            # check secondary date
             dt2_fname = os.path.join(workdir, stack_layer, dates[1] + '.vrt')
             if os.path.exists(dt2_fname):
                 aria_indiv_dates += [dates[1]]
+            else:
+                rejected_dates += [dates[0]]
+
         aria_dates = sorted(list(set(aria_indiv_dates)))
+        rejected_dates = sorted(list(set(rejected_dates)))
+
+        # report rejected dates
+        if rejected_dates != []:
+            LOGGER.warning(
+                'The following %d date(s) lack %s layers: %s',
+                 len(rejected_dates), domain_name, ", ".join(rejected_dates)
+            )
 
     # Find files
     int_list = [os.path.join(workdir, stack_layer, aria_date + '.vrt')
