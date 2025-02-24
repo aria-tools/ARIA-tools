@@ -245,6 +245,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     # get dates
     aria_dates = \
         sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
+
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
         domain_name in ARIA_TROPO_MODELS):
         aria_indiv_dates = []
@@ -263,7 +264,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             if os.path.exists(dt2_fname):
                 aria_indiv_dates += [dates[1]]
             else:
-                rejected_dates += [dates[0]]
+                rejected_dates += [dates[1]]
 
         aria_dates = sorted(list(set(aria_indiv_dates)))
         rejected_dates = sorted(list(set(rejected_dates)))
@@ -657,6 +658,7 @@ def main():
     # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
+    layers = sorted(list(set(layers)))
 
     remove_lyrs = []
     for i in layers:
@@ -675,6 +677,7 @@ def main():
     stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist}
     for layer in layers:
         if layer in ARIA_STACK_OUTFILES.keys():
+            print('layer', layer)
 
             # iterate through model dirs if necessary
             if 'tropo' in layer:
