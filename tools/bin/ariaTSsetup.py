@@ -216,10 +216,6 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
                    workdir='./', ref_tropokey=None, ref_dlist=None):
     """Generate time series stack."""
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
-    # Progress bar
-    prog_bar = ARIAtools.util.misc.ProgressBar(
-        maxValue=len(aria_prod.products[1]), print_msg='Creating stack: ')
-
     # Set up single stack file
     stack_dir = os.path.join(workdir, 'stack')
     if not os.path.exists(stack_dir):
@@ -250,13 +246,36 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     # get dates
     aria_dates = \
         sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
+
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
         domain_name in ARIA_TROPO_MODELS):
         aria_indiv_dates = []
+        rejected_dates = []
         for aria_date in aria_dates:
             dates = aria_date.split('_')
-            aria_indiv_dates += dates
+            # check reference date
+            dt1_fname = os.path.join(workdir, stack_layer, dates[0] + '.vrt')
+            if os.path.exists(dt1_fname):
+                aria_indiv_dates += [dates[0]]
+            else:
+                rejected_dates += [dates[0]]
+
+            # check secondary date
+            dt2_fname = os.path.join(workdir, stack_layer, dates[1] + '.vrt')
+            if os.path.exists(dt2_fname):
+                aria_indiv_dates += [dates[1]]
+            else:
+                rejected_dates += [dates[1]]
+
         aria_dates = sorted(list(set(aria_indiv_dates)))
+        rejected_dates = sorted(list(set(rejected_dates)))
+
+        # report rejected dates
+        if rejected_dates != []:
+            LOGGER.warning(
+                'The following %d date(s) lack %s layers: %s',
+                 len(rejected_dates), domain_name, ", ".join(rejected_dates)
+            )
 
     # Find files
     int_list = [os.path.join(workdir, stack_layer, aria_date + '.vrt')
@@ -264,6 +283,10 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     dlist = sorted(int_list)
     LOGGER.info(
         'Number of %s files discovered: %d' % (stack_layer, len(int_list)))
+
+    # Progress bar
+    prog_bar = ARIAtools.util.misc.ProgressBar(
+        maxValue=len(int_list), print_msg='Creating stack: ')
 
     # only perform following checks if a differential layer
     b_perp = []
@@ -639,6 +662,7 @@ def main():
     # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
+    layers = sorted(list(set(layers)))
 
     remove_lyrs = []
     for i in layers:
@@ -657,6 +681,7 @@ def main():
     stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist}
     for layer in layers:
         if layer in ARIA_STACK_OUTFILES.keys():
+            print('layer', layer)
 
             # iterate through model dirs if necessary
             if 'tropo' in layer:
