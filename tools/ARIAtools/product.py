@@ -496,10 +496,10 @@ class Product:
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]
-            if not basename.endswith('_J_001.h5'):
+            if not basename.endswith('_M_P_J_001.h5'):
                 LOGGER.warning(
-                    'input file %s rejected because it downloaded from asf '
-                    'and not a supported version', fname)
+                    'input file %s is an older, unsupported '
+                    'version of the NISAR sample product', fname)
                 return []
 
         else:
@@ -1013,13 +1013,15 @@ class Product:
         for i in enumerate(layerkeys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
-        # Rewrite tropo and iono keys
+        # Rewrite tropo, iono, and SET keys
         datalyr_dict['ionosphere'] = datalyr_dict.pop(
             'ionospherePhaseScreen')
         datalyr_dict['troposphereHydrostatic'] = datalyr_dict.pop(
             'hydrostaticTroposphericPhaseScreen')
         datalyr_dict['troposphereWet'] = datalyr_dict.pop(
             'wetTroposphericPhaseScreen')
+        datalyr_dict['solidEarthTide'] = datalyr_dict.pop(
+            'slantRangeSolidEarthTidesPhase')
 
         return [rdrmetadata_dict, datalyr_dict]
 
