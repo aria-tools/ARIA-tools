@@ -273,6 +273,13 @@ def export_ionosphere(input_iono_files: typing.List[str],
         outputBounds=bounds)
     ds = None
 
+    # Fill NoData using nearest neighbor interpolation
+    ds = osgeo.gdal.Open(str(output_iono), osgeo.gdal.GA_Update)
+    band = ds.GetRasterBand(1)
+    osgeo.gdal.FillNodata(targetBand=band, maskBand=None, maxSearchDist=100, smoothingIterations=0)
+    band = None
+    ds = None
+
     # Update VRT
     if verbose:
         LOGGER.info(
