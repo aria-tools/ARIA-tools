@@ -7,19 +7,21 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+import argparse
+import concurrent.futures
+import datetime
+import getpass
+import logging
+import math
 import os
 import re
-import math
-import datetime
-import argparse
-import logging
+import time
 import warnings
-import getpass
-import tqdm
-import concurrent.futures
 
+import tqdm
 import shapely
 import asf_search
+from requests.exceptions import RequestException
 
 import ARIAtools.util.log
 from ARIAtools.util.shp import open_shp
@@ -358,7 +360,7 @@ class Downloader:
         if self.args.user:
             session.auth_with_creds(self.args.user, self.args.passw)
 
-        def download_file(url):
+        def download_file(url, max_retries=3, retry_delay=5):
             local_filename = url.split("/")[-1]
             filepath = os.path.join(self.args.wd, local_filename)
 
@@ -368,13 +370,34 @@ class Downloader:
                 LOGGER.info("Product already in directory: %s", filepath)
                 return filepath
 
-            response = session.get(url, stream=True)
-            response.raise_for_status()
+            attempt = 0
+            while attempt < max_retries:
+                attempt += 1
+                try:
+                    response = session.get(url, stream=True)
+                    response.raise_for_status()
 
-            with open(filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
+                    with open(filepath, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+
+                    # Verify download size
+                    expected_size = int(
+                        response.headers.get("Content-Length", 0)
+                    )
+                    file_size = os.path.getsize(filepath)
+                    if expected_size > 0 and file_size < expected_size:
+                        LOGGER.warning(
+                            "Incomplete download detected (%d/%d bytes). "
+                            "Retrying...",
+                            file_size, expected_size
+                        )
+                        time.sleep(retry_delay)
+                        continue  # Retry download
+
+                except RequestException as e:
+                    LOGGER.error("Error downloading %s: %s", url, e)
 
             return filepath
 
