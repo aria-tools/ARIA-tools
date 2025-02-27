@@ -393,6 +393,7 @@ class Downloader:
                             "Retrying...",
                             file_size, expected_size
                         )
+                        os.remove(filepath)
                         time.sleep(retry_delay)
                         continue  # Retry download
 
