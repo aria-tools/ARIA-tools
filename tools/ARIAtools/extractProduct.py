@@ -742,8 +742,8 @@ def prep_metadatalayers(
             if not os.path.exists(date_dir):
                 os.mkdir(date_dir)
 
-            ref_outname = os.path.join(date_dir, ifg.split('_')[0])
-            sec_outname = os.path.join(date_dir, ifg.split('_')[1])
+            ref_outname = os.path.join(date_dir, ifg.split('_')[1])
+            sec_outname = os.path.join(date_dir, ifg.split('_')[0])
             ref_str = 'reference/' + layer
             sec_str = 'secondary/' + layer
             sec_metadata_arr = [
