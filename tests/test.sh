@@ -12,8 +12,8 @@ ariaDownload.py -t 124 -w products --ifg 20180420_20180315 -v -o count
 ariaDownload.py -t 124 -w products --ifg 20180420_20180315 -v -o url
 
 cd products
-wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180420_20180315-043105-00157W_00020N-PP-74e7-v2_0_6.nc
-wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://grfn.asf.alaska.edu/door/download/S1-GUNW-A-R-124-tops-20180420_20180315-043040-00157W_00018N-PP-3f11-v2_0_6.nc
+wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://cumulus.asf.earthdatacloud.nasa.gov/ARIA/SENTINEL-1_INTERFEROGRAMS/S1-GUNW-A-R-124-tops-20180420_20180315-043105-00157W_00020N-PP-74e7-v2_0_6/S1-GUNW-A-R-124-tops-20180420_20180315-043105-00157W_00020N-PP-74e7-v2_0_6.nc
+wget --no-clobber --load-cookies /tmp/cookies.txt --save-cookies /tmp/cookies.txt --keep-session-cookies https://cumulus.asf.earthdatacloud.nasa.gov/ARIA/SENTINEL-1_INTERFEROGRAMS/S1-GUNW-A-R-124-tops-20180420_20180315-043040-00157W_00018N-PP-3f11-v2_0_6/S1-GUNW-A-R-124-tops-20180420_20180315-043040-00157W_00018N-PP-3f11-v2_0_6.nc
 cd ../
 
 #extraction of 3D metadata layer
