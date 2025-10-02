@@ -6,7 +6,6 @@
 name: ARIA-tools
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - affine
   - arm_pyart
