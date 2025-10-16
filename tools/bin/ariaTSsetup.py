@@ -213,7 +213,8 @@ def extract_utc_time(aria_dates, aztime_list):
 
 
 def generate_stack(aria_prod, stack_layer, output_file_name,
-                   workdir='./', ref_tropokey=None, ref_dlist=None):
+                   workdir='./', ref_tropokey=None, ref_dlist=None,
+                   is_nisar_file=False):
     """Generate time series stack."""
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
     # Set up single stack file
@@ -348,7 +349,10 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     start_range = aria_prod.products[0][0]['slantRangeStart'][0]
     end_range = aria_prod.products[0][0]['slantRangeEnd'][0]
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
-    orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
+    if is_nisar_file:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
+    else:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '_')[6]
 
     with open(os.path.join(stack_dir, output_file_name + '.vrt'), 'w') as fid:
         fid.write('''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
@@ -657,7 +661,7 @@ def main():
     # Generate UNW stack
     ref_dlist = generate_stack(
         standardproduct_info, 'unwrappedPhase', 'unwrapStack',
-        workdir=args.workdir)
+        workdir=args.workdir, is_nisar_file=is_nisar_file)
 
     # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
@@ -678,7 +682,8 @@ def main():
 
     # generate other stack layers
     # generate stack default parms
-    stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist}
+    stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist,
+                 'is_nisar_file': is_nisar_file}
     for layer in layers:
         if layer in ARIA_STACK_OUTFILES.keys():
             print('layer', layer)

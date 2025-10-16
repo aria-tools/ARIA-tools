@@ -496,7 +496,7 @@ class Product:
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]
-            if not basename.endswith('_M_P_J_001.h5'):
+            if not basename.endswith('_N_F_J_001.h5'):
                 LOGGER.warning(
                     'input file %s is an older, unsupported '
                     'version of the NISAR sample product', fname)
