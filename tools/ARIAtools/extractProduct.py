@@ -671,21 +671,60 @@ def merged_productbbox(
 
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     """Wrapper to create raster and apply projection"""
-    # open original raster
-    osgeo.gdal.BuildVRT(fname + '_temp.vrt', data_lis)
-    da = rioxarray.open_rasterio(fname + '_temp.vrt', masked=True)
 
-    # Reproject the raster to the desired projection
-    reproj_da = da.rio.reproject(f'EPSG:{proj}',
-                                 resampling=rasterio.enums.Resampling.nearest,
-                                 nodata=0)
-    reproj_da.rio.to_raster(fname, driver=driver, crs=f'EPSG:{proj}')
-    os.remove(fname + '_temp.vrt')
+    # 1) Build a lightweight reference warp (VRT) from the FIRST frame only.
+    # This is done to access the pixel spacing needed to apply when
+    # mosaicking multiple frames with potentially heterogeneous projections
+    ref_vrt = fname + "_ref.vrt"
+    osgeo.gdal.Warp(
+        ref_vrt,
+        data_lis[0],
+        format='VRT',
+        dstSRS=f"EPSG:{proj}",
+        dstNodata=np.nan,
+        multithread=True
+    )
+
+    # 2) Read the derived resolution from the reference VRT.
+    ds = osgeo.gdal.Open(ref_vrt, osgeo.gdal.GA_ReadOnly)
+    gt = ds.GetGeoTransform()  # (xmin, px_w, 0, ymax, 0, px_h) ; px_h is negative for north-up
+    xres, yres = gt[1], abs(gt[5])
+    ds = None
+
+    # 3) Warp + mosaic ALL frames into a single aligned VRT using that resolution.
+    mosaic_tif = fname + "_warp.tif"
+    osgeo.gdal.Warp(
+        mosaic_tif,
+        data_lis,
+        format='GTiff',
+        xRes=xres, yRes=yres,
+        dstSRS=f"EPSG:{proj}",
+        dstNodata=np.nan,
+        multithread=True,
+        creationOptions=[
+            "TILED=YES",
+            "COMPRESS=LZW",
+            "BIGTIFF=IF_SAFER"
+        ]
+    )
+
+    # 4) Open with rioxarray and save as your desired driver
+    da = rioxarray.open_rasterio(mosaic_tif, masked=True)
+    da = da.rio.write_nodata(np.nan, encoded=True)
+
+    # write your final product
+    da.rio.to_raster(fname, driver=driver, crs=proj)
+
+    # 5) Clean up
+    os.remove(mosaic_tif)
+    os.remove(ref_vrt)
     da.close()
-    reproj_da.close()
+
+    # 6) Create VRT file
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
     osgeo.gdal.BuildVRT(fname + '.vrt', fname, options=buildvrt_options)
 
+    # 7) Add height info
     if hgt_field is not None:
         # write height layers
         hgt_meta = osgeo.gdal.Open(data_lis[0]).GetMetadataItem(hgt_field)
@@ -1574,6 +1613,8 @@ def export_products(
 
             # only extract if file does not exist
             if not os.path.exists(outname):
+                print('iono_arrres', iono_arrres)
+                print('epsg_code', epsg_code)
                 ARIAtools.util.ionosphere.export_ionosphere(**lyr_input_dict)
 
             # track output
