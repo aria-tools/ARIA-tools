@@ -642,7 +642,6 @@ def merged_productbbox(
         # Check other parameters
         if ('arrres' in log_data.keys()) \
                 and (arrres != log_data['arrres']):
-            print('from', log_data['arrres'], 'to', arrres)
             runlog.update('update_mode', 'full_extract')
             LOGGER.warning('arrres has changed. '
                            'Setting update mode to full_extract.')
@@ -1613,8 +1612,6 @@ def export_products(
 
             # only extract if file does not exist
             if not os.path.exists(outname):
-                print('iono_arrres', iono_arrres)
-                print('epsg_code', epsg_code)
                 ARIAtools.util.ionosphere.export_ionosphere(**lyr_input_dict)
 
             # track output

@@ -193,9 +193,6 @@ def main():
         layers=args.layers, croptounion=args.croptounion, runlog=runlog,
         demfile=args.demfile, mask=args.mask)
 
-    print('standardproduct_info.products[0]', standardproduct_info.products[0])#!#
-    print('standardproduct_info.products[1]', standardproduct_info.products[1])#!#
-
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \
         model_names = ARIAtools.util.vrt.layerCheck(
@@ -224,10 +221,6 @@ def main():
         standardproduct_info.bbox_file, args.croptounion,
         num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
         verbose=args.verbose, runlog=runlog)
-
-    print('NEW')#!#
-    print('standardproduct_info.products[0]', standardproduct_info.products[0])#!#
-    print('standardproduct_info.products[1]', standardproduct_info.products[1])#!#
 
     # Load or download mask (if specified).
     if standardproduct_info.mask is not None:
