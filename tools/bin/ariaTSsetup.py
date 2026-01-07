@@ -350,9 +350,9 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     end_range = aria_prod.products[0][0]['slantRangeEnd'][0]
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     if is_nisar_file:
-        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
-    else:
         orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '_')[6]
+    else:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
 
     with open(os.path.join(stack_dir, output_file_name + '.vrt'), 'w') as fid:
         fid.write('''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
