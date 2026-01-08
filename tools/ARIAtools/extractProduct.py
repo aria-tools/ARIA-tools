@@ -756,6 +756,7 @@ def prep_metadatalayers(
         if not is_nisar_file:
             out_dir = os.path.join(out_dir, model_name)
         outname = os.path.join(out_dir, ifg)
+
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
 
@@ -817,12 +818,16 @@ def prep_metadatalayers(
 
     else:
         if not os.path.exists(outname + '.vrt'):
-            osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
+            if is_nisar_file:
+                create_raster_from_gunw(outname, metadata_arr,
+                                        proj, driver, hgt_field)
+            else:
+                osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
 
-            # write height layers
-            osgeo.gdal.Open(outname + '.vrt').SetMetadataItem(
-                hgt_field, osgeo.gdal.Open(
-                    metadata_arr[0]).GetMetadataItem(hgt_field))
+                # write height layers
+                osgeo.gdal.Open(outname + '.vrt').SetMetadataItem(
+                    hgt_field, osgeo.gdal.Open(
+                        metadata_arr[0]).GetMetadataItem(hgt_field))
 
     return hgt_field, ref_outname
 
@@ -1157,7 +1162,7 @@ def export_product_worker(
         ii, ilayer, product, proj, full_product_dict_file, layers, workdir,
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
         outputFormat, outputFormatPhys, layer, outDir,
-        arrres, epsg_code, num_threads, multilooking, verbose, is_nisar_file,
+        arrres, num_threads, multilooking, verbose, is_nisar_file,
         range_correction, rankedResampling, update_mode):
     """
     Worker function for export_products for parallel execution with
@@ -1285,7 +1290,7 @@ def export_product_worker(
 
             # stitching
             ARIAtools.util.seq_stitch.product_stitch_sequential(
-                phs_files, conn_files, arrres=arrres, epsg=epsg_code,
+                phs_files, conn_files, arrres=arrres, epsg=proj,
                 bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
                 output_conn=outFileConnComp,
                 output_format=outputFormatPhys,
@@ -1373,11 +1378,11 @@ def export_products(
     srs = osgeo.osr.SpatialReference()
     srs.ImportFromWkt(proj)
     srs.AutoIdentifyEPSG()
-    epsg_code = srs.GetAuthorityCode(None)
+    epsg_code = int(srs.GetAuthorityCode(None))
     srs = None
     lyr_input_dict = {
         'layers': layers, 'prods_TOTbbox': prods_TOTbbox,
-        'proj': int(epsg_code), 'dem': dem_expanded, 'lat': lat, 'lon': lon,
+        'proj': epsg_code, 'dem': dem_expanded, 'lat': lat, 'lon': lon,
         'mask': mask, 'verbose': verbose, 'multilooking': multilooking,
         'rankedResampling': rankedResampling, 'num_threads': num_threads,
         'is_nisar_file': is_nisar_file}
@@ -1456,7 +1461,7 @@ def export_products(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
+        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': epsg_code}
 
     # track if files need to be updated
     lyr_input_dict['update_mode'] = update_mode
@@ -1662,10 +1667,10 @@ def export_products(
                     'unwrappedPhase', 'connectedComponents'))
 
             mp_args.append((
-                ii, ilayer, product, proj, full_product_dict_file, layers,
+                ii, ilayer, product, epsg_code, full_product_dict_file, layers,
                 workdir, bounds, prods_TOTbbox, demfile,
                 demfile_expanded, maskfile, outputFormat, outputFormatPhys,
-                layer, outDir, arrres, epsg_code, num_threads,
+                layer, outDir, arrres, num_threads,
                 multilooking, verbose, is_nisar_file, range_correction,
                 rankedResampling, update_mode))
 
