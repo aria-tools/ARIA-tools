@@ -26,6 +26,7 @@ import dask
 import rioxarray
 import rasterio
 import osgeo
+import osgeo_utils.gdal_calc
 import pyproj
 import numpy as np
 import scipy.interpolate
@@ -819,8 +820,100 @@ def prep_metadatalayers(
     else:
         if not os.path.exists(outname + '.vrt'):
             if is_nisar_file:
-                create_raster_from_gunw(outname, metadata_arr,
-                                        proj, driver, hgt_field)
+                # Need to compute azimuthAngle from
+                # losUnitVectorX and losUnitVectorY
+                if layer == 'azimuthAngle':
+                    losx_arr = copy.deepcopy(metadata_arr)
+                    losy_arr = [
+                        path.replace('losUnitVectorX', 'losUnitVectorY')
+                        for path in metadata_arr
+                    ]
+
+                    # Initiate temp los dimension files
+                    losx_name = os.path.join(out_dir, f'temp_{ifg}_losx_arr')
+                    losy_name = os.path.join(out_dir, f'temp_{ifg}_losy_arr')
+
+                    create_raster_from_gunw(
+                        losx_name, losx_arr, proj, driver, hgt_field
+                    )
+                    create_raster_from_gunw(
+                        losy_name, losy_arr, proj, driver, hgt_field
+                    )
+
+                    # Get NoData value from input
+                    ds_temp = osgeo.gdal.Open(losx_name + '.vrt')
+                    src_nodata = ds_temp.GetRasterBand(1).GetNoDataValue()
+                    ds_temp = None
+
+                    # Construct the Calc String safely
+                    # If src_nodata exists and is NOT nan, we must mask it
+                    # manually.
+                    if src_nodata is not None and not np.isnan(src_nodata):
+                        # Logic: If (A == nodata) OR (B == nodata), return
+                        # NaN. Else calculate the angle.
+                        calc_cmd = (
+                            f"numpy.where("
+                            f"(A=={src_nodata})|(B=={src_nodata}), "
+                            f"numpy.nan, "
+                            f"numpy.degrees(numpy.arctan2(-B, -A)))"
+                        )
+                    else:
+                        # If input is already NaN (or None), the math
+                        # handles it naturally.
+                        calc_cmd = "numpy.degrees(numpy.arctan2(-B, -A))"
+
+                    # Compute azimuthAngle from the outputs above
+                    # We map path_x to 'A' and path_y to 'B'
+                    osgeo_utils.gdal_calc.Calc(
+                        A=losx_name + '.vrt',
+                        B=losy_name + '.vrt',
+                        outfile=outname,
+                        calc=calc_cmd,
+                        format=driver,
+                        allBands="A",  # processes every band
+                        quiet=True
+                    )
+
+                    # Manually enforce NoData = NaN on the output header
+                    ds_update = osgeo.gdal.Open(
+                        outname, osgeo.gdal.GA_Update
+                    )
+                    if ds_update:
+                        for b in range(1, ds_update.RasterCount + 1):
+                            ds_update.GetRasterBand(b).SetNoDataValue(np.nan)
+                        ds_update = None
+
+                    # Create VRT file
+                    buildvrt_options = osgeo.gdal.BuildVRTOptions(
+                        outputSRS=f'EPSG:{proj}'
+                    )
+                    osgeo.gdal.BuildVRT(
+                        outname + '.vrt',
+                        outname,
+                        options=buildvrt_options
+                    )
+
+                    # Add height info
+                    if hgt_field is not None:
+                        # Write height layers
+                        ds_meta = osgeo.gdal.Open(metadata_arr[0])
+                        hgt_meta = ds_meta.GetMetadataItem(hgt_field)
+                        ds_meta = None  # Close file
+
+                        ds_vrt = osgeo.gdal.Open(outname + '.vrt')
+                        ds_vrt.SetMetadataItem(hgt_field, hgt_meta)
+                        ds_vrt = None  # Close file
+
+                    # Cleanup Input Files
+                    for f in [losx_name, losy_name]:
+                        for junk_file in glob.glob(f"{f}*"):
+                            try:
+                                os.remove(junk_file)
+                            except OSError:
+                                pass
+                else:
+                    create_raster_from_gunw(outname, metadata_arr,
+                        proj, driver, hgt_field)
             else:
                 osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
 
