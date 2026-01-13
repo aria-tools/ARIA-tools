@@ -325,8 +325,11 @@ def crop_only_manager(outname, lyrname, ifg_tag, gdal_warp_kwargs):
     # Crop
     gdal_warp_kwargs['format'] = 'ENVI'
     warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-    osgeo.gdal.Warp(
-        outname + '_crop', outname + '.vrt', options=warp_options)
+    ds = osgeo.gdal.Warp(
+        outname + '_crop', outname + '.vrt', options=warp_options
+    )
+    ds = None
+
     for crop_name in glob.glob(outname + '_crop*'):
         fname = os.path.basename(crop_name).replace('_crop', '')
         fname = os.path.join(os.path.dirname(crop_name), fname)
@@ -676,7 +679,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     # This is done to access the pixel spacing needed to apply when
     # mosaicking multiple frames with potentially heterogeneous projections
     ref_vrt = fname + "_ref.vrt"
-    osgeo.gdal.Warp(
+    ds = osgeo.gdal.Warp(
         ref_vrt,
         data_lis[0],
         format='VRT',
@@ -684,6 +687,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
         dstNodata=np.nan,
         multithread=True
     )
+    ds = None
 
     # 2) Read the derived resolution from the reference VRT.
     ds = osgeo.gdal.Open(ref_vrt, osgeo.gdal.GA_ReadOnly)
@@ -693,7 +697,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
 
     # 3) Warp + mosaic ALL frames into a single aligned VRT using that resolution.
     mosaic_tif = fname + "_warp.tif"
-    osgeo.gdal.Warp(
+    ds = osgeo.gdal.Warp(
         mosaic_tif,
         data_lis,
         format='GTiff',
@@ -707,6 +711,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
             "BIGTIFF=IF_SAFER"
         ]
     )
+    ds = None
 
     # 4) Open with rioxarray and save as your desired driver
     da = rioxarray.open_rasterio(mosaic_tif, masked=True)
@@ -887,11 +892,12 @@ def prep_metadatalayers(
                     buildvrt_options = osgeo.gdal.BuildVRTOptions(
                         outputSRS=proj
                     )
-                    osgeo.gdal.BuildVRT(
+                    ds_vrt = osgeo.gdal.BuildVRT(
                         outname + '.vrt',
                         outname,
                         options=buildvrt_options
                     )
+                    ds_vrt = None
 
                     # Add height info
                     if hgt_field is not None:
@@ -915,7 +921,8 @@ def prep_metadatalayers(
                     create_raster_from_gunw(outname, metadata_arr,
                         proj, driver, hgt_field)
             else:
-                osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
+                ds_vrt = osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
+                ds_vrt = None
 
                 # write height layers
                 osgeo.gdal.Open(outname + '.vrt').SetMetadataItem(
@@ -1399,20 +1406,22 @@ def export_product_worker(
 
                     # 4. Warp the In-Memory Amplitude to Disk
                     # We pass the 'ds_amp' object directly to Warp
-                    osgeo.gdal.Warp(
+                    ds_amp_warp = osgeo.gdal.Warp(
                         outname, ds_amp, options=amp_warp_opts
                     )
 
                     # Cleanup
                     ds_amp = None
+                    ds_amp_warp = None
                     if os.path.exists(temp_vrt):
                         os.remove(temp_vrt)
 
                 else:
                     # Standard NISAR layer options
-                    osgeo.gdal.Warp(
+                    ds = osgeo.gdal.Warp(
                         outname, product, options=warp_options
                     )
+                    ds = None
 
             else:
                 # Legacy handling
@@ -1421,37 +1430,43 @@ def export_product_worker(
                 ):
 
                     if outputFormat == 'VRT':
-                        osgeo.gdal.BuildVRT(
+                        ds_vrt = osgeo.gdal.BuildVRT(
                             outname + "_uncropped.vrt", product
                         )
-                        osgeo.gdal.Warp(
+                        ds_vrt = None
+                        ds = osgeo.gdal.Warp(
                             outname + '.vrt',
                             outname + '_uncropped.vrt',
                             options=warp_options
                         )
+                        ds = None
                     else:
-                        osgeo.gdal.BuildVRT(outname + '.vrt', product)
-                        osgeo.gdal.Warp(
+                        ds_vrt = osgeo.gdal.BuildVRT(outname + '.vrt', product)
+                        ds_vrt = None
+                        ds = osgeo.gdal.Warp(
                             outname,
                             outname + '.vrt',
                             options=warp_options
                         )
-                        osgeo.gdal.Translate(
+                        ds = None
+                        ds_trans = osgeo.gdal.Translate(
                             outname + '.vrt',
                             outname,
                             options=osgeo.gdal.TranslateOptions(
                                 format="VRT"
                             )
                         )
+                        ds_trans = None
 
             # Create VRT (Global for this block)
-            osgeo.gdal.Translate(
+            ds_trans = osgeo.gdal.Translate(
                 outname + '.vrt',
                 outname,
                 options=osgeo.gdal.TranslateOptions(
                     format="VRT"
                 )
             )
+            ds_trans = None
 
         # Extract/crop phs and conn_comp layers
         else:
@@ -2056,7 +2071,10 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             'xRes': dem_arrres[0], 'yRes': dem_arrres[1],
             'targetAlignedPixels': True, 'multithread': True}
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        osgeo.gdal.Warp(tmp_name + '_temp', tmp_name, options=warp_options)
+        ds = osgeo.gdal.Warp(
+            tmp_name + '_temp', tmp_name, options=warp_options
+        )
+        ds = None
 
     # Adjust shape
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
@@ -2066,7 +2084,10 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
             'multithread': True}
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        osgeo.gdal.Warp(outname, tmp_name + '_temp', options=warp_options)
+        ds = osgeo.gdal.Warp(
+            outname, tmp_name + '_temp', options=warp_options
+        )
+        ds = None
 
     # remove temp files
     for i in glob.glob(outname + '*_temp*'):
