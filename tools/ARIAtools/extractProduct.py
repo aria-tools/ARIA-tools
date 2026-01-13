@@ -680,7 +680,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
         ref_vrt,
         data_lis[0],
         format='VRT',
-        dstSRS=f"EPSG:{proj}",
+        dstSRS=proj,
         dstNodata=np.nan,
         multithread=True
     )
@@ -698,7 +698,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
         data_lis,
         format='GTiff',
         xRes=xres, yRes=yres,
-        dstSRS=f"EPSG:{proj}",
+        dstSRS=proj,
         dstNodata=np.nan,
         multithread=True,
         creationOptions=[
@@ -721,7 +721,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     da.close()
 
     # 6) Create VRT file
-    buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
+    buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
     osgeo.gdal.BuildVRT(fname + '.vrt', fname, options=buildvrt_options)
 
     # 7) Add height info
@@ -885,7 +885,7 @@ def prep_metadatalayers(
 
                     # Create VRT file
                     buildvrt_options = osgeo.gdal.BuildVRTOptions(
-                        outputSRS=f'EPSG:{proj}'
+                        outputSRS=proj
                     )
                     osgeo.gdal.BuildVRT(
                         outname + '.vrt',
@@ -962,8 +962,8 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     da_total = da_total.assign_attrs(da_attrs)
 
     # write initial array to file
-    da_total.rio.to_raster(outname, driver=driver, crs=f'EPSG:{proj}')
-    buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=f'EPSG:{proj}')
+    da_total.rio.to_raster(outname, driver=driver, crs=proj)
+    buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
     ds = osgeo.gdal.BuildVRT(
         f'{outname}.vrt', outname, options=buildvrt_options)
     # fix if numpy array not set properly
@@ -1266,6 +1266,9 @@ def export_product_worker(
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
         'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
+    warp_options = osgeo.gdal.WarpOptions(
+        **gdal_warp_kwargs
+    )
 
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
@@ -1343,27 +1346,112 @@ def export_product_worker(
         # Extract/crop full res layers, except for "unw" and "conn_comp"
         # which requires advanced stitching
         elif layer != 'unwrappedPhase' and layer != 'connectedComponents':
-            with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-                warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-                if outputFormat == 'VRT':
-                    # building the virtual vrt
-                    osgeo.gdal.BuildVRT(
-                        outname + "_uncropped" + '.vrt', product)
 
-                    # building the cropped vrt
+            if is_nisar_file:
+
+                if layer == 'amplitude':
+                    # 1. Build a temp VRT to merge the input files
+                    temp_vrt = outname + '_temp_complex.vrt'
+                    osgeo.gdal.BuildVRT(temp_vrt, product)
+
+                    # 2. Open VRT and Calculate Amplitude in Memory
+                    # This guarantees we get Magnitude, not Real component
+                    ds_in = osgeo.gdal.Open(temp_vrt)
+                    
+                    # Create an in-memory (MEM) dataset for the Amplitude
+                    # This avoids writing an intermediate file to disk
+                    mem_driver = osgeo.gdal.GetDriverByName('MEM')
+                    ds_amp = mem_driver.Create(
+                        '',
+                        ds_in.RasterXSize,
+                        ds_in.RasterYSize,
+                        1,
+                        osgeo.gdal.GDT_Float32
+                    )
+
+                    # Copy Projection and GeoTransform
+                    ds_amp.SetProjection(ds_in.GetProjection())
+                    ds_amp.SetGeoTransform(ds_in.GetGeoTransform())
+
+                    # Read Complex, Compute Abs, Write Float32
+                    # Note: For ~250MB, this is safe for RAM.
+                    complex_data = ds_in.GetRasterBand(1).ReadAsArray()
+                    ds_amp.GetRasterBand(1).WriteArray(np.abs(complex_data))
+                    
+                    # Close input to free strict lock
+                    ds_in = None
+
+                    # 3. Setup Warp Options
+                    amp_kwargs = gdal_warp_kwargs.copy()
+                    
+                    # Handle integer EPSG codes for compliance
+                    if ('dstSRS' in amp_kwargs and
+                            isinstance(amp_kwargs['dstSRS'], int)):
+                        amp_kwargs['dstSRS'] = (
+                            f"EPSG:{amp_kwargs['dstSRS']}"
+                        )
+
+                    # Explicitly force Float32 output
+                    amp_warp_opts = osgeo.gdal.WarpOptions(
+                        outputType=osgeo.gdal.GDT_Float32,
+                        **amp_kwargs
+                    )
+
+                    # 4. Warp the In-Memory Amplitude to Disk
+                    # We pass the 'ds_amp' object directly to Warp
                     osgeo.gdal.Warp(
-                        outname + '.vrt', outname + '_uncropped.vrt',
-                        options=warp_options)
+                        outname, ds_amp, options=amp_warp_opts
+                    )
+
+                    # Cleanup
+                    ds_amp = None
+                    if os.path.exists(temp_vrt):
+                        os.remove(temp_vrt)
+
                 else:
-                    # building the VRT
-                    osgeo.gdal.BuildVRT(outname + '.vrt', product)
+                    # Standard NISAR layer options
                     osgeo.gdal.Warp(
-                        outname, outname + '.vrt', options=warp_options)
+                        outname, product, options=warp_options
+                    )
 
-                    # Update VRT
-                    osgeo.gdal.Translate(
-                        outname + '.vrt', outname,
-                        options=osgeo.gdal.TranslateOptions(format="VRT"))
+            else:
+                # Legacy handling
+                with osgeo.gdal.config_options(
+                    {"GDAL_NUM_THREADS": num_threads}
+                ):
+
+                    if outputFormat == 'VRT':
+                        osgeo.gdal.BuildVRT(
+                            outname + "_uncropped.vrt", product
+                        )
+                        osgeo.gdal.Warp(
+                            outname + '.vrt',
+                            outname + '_uncropped.vrt',
+                            options=warp_options
+                        )
+                    else:
+                        osgeo.gdal.BuildVRT(outname + '.vrt', product)
+                        osgeo.gdal.Warp(
+                            outname,
+                            outname + '.vrt',
+                            options=warp_options
+                        )
+                        osgeo.gdal.Translate(
+                            outname + '.vrt',
+                            outname,
+                            options=osgeo.gdal.TranslateOptions(
+                                format="VRT"
+                            )
+                        )
+
+            # Create VRT (Global for this block)
+            osgeo.gdal.Translate(
+                outname + '.vrt',
+                outname,
+                options=osgeo.gdal.TranslateOptions(
+                    format="VRT"
+                )
+            )
 
         # Extract/crop phs and conn_comp layers
         else:
@@ -1471,7 +1559,7 @@ def export_products(
     srs = osgeo.osr.SpatialReference()
     srs.ImportFromWkt(proj)
     srs.AutoIdentifyEPSG()
-    epsg_code = int(srs.GetAuthorityCode(None))
+    epsg_code = f'EPSG:{int(srs.GetAuthorityCode(None))}'
     srs = None
     lyr_input_dict = {
         'layers': layers, 'prods_TOTbbox': prods_TOTbbox,
