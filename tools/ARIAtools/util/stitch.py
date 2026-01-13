@@ -167,7 +167,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
                      snwe: list,
                      nodata: Optional[str] = 'NAN',
                      format: Optional[str] = 'ENVI',
-                     epsg: Optional[int] = 4326,
+                     epsg: Optional[str] = 'EPSG:4326',
                      add_vrt: Optional[bool] = True,
                      verbose: Optional[bool] = False,
                      update_mode: Optional[bool] = True) -> None:
@@ -186,8 +186,8 @@ def write_GUNW_array(output_filename: Union[str, Path],
         value or nan for NODATA (used for VRT creation)
     format : str
         output raster format, default is ENVI
-    epsg : int
-        projection epsg, default is 4326 for WGS84
+    epsg : str
+        projection epsg, default is 'EPSG:4326' for WGS84
     add_vrt : bool
         flag to create VRT for output raster [True/False]
     verbose : bool
@@ -222,7 +222,8 @@ def write_GUNW_array(output_filename: Union[str, Path],
     # Geotransform
     geo = (snwe[2], x_step, 0, snwe[1], 0, y_step)
     srs = osr.SpatialReference()
-    srs.ImportFromEPSG(epsg)  # set projection
+    epsg_int = int(epsg.split(":")[-1])
+    srs.ImportFromEPSG(epsg_int)  # set projection
 
     # Write
     driver = gdal.GetDriverByName(format)
