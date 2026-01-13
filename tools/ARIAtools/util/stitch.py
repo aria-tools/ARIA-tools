@@ -446,7 +446,17 @@ def combine_data_to_single(data_list: list,
             comb_data[i, y:y + data.shape[0], x: x + data.shape[1]] = data
 
     with warnings.catch_warnings():
-        #warnings.simplefilter("ignore", category=RuntimeWarning)
+        warnings.filterwarnings(
+            "ignore",
+            message="Mean of empty slice",
+            category=RuntimeWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="All-NaN slice encountered",
+            category=RuntimeWarning,
+        )
+
         # combine using numpy
         if method == 'mean':
             comb_data = np.nanmean(comb_data, axis=0)
