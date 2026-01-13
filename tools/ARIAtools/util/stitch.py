@@ -2,6 +2,8 @@ import numpy as np
 import warnings
 from numpy.typing import NDArray
 
+import rioxarray
+
 from typing import Optional, Tuple, Union
 from osgeo import gdal, osr, gdal_array
 from pathlib import Path
@@ -10,7 +12,9 @@ from pathlib import Path
 
 
 def get_GUNW_attr(filename: Union[str, Path],
-                  proj: Optional[str] = None) -> dict:
+                  proj: Optional[str] = None,
+                  xres: Optional[float] = None,
+                  yres: Optional[float] = None,) -> dict:
     """
     Use GDAL to get raster metadata
 
@@ -26,10 +30,20 @@ def get_GUNW_attr(filename: Union[str, Path],
         [path, nodata, len, wid, snwe, lon_spacing, lat_spacing, projection]
     """
 
+    warp_kwargs = dict(
+        format="MEM",
+        dstSRS=proj,
+        multithread=True,
+    )
+
+    # set pixel spacing
+    if xres is not None and yres is not None:
+        warp_kwargs["xRes"] = xres
+        warp_kwargs["yRes"] = yres
+
     # Use GDAL to read GUNW netcdf
     if proj is not None:
-        ds = gdal.Warp(
-            '', filename, format='MEM', dstSRS=proj)
+        ds = gdal.Warp("", str(filename), **warp_kwargs)
     else:
         ds = gdal.Open(filename, gdal.GA_ReadOnly)
 
@@ -64,45 +78,88 @@ def get_GUNW_attr(filename: Union[str, Path],
 
 
 def get_GUNW_array(filename: Union[str, Path],
-                   proj: Optional[str] = 'EPSG:4326',
+                   proj: str = "EPSG:4326",
                    nodata: Optional[float] = None,
-                   subset: Optional[tuple] = None) -> NDArray:
+                   subset: Optional[slice] = None,
+                   xres: Optional[float] = None,
+                   yres: Optional[float] = None,
+                   align_to_grid: bool = False,
+                   resample=gdal.GRA_NearestNeighbour,
+                   as_xarray: bool = False,
+                   varname: str = "connectedComponents",
+                  ) -> np.ndarray:
     """
-    Use GDAL to get raster data [as array]
-
-    Parameters
-    ----------
-    filename : str
-        path to raster
-    proj : str
-        raster projection
-    subset : slice
-        subset created with np.s_ TODO: insert tuple of (x1,x2, y1,y2)
-        and then convert to slice with np.s_
-
-    Returns
-    -------
-    data : array
-        raster data 2D array [length x width]
+    Load a GUNW raster, optionally reprojecting to a consistent target grid.
+    By default returns a NumPy array. If `as_xarray=True`, returns an
+    xarray.DataArray opened via the rasterio engine (through rioxarray).
     """
 
-    # Use GDAL to read GUNW netcdf
-    ds = gdal.Open(filename)
-    ds = gdal.Warp(
-        '', filename, format='MEM', dstSRS=proj, outputType=gdal.GDT_Float32)
+    # Discover source nodata (if present)
+    src = gdal.Open(str(filename), gdal.GA_ReadOnly)
+    band = src.GetRasterBand(1)
+    src_nodata = band.GetNoDataValue()
+    src = None
 
-    data = ds.ReadAsArray()
-    # close
-    ds = None
+    warp_kwargs = dict(
+        format="MEM",
+        dstSRS=proj,
+        resampleAlg=resample,
+        multithread=True,
+        outputType=gdal.GDT_Float32
+    )
 
-    # Subset array
-    if subset:
-        data = data[subset]
+    # set pixel spacing
+    if xres is not None and yres is not None:
+        warp_kwargs["xRes"] = xres
+        warp_kwargs["yRes"] = yres
+        if align_to_grid:
+            warp_kwargs["targetAlignedPixels"] = True
 
+    # Use explicit nodata handling for float rasters
     if nodata is not None:
-        return np.ma.masked_equal(data, nodata)
-    else:
-        return data
+        warp_kwargs["dstNodata"] = nodata
+        warp_kwargs["srcNodata"] = src_nodata if src_nodata is not None else nodata
+
+    # Reproject to target grid in-memory
+    ds = gdal.Warp("", str(filename), **warp_kwargs)
+
+    if not as_xarray:
+        data = ds.ReadAsArray()
+        ds = None
+        if subset:
+            data = data[subset]
+        return np.ma.masked_equal(data, nodata) if nodata is not None else data
+
+    # ---- xarray / rasterio path ----
+    # Write to an in-memory GeoTIFF so rasterio can open it
+    vsipath = "/vsimem/_gunw_tmp.tif"
+    gdal.Translate(
+        vsipath, ds, format="GTiff",
+        creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=IF_SAFER"]
+    )
+    ds = None  # release MEM dataset
+
+    da = rioxarray.open_rasterio(vsipath, masked=True)
+
+    # Optional subset (y, x) indexing; keep it simple if provided as a slice/tuple
+    if subset:
+        da = da.isel(y=subset[0], x=subset[1]) if isinstance(subset, tuple) else da[subset]
+
+    # Squeeze single-band and name
+    if "band" in da.dims and da.sizes["band"] == 1:
+        da = da.squeeze("band", drop=True)
+
+    # make sure it has a variable name
+        da.name = varname
+
+    # Ensure nodata encoded (use NaN if provided)
+    if nodata is not None:
+        da = da.rio.write_nodata(nodata)
+
+    # Clean up the vsimem file
+    gdal.Unlink(vsipath)
+
+    return da.to_dataset(name=varname)
 
 
 def write_GUNW_array(output_filename: Union[str, Path],
@@ -110,7 +167,7 @@ def write_GUNW_array(output_filename: Union[str, Path],
                      snwe: list,
                      nodata: Optional[str] = 'NAN',
                      format: Optional[str] = 'ENVI',
-                     epsg: Optional[int] = 4326,
+                     epsg: Optional[str] = 'EPSG:4326',
                      add_vrt: Optional[bool] = True,
                      verbose: Optional[bool] = False,
                      update_mode: Optional[bool] = True) -> None:
@@ -129,8 +186,8 @@ def write_GUNW_array(output_filename: Union[str, Path],
         value or nan for NODATA (used for VRT creation)
     format : str
         output raster format, default is ENVI
-    epsg : int
-        projection epsg, default is 4326 for WGS84
+    epsg : str
+        projection epsg, default is 'EPSG:4326' for WGS84
     add_vrt : bool
         flag to create VRT for output raster [True/False]
     verbose : bool
@@ -165,7 +222,8 @@ def write_GUNW_array(output_filename: Union[str, Path],
     # Geotransform
     geo = (snwe[2], x_step, 0, snwe[1], 0, y_step)
     srs = osr.SpatialReference()
-    srs.ImportFromEPSG(epsg)  # set projection
+    epsg_int = int(epsg.split(":")[-1])
+    srs.ImportFromEPSG(epsg_int)  # set projection
 
     # Write
     driver = gdal.GetDriverByName(format)
@@ -228,7 +286,7 @@ def lalo2xy(lat: np.float32,
             data_snwe: list,
             latlon_step: list,
             rounding_method: Optional[str] = 'floor') \
-        -> Tuple[np.int16, np.int16]:
+        -> Tuple[gdal.GDT_Float32, gdal.GDT_Float32]:
     """
     Georeferenced coordinates to image space coordinates.
     GDAL raster starting point is the upper left corner.
@@ -388,7 +446,17 @@ def combine_data_to_single(data_list: list,
             comb_data[i, y:y + data.shape[0], x: x + data.shape[1]] = data
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=RuntimeWarning)
+        warnings.filterwarnings(
+            "ignore",
+            message="Mean of empty slice",
+            category=RuntimeWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="All-NaN slice encountered",
+            category=RuntimeWarning,
+        )
+
         # combine using numpy
         if method == 'mean':
             comb_data = np.nanmean(comb_data, axis=0)

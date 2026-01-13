@@ -496,7 +496,7 @@ class Product:
             version = basename.split('_')[-1][:-3]
             version = '.'.join(version)
             nc_version_check = [version]
-            if not basename.endswith('_M_P_J_001.h5'):
+            if not basename.endswith('_N_F_J_001.h5'):
                 LOGGER.warning(
                     'input file %s is an older, unsupported '
                     'version of the NISAR sample product', fname)
@@ -910,6 +910,7 @@ class Product:
         # get product bounding box
         # and other variables
         lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
+        wrapped_lyr_pref = f'{lyr_pref}/wrappedInterferogram/{file_pol}/'
         lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
         center_freq = '/science/LSAR/GUNW/grids/frequencyA/centerFrequency'
         with h5py.File(fname[8:], 'r') as hdf_gunw:
@@ -956,7 +957,8 @@ class Product:
             lyr_pref + 'coherenceMagnitude',
             lyr_pref + 'connectedComponents',
             lyr_pref + 'ionospherePhaseScreen',
-            lyr_pref + 'ionospherePhaseScreenUncertainty'
+            lyr_pref + 'ionospherePhaseScreenUncertainty',
+            wrapped_lyr_pref + 'wrappedInterferogram'
         ])
         lyr_pref = '/science/LSAR/GUNW/metadata/radarGrid/'
         sdskeys.extend([
@@ -965,7 +967,7 @@ class Product:
             lyr_pref + 'incidenceAngle',
             lyr_pref + 'losUnitVectorX',  # derive azimuthAngle from this
             lyr_pref + 'losUnitVectorY',  # derive azimuthAngle from this
-            lyr_pref + 'elevationAngle'
+            lyr_pref + 'elevationAngle'   # the equivalent of lookAngle
         ])
         # track and add additional correction layers, if they exist
         sdskeys_addlyrs = [
@@ -997,10 +999,12 @@ class Product:
         layerkeys = [
             'productBoundingBox', 'unwrappedPhase', 'coherence',
             'connectedComponents', 'ionospherePhaseScreen',
-            'ionospherePhaseScreenUncertainty', 'bPerpendicular', 'bParallel',
-            'incidenceAngle', 'losUnitVectorX', 'losUnitVectorY',
-            'elevationAngle', 'slantRangeSolidEarthTidesPhase',
-            'hydrostaticTroposphericPhaseScreen', 'wetTroposphericPhaseScreen']
+            'ionospherePhaseScreenUncertainty', 'wrappedInterferogram',
+            'bPerpendicular', 'bParallel', 'incidenceAngle', 'losUnitVectorX',
+            'losUnitVectorY', 'elevationAngle',
+            'slantRangeSolidEarthTidesPhase',
+            'hydrostaticTroposphericPhaseScreen',
+            'wetTroposphericPhaseScreen']
 
         # Setup datalyr_dict
         datalyr_dict = {}
@@ -1013,7 +1017,7 @@ class Product:
         for i in enumerate(layerkeys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
-        # Rewrite tropo, iono, and SET keys
+        # Rewrite tropo, iono, SET, lookAngle, and amplitude keys
         datalyr_dict['ionosphere'] = datalyr_dict.pop(
             'ionospherePhaseScreen')
         datalyr_dict['troposphereHydrostatic'] = datalyr_dict.pop(
@@ -1022,6 +1026,13 @@ class Product:
             'wetTroposphericPhaseScreen')
         datalyr_dict['solidEarthTide'] = datalyr_dict.pop(
             'slantRangeSolidEarthTidesPhase')
+        datalyr_dict['lookAngle'] = datalyr_dict.pop(
+            'elevationAngle')
+        datalyr_dict['amplitude'] = datalyr_dict.pop(
+            'wrappedInterferogram')
+
+        # add azimuthAngle key hack (to be handled downstream)
+        datalyr_dict['azimuthAngle'] = datalyr_dict['losUnitVectorX']
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -1392,4 +1403,5 @@ class Product:
             'Group GUNW products into spatiotemporally continuous '
             'interferograms.')
         self.products = self.__continuous_time__()
+
         return self.products

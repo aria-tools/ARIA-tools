@@ -146,7 +146,7 @@ def create_parser():
     return parser
 
 
-def extract_bperp_dict(domain_name, aria_prod):
+def extract_bperp_dict_ts(domain_name, aria_prod):
     """Extract mean bperp from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
@@ -162,20 +162,32 @@ def extract_bperp_dict(domain_name, aria_prod):
             b_perp = i.split('/')
             b_perp[-2] = 'bPerpendicular'
             b_perp = '/'.join(b_perp)
+
             if os.path.exists(b_perp):
-                data_set = osgeo.gdal.Open(b_perp)
-                band = data_set.GetRasterBand(1)
-
-                # returns [min, max, mean, std]
-                try:
-                    # gdal~3.5
-                    stat = band.GetStatistics(True, True)[2]
-
-                except Exception as E:
-                    # gdal~3.4
-                    stat = band.GetStatistics(False, True)[2]
                 data_set = None
+                try:
+                    data_set = osgeo.gdal.Open(
+                        b_perp, osgeo.gdal.GA_ReadOnly
+                    )
+                    if data_set is not None:
+                        band = data_set.GetRasterBand(1)
+
+                        # returns [min, max, mean, std]
+                        try:
+                            # gdal~3.5
+                            stat = band.GetStatistics(True, True)[2]
+                        except Exception:
+                            # gdal~3.4
+                            stat = band.GetStatistics(False, True)[2]
+                        
+                        # Release band reference
+                        band = None
+                finally:
+                    # CRITICAL: Ensure file close happens no matter what
+                    data_set = None
+
         meta[pair_name] = stat
+
     return meta
 
 
@@ -213,7 +225,8 @@ def extract_utc_time(aria_dates, aztime_list):
 
 
 def generate_stack(aria_prod, stack_layer, output_file_name,
-                   workdir='./', ref_tropokey=None, ref_dlist=None):
+                   workdir='./', ref_tropokey=None, ref_dlist=None,
+                   is_nisar_file=False):
     """Generate time series stack."""
     os.environ['GDAL_PAM_ENABLED'] = 'YES'
     # Set up single stack file
@@ -240,15 +253,17 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # handle individual epochs if external correction layer
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
-        domain_name in ARIA_TROPO_MODELS):
+        domain_name in ARIA_TROPO_MODELS) and not is_nisar_file:
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # get dates
     aria_dates = \
         sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
 
-    if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
-        domain_name in ARIA_TROPO_MODELS):
+    # data are extracted as dates for tropo and SET layers for ARIA-S1-GUNW
+    # no NISAR layers are extracted this way
+    if not is_nisar_file and (domain_name in ARIA_EXTERNAL_CORRECTIONS
+                              or domain_name in ARIA_TROPO_MODELS):
         aria_indiv_dates = []
         rejected_dates = []
         for aria_date in aria_dates:
@@ -289,10 +304,12 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         maxValue=len(int_list), print_msg='Creating stack: ')
 
     # only perform following checks if a differential layer
+    # all NISAR layers are differential
     b_perp = []
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
-    if domain_name not in ARIA_EXTERNAL_CORRECTIONS and \
-            domain_name not in ARIA_TROPO_MODELS:
+    if is_nisar_file or (
+            domain_name not in ARIA_EXTERNAL_CORRECTIONS
+            and domain_name not in ARIA_TROPO_MODELS):
 
         # get az times for each date
         aztime_list = []
@@ -308,7 +325,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             with open(b_perp_json_file) as ifp:
                 b_perp = json.loads(ifp.read())
         else:
-            b_perp = extract_bperp_dict(domain_name, dlist)
+            b_perp = extract_bperp_dict_ts(domain_name, dlist)
 
         # Confirm 1-to-1 match between UNW and other derived products
         if ref_dlist and new_dlist != ref_dlist:
@@ -348,7 +365,10 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     start_range = aria_prod.products[0][0]['slantRangeStart'][0]
     end_range = aria_prod.products[0][0]['slantRangeEnd'][0]
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
-    orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
+    if is_nisar_file:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '_')[6]
+    else:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
 
     with open(os.path.join(stack_dir, output_file_name + '.vrt'), 'w') as fid:
         fid.write('''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
@@ -657,7 +677,7 @@ def main():
     # Generate UNW stack
     ref_dlist = generate_stack(
         standardproduct_info, 'unwrappedPhase', 'unwrapStack',
-        workdir=args.workdir)
+        workdir=args.workdir, is_nisar_file=is_nisar_file)
 
     # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
@@ -678,13 +698,14 @@ def main():
 
     # generate other stack layers
     # generate stack default parms
-    stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist}
+    stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist,
+                 'is_nisar_file': is_nisar_file}
     for layer in layers:
         if layer in ARIA_STACK_OUTFILES.keys():
             print('layer', layer)
 
             # iterate through model dirs if necessary
-            if 'tropo' in layer:
+            if 'tropo' in layer and not is_nisar_file:
                 model_dirs = glob.glob(
                     args.workdir + f'/{layer}/*', recursive=True)
                 model_dirs = [os.path.basename(i) for i in model_dirs]

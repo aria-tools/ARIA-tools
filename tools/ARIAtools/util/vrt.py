@@ -13,6 +13,7 @@ import numpy as np
 import logging
 import decimal
 import osgeo
+import warnings
 
 import ARIAtools.constants
 
@@ -68,7 +69,10 @@ def resampleRaster(
         inputname = fname
     else:
         fname += '.vrt'
-        inputname = osgeo.gdal.Open(fname).GetFileList()[-1]
+        # Explicitly close
+        ds = osgeo.gdal.Open(fname, osgeo.gdal.GA_ReadOnly)
+        inputname = ds.GetFileList()[-1]
+        ds = None
 
     # Access original shape
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
@@ -160,6 +164,9 @@ def resampleRaster(
             unwmap = np.ma.masked_invalid(unwmap)
             np.ma.set_fill_value(unwmap, ds_unw_nodata)
 
+            # Clear variable
+            ds_unw = None
+
             # unwphase
             renderVRT(
                 fnameunw, unwmap.filled(), geotrans=geotrans,
@@ -168,7 +175,9 @@ def resampleRaster(
 
             # temp workaround for gdal bug
             try:
-                osgeo.gdal.Open(fnameunw)
+                # Assign and close
+                ds_check = osgeo.gdal.Open(fnameunw, osgeo.gdal.GA_ReadOnly)
+                ds_check = None
 
             except RuntimeError:
                 for f in glob.glob(fnameunw + "*"):
@@ -199,8 +208,9 @@ def resampleRaster(
 
         # Default: resample unw phase with gdal average algorithm
         else:
-            ds_unw_nodata = osgeo.gdal.Open(fnameunw)
-            ds_unw_nodata = ds_unw_nodata.GetRasterBand(1).GetNoDataValue()
+            ds = osgeo.gdal.Open(fnameunw, osgeo.gdal.GA_ReadOnly)
+            ds_unw_nodata = ds.GetRasterBand(1).GetNoDataValue()
+            ds = None
 
             # Resample unwphase
             with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
@@ -219,7 +229,9 @@ def resampleRaster(
 
             # temp workaround for gdal bug
             try:
-                osgeo.gdal.Open(fnameunw)
+                # Assign and close
+                ds_check = osgeo.gdal.Open(fnameunw, osgeo.gdal.GA_ReadOnly)
+                ds_check = None
 
             except RuntimeError:
                 unwmap = np.fromfile(fnameunw, dtype=np.float32).reshape(
@@ -271,11 +283,7 @@ def resampleRaster(
 def rasterAverage(
         outname, product_dict, bounds, prods_TOTbbox, arrres,
         outputFormat='ENVI', thresh=None):
-    """Generate average of rasters.
-
-    Currently implemented for:
-    1. amplitude under 'mask_util.py'
-    2. coherence under 'plot_avgcoherence' function of productPlot"""
+    """Generate average of rasters."""
     # Make average raster
     # Delete existing average raster file
     for i in glob.glob(outname + '*'):
@@ -286,42 +294,73 @@ def rasterAverage(
         warp_options = osgeo.gdal.WarpOptions(
             format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
             xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True)
-        arr_file = osgeo.gdal.Warp('', i[1], options=warp_options)
-        nodata_value = arr_file.GetRasterBand(1).GetNoDataValue()
+            
+        # --- FIX START ---
+        # 1. Capture the Warp result
+        ds_warp = osgeo.gdal.Warp('', i[1], options=warp_options)
+        
+        # 2. Read data immediately
+        nodata_value = ds_warp.GetRasterBand(1).GetNoDataValue()
+        warp_arr = ds_warp.ReadAsArray()
+        
+        # 3. CRITICAL: Close the Warp dataset
+        ds_warp = None 
+        # --- FIX END ---
+
         arr_file_arr = np.ma.masked_where(
-            arr_file.ReadAsArray() == nodata_value, arr_file.ReadAsArray())
+            warp_arr == nodata_value, warp_arr)
 
         # Iteratively update average raster file
         if os.path.exists(outname):
-            arr_file = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
-            arr_file = arr_file.GetRasterBand(1).WriteArray(
-                arr_file_arr + arr_file.ReadAsArray())
+            # Open update file
+            ds_update = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
+            band = ds_update.GetRasterBand(1)
+            
+            # Read, Add, Write
+            current_data = band.ReadAsArray()
+            band.WriteArray(arr_file_arr + current_data)
+            
+            # Close update file
+            ds_update = None
 
         else:
             # If looping through first raster file, nothing to sum so just save
-            # to file
+            # Note: We need projection/geotransform. 
+            # We can re-open source i[1] briefly or cache it from ds_warp above.
+            # Better approach: Cache proj/gt from ds_warp before closing it above.
+            
+            # (Re-opening source for metadata is safer if ds_warp was MEM)
+            ds_src = osgeo.gdal.Open(i[1], osgeo.gdal.GA_ReadOnly)
             renderVRT(
-                outname, arr_file_arr, geotrans=arr_file.GetGeoTransform(),
+                outname, arr_file_arr, geotrans=ds_src.GetGeoTransform(),
                 drivername=outputFormat, gdal_fmt=arr_file_arr.dtype.name,
-                proj=arr_file.GetProjection(),
-                nodata=arr_file.GetRasterBand(1).GetNoDataValue())
+                proj=ds_src.GetProjection(),
+                nodata=nodata_value)
+            ds_src = None
 
     # Take average of raster sum
-    arr_file = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
-    arr_mean = arr_file.ReadAsArray() / len(product_dict)
+    ds_avg = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
+    arr_sum = ds_avg.ReadAsArray()
+    
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        arr_mean = arr_sum / len(product_dict)
 
     # Mask using specified raster threshold
     if thresh:
         arr_mean = np.where(arr_mean < float(thresh), 0, 1)
 
     # Save updated array to file
-    arr_file = arr_file.GetRasterBand(1).WriteArray(arr_mean)
-    arr_file = None
+    ds_avg.GetRasterBand(1).WriteArray(arr_mean)
+    ds_avg = None  # CLOSE
     arr_mean = None
 
     # Load raster to pass
-    arr_file = osgeo.gdal.Open(outname).ReadAsArray()
-    return arr_file
+    ds_final = osgeo.gdal.Open(outname)
+    final_arr = ds_final.ReadAsArray()
+    ds_final = None
+    
+    return final_arr
 
 
 # Perform initial layer, product, and correction sanity checks
@@ -482,3 +521,12 @@ def dim_check(ref_arr, prod_arr):
             f'and height ({ref_hgt}, {prod_hgt}) and geotrans '
             f'({ref_geotrans}, {prod_geotrans})')
     return
+
+
+# Helper to check heights safely
+def get_hgt_meta(fname, field):
+    ds = osgeo.gdal.Open(fname)
+    val = ds.GetMetadataItem(field)
+    ds = None # Close immediately
+
+    return val

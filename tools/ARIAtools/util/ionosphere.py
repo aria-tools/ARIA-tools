@@ -9,6 +9,7 @@ import logging
 import os
 import pathlib
 import typing
+from typing import Optional
 
 import ARIAtools.util.stitch
 import numpy as np
@@ -98,6 +99,8 @@ def _get_median_offsets2frames(xr_data_list, xr_mask_list, ix1, ix2):
 def stitch_ionosphere_frames(
     input_iono_files: typing.List[str],
     proj: typing.Optional[str] = "EPSG:4326",
+    xres: Optional[float] = None,
+    yres: Optional[float] = None,
     direction_N_S: typing.Optional[bool] = True,
 ):
 
@@ -122,18 +125,36 @@ def stitch_ionosphere_frames(
     # Loop through files
     for iono_file in input_iono_files:
         filename = iono_file.split(":")[1]
-        iono_attr_list.append(ARIAtools.util.stitch.get_GUNW_attr(iono_file, proj=proj))
-        iono_xr = xr.open_dataset(iono_file, engine="rasterio").squeeze()
+        iono_attr_list.append(ARIAtools.util.stitch.get_GUNW_attr(iono_file, xres=xres, yres=yres, proj=proj))
 
-        # Generate mask using unwrapPhase connectedComponents
+        # Load raster and generate mask using unwrapPhase connectedComponents
         if is_nisar_file:
-            mask_xr = xr.open_dataset(
-                NISAR_GUNW_LAYERS["connectedComponents"] % (filename, file_pol),
-                engine="rasterio",
+            iono_xr = ARIAtools.util.stitch.get_GUNW_array(
+                filename=iono_file,
+                proj=proj,
+                xres=xres, yres=yres,
+                nodata=iono_attr_list[-1]['NODATA'],
+                as_xarray = True,
+                varname = "connectedComponents"
+            ).squeeze()
+            # get concomp nodata value
+            conn_file = NISAR_GUNW_LAYERS["connectedComponents"] % (filename, file_pol)
+            conn_np = osgeo.gdal.Open(conn_file)
+            conn_nodata = conn_np.GetRasterBand(1)
+            conn_nodata = conn_nodata.GetNoDataValue()
+            mask_xr = ARIAtools.util.stitch.get_GUNW_array(
+                filename=conn_file,
+                proj=proj,
+                xres=xres, yres=yres,
+                nodata=conn_nodata,
+                as_xarray = True,
+                varname = "connectedComponents"
             ).squeeze()
         else:
+            iono_xr = xr.open_dataset(iono_file, engine="rasterio").squeeze()
+            conn_file = GUNW_LAYERS["connectedComponents"] % filename
             mask_xr = xr.open_dataset(
-                GUNW_LAYERS["connectedComponents"] % filename, engine="rasterio"
+                conn_file, engine="rasterio"
             ).squeeze()
 
         mask = np.bool_(mask_xr.connectedComponents.data != 0)
@@ -145,7 +166,7 @@ def stitch_ionosphere_frames(
         iono_xr_list.append(iono_xr)
         mask_xr_list.append(mask_xr)
 
-    # Remove intermidate variables
+    # Remove intermediate variables
     iono_xr = None
     mask_xr = None
     mask = None
@@ -207,7 +228,7 @@ def stitch_ionosphere_frames(
 def export_ionosphere(
     input_iono_files: typing.List[str],
     arrres: typing.List[float],
-    epsg: typing.Optional[str] = "4326",
+    epsg: typing.Optional[str] = "EPSG:4326",
     output_iono: typing.Optional[str] = "./ionosphere",
     output_format: typing.Optional[str] = "ISCE",
     bounds: typing.Optional[tuple] = None,
@@ -229,14 +250,6 @@ def export_ionosphere(
     # create temp files
     temp_iono_out = output_iono.parent / ("temp_" + output_iono.name)
 
-    # obtain reference epsg code to assign to intermediate outputs
-    ref_proj_str = ARIAtools.util.stitch.get_GUNW_attr(input_iono_files[0])[
-        "PROJECTION"
-    ]
-    srs = osgeo.osr.SpatialReference(wkt=ref_proj_str)
-    srs.AutoIdentifyEPSG()
-    ref_proj = srs.GetAuthorityCode(None)
-
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_iono_files) == 1:
@@ -247,7 +260,8 @@ def export_ionosphere(
 
     else:
         (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(
-            input_iono_files, proj=f"EPSG:{ref_proj}", direction_N_S=True
+            input_iono_files, xres=arrres[0], yres=arrres[1],
+            proj=epsg, direction_N_S=True
         )
 
         ARIAtools.util.stitch.write_GUNW_array(
@@ -255,7 +269,7 @@ def export_ionosphere(
             combined_iono,
             snwe,
             format=output_format,
-            epsg=int(ref_proj),
+            epsg=epsg,
             verbose=verbose,
             update_mode=overwrite,
             add_vrt=True,
@@ -280,7 +294,7 @@ def export_ionosphere(
         xRes=arrres[0],
         yRes=arrres[1],
         targetAlignedPixels=True,
-        dstSRS=f"EPSG:{epsg}",
+        dstSRS=epsg,
         outputBounds=bounds,
     )
     ds = None
@@ -317,7 +331,7 @@ def export_ionosphere(
 
         mask_array = mask.ReadAsArray()
         array = ARIAtools.util.stitch.get_GUNW_array(
-            str(output_iono.with_suffix(".vrt")), proj=f"EPSG:{epsg}"
+            str(output_iono.with_suffix(".vrt")), proj=epsg
         )
         update_array = mask_array * array
 
