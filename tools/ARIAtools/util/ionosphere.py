@@ -228,7 +228,7 @@ def stitch_ionosphere_frames(
 def export_ionosphere(
     input_iono_files: typing.List[str],
     arrres: typing.List[float],
-    epsg: typing.Optional[str] = "4326",
+    epsg: typing.Optional[str] = "EPSG:4326",
     output_iono: typing.Optional[str] = "./ionosphere",
     output_format: typing.Optional[str] = "ISCE",
     bounds: typing.Optional[tuple] = None,
@@ -261,7 +261,7 @@ def export_ionosphere(
     else:
         (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(
             input_iono_files, xres=arrres[0], yres=arrres[1],
-            proj=f"EPSG:{epsg}", direction_N_S=True
+            proj=epsg, direction_N_S=True
         )
 
         ARIAtools.util.stitch.write_GUNW_array(
@@ -269,7 +269,7 @@ def export_ionosphere(
             combined_iono,
             snwe,
             format=output_format,
-            epsg=int(epsg),
+            epsg=epsg,
             verbose=verbose,
             update_mode=overwrite,
             add_vrt=True,
@@ -294,7 +294,7 @@ def export_ionosphere(
         xRes=arrres[0],
         yRes=arrres[1],
         targetAlignedPixels=True,
-        dstSRS=f"EPSG:{epsg}",
+        dstSRS=epsg,
         outputBounds=bounds,
     )
     ds = None
@@ -331,7 +331,7 @@ def export_ionosphere(
 
         mask_array = mask.ReadAsArray()
         array = ARIAtools.util.stitch.get_GUNW_array(
-            str(output_iono.with_suffix(".vrt")), proj=f"EPSG:{epsg}"
+            str(output_iono.with_suffix(".vrt")), proj=epsg
         )
         update_array = mask_array * array
 
