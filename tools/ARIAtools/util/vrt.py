@@ -13,6 +13,7 @@ import numpy as np
 import logging
 import decimal
 import osgeo
+import warnings
 
 import ARIAtools.constants
 
@@ -338,20 +339,23 @@ def rasterAverage(
             ds_src = None
 
     # Take average of raster sum
-    arr_file = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
-    arr_mean = arr_file.ReadAsArray() / len(product_dict)
+    ds_avg = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
+    arr_sum = ds_avg.ReadAsArray()
+    
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        arr_mean = arr_sum / len(product_dict)
 
     # Mask using specified raster threshold
     if thresh:
         arr_mean = np.where(arr_mean < float(thresh), 0, 1)
 
     # Save updated array to file
-    arr_file.GetRasterBand(1).WriteArray(arr_mean)
-    arr_file = None # Close final file
+    ds_avg.GetRasterBand(1).WriteArray(arr_mean)
+    ds_avg = None  # CLOSE
     arr_mean = None
 
     # Load raster to pass
-    # Open, Read, Close
     ds_final = osgeo.gdal.Open(outname)
     final_arr = ds_final.ReadAsArray()
     ds_final = None
