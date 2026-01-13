@@ -482,3 +482,12 @@ def dim_check(ref_arr, prod_arr):
             f'and height ({ref_hgt}, {prod_hgt}) and geotrans '
             f'({ref_geotrans}, {prod_geotrans})')
     return
+
+
+# Helper to check heights safely
+def get_hgt_meta(fname, field):
+    ds = osgeo.gdal.Open(fname)
+    val = ds.GetMetadataItem(field)
+    ds = None # Close immediately
+
+    return val
