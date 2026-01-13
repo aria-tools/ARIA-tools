@@ -583,13 +583,14 @@ def merged_productbbox(
         ARIAtools.util.shp.open_shp(bbox_file).bounds)
     gdal_warp_kwargs = {
         'format': 'MEM', 'multithread': True, 'dstSRS': f'EPSG:{lyr_proj}'}
-    vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
+    ds_vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        ds = osgeo.gdal.Warp('', vrt, options=warp_options)
+        ds = osgeo.gdal.Warp('', ds_vrt, options=warp_options)
         arrres = [abs(ds.GetGeoTransform()[1]),
                   abs(ds.GetGeoTransform()[-1])]
         ds = None
+        ds_vrt = None
 
     # Adjust arrres to supported resolution
     for i, res in enumerate(arrres):
@@ -603,10 +604,10 @@ def merged_productbbox(
     gdal_warp_kwargs['xRes'] = arrres[0]
     gdal_warp_kwargs['yRes'] = arrres[1]
     gdal_warp_kwargs['targetAlignedPixels'] = True
-    vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
+    ds_vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
-        ds = osgeo.gdal.Warp('', vrt, options=warp_options)
+        ds = osgeo.gdal.Warp('', ds_vrt, options=warp_options)
 
         # Get shape of full res layers
         arrshape = [ds.RasterYSize, ds.RasterXSize]
@@ -635,6 +636,7 @@ def merged_productbbox(
         # Get projection of full res layers
         proj = ds.GetProjection()
         ds = None
+        ds_vrt = None
 
     # Run additional checks and update runlog if provided
     if runlog is None:
@@ -727,7 +729,10 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
 
     # 6) Create VRT file
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
-    osgeo.gdal.BuildVRT(fname + '.vrt', fname, options=buildvrt_options)
+    ds_vrt = osgeo.gdal.BuildVRT(
+        fname + '.vrt', fname, options=buildvrt_options
+    )
+    ds_vrt = None
 
     # 7) Add height info
     if hgt_field is not None:
@@ -754,7 +759,8 @@ def prep_metadatalayers(
 
     # ionosphere layer, heights do not exist to exit
     if metadata_arr[0].split('/')[-1] == 'ionosphere':
-        osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
+        ds_vrt = osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
+        ds_vrt= None
         return [0], None, outname
 
     # capture model if tropo product
@@ -767,18 +773,25 @@ def prep_metadatalayers(
             os.mkdir(out_dir)
 
     # Get height values
-    zdim = osgeo.gdal.Open(metadata_arr[0]).GetMetadataItem(
-        'NETCDF_DIM_EXTRA')[1:-1]
+    ds_meta = osgeo.gdal.Open(metadata_arr[0])
+    zdim = ds_meta.GetMetadataItem('NETCDF_DIM_EXTRA')[1:-1]
+    ds_meta = None # Close
     hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
+
+    # Helper to check heights safely
+    def get_hgt_meta(fname, field):
+        ds = osgeo.gdal.Open(fname)
+        val = ds.GetMetadataItem(field)
+        ds = None # Close immediately
+        return val
 
     # Check if height layers are consistent
     if not os.path.exists(outname + '.vrt') and \
-        not len(set([osgeo.gdal.Open(i).GetMetadataItem(hgt_field)
-                     for i in metadata_arr])) == 1:
+        not len(set([get_hgt_meta(i, hgt_field) for i in metadata_arr])) == 1:
         raise Exception(
             'Inconsistent heights for metadata layer(s) ', metadata_arr,
-            ' corresponding heights: ', [osgeo.gdal.Open(i).GetMetadataItem(
-                hgt_field) for i in metadata_arr])
+            ' corresponding heights: ', [get_hgt_meta(i, hgt_field)
+                for i in metadata_arr])
 
     if 'tropo' in layer or layer == 'solidEarthTide':
         # get ref and sec paths
@@ -922,12 +935,15 @@ def prep_metadatalayers(
                         proj, driver, hgt_field)
             else:
                 ds_vrt = osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
-                ds_vrt = None
+                
+                # Get metadata from source safely
+                ds_src = osgeo.gdal.Open(metadata_arr[0])
+                hgt_val = ds_src.GetMetadataItem(hgt_field)
+                ds_src = None # Close source
 
-                # write height layers
-                osgeo.gdal.Open(outname + '.vrt').SetMetadataItem(
-                    hgt_field, osgeo.gdal.Open(
-                        metadata_arr[0]).GetMetadataItem(hgt_field))
+                # Set metadata on VRT and THEN close
+                ds_vrt.SetMetadataItem(hgt_field, hgt_val)
+                ds_vrt = None # Close VRT
 
     return hgt_field, ref_outname
 
@@ -971,23 +987,35 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     # write initial array to file
     da_total.rio.to_raster(outname, driver=driver, crs=proj)
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
-    ds = osgeo.gdal.BuildVRT(
-        f'{outname}.vrt', outname, options=buildvrt_options)
+    ds_vrt = osgeo.gdal.BuildVRT(
+        f'{outname}.vrt', outname, options=buildvrt_options
+    )
+
     # fix if numpy array not set properly
     if not isinstance(da_attrs[hgt_field], np.ndarray):
         da_attrs[hgt_field] = np.array(da_attrs[hgt_field])
     da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
-    ds.SetMetadata(da_attrs)
-    ds = None
+    ds_vrt.SetMetadata(da_attrs)
+    ds_vrt = None
 
     return
 
 
 def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
+    
     def read_and_average_bperp(frame):
         """Helper function for dask multiprocessing"""
-        return osgeo.gdal.Open(frame).ReadAsArray().mean()
+        # 1. Open explicitly
+        ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
+        
+        # 2. Read data
+        res = ds.ReadAsArray().mean()
+        
+        # 3. CRITICAL: Close the file explicitly
+        ds = None 
+        
+        return res
 
     bperp_dict = {}
     for product in products:
@@ -1002,6 +1030,7 @@ def extract_bperp_dict(products, num_threads):
             product['pair_name'][0], mean_bperp_by_frames))
         bperp_dict[product['pair_name'][0]] = float(
             np.mean(mean_bperp_by_frames))
+            
     return bperp_dict
 
 
@@ -1359,7 +1388,8 @@ def export_product_worker(
                 if layer == 'amplitude':
                     # 1. Build a temp VRT to merge the input files
                     temp_vrt = outname + '_temp_complex.vrt'
-                    osgeo.gdal.BuildVRT(temp_vrt, product)
+                    ds_vrt = osgeo.gdal.BuildVRT(temp_vrt, product)
+                    ds_vrt = None
 
                     # 2. Open VRT and Calculate Amplitude in Memory
                     # This guarantees we get Magnitude, not Real component
