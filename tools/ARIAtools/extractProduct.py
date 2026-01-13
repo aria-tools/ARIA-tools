@@ -739,8 +739,14 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     if hgt_field is not None:
         # write height layers
         hgt_meta = ARIAtools.util.vrt.get_hgt_meta(data_lis[0], hgt_field)
-        osgeo.gdal.Open(
-            fname + '.vrt').SetMetadataItem(hgt_field, hgt_meta)
+
+        hgt_meta = ARIAtools.util.vrt.get_hgt_meta(data_lis[0], hgt_field)
+
+        ds_meta_update = osgeo.gdal.Open(
+            fname + '.vrt', osgeo.gdal.GA_Update
+        )
+        ds_meta_update.SetMetadataItem(hgt_field, hgt_meta)
+        ds_meta_update = None
 
     return
 
@@ -1229,6 +1235,9 @@ def handle_epoch_layers(
         key_name = os.path.basename(i)
         if os.path.exists(i):
             if key_name not in layers or len(os.listdir(i)) == 0:
+                # avoid NFS latency issue which raises the following error:
+                # OSError: [Errno 16] Device or resource busy
+                time.sleep(0.1)
                 shutil.rmtree(i)
 
     # interpolate and intersect epochs for user requested layers
@@ -1243,7 +1252,9 @@ def handle_epoch_layers(
 
             for j in enumerate(record_epochs):
                 # dedup check for interpolating only new files
-                band_count = osgeo.gdal.Open(j[1]).RasterCount
+                ds_count = osgeo.gdal.Open(j[1], osgeo.gdal.GA_ReadOnly)
+                band_count = ds_count.RasterCount
+                ds_count = None
                 if band_count == 1:
                     # Track consistency of dimensions
                     if j[0] == 0:
@@ -1261,11 +1272,21 @@ def handle_epoch_layers(
 
                 # Apply mask (if specified)
                 if mask is not None:
+                    # Load mask
+                    ds_vrt_read = osgeo.gdal.Open(
+                        j[1][:-4] + '.vrt', osgeo.gdal.GA_ReadOnly
+                    )
+                    vrt_arr = ds_vrt_read.ReadAsArray()
+                    ds_vrt_read = None
+                    mask_arr = mask.ReadAsArray() * vrt_arr
+
+                    # Initiate file update with mask
                     update_file = osgeo.gdal.Open(
-                        j[1][:-4], osgeo.gdal.GA_Update)
-                    mask_arr = mask.ReadAsArray() * \
-                        osgeo.gdal.Open(j[1][:-4] + '.vrt').ReadAsArray()
+                        j[1][:-4], osgeo.gdal.GA_Update
+                    )
                     update_file.GetRasterBand(1).WriteArray(mask_arr)
+
+                    # Clear variables
                     update_file = None
                     mask_arr = None
 
@@ -1539,11 +1560,23 @@ def export_product_worker(
             # Apply mask (if specified)
             if mask is not None:
                 for j in [outFileConnComp, outFilePhs]:
+                    # Load mask
+                    ds_vrt_read = osgeo.gdal.Open(
+                        j + '.vrt', osgeo.gdal.GA_ReadOnly
+                    )
+                    vrt_arr = ds_vrt_read.ReadAsArray()
+                    ds_vrt_read = None
+                    mask_arr = mask.ReadAsArray() * vrt_arr
+
+                    # Initiate file update with mask
                     update_file = osgeo.gdal.Open(
-                        j, osgeo.gdal.GA_Update)
-                    mask_arr = mask.ReadAsArray() * \
-                        osgeo.gdal.Open(j + '.vrt').ReadAsArray()
+                        j, osgeo.gdal.GA_Update
+                    )
                     update_file.GetRasterBand(1).WriteArray(mask_arr)
+
+                    # Clear variables
+                    update_file = None
+                    mask_arr = None
 
         if layer != 'unwrappedPhase' and layer != 'connectedComponents':
 
@@ -1556,11 +1589,21 @@ def export_product_worker(
 
             # Apply mask (if specified)
             if mask is not None:
+                # Load mask
+                ds_vrt_read = osgeo.gdal.Open(
+                    outname + '.vrt', osgeo.gdal.GA_ReadOnly
+                )
+                vrt_arr = ds_vrt_read.ReadAsArray()
+                ds_vrt_read = None
+                mask_arr = mask.ReadAsArray() * vrt_arr
+
+                # Initiate file update with mask
                 update_file = osgeo.gdal.Open(
-                    outname, osgeo.gdal.GA_Update)
-                mask_arr = mask.ReadAsArray() * \
-                    osgeo.gdal.Open(outname + '.vrt').ReadAsArray()
+                    outname, osgeo.gdal.GA_Update
+                )
                 update_file.GetRasterBand(1).WriteArray(mask_arr)
+
+                # Clear variables
                 update_file = None
                 mask_arr = None
 
@@ -2050,9 +2093,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         heightsMeta = ARIAtools.util.vrt.get_hgt_meta(
             outname + '.vrt', hgt_field
         )
-        print('OG heightsMeta', heightsMeta)
         heightsMeta = np.array(heightsMeta[1:-1].split(','), dtype='float32')
-        print('new heightsMeta', heightsMeta)
 
         latitudeMeta = np.linspace(
             data_array.GetGeoTransform()[3],
