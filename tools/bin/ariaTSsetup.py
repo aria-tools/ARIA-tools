@@ -146,7 +146,7 @@ def create_parser():
     return parser
 
 
-def extract_bperp_dict(domain_name, aria_prod):
+def extract_bperp_dict_ts(domain_name, aria_prod):
     """Extract mean bperp from products."""
     os.environ['GDAL_PAM_ENABLED'] = 'NO'
     meta = {}
@@ -162,20 +162,32 @@ def extract_bperp_dict(domain_name, aria_prod):
             b_perp = i.split('/')
             b_perp[-2] = 'bPerpendicular'
             b_perp = '/'.join(b_perp)
+
             if os.path.exists(b_perp):
-                data_set = osgeo.gdal.Open(b_perp)
-                band = data_set.GetRasterBand(1)
-
-                # returns [min, max, mean, std]
-                try:
-                    # gdal~3.5
-                    stat = band.GetStatistics(True, True)[2]
-
-                except Exception as E:
-                    # gdal~3.4
-                    stat = band.GetStatistics(False, True)[2]
                 data_set = None
+                try:
+                    data_set = osgeo.gdal.Open(
+                        b_perp, osgeo.gdal.GA_ReadOnly
+                    )
+                    if data_set is not None:
+                        band = data_set.GetRasterBand(1)
+
+                        # returns [min, max, mean, std]
+                        try:
+                            # gdal~3.5
+                            stat = band.GetStatistics(True, True)[2]
+                        except Exception:
+                            # gdal~3.4
+                            stat = band.GetStatistics(False, True)[2]
+                        
+                        # Release band reference
+                        band = None
+                finally:
+                    # CRITICAL: Ensure file close happens no matter what
+                    data_set = None
+
         meta[pair_name] = stat
+
     return meta
 
 
@@ -309,7 +321,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             with open(b_perp_json_file) as ifp:
                 b_perp = json.loads(ifp.read())
         else:
-            b_perp = extract_bperp_dict(domain_name, dlist)
+            b_perp = extract_bperp_dict_ts(domain_name, dlist)
 
         # Confirm 1-to-1 match between UNW and other derived products
         if ref_dlist and new_dlist != ref_dlist:
