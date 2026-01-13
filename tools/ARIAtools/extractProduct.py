@@ -336,7 +336,8 @@ def crop_only_manager(outname, lyrname, ifg_tag, gdal_warp_kwargs):
         os.rename(crop_name, fname)
 
     # Update VRT
-    osgeo.gdal.Translate(outname + '.vrt', outname, format='VRT')
+    ds_trans = osgeo.gdal.Translate(outname + '.vrt', outname, format='VRT')
+    ds_trans = None
 
     return
 
@@ -737,7 +738,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
     # 7) Add height info
     if hgt_field is not None:
         # write height layers
-        hgt_meta = osgeo.gdal.Open(data_lis[0]).GetMetadataItem(hgt_field)
+        hgt_meta = ARIAtools.util.vrt.get_hgt_meta(data_lis[0], hgt_field)
         osgeo.gdal.Open(
             fname + '.vrt').SetMetadataItem(hgt_field, hgt_meta)
 
@@ -778,20 +779,25 @@ def prep_metadatalayers(
     ds_meta = None # Close
     hgt_field = f'NETCDF_DIM_{zdim}_VALUES'
 
-    # Helper to check heights safely
-    def get_hgt_meta(fname, field):
-        ds = osgeo.gdal.Open(fname)
-        val = ds.GetMetadataItem(field)
-        ds = None # Close immediately
-        return val
-
     # Check if height layers are consistent
-    if not os.path.exists(outname + '.vrt') and \
-        not len(set([get_hgt_meta(i, hgt_field) for i in metadata_arr])) == 1:
+    if (
+        not os.path.exists(outname + ".vrt")
+        and len(
+            {
+                ARIAtools.util.vrt.get_hgt_meta(i, hgt_field)
+                for i in metadata_arr
+            }
+        )
+        != 1
+    ):
+        heights = [
+            ARIAtools.util.vrt.get_hgt_meta(i, hgt_field)
+            for i in metadata_arr
+        ]
         raise Exception(
-            'Inconsistent heights for metadata layer(s) ', metadata_arr,
-            ' corresponding heights: ', [get_hgt_meta(i, hgt_field)
-                for i in metadata_arr])
+            "Inconsistent heights for metadata layer(s) "
+            f"{metadata_arr}; corresponding heights: {heights}"
+        )
 
     if 'tropo' in layer or layer == 'solidEarthTide':
         # get ref and sec paths
@@ -2041,9 +2047,12 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         tmp_name = outname + '_temp'
 
         # Define lat/lon/height arrays for metadata layers
-        heightsMeta = np.array(
-            osgeo.gdal.Open(outname + '.vrt').GetMetadataItem(
-                hgt_field)[1:-1].split(','), dtype='float32')
+        heightsMeta = ARIAtools.util.vrt.get_hgt_meta(
+            outname + '.vrt', hgt_field
+        )
+        print('OG heightsMeta', heightsMeta)
+        heightsMeta = np.array(heightsMeta[1:-1].split(','), dtype='float32')
+        print('new heightsMeta', heightsMeta)
 
         latitudeMeta = np.linspace(
             data_array.GetGeoTransform()[3],
