@@ -676,11 +676,9 @@ def merged_productbbox(
 
 
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
-    """Wrapper to create raster and apply projection"""
+    """Wrapper to create raster and apply projection using Rioxarray (Safe)"""
 
-    # 1) Build a lightweight reference warp (VRT) from the FIRST frame only.
-    # This is done to access the pixel spacing needed to apply when
-    # mosaicking multiple frames with potentially heterogeneous projections
+    # 1) Build a lightweight reference warp (VRT)
     ref_vrt = fname + "_ref.vrt"
     ds = osgeo.gdal.Warp(
         ref_vrt,
@@ -690,15 +688,15 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
         dstNodata=np.nan,
         multithread=True
     )
-    ds = None
+    ds = None # Close immediately
 
-    # 2) Read the derived resolution from the reference VRT.
+    # 2) Read the derived resolution
     ds = osgeo.gdal.Open(ref_vrt, osgeo.gdal.GA_ReadOnly)
-    gt = ds.GetGeoTransform()  # (xmin, px_w, 0, ymax, 0, px_h) ; px_h is negative for north-up
+    gt = ds.GetGeoTransform()
     xres, yres = gt[1], abs(gt[5])
-    ds = None
+    ds = None # Close immediately
 
-    # 3) Warp + mosaic ALL frames into a single aligned VRT using that resolution.
+    # 3) Warp + mosaic to temp Tiff
     mosaic_tif = fname + "_warp.tif"
     ds = osgeo.gdal.Warp(
         mosaic_tif,
@@ -708,45 +706,45 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
         dstSRS=proj,
         dstNodata=np.nan,
         multithread=True,
-        creationOptions=[
-            "TILED=YES",
-            "COMPRESS=LZW",
-            "BIGTIFF=IF_SAFER"
-        ]
+        creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=IF_SAFER"]
     )
-    ds = None
+    ds = None # Close immediately
 
-    # 4) Open with rioxarray and save as your desired driver
-    da = rioxarray.open_rasterio(mosaic_tif, masked=True)
-    da = da.rio.write_nodata(np.nan, encoded=True)
+    # 4) Open with rioxarray (Context Manager prevents locking)
+    with rioxarray.open_rasterio(mosaic_tif, masked=True) as da:
+        da = da.rio.write_nodata(np.nan, encoded=True)
+        
+        # --- FIX: Remove _FillValue from attrs ---
+        if "_FillValue" in da.attrs:
+            del da.attrs["_FillValue"]
+        # -----------------------------------------
+        
+        # Enforce threading during the write
+        with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'): 
+            da.rio.to_raster(fname, driver=driver, crs=proj)
 
-    # write your final product
-    da.rio.to_raster(fname, driver=driver, crs=proj)
-
-    # 5) Clean up
-    os.remove(mosaic_tif)
-    os.remove(ref_vrt)
-    da.close()
+    # 5) Clean up (Now safe because 'da' is closed)
+    if os.path.exists(mosaic_tif):
+        os.remove(mosaic_tif)
+    if os.path.exists(ref_vrt):
+        os.remove(ref_vrt)
 
     # 6) Create VRT file
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
     ds_vrt = osgeo.gdal.BuildVRT(
         fname + '.vrt', fname, options=buildvrt_options
     )
-    ds_vrt = None
+    ds_vrt = None # Close immediately
 
     # 7) Add height info
     if hgt_field is not None:
-        # write height layers
         hgt_meta = ARIAtools.util.vrt.get_hgt_meta(data_lis[0], hgt_field)
-
-        hgt_meta = ARIAtools.util.vrt.get_hgt_meta(data_lis[0], hgt_field)
-
+        
         ds_meta_update = osgeo.gdal.Open(
             fname + '.vrt', osgeo.gdal.GA_Update
         )
         ds_meta_update.SetMetadataItem(hgt_field, hgt_meta)
-        ds_meta_update = None
+        ds_meta_update = None # Close immediately
 
     return
 
@@ -962,51 +960,79 @@ def prep_metadatalayers(
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                   hgt_field, proj, driver):
-    """ Compute differential from reference and secondary scenes """
+    """ Compute differential from reference and secondary scenes (Multi-dim safe) """
 
     # if specified workdir doesn't exist, create it
     output_dir = os.path.dirname(outname)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # open intermediate files
+    # 1. Open Inputs with Context Managers (Closes files automatically)
     with rioxarray.open_rasterio(sec_outname + '.vrt', masked=True) as da_sec:
-        arr_sec = da_sec.data
-    with rioxarray.open_rasterio(ref_outname + '.vrt', masked=True) as da_ref:
-        arr_ref = da_ref.data
+        # Copy attributes and crs while file is open
+        sec_attrs = da_sec.attrs
+        sec_crs = da_sec.rio.crs
+        sec_nodata = da_sec.rio.nodata
+        
+        # Open Reference inside the first block or separately
+        with rioxarray.open_rasterio(ref_outname + '.vrt', masked=True) as da_ref:
+            arr_ref = da_ref.data
+            arr_sec = da_sec.data # Read data while open
 
-    # make the total arr
-    # if computing total delay, must add dry and wet
-    if tropo_total:
-        arr_total = arr_sec + arr_ref
-    else:
-        arr_total = arr_sec - arr_ref
-    da_total = da_sec.copy()
-    da_total.data = arr_total
+            # 2. Math (Preserves dimensions)
+            if tropo_total:
+                arr_total = arr_sec + arr_ref
+            else:
+                arr_total = arr_sec - arr_ref
 
-    # update attributes
-    da_total.name = key
-    og_da_attrs = da_total.attrs
-    da_attrs = {}
-    for key in og_da_attrs:
-        new_key = key.replace(OG_key, key)
-        new_val = og_da_attrs[key]
-        if isinstance(new_val, str):
-            new_val = new_val.replace(OG_key, key)
-        da_attrs[new_key] = new_val
-    da_total = da_total.assign_attrs(da_attrs)
+            # 3. Create Output DataArray
+            # We copy da_sec to preserve coordinates/dims/attrs
+            da_total = da_sec.copy()
+            da_total.data = arr_total
 
-    # write initial array to file
-    da_total.rio.to_raster(outname, driver=driver, crs=proj)
+            # Update attributes
+            da_total.name = key
+            og_da_attrs = sec_attrs
+            da_attrs = {}
+            for k in og_da_attrs:
+                new_k = k.replace(OG_key, key)
+                new_v = og_da_attrs[k]
+                if isinstance(new_v, str):
+                    new_v = new_v.replace(OG_key, key)
+                da_attrs[new_k] = new_v
+            da_total = da_total.assign_attrs(da_attrs)
+            
+            # Ensure CRS/Nodata is carried over
+            if sec_crs:
+                da_total.rio.write_crs(sec_crs, inplace=True)
+            if sec_nodata is not None:
+                da_total.rio.write_nodata(sec_nodata, inplace=True)
+
+            # --- FIX: Remove _FillValue from attrs to prevent conflict ---
+            if "_FillValue" in da_total.attrs:
+                del da_total.attrs["_FillValue"]
+            # -------------------------------------------------------------
+
+            # 4. Write to disk
+            # Using rasterio.Env to ensure threading settings are respected
+            with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'):
+                da_total.rio.to_raster(outname, driver=driver, crs=proj)
+
+    # 5. Build VRT (Pure GDAL)
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
     ds_vrt = osgeo.gdal.BuildVRT(
         f'{outname}.vrt', outname, options=buildvrt_options
     )
 
-    # fix if numpy array not set properly
-    if not isinstance(da_attrs[hgt_field], np.ndarray):
-        da_attrs[hgt_field] = np.array(da_attrs[hgt_field])
-    da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
+    # Fix numpy array attributes for VRT metadata
+    if hgt_field in da_attrs:
+        if not isinstance(da_attrs[hgt_field], (list, tuple)):
+             if isinstance(da_attrs[hgt_field], np.ndarray):
+                 da_attrs[hgt_field] = da_attrs[hgt_field].tolist()
+             else:
+                 # Fallback if it's a scalar or something else
+                 pass
+                 
     ds_vrt.SetMetadata(da_attrs)
     ds_vrt = None
 
@@ -1235,9 +1261,6 @@ def handle_epoch_layers(
         key_name = os.path.basename(i)
         if os.path.exists(i):
             if key_name not in layers or len(os.listdir(i)) == 0:
-                # avoid NFS latency issue which raises the following error:
-                # OSError: [Errno 16] Device or resource busy
-                time.sleep(0.1)
                 shutil.rmtree(i)
 
     # interpolate and intersect epochs for user requested layers
@@ -2054,7 +2077,14 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     tmp_name = outname + '.vrt'
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(format="MEM")
-        data_array = osgeo.gdal.Warp('', tmp_name, options=warp_options)
+        # Explicitly close the warp result immediately
+        ds_warp = osgeo.gdal.Warp('', tmp_name, options=warp_options)
+        data_array_nodata = ds_warp.GetRasterBand(1).GetNoDataValue()
+        data_array = ds_warp.ReadAsArray().astype('float32')
+        gt_mem = ds_warp.GetGeoTransform()
+        x_size = ds_warp.RasterXSize
+        y_size = ds_warp.RasterYSize
+        ds_warp = None # CLOSE
 
     # get minimum version
     version_check = []
@@ -2086,56 +2116,59 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
 
     # only perform DEM intersection for rasters with valid height levels
     NOHGT_LYRS = ['ionosphere']
+    metadatalyr_name = outname.split('/')[-2]
+
     if metadatalyr_name not in NOHGT_LYRS:
         tmp_name = outname + '_temp'
 
-        # Define lat/lon/height arrays for metadata layers
+        # ... [Height/Lat/Lon definitions remain the same] ...
         heightsMeta = ARIAtools.util.vrt.get_hgt_meta(
             outname + '.vrt', hgt_field
         )
         heightsMeta = np.array(heightsMeta[1:-1].split(','), dtype='float32')
 
         latitudeMeta = np.linspace(
-            data_array.GetGeoTransform()[3],
-            data_array.GetGeoTransform()[3] +
-            (data_array.GetGeoTransform()[5] * (data_array.RasterYSize - 1)),
-            data_array.RasterYSize, dtype='float32')
+            gt_mem[3], gt_mem[3] + (gt_mem[5] * (y_size - 1)),
+            y_size, dtype='float32')
 
         longitudeMeta = np.linspace(
-            data_array.GetGeoTransform()[0],
-            data_array.GetGeoTransform()[0] +
-            (data_array.GetGeoTransform()[1] * (data_array.RasterXSize - 1)),
-            data_array.RasterXSize, dtype='float32')
+            gt_mem[0], gt_mem[0] + (gt_mem[1] * (x_size - 1)),
+            x_size, dtype='float32')
 
-        da_dem = rioxarray.open_rasterio(
-            dem.GetDescription(), band_as_variable=True,
-            masked=True)['band_1']
-
-        # interpolate the DEM to the GUNW lat/lon
-        nodata = dem.GetRasterBand(1).GetNoDataValue()
-        da_dem1 = da_dem.interp(
-            x=lon[0, :], y=lat[:, 0]).fillna(nodata)
+        # --- SAFE RIOXARRAY BLOCK ---
+        # Using 'with' ensures the handle to the DEM file is dropped
+        # immediately after reading.
+        with rioxarray.open_rasterio(
+            dem.GetDescription(), band_as_variable=True, masked=True
+        ) as rds:
+            da_dem = rds['band_1']
+            
+            # interpolate the DEM to the GUNW lat/lon
+            nodata = dem.GetRasterBand(1).GetNoDataValue()
+            
+            # Force close check: Ensure we don't hold the file open during compute
+            da_dem1 = da_dem.interp(
+                x=lon[0, :], y=lat[:, 0]
+            ).fillna(nodata)
 
         # hack to get an stack of coordinates for the interpolator
-        # to interpolate in the right shape
         pnts = transformPoints(
             lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
         # set up the interpolator with the GUNW cube
-        data_array_inp = data_array.ReadAsArray().astype('float32')
         interper = scipy.interpolate.RegularGridInterpolator(
             (latitudeMeta, longitudeMeta, heightsMeta),
-            data_array_inp.transpose(1, 2, 0),
+            data_array.transpose(1, 2, 0),
             fill_value=np.nan, bounds_error=False)
 
         # interpolate cube to DEM points
         out_interpolated = interper(pnts.transpose(2, 1, 0))
 
-        # Save file
+        # Save file (Using GDAL to ensure clean write)
         ARIAtools.util.vrt.renderVRT(
             tmp_name, out_interpolated, geotrans=dem.GetGeoTransform(),
             drivername=outputFormat,
-            gdal_fmt=data_array.ReadAsArray().dtype.name,
+            gdal_fmt='float32',
             proj=dem.GetProjection(), nodata=nodata)
         out_interpolated = None
 
@@ -2143,7 +2176,6 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     # outside of the expected track bounds,
     # it must be cut to conform with these bounds.
     # Crop to track extents
-    data_array_nodata = data_array.GetRasterBand(1).GetNoDataValue()
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         gdal_warp_kwargs = {
             'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
