@@ -253,15 +253,17 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # handle individual epochs if external correction layer
     if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
-        domain_name in ARIA_TROPO_MODELS):
+        domain_name in ARIA_TROPO_MODELS) and not is_nisar_file:
         stack_layer = f'{stack_layer}/' + 'dates'
 
     # get dates
     aria_dates = \
         sorted([prod['pair_name'][0] for prod in aria_prod.products[0]])
 
-    if (domain_name in ARIA_EXTERNAL_CORRECTIONS or
-        domain_name in ARIA_TROPO_MODELS):
+    # data are extracted as dates for tropo and SET layers for ARIA-S1-GUNW
+    # no NISAR layers are extracted this way
+    if not is_nisar_file and (domain_name in ARIA_EXTERNAL_CORRECTIONS
+                              or domain_name in ARIA_TROPO_MODELS):
         aria_indiv_dates = []
         rejected_dates = []
         for aria_date in aria_dates:
@@ -302,10 +304,12 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
         maxValue=len(int_list), print_msg='Creating stack: ')
 
     # only perform following checks if a differential layer
+    # all NISAR layers are differential
     b_perp = []
     new_dlist = [os.path.basename(i).split('.vrt')[0] for i in dlist]
-    if domain_name not in ARIA_EXTERNAL_CORRECTIONS and \
-            domain_name not in ARIA_TROPO_MODELS:
+    if is_nisar_file or (
+            domain_name not in ARIA_EXTERNAL_CORRECTIONS
+            and domain_name not in ARIA_TROPO_MODELS):
 
         # get az times for each date
         aztime_list = []
