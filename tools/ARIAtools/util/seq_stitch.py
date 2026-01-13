@@ -635,7 +635,7 @@ def _metadata_offset(unw1: NDArray, unw2: NDArray,
 def product_stitch_sequential(input_unw_files: List[str],
                               input_conncomp_files: List[str],
                               arrres: List[float],
-                              epsg: Optional[str] = '4326',
+                              epsg: Optional[str] = 'EPSG:4326',
                               output_unw: Optional[str] = './unwMerged',
                               output_conn: Optional[str] = './connCompMerged',
                               output_format: Optional[str] = 'ENVI',
@@ -723,7 +723,7 @@ def product_stitch_sequential(input_unw_files: List[str],
         (combined_unwrap, combined_conn, combined_snwe) = \
             stitch_unwrapped_frames(
                 input_unw_files, input_conncomp_files,
-                proj=f'EPSG:{epsg}',
+                proj=epsg,
                 xres=arrres[0], yres=arrres[1],
                 correction_method=correction_method,
                 range_correction=range_correction, direction_N_S=True,
@@ -733,13 +733,13 @@ def product_stitch_sequential(input_unw_files: List[str],
         # write stitched unwrappedPhase
         ARIAtools.util.stitch.write_GUNW_array(
             temp_unw_out, combined_unwrap, combined_snwe,
-            format=output_format, epsg=int(epsg), verbose=verbose,
+            format=output_format, epsg=epsg, verbose=verbose,
             update_mode=overwrite, add_vrt=True, nodata=0.0)
 
         # write stitched connectedComponents
         ARIAtools.util.stitch.write_GUNW_array(
             temp_conn_out, combined_conn, combined_snwe,
-            format=output_format, epsg=int(epsg), verbose=verbose,
+            format=output_format, epsg=epsg, verbose=verbose,
             update_mode=overwrite, add_vrt=True, nodata=-1.0)
 
     # Crop
@@ -764,7 +764,7 @@ def product_stitch_sequential(input_unw_files: List[str],
         ds = osgeo.gdal.Warp(
             str(output), str(input.with_suffix('.vrt')), format=output_format,
             cutlineDSName=clip_json, xRes=arrres[0], yRes=arrres[1],
-            targetAlignedPixels=True, dstSRS=f'EPSG:{epsg}',
+            targetAlignedPixels=True, dstSRS=epsg,
             outputBounds=bounds, outputType=osgeo.gdal.GDT_Float32)
         ds = None
 
@@ -794,7 +794,7 @@ def product_stitch_sequential(input_unw_files: List[str],
             mask_array = mask.ReadAsArray()
             array = ARIAtools.util.stitch.get_GUNW_array(
                 str(output.with_suffix('.vrt')),
-                xres=arrres[0], yres=arrres[1], proj=f'EPSG:{epsg}')
+                xres=arrres[0], yres=arrres[1], proj=epsg)
 
             if output == output_conn:
                 # Mask connected components
@@ -812,7 +812,7 @@ def product_stitch_sequential(input_unw_files: List[str],
         # mask out zeros
         array = ARIAtools.util.stitch.get_GUNW_array(
             str(output.with_suffix('.vrt')),
-            xres=arrres[0], yres=arrres[1], proj=f'EPSG:{epsg}')
+            xres=arrres[0], yres=arrres[1], proj=epsg)
 
         if output == output_conn:
             # Mask connected components
@@ -821,7 +821,7 @@ def product_stitch_sequential(input_unw_files: List[str],
         else:
             concomp_array = ARIAtools.util.stitch.get_GUNW_array(
                 str(output_conn.with_suffix('.vrt')),
-                xres=arrres[0], yres=arrres[1], proj=f'EPSG:{epsg}')
+                xres=arrres[0], yres=arrres[1], proj=epsg)
             concomp_array[(concomp_array == -1)
                           | (concomp_array == 0)] = np.nan
             concomp_array = np.isnan(concomp_array)
@@ -1001,11 +1001,11 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
 
     # Load Data
     stitched_unw = ARIAtools.util.stitch.get_GUNW_array(
-        stiched_unw_filename, proj=f'EPSG:{epsg}')
+        stiched_unw_filename, proj=epsg)
     stitched_conn = ARIAtools.util.stitch.get_GUNW_array(
-        stiched_conn_filename, proj=f'EPSG:{epsg}')
+        stiched_conn_filename, proj=epsg)
     stitched_attr = ARIAtools.util.stitch.get_GUNW_attr(
-        stiched_unw_filename, proj=f'EPSG:{epsg}')
+        stiched_unw_filename, proj=epsg)
 
     # ConnComp discrete colormap
     bounds = np.linspace(0, 30, 31)
