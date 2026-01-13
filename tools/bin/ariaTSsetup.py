@@ -705,7 +705,7 @@ def main():
             print('layer', layer)
 
             # iterate through model dirs if necessary
-            if 'tropo' in layer:
+            if 'tropo' in layer and not is_nisar_file:
                 model_dirs = glob.glob(
                     args.workdir + f'/{layer}/*', recursive=True)
                 model_dirs = [os.path.basename(i) for i in model_dirs]
