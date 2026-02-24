@@ -1,20 +1,32 @@
 # ARIA-tools
-
 [![Language](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
 
-ARIA-tools is an open-source package in Python which contains tools to manipulate ARIA standard InSAR products. This software is open source under the terms of the [Apache 2.0 License](LICENSE). Its development was funded under the NASA Sea-level Change Team (NSLCT) program and the Earth Surface and Interior (ESI) program.
+ARIA-tools is an open-source package in Python which contains tools to manipulate standard InSAR products from Sentinel-1 (ARIA GUNW-S1) and NISAR (NISAR_L2_PR_GUNW). This software is open source under the terms of the [Apache 2.0 License](LICENSE). Its development was funded under the ROSES awards from the NASA Sea-level Change Team (NSLCT) program, the Earth Surface and Interior (ESI) program, and under the NISAR Science Team (NISAR-ST) program.
 
-For a full overview of available ARIA standard products and their specification, see the products page on the [ARIA website](https://aria.jpl.nasa.gov). Currently, support for the ARIA Geocoded Unwrapped Interferogram (GUNW) product is included. Products can be downloaded for free from the [ARIA-products page](https://aria-products.jpl.nasa.gov) and the [ASF DAAC vertex page](https://vertex.daac.asf.alaska.edu/#) under missions and beta-products, but require log-on using the NASA Earthdata credentials.
+
+> [!IMPORTANT]
+> ARIA-tools now supports **NISAR GUNW** products created routinely by the NASA-ISRO SAR mission. We welcome the community for reporting bugs using the issue ticket functionality
+
+
+------
+
+ARIA tools includes support for:
+- ARIA Geocoded Unwrapped Interferogram from Sentinel-1 (GUNW-S1) can be downloaded for free from the [ASF DAAC vertex page](https://search.asf.alaska.edu/#/?dataset=SENTINEL-1%20INTERFEROGRAM%20(BETA)) selecting "ARIA S1 GUNW" under "datasets".  Users can also request free on-demand products through the [ASF on-demand system](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/). These products are added to the standard product archive. A log-on using the NASA Earthdata credentials is required to order new or download data from the archive. [Product Specification Document](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/#product-packaging).
+-  NISAR Gecoded Unwrapped Interferogram products (NISAR_L2_PR_GUNW) can be downloaded for free from the [ASF DAAC vertex page](https://search.asf.alaska.edu/#/?dataset=NISAR&prodConfig=PR&sciProducts=GUNW) selecting "NISAR" under "datasets" and selecting "GUNW" under the filter criteria. [Product Specification document](https://nisar-docs.asf.alaska.edu/gunw/). 
+
+
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series. 
 
-Actual time-series processing is not supported in ARIA-tools. However, outputs are compatible with third-party time-series InSAR packages such as the "Generic InSAR Analysis Toolbox" ([GIAnT](http://earthdef.caltech.edu/projects/giant/wiki)) and the "Miami INsar Time-series software in PYthon" ([MintPy](https://github.com/insarlab/MintPy)).
+Actual time-series processing is not supported in ARIA-tools. However, outputs are compatible with third-party time-series InSAR packages such the "Miami INsar Time-series software in PYthon" ([MintPy](https://github.com/insarlab/MintPy)).
 <p align="center">
 <img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/Hawaii.png">
 <img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/CA.png">
 <img height="250" src="https://github.com/aria-tools/ARIA-tools-docs/blob/master/images/EastCoast.png">
 </p>
-THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
+
+> [!CAUTION]
+> THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS. USE AT YOUR OWN RISK.
 
 ## Contents
 1.  [Software Dependencies](#software-dependencies)
@@ -36,13 +48,13 @@ THIS IS RESEARCH CODE PROVIDED TO YOU "AS IS" WITH NO WARRANTIES OF CORRECTNESS.
 ------
 
 ## Software Dependencies
-Below we list the dependencies for ARIA-tools
+Below we list the key dependencies for ARIA-tools. See environment.yml for complete list.
 
 ### Packages
 ```
-* Python >= 3.5  (3.6 preferred)
+* Python >= 3.8  (3.9 preferred)
 * [PROJ 4](https://github.com/OSGeo/proj) github) >= 6.0
-* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0
+* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.7.0
 ```
 
 ### Python dependencies
@@ -50,9 +62,10 @@ Below we list the dependencies for ARIA-tools
 * [SciPy](https://www.scipy.org/)
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 * [requests](https://2.python-requests.org/en/master/)
+* [asf_search](https://github.com/asfadmin/Discovery-asf_search) >=10.0.4
 ```
 
-### Python Jupyter dependencies
+### Optional Python Jupyter dependencies
 ```
 * py3X-jupyter
 * py3X-jupyter_client
@@ -62,14 +75,9 @@ Below we list the dependencies for ARIA-tools
 * py3X-RISE
 ```
 
-### Optional Third-party packages
-```
-* RelaxIV available from [Min-Cost-Flow-Class](https://github.com/frangio68/Min-Cost-Flow-Class)
-```
 
 ------
 ## Installation
-
 
 ARIA-tools has been tested on the following system:
 - Linux v.7 and up
@@ -129,13 +137,7 @@ mamba env create -f environment.yml
 conda activate ARIA-tools
 ```
 
-Or run the commands below to install dependencies to an existing conda environment (`base` by default):
-
-```.tcsh
-mamba install -c conda-forge --yes --file requirements.txt
-```
-
-We have included a `setup.py` script which allows for easy compilation and installation of third-party dependencies (c-code), as well as for setting up the ARIA-tools package itself (python and command line tools).
+We have included a `setup.py` script which allows for easy installation and setting up the ARIA-tools package itself (python and command line tools).
 ```.tcsh
 python -m pip install -e .
 ```
@@ -167,7 +169,7 @@ GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools 
 
 Minimum requirements:
 ```
-* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.0
+* [GDAL](https://www.gdal.org/) and its Python bindings >= 3.8
 * Linux kernel >=4.3 
 * libnetcdf >=4.5 
 ```
@@ -190,19 +192,21 @@ export VSI_CACHE=YES
 
 The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
-* NOTE, Currently we support processing of tropospheric estimates derived from the HRRR weather model for v3.0.1 products spanning the continental United States, and adjacent regions of Canada and Mexico.
 
 ### Commandline download of GUNW Products
-GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
+ARIA GUNW-S1 products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
 
 ### Manipulating GUNW Products
-GUNW product can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program.
+ARIA GUNW-S1/NISAR_L2_PR_GUNW products can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program. 
 
 ### Baseline and quality control plots for GUNW Products
-Quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
+ARIA GUNW-S1 quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
 
 ### Time-series set-up of GUNW Products
-Time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
+ARIA GUNW-S1/NISAR_L2_PR_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
+
+> [!NOTE]  
+> We support extraction of correction layers (e.g. Troposphere, Ionosphere, Solid Earth Tides) as well as geometry information (e.g. incidence angle, look angle, baselines, etc) embeded within the GUNW products 
 
 ------
 ## Documentation
