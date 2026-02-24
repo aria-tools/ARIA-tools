@@ -95,32 +95,58 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
                 'PATH'].split('"')[1].split('/')[-1]
             LOGGER.info('Frame-2: ', frame2_prods)
 
+        # determine if NISAR GUNW
+        is_nisar_file = False
+        frame1_nisar_msk = None
+        frame2_nisar_msk = None
+        track_fileext = unw_attr_dicts[ix1]['PATH'].split('"')[1]
+        if track_fileext.endswith('.h5'):
+            is_nisar_file = True
+            # Get paths to masks from each respective frame
+            # NOTE: Only load Frame 1 mask if it's the very first iteration.
+            # In subsequent iterations, Frame 1 is the
+            # already-masked `corr_unw`.
+            if i == 0:
+                frame1_nisar_msk = \
+                    ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                    unw_attr_dicts[ix1]['PATH']
+                )
+            
+            frame2_nisar_msk = \
+                ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                unw_attr_dicts[ix2]['PATH']
+            )
+
         # Get numpy masked arrays
         # Frame1
         frame1_unw_array = ARIAtools.util.stitch.get_GUNW_array(
             filename=unw_attr_dicts[ix1]['PATH'],
             proj=proj,
             xres=xres, yres=yres,
-            nodata=unw_attr_dicts[ix1]['NODATA'])
+            nodata=unw_attr_dicts[ix1]['NODATA'],
+            mask=frame1_nisar_msk)
 
         frame1_conn_array = ARIAtools.util.stitch.get_GUNW_array(
             filename=conncomp_attr_dicts[ix1]['PATH'],
             proj=proj,
             xres=xres, yres=yres,
-            nodata=conncomp_attr_dicts[ix1]['NODATA'])
+            nodata=conncomp_attr_dicts[ix1]['NODATA'],
+            mask=frame1_nisar_msk)
 
         # Frame2
         frame2_unw_array = ARIAtools.util.stitch.get_GUNW_array(
             filename=unw_attr_dicts[ix2]['PATH'],
             proj=proj,
             xres=xres, yres=yres,
-            nodata=unw_attr_dicts[ix2]['NODATA'])
+            nodata=unw_attr_dicts[ix2]['NODATA'],
+            mask=frame2_nisar_msk)
 
         frame2_conn_array = ARIAtools.util.stitch.get_GUNW_array(
             filename=conncomp_attr_dicts[ix2]['PATH'],
             proj=proj,
             xres=xres, yres=yres,
-            nodata=conncomp_attr_dicts[ix2]['NODATA'])
+            nodata=conncomp_attr_dicts[ix2]['NODATA'],
+            mask=frame2_nisar_msk)
 
         # capture all lyr nodata values
         conncomp_nodata_values = [
@@ -711,13 +737,34 @@ def product_stitch_sequential(input_unw_files: List[str],
     temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
     temp_conn_out = output_conn.parent / ('temp_' + output_conn.name)
 
+    # determine if NISAR GUNW
+    is_nisar_file = False
+    track_fileext = input_unw_files[0].split('"')[1]
+    if track_fileext.endswith('.h5'):
+        is_nisar_file = True
+
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_unw_files) == 1:
         osgeo.gdal.BuildVRT(
             str(temp_unw_out.with_suffix('.vrt')), input_unw_files)
         osgeo.gdal.BuildVRT(
-            str(temp_conn_out.with_suffix('.vrt')), input_conncomp_files)
+                str(temp_conn_out.with_suffix('.vrt')), input_conncomp_files)
+        if is_nisar_file:
+            # Get path to mask in the GUNW
+            nisar_binary_mask = \
+                ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                input_unw_files[0]
+            )
+
+            # apply it and save as temporary GeoTIFFs
+            ARIAtools.util.stitch.apply_mask_and_write(
+                vrt_unw_path=str(temp_unw_out.with_suffix('.vrt')),
+                vrt_conn_path=str(temp_conn_out.with_suffix('.vrt')),
+                binary_mask=nisar_binary_mask,
+                out_unw_path=temp_unw_out,
+                out_conn_path=temp_conn_out
+            )
 
     else:
         (combined_unwrap, combined_conn, combined_snwe) = \
@@ -776,7 +823,7 @@ def product_stitch_sequential(input_unw_files: List[str],
             str(output.with_suffix('.vrt')), str(output), format="VRT")
 
         # Remove temp files
-        for suffix in [None, '.vrt', '.xml', '.hdr', '.aux.xml']:
+        for suffix in [None, '.vrt', '.xml', '.hdr', '.aux.xml', '.tif']:
             target = (input if suffix is None else
                       input.with_suffix(suffix))
             if target.exists():
