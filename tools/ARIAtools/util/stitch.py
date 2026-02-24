@@ -522,10 +522,10 @@ def get_binary_nisar_mask_from_path(gdal_path):
 def create_binary_nisar_mask(mask_path: str) -> np.ndarray:
     """
     Reads a 3-digit NISAR SAR mask file and decodes it into a
-    sbinary mask in memory.
+    binary mask in memory.
     
-    1 = Valid non-water (Land)
-    0 = Water or Invalid (Missing data in reference or secondary image)
+    1 = Valid (Secondary RSLC has data, ignores water status)
+    0 = Invalid (Missing data in the secondary image ONLY, i.e., XX0)
 
     Args:
         mask_path (str): File path to the 3-digit mask file.
@@ -543,17 +543,13 @@ def create_binary_nisar_mask(mask_path: str) -> np.ndarray:
     arr_mask = ds_mask.ReadAsArray()
     ds_mask = None  # Free GDAL dataset from memory
 
-    # Decode the 3-digit mask
-    is_water = arr_mask // 100
-    ref_subswath = (arr_mask // 10) % 10
+    # We only need to decode the least significant digit (Secondary RSLC)
+    # Ignore the internal water mask for now
     sec_subswath = arr_mask % 10
 
     # Create and return binary mask
-    binary_mask = np.where(
-        (is_water == 0) & (ref_subswath != 0) & (sec_subswath != 0),
-        1,
-        0
-    )
+    # 1 if the last digit is not 0, otherwise 0
+    binary_mask = np.where(sec_subswath != 0, 1, 0)
 
     return binary_mask
 
