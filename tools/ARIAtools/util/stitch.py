@@ -87,19 +87,51 @@ def get_GUNW_array(filename: Union[str, Path],
                    resample=gdal.GRA_NearestNeighbour,
                    as_xarray: bool = False,
                    varname: str = "connectedComponents",
-                  ) -> np.ndarray:
+                   mask: Optional[np.ndarray] = None,
+                   ) -> np.ndarray:
     """
-    Load a GUNW raster, optionally reprojecting to a consistent target grid.
-    By default returns a NumPy array. If `as_xarray=True`, returns an
-    xarray.DataArray opened via the rasterio engine (through rioxarray).
+    Load a GUNW raster, optionally applying a binary mask, and reprojecting 
+    to a consistent target grid. By default returns a NumPy array. If 
+    `as_xarray=True`, returns an xarray.Dataset opened via the rasterio engine.
     """
 
     # Discover source nodata (if present)
     src = gdal.Open(str(filename), gdal.GA_ReadOnly)
     band = src.GetRasterBand(1)
     src_nodata = band.GetNoDataValue()
-    src = None
 
+    # --- NEW: Apply the optional mask in native resolution before warping ---
+    if mask is not None:
+        # Create an in-memory copy of the source raster
+        driver = gdal.GetDriverByName('MEM')
+        warp_input = driver.CreateCopy('', src)
+        masked_band = warp_input.GetRasterBand(1)
+        arr = masked_band.ReadAsArray()
+
+        # Validate dimensions
+        if mask.shape != arr.shape:
+            raise ValueError(f"Mask shape {mask.shape} does not match source shape {arr.shape}.")
+
+        # Determine the safest NoData value to fill masked pixels with
+        fill_val = src_nodata if src_nodata is not None else (nodata if nodata is not None else 0.0)
+
+        # Apply mask: where mask == 1 (Valid), keep data; else replace with fill_val
+        arr = np.where(mask == 1, arr, fill_val)
+
+        # Write the cleanly masked array back into our MEM dataset
+        masked_band.WriteArray(arr)
+        
+        # Ensure GDAL knows about our NoData value for the Warp step
+        if src_nodata is None:
+            masked_band.SetNoDataValue(fill_val)
+            src_nodata = fill_val  # Update so warp_kwargs handles it correctly below
+    else:
+        # Standard operation: just point Warp to the file path
+        warp_input = str(filename)
+
+    src = None  # Safely release the original file lock
+
+    # --- Original Warp and Processing Logic ---
     warp_kwargs = dict(
         format="MEM",
         dstSRS=proj,
@@ -120,8 +152,8 @@ def get_GUNW_array(filename: Union[str, Path],
         warp_kwargs["dstNodata"] = nodata
         warp_kwargs["srcNodata"] = src_nodata if src_nodata is not None else nodata
 
-    # Reproject to target grid in-memory
-    ds = gdal.Warp("", str(filename), **warp_kwargs)
+    # Reproject to target grid in-memory using our warp_input (either file path or MEM dataset)
+    ds = gdal.Warp("", warp_input, **warp_kwargs)
 
     if not as_xarray:
         data = ds.ReadAsArray()
@@ -150,7 +182,7 @@ def get_GUNW_array(filename: Union[str, Path],
         da = da.squeeze("band", drop=True)
 
     # make sure it has a variable name
-        da.name = varname
+    da.name = varname
 
     # Ensure nodata encoded (use NaN if provided)
     if nodata is not None:
@@ -468,3 +500,137 @@ def combine_data_to_single(data_list: list,
             comb_data = np.nanmax(comb_data, axis=0)
 
     return comb_data, SNWE, latlon_step
+
+
+def get_binary_nisar_mask_from_path(gdal_path):
+    """
+    Given a GDAL-style path to an unwrapped phase layer, 
+    reconstructs the path to the internal mask and generates a binary mask.
+    """
+    # Isolate the file path from the internal HDF5 subpath
+    # This splits at the boundary of the filename and the internal layers
+    prefix, subpath = gdal_path.split('":')
+    
+    # Inherit the parent tree (e.g., frequencyA/) and swap the leaf to /mask
+    base, sep, _ = subpath.partition("unwrappedInterferogram")
+    nisar_mask_path = f'{prefix}":{base}{sep}/mask'
+    
+    # Generate and return the binary mask using ARIAtools
+    return create_binary_nisar_mask(nisar_mask_path)
+
+
+def create_binary_nisar_mask(mask_path: str) -> np.ndarray:
+    """
+    Reads a 3-digit NISAR SAR mask file and decodes it into a
+    sbinary mask in memory.
+    
+    1 = Valid non-water (Land)
+    0 = Water or Invalid (Missing data in reference or secondary image)
+
+    Args:
+        mask_path (str): File path to the 3-digit mask file.
+
+    Returns:
+        np.ndarray: The decoded binary mask array.
+
+    Raises:
+        FileNotFoundError: If the mask file cannot be opened.
+    """
+    ds_mask = gdal.Open(mask_path, gdal.GA_ReadOnly)
+    if not ds_mask:
+        raise FileNotFoundError(f"Could not open mask file: {mask_path}")
+
+    arr_mask = ds_mask.ReadAsArray()
+    ds_mask = None  # Free GDAL dataset from memory
+
+    # Decode the 3-digit mask
+    is_water = arr_mask // 100
+    ref_subswath = (arr_mask // 10) % 10
+    sec_subswath = arr_mask % 10
+
+    # Create and return binary mask
+    binary_mask = np.where(
+        (is_water == 0) & (ref_subswath != 0) & (sec_subswath != 0),
+        1,
+        0
+    )
+
+    return binary_mask
+
+
+def apply_mask_and_write(
+    vrt_unw_path: str,
+    vrt_conn_path: str,
+    binary_mask: np.ndarray,
+    out_unw_path: str,
+    out_conn_path: str
+    ) -> Tuple[str, str]:
+    """
+    Applies a NISAR binary mask to VRT datasets, writes the results to temp
+    files and OVERWRITES the original VRT files to point to the new temp files
+
+    Args:
+        vrt_unw_path (str): Path to the source unwrapped phase VRT to overwrite.
+        vrt_conn_path (str): Path to the source conncomp VRT to overwrite.
+        binary_mask (np.ndarray): The decoded binary mask array in memory.
+        out_unw_path (str): Filepath to save the intermediate masked unw TIF.
+        out_conn_path (str): Filepath to save the intermediate masked conn TIF.
+
+    Returns:
+        Tuple[str, str]: Paths to the newly overwritten VRT files.
+
+    Raises:
+        FileNotFoundError: If any input VRTs cannot be opened.
+        ValueError: If the mask shape does not match the VRT shape.
+    """
+    ds_unw = gdal.Open(vrt_unw_path, gdal.GA_ReadOnly)
+    ds_conn = gdal.Open(vrt_conn_path, gdal.GA_ReadOnly)
+
+    if not all([ds_unw, ds_conn]):
+        raise FileNotFoundError("One or more input VRTs could not be opened.")
+
+    # Extract spatial metadata from the reference dataset
+    geo_transform = ds_unw.GetGeoTransform()
+    projection = ds_unw.GetProjection()
+    cols = ds_unw.RasterXSize
+    rows = ds_unw.RasterYSize
+
+    if not (binary_mask.shape == (rows, cols)):
+        raise ValueError("Binary mask shape does not match VRT dimensions.")
+
+    # Apply the mask directly to the arrays read from the VRTs
+    masked_unw = ds_unw.ReadAsArray() * binary_mask
+    masked_conn = ds_conn.ReadAsArray() * binary_mask
+
+    # Driver for writing standard GeoTIFFs
+    driver = gdal.GetDriverByName("GTiff")
+
+    def _write_geotiff(
+        out_path: str, data_array: np.ndarray, gdal_type: int
+    ) -> None:
+        """Helper to physically write the array to disk and safely close it."""
+        out_ds = driver.Create(out_path, cols, rows, 1, gdal_type)
+        out_ds.SetGeoTransform(geo_transform)
+        out_ds.SetProjection(projection)
+        
+        band = out_ds.GetRasterBand(1)
+        band.WriteArray(data_array)
+        band.SetNoDataValue(0)
+        band.FlushCache()
+        
+        out_ds = None  # Safely close the file lock
+
+    # Write out the intermediate .tif files safely
+    _write_geotiff(out_unw_path, masked_unw, ds_unw.GetRasterBand(1).DataType)
+    _write_geotiff(out_conn_path, masked_conn, ds_conn.GetRasterBand(1).DataType)
+
+    # CRITICAL: Free memory and release file locks on the original VRTs 
+    # BEFORE we attempt to overwrite them in the next step.
+    ds_unw = None
+    ds_conn = None
+
+    # Overwrite the original VRTs to point to our newly created TIFs
+    gdal.BuildVRT(vrt_unw_path, out_unw_path)
+    gdal.BuildVRT(vrt_conn_path, out_conn_path)
+
+    return vrt_unw_path, vrt_conn_path
