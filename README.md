@@ -2,7 +2,7 @@
 [![Language](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
 
-ARIA-tools is an open-source package in Python which contains tools to manipulate standard InSAR products from Sentinel-1 (ARIA GUNW-S1) and NISAR (NISAR_L2_PR_GUNW). This software is open source under the terms of the [Apache 2.0 License](LICENSE). Its development was funded under the ROSES awards from the NASA Sea-level Change Team (NSLCT) program, the Earth Surface and Interior (ESI) program, and under the NISAR Science Team (NISAR-ST) program.
+ARIA-tools is an open-source package in Python which contains tools to manipulate standard InSAR products from Sentinel-1 (ARIA GUNW-S1) and NISAR (NISAR_L2_GUNW). This software is open source under the terms of the [Apache 2.0 License](LICENSE). Its development was funded under the ROSES awards from the NASA Sea-level Change Team (NSLCT) program, the Earth Surface and Interior (ESI) program, and under the NISAR Science Team (NISAR-ST) program.
 
 
 > [!IMPORTANT]
@@ -13,7 +13,7 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 
 ARIA tools includes support for:
 - ARIA Geocoded Unwrapped Interferogram from Sentinel-1 (GUNW-S1) can be downloaded for free from the [ASF DAAC vertex page](https://search.asf.alaska.edu/#/?dataset=SENTINEL-1%20INTERFEROGRAM%20(BETA)) selecting "ARIA S1 GUNW" under "datasets".  Users can also request free on-demand products through the [ASF on-demand system](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/). These products are added to the standard product archive. A log-on using the NASA Earthdata credentials is required to order new or download data from the archive. [Product Specification Document](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/#product-packaging).
--  NISAR Gecoded Unwrapped Interferogram products (NISAR_L2_PR_GUNW) can be downloaded for free from the [ASF DAAC vertex page](https://search.asf.alaska.edu/#/?dataset=NISAR&prodConfig=PR&sciProducts=GUNW) selecting "NISAR" under "datasets" and selecting "GUNW" under the filter criteria. [Product Specification document](https://nisar-docs.asf.alaska.edu/gunw/). 
+-  NISAR Gecoded Unwrapped Interferogram products (NISAR_L2_GUNW) can be downloaded for free from the [ASF DAAC vertex page](https://search.asf.alaska.edu/#/?dataset=NISAR&prodConfig=PR&sciProducts=GUNW) selecting "NISAR" under "datasets" and selecting "GUNW" under the filter criteria. [Product Specification document](https://nisar-docs.asf.alaska.edu/gunw/). 
 
 
 The ARIA-tools package includes functionality to crop/merge data and meta-data layers for multiple standard products, extraction of data and meta-data layers from these products, and the set-up and the preparation for time-series. 
@@ -194,16 +194,16 @@ The ARIA-tools scripts are highly modulized in Python and therefore allows for b
 
 
 ### Commandline download of GUNW Products
-ARIA GUNW-S1 products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
+ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
 
 ### Manipulating GUNW Products
-ARIA GUNW-S1/NISAR_L2_PR_GUNW products can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program. 
+ARIA GUNW-S1/NISAR_L2_GUNW products can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program. 
 
 ### Baseline and quality control plots for GUNW Products
 ARIA GUNW-S1 quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
 
 ### Time-series set-up of GUNW Products
-ARIA GUNW-S1/NISAR_L2_PR_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
+ARIA GUNW-S1/NISAR_L2_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
 
 > [!NOTE]  
 > We support extraction of correction layers (e.g. Troposphere, Ionosphere, Solid Earth Tides) as well as geometry information (e.g. incidence angle, look angle, baselines, etc) embeded within the GUNW products 
