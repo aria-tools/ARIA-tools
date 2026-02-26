@@ -1,6 +1,6 @@
 affine
 arm_pyart
-asf_search>=10.0.4
+asf_search>=12.0.1
 dask
 dem_stitcher>=2.5.8
 gdal>=3.7.0
