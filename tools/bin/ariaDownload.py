@@ -38,17 +38,31 @@ def createParser():
     parser = argparse.ArgumentParser(
         description='Command line interface to download Sentinel-1/NISAR '
                     'GUNW products from the ASF DAAC. \nDownloading them '
-                    'requires a NASA Earthdata URS user login and requires '
-                    'users to add "GRFN Door (PROD)" and "ASF Datapool '
-                    'Products" to their URS approved applications. Access '
-                    'to NISAR products requires an Earthdata Bearer token '
-                    'from: https://urs.earthdata.nasa.gov/documentation/'
-                    'for_users/user_token',
-        epilog='Examples of use:\n'
-               '\t ariaDownload.py --track 004 --output count\n'
-               '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
-               '\t ariaDownload.py -t 004,077 --start 20190101 -o count'
-               '\t ariaDownload.py --mission NISAR -o count',
+                    'requires a NASA Earthdata URS user login',
+        epilog='Examples of use:\n\n'
+                '\t # Count Sentinel-1 products available for track 004\n'
+                '\t ariaDownload.py --track 004 --output count\n\n'
+                '\t # Download Sentinel-1 products within specified '
+                'bounding box\n'
+                '\t ariaDownload.py --bbox "36.75 37.225 -76.655 '
+                '-75.928"\n\n'
+                '\t # Count Sentinel-1 products for tracks 004 & 077 '
+                'since Jan 2019\n'
+                '\t ariaDownload.py --mission S1 -t 004,077 '
+                '--start 20190101 -o count\n\n'
+                '\t # Count all available NISAR products\n'
+                '\t ariaDownload.py --mission NISAR -o count\n\n'
+                '\t # Download globally available descending NISAR '
+                'products\n'
+                '\t ariaDownload.py --mission NISAR -d d '
+                '-b "-90 90 -180 180"\n\n'
+                '\t # Count all available NISAR products for track 172\n'
+                '\t ariaDownload.py --mission NISAR -t 172 -o count\n\n'
+                '\t # Download specific NISAR interferogram '
+                'and query the globe for it\n'
+                '\t ariaDownload.py --mission NISAR '
+                '-b "-90 90 -180 180" -i 20251122_20251204\n',
+        
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument(
@@ -58,12 +72,12 @@ def createParser():
              'aria*.py')
     parser.add_argument(
         '-t', '--track', default=None, type=str,
-        help='track to download; single number (including leading zeros) or '
+        help='track to download; single number or '
              'comma separated')
     parser.add_argument(
-        '-b', '--bbox', default=None, type=str,
+        '-b', '--bbox', default="-90 90 -180 180", type=str,
         help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
-             'POLYGON geometry.')
+             'POLYGON geometry. Default is set to global scale')
     parser.add_argument(
         '-w', '--workdir', dest='wd', default='./products', type=str,
         help='Specify directory to deposit all outputs. Default is "products" '
@@ -71,20 +85,16 @@ def createParser():
     parser.add_argument(
         '-s', '--start', default='20100101', type=str,
         help='Start date as YYYYMMDD; If none provided, starts at beginning '
-             'of beta NISAR GUNW record (2010).')
+             'of 2010.')
     parser.add_argument(
         '-e', '--end', default='21000101', type=str,
         help='End date as YYYYMMDD. If none provided, ends today.')
     parser.add_argument(
         '-u', '--user', default=None, type=str,
-        help='NASA Earthdata URS user login. Users must add "GRFN Door '
-             '(PROD)" and "ASF Datapool Products" to their URS approved '
-             'applications.')
+        help='NASA Earthdata URS user login.')
     parser.add_argument(
         '-p', '--pass', dest='passw', default=None, type=str,
-        help='NASA Earthdata URS user password. Users must add "GRFN Door '
-             '(PROD)" and "ASF Datapool Products" to their URS approved '
-             'applications.')
+        help='NASA Earthdata URS user password.')
     parser.add_argument(
         '--mission', default='S1', type=str.upper, choices=('S1', 'NISAR'),
         help='Sentinel-1 (S1) or NISAR. Default is S1')
@@ -105,7 +115,7 @@ def createParser():
     parser.add_argument(
         '-i', '--ifg', default=None, type=str,
         help='Retrieve one interferogram by its start/end date, specified as '
-             'YYYYMMDD_YYYYMMDD (order independent)')
+             'YYYYMMDD_YYYYMMDD (order independent).')
     parser.add_argument(
         '-d', '--direction', dest='flightdir', default=None, type=str,
         help='Flight direction, options: ascending, a, descending, d')
@@ -113,7 +123,8 @@ def createParser():
         '--version', default=None,
         help='Specify version as str, e.g. 2_0_4 or all prods. All products '
              'are downloaded by default. If version is specified, only '
-             'products which match that version are downloaded.')
+             'products which match that version are downloaded. '
+             'Not supported for NISAR currently.')
     parser.add_argument(
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
@@ -175,7 +186,7 @@ def get_url_ifg(scenes):
         else:
             f = s['fileID'].split('-')
             pairname = f[6]
-        ifgs.append(pairname)
+            ifgs.append(pairname)
 
     # determine if NISAR GUNW
     is_nisar_file = False
@@ -231,7 +242,12 @@ class Downloader:
         urls, ifgs, is_nisar_file = get_url_ifg(scenes)
 
         # Subset everything by version
-        urls = url_versions(urls, self.args.version, self.args.wd)
+        if is_nisar_file and self.args.version is not None:
+            raise Exception(
+                'Version support not included for NISAR, remove the critera'
+            )
+        else:
+            urls = url_versions(urls, self.args.version, self.args.wd)
         scenes = [scene for scene, url in zip(scenes, urls) if url in urls]
         ifgs = [ifg for ifg, url in zip(ifgs, urls) if url in urls]
 
@@ -242,6 +258,7 @@ class Downloader:
             ifgs,
             is_nisar_file
         )
+        
 
         if self.args.output == "Count":
             LOGGER.info("Found -- %d -- products", len(scenes))
@@ -249,7 +266,7 @@ class Downloader:
             self.write_urls(urls)
         elif self.args.output == "Download":
             self.download_scenes(scenes)
-
+            
         if self.args.verbose:
             for scene in scenes:
                 LOGGER.info(scene.geojson()["properties"]["sceneName"])
@@ -288,27 +305,22 @@ class Downloader:
                 end=end,
             )
         elif self.args.mission.upper() == "NISAR":
-            session = asf_search.ASFSession()
-            session.auth_with_token(getpass.getpass("EDL Token:"))
-            LOGGER.info("Token accepted.")
-
-            search_opts = asf_search.ASFSearchOptions(
-                shortName="NISAR_L2_GUNW_BETA_V1",
+            return asf_search.geo_search(
+                collections=["C2850261892-ASF"],
+                dataset=asf_search.constants.NISAR,
+                processingLevel=asf_search.constants.GUNW,
+                relativeOrbit=tracks,
+                flightDirection=flight_direction,
                 intersectsWith=bbox_wkt,
                 start=start,
                 end=end,
-                session=session,
             )
-            scenes = asf_search.search(opts=search_opts, maxResults=250)
-
-            LOGGER.info("Found %d NISAR GUNW Betas.", len(scenes))
-            return scenes
 
     def filter_scenes(self, scenes, urls, ifgs, is_nisar_file):
         filtered_scenes, filtered_urls, filtered_ifgs = [], [], []
+
         for scene, url, ifg in zip(scenes, urls, ifgs):
             eni, sti = self.parse_dates(ifg, is_nisar_file)
-
             if self.args.ifg:
                 if self.match_single_ifg(sti, eni):
                     filtered_scenes.append(scene)
@@ -318,7 +330,6 @@ class Downloader:
                 filtered_scenes.append(scene)
                 filtered_urls.append(url)
                 filtered_ifgs.append(ifg)
-
         return filtered_scenes, filtered_urls, filtered_ifgs
 
     def parse_dates(self, ifg, is_nisar_file):
@@ -442,7 +453,7 @@ def main():
     args.start = datetime.datetime.strptime(args.start, '%Y%m%d')
     args.end = datetime.datetime.strptime(args.end, '%Y%m%d')
 
-    if not args.track and not args.bbox and args.mission.upper() != 'NISAR':
+    if not args.track and not args.bbox:
         raise Exception('Must specify either a bbox or track')
     Downloader(args)()
 
