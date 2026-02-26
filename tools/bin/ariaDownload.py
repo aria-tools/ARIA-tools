@@ -39,14 +39,29 @@ def createParser():
         description='Command line interface to download Sentinel-1/NISAR '
                     'GUNW products from the ASF DAAC. \nDownloading them '
                     'requires a NASA Earthdata URS user login',
-        epilog='Examples of use:\n'
-               '\t ariaDownload.py --track 004 --output count\n'
-               '\t ariaDownload.py --bbox "36.75 37.225 -76.655 -75.928"\n'
-               '\t ariaDownload.py --mission S1 -t 004,077 --start 20190101 -o count\n'
-               '\t ariaDownload.py --mission NISAR -o count\n'
-               '\t ariaDownload.py --mission NISAR -d d -b "-90 90 -180 180"\n'
-               '\t ariaDownload.py --mission NISAR -t 172 -o count\n'
-               '\t ariaDownload.py --mission NISAR -b "-90 90 -180 180" -i 20251122_20251204\n',
+        epilog='Examples of use:\n\n'
+                '\t # Count Sentinel-1 products available for track 004\n'
+                '\t ariaDownload.py --track 004 --output count\n\n'
+                '\t # Download Sentinel-1 products within specified '
+                'bounding box\n'
+                '\t ariaDownload.py --bbox "36.75 37.225 -76.655 '
+                '-75.928"\n\n'
+                '\t # Count Sentinel-1 products for tracks 004 & 077 '
+                'since Jan 2019\n'
+                '\t ariaDownload.py --mission S1 -t 004,077 '
+                '--start 20190101 -o count\n\n'
+                '\t # Count all available NISAR products\n'
+                '\t ariaDownload.py --mission NISAR -o count\n\n'
+                '\t # Download globally available descending NISAR '
+                'products\n'
+                '\t ariaDownload.py --mission NISAR -d d '
+                '-b "-90 90 -180 180"\n\n'
+                '\t # Count all available NISAR products for track 172\n'
+                '\t ariaDownload.py --mission NISAR -t 172 -o count\n\n'
+                '\t # Download specific NISAR interferogram '
+                'and query the globe for it\n'
+                '\t ariaDownload.py --mission NISAR '
+                '-b "-90 90 -180 180" -i 20251122_20251204\n',
         
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
@@ -60,9 +75,9 @@ def createParser():
         help='track to download; single number or '
              'comma separated')
     parser.add_argument(
-        '-b', '--bbox', default=None, type=str,
+        '-b', '--bbox', default="-90 90 -180 180", type=str,
         help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
-             'POLYGON geometry.')
+             'POLYGON geometry. Default is set to global scale')
     parser.add_argument(
         '-w', '--workdir', dest='wd', default='./products', type=str,
         help='Specify directory to deposit all outputs. Default is "products" '
@@ -108,7 +123,8 @@ def createParser():
         '--version', default=None,
         help='Specify version as str, e.g. 2_0_4 or all prods. All products '
              'are downloaded by default. If version is specified, only '
-             'products which match that version are downloaded. Not supported for NISAR currently.')
+             'products which match that version are downloaded. '
+             'Not supported for NISAR currently.')
     parser.add_argument(
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
@@ -227,7 +243,9 @@ class Downloader:
 
         # Subset everything by version
         if is_nisar_file and self.args.version is not None:
-            raise Exception('Version support not included for NISAR, remove the critera')
+            raise Exception(
+                'Version support not included for NISAR, remove the critera'
+            )
         else:
             urls = url_versions(urls, self.args.version, self.args.wd)
         scenes = [scene for scene, url in zip(scenes, urls) if url in urls]
