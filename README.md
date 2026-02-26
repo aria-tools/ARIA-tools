@@ -62,7 +62,7 @@ Below we list the key dependencies for ARIA-tools. See environment.yml for compl
 * [SciPy](https://www.scipy.org/)
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 * [requests](https://2.python-requests.org/en/master/)
-* [asf_search](https://github.com/asfadmin/Discovery-asf_search) >=10.0.4
+* [asf_search](https://github.com/asfadmin/Discovery-asf_search) >=12.0.1
 ```
 
 ### Optional Python Jupyter dependencies
