@@ -125,63 +125,58 @@ def stitch_ionosphere_frames(
     # Loop through files
     for iono_file in input_iono_files:
         filename = iono_file.split(":")[1]
-        iono_attr_list.append(ARIAtools.util.stitch.get_GUNW_attr(iono_file, xres=xres, yres=yres, proj=proj))
+        iono_attr_list.append(
+            ARIAtools.util.stitch.get_GUNW_attr(
+                iono_file, xres=xres, yres=yres, proj=proj
+            )
+        )
 
-        # Load raster and generate mask using unwrapPhase connectedComponents
+        # 1. Fetch NISAR mask if applicable
+        nisar_mask = None
         if is_nisar_file:
-            iono_xr = ARIAtools.util.stitch.get_GUNW_array(
-                filename=iono_file,
-                proj=proj,
-                xres=xres, yres=yres,
-                nodata=iono_attr_list[-1]['NODATA'],
-                as_xarray = True,
-                varname = "connectedComponents"
-            ).squeeze()
-            # get concomp nodata value
-            conn_file = NISAR_GUNW_LAYERS["connectedComponents"] % (filename, file_pol)
-            conn_np = osgeo.gdal.Open(conn_file)
-            conn_nodata = conn_np.GetRasterBand(1)
-            conn_nodata = conn_nodata.GetNoDataValue()
-            mask_xr = ARIAtools.util.stitch.get_GUNW_array(
-                filename=conn_file,
-                proj=proj,
-                xres=xres, yres=yres,
-                nodata=conn_nodata,
-                as_xarray = True,
-                varname = "connectedComponents"
-            ).squeeze()
+            nisar_mask = ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                iono_file
+            )
+            conn_file = NISAR_GUNW_LAYERS["connectedComponents"] % (
+                filename, file_pol
+            )
         else:
-            # Dynamically warp legacy ionosphere to target projection
-            iono_xr = ARIAtools.util.stitch.get_GUNW_array(
-                filename=iono_file,
-                proj=proj,
-                xres=xres,
-                yres=yres,
-                nodata=iono_attr_list[-1]['NODATA'],
-                as_xarray=True,
-                varname="ionosphere"
-            ).squeeze()
-
-            # Retrieve nodata value for legacy connectedComponents
             conn_file = GUNW_LAYERS["connectedComponents"] % filename
-            conn_np = osgeo.gdal.Open(conn_file)
-            conn_nodata = conn_np.GetRasterBand(1).GetNoDataValue()
-            conn_np = None
 
-            # Dynamically warp legacy mask to target projection
-            mask_xr = ARIAtools.util.stitch.get_GUNW_array(
-                filename=conn_file,
-                proj=proj,
-                xres=xres,
-                yres=yres,
-                nodata=conn_nodata,
-                as_xarray=True,
-                varname="connectedComponents"
-            ).squeeze()
+        # 2. Load Ionosphere (Mask applied natively during load)
+        iono_xr = ARIAtools.util.stitch.get_GUNW_array(
+            filename=iono_file,
+            proj=proj,
+            xres=xres,
+            yres=yres,
+            nodata=iono_attr_list[-1]["NODATA"],
+            as_xarray=True,
+            varname="ionosphere",
+            mask=nisar_mask,
+        ).squeeze()
 
+        # 3. Retrieve nodata value for connectedComponents
+        conn_np = osgeo.gdal.Open(conn_file)
+        conn_nodata = conn_np.GetRasterBand(1).GetNoDataValue()
+        conn_np = None
+
+        # 4. Load connectedComponents (Mask applied natively during load)
+        mask_xr = ARIAtools.util.stitch.get_GUNW_array(
+            filename=conn_file,
+            proj=proj,
+            xres=xres,
+            yres=yres,
+            nodata=conn_nodata,
+            as_xarray=True,
+            varname="connectedComponents",
+            mask=nisar_mask,
+        ).squeeze()
+
+        # 5. Create final mask isolating reliable areas (!= 0)
         mask = np.bool_(mask_xr.connectedComponents.data != 0)
         mask_xr["connectedComponents"].values = mask
         mask_xr = mask_xr.rename_vars({"connectedComponents": "mask"})
+        
         # Interpolate to iono grid
         mask_xr = mask_xr.interp_like(iono_xr)
 
@@ -214,21 +209,26 @@ def stitch_ionosphere_frames(
     data_list = [d[list(d.data_vars.keys())[0]].data for d in iono_xr_list]
     mask_list = [d.mask.data for d in mask_xr_list]
 
-    combined_iono = ARIAtools.util.stitch.combine_data_to_single(
-        data_list,
-        SNWE.tolist(),
-        LATLON.tolist(),
-        method="mean",
-        latlon_step=LATLON[0, :].tolist(),
-    )
+    if len(data_list) == 1:
+        # Bypass combine_data_to_single for single frames
+        combined_iono = (data_list[0], SNWE[0].tolist(), LATLON[0].tolist())
+        combined_mask = (mask_list[0], SNWE[0].tolist(), LATLON[0].tolist())
+    else:
+        combined_iono = ARIAtools.util.stitch.combine_data_to_single(
+            data_list,
+            SNWE.tolist(),
+            LATLON.tolist(),
+            method="mean",
+            latlon_step=LATLON[0, :].tolist(),
+        )
 
-    combined_mask = ARIAtools.util.stitch.combine_data_to_single(
-        mask_list,
-        SNWE.tolist(),
-        LATLON.tolist(),
-        method="min",
-        latlon_step=LATLON[0, :].tolist(),
-    )
+        combined_mask = ARIAtools.util.stitch.combine_data_to_single(
+            mask_list,
+            SNWE.tolist(),
+            LATLON.tolist(),
+            method="min",
+            latlon_step=LATLON[0, :].tolist(),
+        )
 
     # Step 3: Fit quadratic surface
     # Mask combined_iono before surface fitting
@@ -272,31 +272,27 @@ def export_ionosphere(
     # create temp files
     temp_iono_out = output_iono.parent / ("temp_" + output_iono.name)
 
-    # Create VRT and exit early if only one frame passed,
-    # and therefore no stitching needed
-    if len(input_iono_files) == 1:
-        osgeo.gdal.Translate(
-            str(temp_iono_out), input_iono_files[0], format=output_format
-        )
-        osgeo.gdal.BuildVRT(str(temp_iono_out.with_suffix(".vrt")), str(temp_iono_out))
+    # Process single frames and stitched frames identically
+    # to ensure consistent quadratic surface fitting and masking.
+    (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(
+        input_iono_files,
+        xres=arrres[0],
+        yres=arrres[1],
+        proj=epsg,
+        direction_N_S=True,
+    )
 
-    else:
-        (combined_iono, snwe, latlon_spacing) = stitch_ionosphere_frames(
-            input_iono_files, xres=arrres[0], yres=arrres[1],
-            proj=epsg, direction_N_S=True
-        )
-
-        ARIAtools.util.stitch.write_GUNW_array(
-            temp_iono_out,
-            combined_iono,
-            snwe,
-            format=output_format,
-            epsg=epsg,
-            verbose=verbose,
-            update_mode=overwrite,
-            add_vrt=True,
-            nodata=0.0,
-        )
+    ARIAtools.util.stitch.write_GUNW_array(
+        temp_iono_out,
+        combined_iono,
+        snwe,
+        format=output_format,
+        epsg=epsg,
+        verbose=verbose,
+        update_mode=overwrite,
+        add_vrt=True,
+        nodata=0.0,
+    )
 
     # Crop
     if verbose:
