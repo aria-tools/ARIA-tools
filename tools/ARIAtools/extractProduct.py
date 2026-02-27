@@ -1571,6 +1571,7 @@ def export_product_worker(
                 bounds=bounds, clip_json=prods_TOTbbox, output_unw=outFilePhs,
                 output_conn=outFileConnComp,
                 output_format=outputFormatPhys,
+                is_nisar_file=is_nisar_file,
                 range_correction=range_correction, save_fig=False,
                 overwrite=True)
 
@@ -1642,7 +1643,7 @@ def export_product_worker(
 
 def export_products(
         full_product_dict, proj, bbox_file, prods_TOTbbox, layers, arrres,
-        is_nisar_file, rankedResampling=False, demfile=None,
+        iono_filter, is_nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
         outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
         tropo_total=False, model_names=[], multiproc_method='single',
@@ -1898,6 +1899,8 @@ def export_products(
                               bounds=bounds,
                               clip_json=prods_TOTbbox,
                               mask_file=mask,
+                              iono_filter=iono_filter,
+                              is_nisar_file=is_nisar_file,
                               verbose=verbose,
                               overwrite=True)
 

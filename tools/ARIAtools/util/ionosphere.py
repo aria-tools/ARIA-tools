@@ -102,6 +102,8 @@ def stitch_ionosphere_frames(
     xres: Optional[float] = None,
     yres: Optional[float] = None,
     direction_N_S: typing.Optional[bool] = True,
+    iono_filter: typing.Optional[bool] = True,
+    is_nisar_file: typing.Optional[bool] = True,
 ):
 
     # Initalize variables for raster attributes
@@ -109,17 +111,14 @@ def stitch_ionosphere_frames(
     iono_xr_list = []
     mask_xr_list = []
 
-    # track if product stack is NISAR GUNW or not
-    is_nisar_file = False
-    track_fileext = input_iono_files[0].split(":")[1]
-    if len(track_fileext.split(".h5")) > 1:
-        is_nisar_file = True
-        # Get polarization
+    # Get polarization
+    if is_nisar_file:
         pol_dict = {}
         pol_dict["SV"] = "VV"
         pol_dict["SH"] = "HH"
         pol_dict["HHNA"] = "HH"
-        basename = os.path.basename(track_fileext)
+        strp_fname = input_iono_files[0].split(":")[1]
+        basename = os.path.basename(strp_fname)
         file_pol = pol_dict[basename.split("_")[10]]
 
     # Loop through files
@@ -134,8 +133,10 @@ def stitch_ionosphere_frames(
         # 1. Fetch NISAR mask if applicable
         nisar_mask = None
         if is_nisar_file:
-            nisar_mask = ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
-                iono_file
+            nisar_mask = (
+                ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                    iono_file
+                )
             )
             conn_file = NISAR_GUNW_LAYERS["connectedComponents"] % (
                 filename, file_pol
@@ -172,11 +173,11 @@ def stitch_ionosphere_frames(
             mask=nisar_mask,
         ).squeeze()
 
-        # 5. Create final mask isolating reliable areas (!= 0)
-        mask = np.bool_(mask_xr.connectedComponents.data != 0)
+        # 5. Create final mask isolating reliable areas (!= 0, -1)
+        mask = ~np.isin(mask_xr.connectedComponents.data, [0, -1])
         mask_xr["connectedComponents"].values = mask
         mask_xr = mask_xr.rename_vars({"connectedComponents": "mask"})
-        
+
         # Interpolate to iono grid
         mask_xr = mask_xr.interp_like(iono_xr)
 
@@ -231,17 +232,22 @@ def stitch_ionosphere_frames(
         )
 
     # Step 3: Fit quadratic surface
+    combined_iono_arr = combined_iono[0].copy()
     # Mask combined_iono before surface fitting
-    combined_iono_msk = combined_iono[0].copy()
     mask = ~np.nan_to_num(combined_mask[0], 0).astype(np.bool_)
-    combined_iono_msk[mask] = np.nan
+    combined_iono_arr[mask] = np.nan
+    if (
+        (iono_filter and is_nisar_file)
+        or not is_nisar_file
+    ):
+        # Get surface
+        surface = fit_surface(combined_iono_arr)
+        surface = np.ma.masked_array(surface, mask=np.isnan(combined_iono[0]))
+        combined_iono_arr = surface.filled(fill_value=0.0)
+        del surface
+        
 
-    # Get surface
-    surface = fit_surface(combined_iono_msk)
-    surface = np.ma.masked_array(surface, mask=np.isnan(combined_iono[0]))
-    surface = surface.filled(fill_value=0.0)
-
-    return surface, combined_iono[1], combined_iono[2]
+    return combined_iono_arr, combined_iono[1], combined_iono[2]
 
 
 # MAIN
@@ -256,6 +262,8 @@ def export_ionosphere(
     bounds: typing.Optional[tuple] = None,
     clip_json: typing.Optional[str] = None,
     mask_file: typing.Optional[str] = None,
+    iono_filter: typing.Optional[bool] = False,
+    is_nisar_file: typing.Optional[bool] = False,
     verbose: typing.Optional[bool] = False,
     overwrite: typing.Optional[bool] = True,
 ) -> None:
@@ -280,6 +288,8 @@ def export_ionosphere(
         yres=arrres[1],
         proj=epsg,
         direction_N_S=True,
+        iono_filter=iono_filter,
+        is_nisar_file=is_nisar_file,
     )
 
     ARIAtools.util.stitch.write_GUNW_array(
@@ -318,13 +328,15 @@ def export_ionosphere(
     ds = None
 
     # Fill NoData using nearest neighbor interpolation
-    ds = osgeo.gdal.Open(str(output_iono), osgeo.gdal.GA_Update)
-    band = ds.GetRasterBand(1)
-    osgeo.gdal.FillNodata(
-        targetBand=band, maskBand=None, maxSearchDist=100, smoothingIterations=0
-    )
-    band = None
-    ds = None
+    if not is_nisar_file:
+        ds = osgeo.gdal.Open(str(output_iono), osgeo.gdal.GA_Update)
+        band = ds.GetRasterBand(1)
+        osgeo.gdal.FillNodata(
+            targetBand=band, maskBand=None, maxSearchDist=100,
+            smoothingIterations=0
+        )
+        band = None
+        ds = None
 
     # Update VRT
     if verbose:
