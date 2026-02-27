@@ -151,10 +151,32 @@ def stitch_ionosphere_frames(
                 varname = "connectedComponents"
             ).squeeze()
         else:
-            iono_xr = xr.open_dataset(iono_file, engine="rasterio").squeeze()
+            # Dynamically warp legacy ionosphere to target projection
+            iono_xr = ARIAtools.util.stitch.get_GUNW_array(
+                filename=iono_file,
+                proj=proj,
+                xres=xres,
+                yres=yres,
+                nodata=iono_attr_list[-1]['NODATA'],
+                as_xarray=True,
+                varname="ionosphere"
+            ).squeeze()
+
+            # Retrieve nodata value for legacy connectedComponents
             conn_file = GUNW_LAYERS["connectedComponents"] % filename
-            mask_xr = xr.open_dataset(
-                conn_file, engine="rasterio"
+            conn_np = osgeo.gdal.Open(conn_file)
+            conn_nodata = conn_np.GetRasterBand(1).GetNoDataValue()
+            conn_np = None
+
+            # Dynamically warp legacy mask to target projection
+            mask_xr = ARIAtools.util.stitch.get_GUNW_array(
+                filename=conn_file,
+                proj=proj,
+                xres=xres,
+                yres=yres,
+                nodata=conn_nodata,
+                as_xarray=True,
+                varname="connectedComponents"
             ).squeeze()
 
         mask = np.bool_(mask_xr.connectedComponents.data != 0)
