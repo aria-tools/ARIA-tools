@@ -498,7 +498,7 @@ class Product:
             nc_version_check = [version]
 
             # check the algorithm CRID version seperate.
-            CRIDversion = basename.split('_')[-5][-4:]            
+            CRIDversion = basename.split('_')[-5][-4:]
             if int(CRIDversion)<5006:
                 LOGGER.warning(
                     'input file %s is an older, unsupported '
