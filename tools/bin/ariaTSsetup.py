@@ -51,7 +51,8 @@ LOGGER = logging.getLogger('ariaTSsetup.py')
 def create_parser():
     """Parser to read command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Prepare ARIA products for time series processing.')
+        description='Prepare standard GUNW products products for '
+                    'time series processing.')
     parser.add_argument(
         '-f', '--file', dest='imgfile', type=str, required=True,
         help='ARIA file')
@@ -131,6 +132,13 @@ def create_parser():
         help='Minimum km\u00b2 area of overlap of scenes wrt specified '
              'bounding box. Default 0.0081 = 0.0081km\u00b2 = area of single'
              'pixel at standard 90m resolution')
+    parser.add_argument(
+        '-if', '--iono_filter', action='store_true', dest='iono_filter',
+        help='Enable spatial filtering and quadratic surface approximation '
+             'of the NISAR ionosphere layer. Caution: This may smooth out '
+             'valid short-wavelength signals. (Note: This filter is always '
+             'enforced for S1 GUNWs to mitigate large, unreliable artifacts).'
+    )
     parser.add_argument(
         '--version', dest='version', default=None,
         help='Specify version as str, e.g. 2_0_4 or all prods; default: all')
@@ -582,6 +590,7 @@ def main():
         'prods_TOTbbox': prods_TOTbbox,
         'demfile': demfile,
         'demfile_expanded': demfile_expanded,
+        'iono_filter':  args.iono_filter,
         'is_nisar_file': is_nisar_file,
         'arrres': arrres,
         'lat': lat,

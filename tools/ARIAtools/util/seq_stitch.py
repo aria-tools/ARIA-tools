@@ -43,6 +43,7 @@ LOGGER = logging.getLogger(__name__)
 
 def stitch_unwrapped_frames(input_unw_files: List[str],
                             input_conncomp_files: List[str],
+                            is_nisar_file: Optional[bool] = False,
                             proj: Optional[str] = 'EPSG:4326',
                             xres: Optional[float] = None,
                             yres: Optional[float] = None,
@@ -95,13 +96,10 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
                 'PATH'].split('"')[1].split('/')[-1]
             LOGGER.info('Frame-2: ', frame2_prods)
 
-        # determine if NISAR GUNW
-        is_nisar_file = False
+        # apply embedded artifact mask if NISAR GUNW
         frame1_nisar_msk = None
         frame2_nisar_msk = None
-        track_fileext = unw_attr_dicts[ix1]['PATH'].split('"')[1]
-        if track_fileext.endswith('.h5'):
-            is_nisar_file = True
+        if is_nisar_file:
             # Get paths to masks from each respective frame
             # NOTE: Only load Frame 1 mask if it's the very first iteration.
             # In subsequent iterations, Frame 1 is the
@@ -665,6 +663,7 @@ def product_stitch_sequential(input_unw_files: List[str],
                               output_unw: Optional[str] = './unwMerged',
                               output_conn: Optional[str] = './connCompMerged',
                               output_format: Optional[str] = 'ENVI',
+                              is_nisar_file: Optional[bool] = False,
                               bounds: Optional[tuple] = None,
                               clip_json: Optional[str] = None,
                               mask_file: Optional[str] = None,
@@ -700,6 +699,8 @@ def product_stitch_sequential(input_unw_files: List[str],
         Connected Components
     output_format : str
         output format used for gdal writer [e.g., Gtiff ENVI], default is ENVI
+    is_nisar_file : bool
+        is NISAR GUNW or now [True/False], default is False (assumes S1 GUNW)
     bounds : tuple
         (West, South, East, North) bounds obtained in ariaExtract.py
     clip_json : str
@@ -737,12 +738,6 @@ def product_stitch_sequential(input_unw_files: List[str],
     temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
     temp_conn_out = output_conn.parent / ('temp_' + output_conn.name)
 
-    # determine if NISAR GUNW
-    is_nisar_file = False
-    track_fileext = input_unw_files[0].split('"')[1]
-    if track_fileext.endswith('.h5'):
-        is_nisar_file = True
-
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_unw_files) == 1:
@@ -770,6 +765,7 @@ def product_stitch_sequential(input_unw_files: List[str],
         (combined_unwrap, combined_conn, combined_snwe) = \
             stitch_unwrapped_frames(
                 input_unw_files, input_conncomp_files,
+                is_nisar_file=is_nisar_file,
                 proj=epsg,
                 xres=arrres[0], yres=arrres[1],
                 correction_method=correction_method,
