@@ -605,7 +605,7 @@ def apply_mask_and_write(
         out_path: str, data_array: np.ndarray, gdal_type: int
     ) -> None:
         """Helper to physically write the array to disk and safely close it."""
-        out_ds = driver.Create(out_path, cols, rows, 1, gdal_type)
+        out_ds = driver.Create(str(out_path), cols, rows, 1, gdal_type)
         out_ds.SetGeoTransform(geo_transform)
         out_ds.SetProjection(projection)
         
