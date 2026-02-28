@@ -83,7 +83,7 @@ def prep_mask(
 
         # Check if mask has already been downloaded and covers necessary area
         if os.path.exists(uncropped_maskfilename) \
-            and update_mode is not 'full_extract':
+            and update_mode != 'full_extract':
             LOGGER.warning(
                 '%s has already been downloaded. Skipping download.',
                 uncropped_maskfilename)
