@@ -239,7 +239,6 @@ def export_ionosphere(
 ) -> None:
 
     if output_format == "VRT":
-        LOGGER.warning("Cannot proceed with VRT format, using ENVI format instead")
         output_format = "ENVI"
 
     # Outputs
