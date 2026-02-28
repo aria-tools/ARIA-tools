@@ -41,8 +41,6 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
     # File must be physically extracted, cannot proceed with VRT format.
     # Defaulting to ENVI format.
     if outputFormat == 'VRT':
-        LOGGER.warning(
-            "Cannot proceed with VRT format, using ENVI format instead")
         outputFormat = 'ENVI'
 
     # Set output res
@@ -148,7 +146,7 @@ def download_dem(
             update_mode = log_data['update_mode']
 
     # Check if DEM has already been downloaded and overlaps necessary area
-    if tiles_exist and update_mode is not 'full_extract':
+    if tiles_exist and update_mode != 'full_extract':
         LOGGER.warning(
             '%s has already been downloaded. Skipping download.', vrt_path)
 
