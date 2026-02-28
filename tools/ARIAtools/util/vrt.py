@@ -405,11 +405,14 @@ def layerCheck(
             tropo_models = [i.replace(' ', '') for i in tropo_models]
         model_names = list(
             set.intersection(*map(set, [model_names, tropo_models])))
-        for i in tropo_models:
-            if i not in model_names:
-                LOGGER.warning('%s tropo model not found in product', i)
-            else:
-                LOGGER.info('Generating tropo model %s', i)
+
+        if not is_nisar_file:
+            for i in tropo_models:
+                if i not in model_names:
+                    LOGGER.warning('%s tropo model not found in product', i)
+                else:
+                    LOGGER.info('Generating tropo model %s', i)
+
     else:
         model_names = []
 

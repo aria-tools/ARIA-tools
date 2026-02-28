@@ -605,7 +605,7 @@ def apply_mask_and_write(
         out_path: str, data_array: np.ndarray, gdal_type: int
     ) -> None:
         """Helper to physically write the array to disk and safely close it."""
-        out_ds = driver.Create(out_path, cols, rows, 1, gdal_type)
+        out_ds = driver.Create(str(out_path), cols, rows, 1, gdal_type)
         out_ds.SetGeoTransform(geo_transform)
         out_ds.SetProjection(projection)
         
@@ -626,7 +626,7 @@ def apply_mask_and_write(
     ds_conn = None
 
     # Overwrite the original VRTs to point to our newly created TIFs
-    gdal.BuildVRT(vrt_unw_path, out_unw_path)
-    gdal.BuildVRT(vrt_conn_path, out_conn_path)
+    gdal.BuildVRT(str(vrt_unw_path), str(out_unw_path))
+    gdal.BuildVRT(str(vrt_conn_path), str(out_conn_path))
 
     return vrt_unw_path, vrt_conn_path
