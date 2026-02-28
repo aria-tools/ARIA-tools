@@ -30,7 +30,7 @@ def createParser():
     Extract specified product layers. The default will export all layers.
     """
     parser = argparse.ArgumentParser(
-        description='Program to extract data and meta-data layers from ARIA '
+        description='Program to extract data and meta-data layers from '
                     'standard GUNW products. Program will handle cropping/'
                     'stitching when needed. By default, the program will crop '
                     'all IFGs to bounds determined by the common intersection '

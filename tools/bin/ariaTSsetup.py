@@ -51,7 +51,8 @@ LOGGER = logging.getLogger('ariaTSsetup.py')
 def create_parser():
     """Parser to read command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Prepare ARIA products for time series processing.')
+        description='Prepare standard GUNW products products for '
+                    'time series processing.')
     parser.add_argument(
         '-f', '--file', dest='imgfile', type=str, required=True,
         help='ARIA file')
