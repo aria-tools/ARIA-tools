@@ -1747,7 +1747,7 @@ def export_products(
         prev_maskfile = log_data['maskfilename'] if 'maskfilename' \
             in log_data.keys() else None
 
-        if maskfile != prev_maskfile:
+        if maskfile != prev_maskfile and prev_maskfile is not None:
             update_mode = 'full_extract'
             LOGGER.warning(
                 'Mask file has changed. Setting update mode to full_extract.')
@@ -1758,7 +1758,7 @@ def export_products(
         prev_demfile = log_data['demfile'] if 'demfile' \
             in log_data.keys() else None
 
-        if demfile != prev_demfile:
+        if demfile != prev_demfile and prev_demfile is not None:
             update_mode = 'full_extract'
             LOGGER.warning(
                 'DEM file has changed. Setting update mode to full_extract.')
