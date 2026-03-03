@@ -477,27 +477,22 @@ def combine_data_to_single(data_list: list,
         else:
             comb_data[i, y:y + data.shape[0], x: x + data.shape[1]] = data
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message="Mean of empty slice",
-            category=RuntimeWarning,
-        )
-        warnings.filterwarnings(
-            "ignore",
-            message="All-NaN slice encountered",
-            category=RuntimeWarning,
-        )
+    # Apply warning filters globally to the thread pool
+    # instead of using a context manager
+    # because Dask threads leak Python context managers and
+    # cause the warning to bleed through.
+    warnings.filterwarnings("ignore", message="Mean of empty slice")
+    warnings.filterwarnings("ignore", message="All-NaN slice encountered")
 
-        # combine using numpy
-        if method == 'mean':
-            comb_data = np.nanmean(comb_data, axis=0)
-        elif method == 'median':
-            comb_data = np.nanmedian(comb_data, axis=0)
-        elif method == 'min':
-            comb_data = np.nanmin(comb_data, axis=0)
-        elif method == 'max':
-            comb_data = np.nanmax(comb_data, axis=0)
+    # combine using numpy
+    if method == 'mean':
+        comb_data = np.nanmean(comb_data, axis=0)
+    elif method == 'median':
+        comb_data = np.nanmedian(comb_data, axis=0)
+    elif method == 'min':
+        comb_data = np.nanmin(comb_data, axis=0)
+    elif method == 'max':
+        comb_data = np.nanmax(comb_data, axis=0)
 
     return comb_data, SNWE, latlon_step
 
