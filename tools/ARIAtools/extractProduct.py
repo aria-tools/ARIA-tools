@@ -1437,72 +1437,92 @@ def export_product_worker(
             if is_nisar_file:
 
                 if layer == 'amplitude':
-                    # 1. Build a temp VRT to merge the input files
-                    temp_vrt = outname + '_temp_complex.vrt'
-                    ds_vrt = osgeo.gdal.BuildVRT(temp_vrt, product)
-                    ds_vrt = None
-
-                    # 2. Open VRT and Calculate Amplitude in Memory
-                    # This guarantees we get Magnitude, not Real component
-                    ds_in = osgeo.gdal.Open(temp_vrt)
+                    amp_ds_list = []
+                    # Ensure product is a list
+                    prod_list = product if isinstance(product, list) else [product]
                     
-                    # Create an in-memory (MEM) dataset for the Amplitude
-                    # This avoids writing an intermediate file to disk
                     mem_driver = osgeo.gdal.GetDriverByName('MEM')
-                    ds_amp = mem_driver.Create(
-                        '',
-                        ds_in.RasterXSize,
-                        ds_in.RasterYSize,
-                        1,
-                        osgeo.gdal.GDT_Float32
-                    )
+                    for prod_frame in prod_list:
+                        ds_in = osgeo.gdal.Open(prod_frame)
+                        complex_data = ds_in.GetRasterBand(1).ReadAsArray()
+                        
+                        ds_amp = mem_driver.Create(
+                            '', ds_in.RasterXSize, ds_in.RasterYSize, 1, osgeo.gdal.GDT_Float32
+                        )
+                        ds_amp.SetProjection(ds_in.GetProjection())
+                        ds_amp.SetGeoTransform(ds_in.GetGeoTransform())
+                        
+                        amp_band = ds_amp.GetRasterBand(1)
+                        amp_arr = np.abs(complex_data)
+                        
+                        # 1. Standardize any weird NaNs back to 0 
+                        # so GDAL's C++ engine can safely identify the transparent edge padding
+                        amp_arr[np.isnan(amp_arr)] = 0
+                        
+                        amp_band.WriteArray(amp_arr)
+                        amp_band.SetNoDataValue(0)
+                        
+                        amp_ds_list.append(ds_amp)
+                        ds_in = None
 
-                    # Copy Projection and GeoTransform
-                    ds_amp.SetProjection(ds_in.GetProjection())
-                    ds_amp.SetGeoTransform(ds_in.GetGeoTransform())
-
-                    # Read Complex, Compute Abs, Write Float32
-                    # Note: For ~250MB, this is safe for RAM.
-                    complex_data = ds_in.GetRasterBand(1).ReadAsArray()
-                    ds_amp.GetRasterBand(1).WriteArray(np.abs(complex_data))
-                    
-                    # Close input to free strict lock
-                    ds_in = None
-
-                    # 3. Setup Warp Options
                     amp_kwargs = gdal_warp_kwargs.copy()
-                    
-                    # Handle integer EPSG codes for compliance
+                    amp_kwargs['format'] = outputFormatPhys
                     if ('dstSRS' in amp_kwargs and
                             isinstance(amp_kwargs['dstSRS'], int)):
-                        amp_kwargs['dstSRS'] = (
-                            f"EPSG:{amp_kwargs['dstSRS']}"
-                        )
+                        amp_kwargs['dstSRS'] = f"EPSG:{amp_kwargs['dstSRS']}"
 
-                    # Explicitly force Float32 output
+                    # 2. srcNodata=0 forces the overlapping blank edges to be completely transparent.
+                    # 3. dstNodata=np.nan converts the final stitched background safely back to NaN!
                     amp_warp_opts = osgeo.gdal.WarpOptions(
                         outputType=osgeo.gdal.GDT_Float32,
+                        srcNodata=0,
+                        dstNodata=np.nan,
                         **amp_kwargs
                     )
 
-                    # 4. Warp the In-Memory Amplitude to Disk
-                    # We pass the 'ds_amp' object directly to Warp
+                    # Warp directly from the MEM datasets
                     ds_amp_warp = osgeo.gdal.Warp(
-                        outname, ds_amp, options=amp_warp_opts
+                        outname, amp_ds_list, options=amp_warp_opts
                     )
-
+                    
                     # Cleanup
-                    ds_amp = None
                     ds_amp_warp = None
-                    if os.path.exists(temp_vrt):
-                        os.remove(temp_vrt)
+                    amp_ds_list = None
 
                 else:
                     # Standard NISAR layer options
-                    ds = osgeo.gdal.Warp(
-                        outname, product, options=warp_options
-                    )
-                    ds = None
+                    # 1. If multiple frames are passed, build a VRT mosaic
+                    if isinstance(product, list) and len(product) > 1:
+                        tmp_mosaic = str(outname) + "_uncropped.vrt"
+                        
+                        # Reproject heterogeneous UTM zones safely via VRTs
+                        tmp_vrts = []
+                        for idx, p in enumerate(product):
+                            t_vrt = f"{outname}_{idx}_tmp.vrt"
+                            osgeo.gdal.Warp(
+                                t_vrt, p, format="VRT", dstSRS=proj
+                            )
+                            tmp_vrts.append(t_vrt)
+                            
+                        osgeo.gdal.BuildVRT(tmp_mosaic, tmp_vrts)
+                        warp_inputs = tmp_mosaic
+                    else:
+                        warp_inputs = (
+                            product[0] if isinstance(product, list)
+                            else product
+                        )
+
+                    # 2. Safely warp the single mosaic/file
+                    if outputFormat == 'VRT':
+                        ds = osgeo.gdal.Warp(
+                            outname + '.vrt', warp_inputs, options=warp_options
+                        )
+                        ds = None
+                    else:
+                        ds = osgeo.gdal.Warp(
+                            outname, warp_inputs, options=warp_options
+                        )
+                        ds = None
 
             else:
                 # Legacy handling
@@ -1539,15 +1559,26 @@ def export_product_worker(
                         )
                         ds_trans = None
 
-            # Create VRT (Global for this block)
-            ds_trans = osgeo.gdal.Translate(
-                outname + '.vrt',
-                outname,
-                options=osgeo.gdal.TranslateOptions(
-                    format="VRT"
+            # Create VRT pointing to physical file if a physical file was written
+            if os.path.exists(outname):
+                ds_trans = osgeo.gdal.Translate(
+                    outname + '.vrt', outname, format="VRT"
                 )
-            )
-            ds_trans = None
+                ds_trans = None
+
+            # VRT formats require the source mosaic to remain on disk.
+            # Only delete the uncropped mosaic if data was physically extracted.
+            if outputFormat != 'VRT':
+                tmp_mosaic = str(outname) + "_uncropped.vrt"
+                if os.path.exists(tmp_mosaic):
+                    os.remove(tmp_mosaic)
+                
+                # Clean up intermediate heterogeneous projection VRTs!
+                if isinstance(product, list) and len(product) > 1:
+                    for idx in range(len(product)):
+                        t_vrt = f"{outname}_{idx}_tmp.vrt"
+                        if os.path.exists(t_vrt):
+                            os.remove(t_vrt)
 
         # Extract/crop phs and conn_comp layers
         else:
@@ -1733,7 +1764,7 @@ def export_products(
         prev_maskfile = log_data['maskfilename'] if 'maskfilename' \
             in log_data.keys() else None
 
-        if maskfile != prev_maskfile:
+        if maskfile != prev_maskfile and prev_maskfile is not None:
             update_mode = 'full_extract'
             LOGGER.warning(
                 'Mask file has changed. Setting update mode to full_extract.')
@@ -1744,7 +1775,7 @@ def export_products(
         prev_demfile = log_data['demfile'] if 'demfile' \
             in log_data.keys() else None
 
-        if demfile != prev_demfile:
+        if demfile != prev_demfile and prev_demfile is not None:
             update_mode = 'full_extract'
             LOGGER.warning(
                 'DEM file has changed. Setting update mode to full_extract.')
@@ -2027,7 +2058,6 @@ def export_products(
             'find %s/export_workers -name "export_product_args_*.json" | '
             'parallel -j %d export_product.py {}') % (
                 outDir, int(num_threads)), shell=True)
-        end_time = time.time()
 
         # load in output files and verify dimensions
         output_files = glob.glob(os.path.join(
