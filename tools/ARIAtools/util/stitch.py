@@ -468,14 +468,23 @@ def combine_data_to_single(data_list: list,
     else:
         comb_data = np.empty((n, length, width), dtype=np.float64) * np.nan
     for i, data in enumerate(data_list):
-        x, y = np.abs(lalo2xy(SNWE[1], SNWE[2], snwe_list[i],
-                              latlon_step_list[i], 'around'))
-        # handle if 3D metadata layer
-        if len(data.shape) > 2:
-            comb_data[i, 0:data.shape[0], y:y + data.shape[1],
-                      x: x + data.shape[2]] = data
-        else:
-            comb_data[i, y:y + data.shape[0], x: x + data.shape[1]] = data
+            x, y = np.abs(lalo2xy(SNWE[1], SNWE[2], snwe_list[i],
+                                  latlon_step_list[i], 'around'))
+            x, y = int(x), int(y)
+            
+            # handle if 3D metadata layer
+            if len(data.shape) > 2:
+                y_end = min(y + data.shape[1], comb_data.shape[2])
+                x_end = min(x + data.shape[2], comb_data.shape[3])
+                comb_data[
+                    i, 0:data.shape[0], y:y_end, x:x_end
+                ] = data[:, :y_end - y, :x_end - x]
+            else:
+                y_end = min(y + data.shape[0], comb_data.shape[1])
+                x_end = min(x + data.shape[1], comb_data.shape[2])
+                comb_data[
+                    i, y:y_end, x:x_end
+                ] = data[:y_end - y, :x_end - x]
 
     # Apply warning filters globally to the thread pool
     # instead of using a context manager

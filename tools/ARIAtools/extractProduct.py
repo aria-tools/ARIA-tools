@@ -1494,7 +1494,23 @@ def export_product_worker(
                     # 1. If multiple frames are passed, build a VRT mosaic
                     if isinstance(product, list) and len(product) > 1:
                         tmp_mosaic = str(outname) + "_uncropped.vrt"
-                        osgeo.gdal.BuildVRT(tmp_mosaic, product)
+                        
+                        # Reproject heterogeneous UTM zones safely via VRTs
+                        tmp_vrts = []
+                        for idx, p in enumerate(product):
+                            t_vrt = f"{outname}_{idx}_tmp.vrt"
+                            osgeo.gdal.Warp(
+                                t_vrt, p, format="VRT", dstSRS=proj
+                            )
+                            tmp_vrts.append(t_vrt)
+                            
+                        osgeo.gdal.BuildVRT(tmp_mosaic, tmp_vrts)
+                        
+                        # Clean up intermediate VRTs
+                        for t_vrt in tmp_vrts:
+                            if os.path.exists(t_vrt):
+                                os.remove(t_vrt)
+                                
                         warp_inputs = tmp_mosaic
                     else:
                         warp_inputs = (
