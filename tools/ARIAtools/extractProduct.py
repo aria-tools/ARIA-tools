@@ -1505,12 +1505,6 @@ def export_product_worker(
                             tmp_vrts.append(t_vrt)
                             
                         osgeo.gdal.BuildVRT(tmp_mosaic, tmp_vrts)
-                        
-                        # Clean up intermediate VRTs
-                        for t_vrt in tmp_vrts:
-                            if os.path.exists(t_vrt):
-                                os.remove(t_vrt)
-                                
                         warp_inputs = tmp_mosaic
                     else:
                         warp_inputs = (
@@ -1578,6 +1572,13 @@ def export_product_worker(
                 tmp_mosaic = str(outname) + "_uncropped.vrt"
                 if os.path.exists(tmp_mosaic):
                     os.remove(tmp_mosaic)
+                
+                # Clean up intermediate heterogeneous projection VRTs!
+                if isinstance(product, list) and len(product) > 1:
+                    for idx in range(len(product)):
+                        t_vrt = f"{outname}_{idx}_tmp.vrt"
+                        if os.path.exists(t_vrt):
+                            os.remove(t_vrt)
 
         # Extract/crop phs and conn_comp layers
         else:
