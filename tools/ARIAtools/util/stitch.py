@@ -1,12 +1,14 @@
-import numpy as np
+# 1. Standard library imports
 import warnings
-from numpy.typing import NDArray
-
-import rioxarray
-
-from typing import Optional, Tuple, Union
-from osgeo import gdal, osr, gdal_array
 from pathlib import Path
+from typing import Optional, Tuple, Union
+
+# 2. Third-party imports
+import numpy as np
+import rioxarray
+import scipy.ndimage
+from numpy.typing import NDArray
+from osgeo import gdal, osr, gdal_array
 
 #  READ/WRITE GDAL UTILITIES
 
@@ -508,19 +510,44 @@ def combine_data_to_single(data_list: list,
 
 def get_binary_nisar_mask_from_path(gdal_path):
     """
-    Given a GDAL-style path to an unwrapped phase layer, 
-    reconstructs the path to the internal mask and generates a binary mask.
+    Given a GDAL-style path, reconstructs the internal mask path.
+    Uses spatial morphology to screen wide edge artifacts.
     """
-    # Isolate the file path from the internal HDF5 subpath
-    # This splits at the boundary of the filename and the internal layers
     prefix, subpath = gdal_path.split('":')
-    
-    # Inherit the parent tree (e.g., frequencyA/) and swap the leaf to /mask
-    base, sep, _ = subpath.partition("unwrappedInterferogram")
+    base, sep, rest = subpath.partition("unwrappedInterferogram")
     nisar_mask_path = f'{prefix}":{base}{sep}/mask'
-    
-    # Generate and return the binary mask using ARIAtools
-    return create_binary_nisar_mask(nisar_mask_path)
+
+    binary_mask = create_binary_nisar_mask(nisar_mask_path)
+
+    pol = rest.strip("/").split("/")[0] if rest else "HH"
+    unw_path = f'{prefix}":{base}{sep}/{pol}/unwrappedPhase'
+
+    ds_unw = gdal.Open(unw_path, gdal.GA_ReadOnly)
+    if ds_unw is not None:
+        unw_arr = ds_unw.ReadAsArray()
+        ds_unw = None
+
+        # 1. Find the "core" of the artifact taper
+        near_zeros = (np.abs(unw_arr) < 5e-5) & (unw_arr != 0)
+
+        if np.any(near_zeros):
+            # 2. Define a safe boundary containment zone (~75px)
+            edge_zone = scipy.ndimage.binary_dilation(
+                binary_mask == 0, iterations=75
+            )
+            core_artifacts = near_zeros & edge_zone
+
+            # 3. Dilate the core to swallow the fading rest of the taper
+            # which naturally exceeds the 5e-5 threshold
+            full_artifacts = scipy.ndimage.binary_dilation(
+                core_artifacts, iterations=40
+            )
+
+            # 4. Contain it within the edge zone and mask it
+            full_artifacts = full_artifacts & edge_zone
+            binary_mask = np.where(full_artifacts, 0, binary_mask)
+
+    return binary_mask
 
 
 def create_binary_nisar_mask(mask_path: str) -> np.ndarray:

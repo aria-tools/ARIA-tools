@@ -309,7 +309,7 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
 
     # Progress bar
     prog_bar = ARIAtools.util.misc.ProgressBar(
-        maxValue=len(int_list), print_msg='Creating stack: ')
+        maxValue=len(int_list), prefix=f'Exporting {output_file_name}: ')
 
     # only perform following checks if a differential layer
     # all NISAR layers are differential
