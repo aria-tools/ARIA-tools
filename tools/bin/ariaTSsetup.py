@@ -150,7 +150,7 @@ def create_parser():
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
-        '--log-level', default='warning', help='Logger log level')
+        '--log-level', default='info', help='Logger log level')
     return parser
 
 
@@ -375,8 +375,10 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
     range_spacing = aria_prod.products[0][0]['slantRangeSpacing'][0]
     if is_nisar_file:
         orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '_')[6]
+        platform = 'NISAR'
     else:
         orbit_direction = str.split(os.path.basename(aria_prod.files[0]), '-')[2]
+        platform = 'Sen'
 
     with open(os.path.join(stack_dir, output_file_name + '.vrt'), 'w') as fid:
         fid.write('''<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
@@ -429,7 +431,8 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
             <MDI key="startRange">{start_range}</MDI>
             <MDI key="endRange">{end_range}</MDI>
             <MDI key="slantRangeSpacing">{range_spacing}</MDI>
-            <MDI key="orbitDirection">{orbDir}</MDI>'''
+            <MDI key="orbitDirection">{orbDir}</MDI>
+            <MDI key="PLATFORM">{platform}</MDI>'''
             fid.write(outstr)
             if b_perp != []:
                 bPerp = b_perp[dates]

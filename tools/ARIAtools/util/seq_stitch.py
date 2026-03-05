@@ -758,7 +758,8 @@ def product_stitch_sequential(input_unw_files: List[str],
                 vrt_conn_path=str(temp_conn_out.with_suffix('.vrt')),
                 binary_mask=nisar_binary_mask,
                 out_unw_path=temp_unw_out,
-                out_conn_path=temp_conn_out
+                out_conn_path=temp_conn_out,
+                multiply_unw_by=-1
             )
 
     else:
@@ -771,6 +772,10 @@ def product_stitch_sequential(input_unw_files: List[str],
                 correction_method=correction_method,
                 range_correction=range_correction, direction_N_S=True,
                 verbose=verbose)
+
+        # Invert phase to match date2_date1 convention
+        if is_nisar_file:
+            combined_unwrap = combined_unwrap * -1
 
         # Write
         # write stitched unwrappedPhase

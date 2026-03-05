@@ -8,6 +8,12 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 > [!IMPORTANT]
 > ARIA-tools now supports **NISAR GUNW** products created routinely by the NASA-ISRO SAR mission. We welcome the community for reporting bugs using the issue ticket functionality
 
+> [!NOTE]
+> **Standardized Date and Phase Convention**
+> To prevent confusion during time-series analysis, **all** ARIA-tools outputs enforce a consistent date and phase convention, regardless of the native format of the input product:
+> * **Date Order:** ARIA-tools strictly uses a `ReferenceDate_SecondaryDate` naming convention, where the reference scene is the more recent pass and the secondary scene is the earlier pass. 
+> * **Phase Sign:** Because the more recent acquisition is used as the reference, the unwrapped phase convention is standardized across all outputs. Negative phase differences indicate movement away from the sensor, and positive phase differences indicate movement towards the sensor.
+> * **NISAR vs. S1:** While ARIA-S1-GUNW products natively follow this convention out of the box, NISAR GUNW products natively use the opposite date order. ARIA-tools automatically flips the dates and mathematical signs for NISAR inputs during extraction to ensure all your downstream time-series outputs are 100% consistent!
 
 ------
 
