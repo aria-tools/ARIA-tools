@@ -10,6 +10,7 @@ ARIA-tools is an open-source package in Python which contains tools to manipulat
 
 > [!NOTE]
 > **Standardized Date and Phase Convention**
+>
 > To prevent confusion during time-series analysis, **all** ARIA-tools outputs enforce a consistent date and phase convention, regardless of the native format of the input product:
 > * **Date Order:** ARIA-tools strictly uses a `ReferenceDate_SecondaryDate` naming convention, where the reference scene is the more recent pass and the secondary scene is the earlier pass. 
 > * **Phase Sign:** Because the more recent acquisition is used as the reference, the unwrapped phase convention is standardized across all outputs. Negative phase differences indicate movement away from the sensor, and positive phase differences indicate movement towards the sensor.
