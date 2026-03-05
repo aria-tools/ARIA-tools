@@ -884,10 +884,10 @@ class Product:
         # initiate variables
         rdrmetadata_dict = {}
         sdskeys = ['/science/LSAR/identification/boundingPolygon']
-        # Pass pair name
+        # Pass pair name (Forced to date2_date1 convention)
         basename = os.path.basename(fname)
-        self.pairname = basename.split('_')[11][:8] + '_'
-        self.pairname += basename.split('_')[13][:8]
+        self.pairname = basename.split('_')[13][:8] + '_'
+        self.pairname += basename.split('_')[11][:8]
 
         # Get polarization
         pol_dict = {}

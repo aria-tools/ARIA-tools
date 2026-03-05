@@ -675,7 +675,8 @@ def merged_productbbox(
             is_nisar_file)
 
 
-def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
+def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
+    sign_multiplier=1):
     """Wrapper to create raster and apply projection using Rioxarray (Safe)"""
 
     # 1) Build a lightweight reference warp (VRT)
@@ -719,6 +720,10 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
             del da.attrs["_FillValue"]
         # -----------------------------------------
         
+        # Flip the sign for NISAR convention
+        if sign_multiplier == -1:
+            da = da * -1
+            
         # Enforce threading during the write
         with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'): 
             da.rio.to_raster(fname, driver=driver, crs=proj)
@@ -751,7 +756,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None):
 
 def prep_metadatalayers(
         outname, metadata_arr, dem, layer, layers, is_nisar_file=False,
-        proj='4326', driver='ENVI', model_name=None):
+        proj='4326', driver='ENVI', model_name=None, sign_multiplier=1):
     """Wrapper to prep metadata layer for extraction"""
     if dem is None:
         raise Exception('No DEM input specified. '
@@ -831,7 +836,8 @@ def prep_metadatalayers(
             for j in glob.glob(i[0] + '*'):
                 if os.path.isfile(j):
                     os.remove(j)
-            create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field)
+            create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field,
+                sign_multiplier)
 
         if not is_nisar_file:
             # compute differential
@@ -942,7 +948,7 @@ def prep_metadatalayers(
                                 pass
                 else:
                     create_raster_from_gunw(outname, metadata_arr,
-                        proj, driver, hgt_field)
+                        proj, driver, hgt_field, sign_multiplier)
             else:
                 ds_vrt = osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
                 
@@ -959,7 +965,7 @@ def prep_metadatalayers(
 
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
-                  hgt_field, proj, driver):
+                  hgt_field, proj, driver, sign_multiplier=1):
     """ Compute differential from reference and secondary scenes (Multi-dim safe) """
 
     # if specified workdir doesn't exist, create it
@@ -984,6 +990,9 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                 arr_total = arr_sec + arr_ref
             else:
                 arr_total = arr_sec - arr_ref
+
+            if sign_multiplier == -1:
+                arr_total = arr_total * -1
 
             # 3. Create Output DataArray
             # We copy da_sec to preserve coordinates/dims/attrs
@@ -1150,6 +1159,11 @@ def handle_epoch_layers(
     for i in all_workdirs:
         if not os.path.exists(i):
             os.mkdir(i)
+
+    # Flip sign for external corrections if NISAR
+    sign_multiplier = -1 if (is_nisar_file and key in [
+        'solidEarthTide', 'troposphereWet', 
+        'troposphereHydrostatic', 'troposphereTotal']) else 1
 
     # Iterate through all IFGs
     all_outputs = []
@@ -1363,6 +1377,10 @@ def export_product_worker(
         **gdal_warp_kwargs
     )
 
+    # Flip sign for baselines if NISAR
+    sign_multiplier = -1 if (is_nisar_file and layer in [
+        'bPerpendicular', 'bParallel']) else 1
+
     mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
@@ -1428,7 +1446,7 @@ def export_product_worker(
             # make VRT pointing to metadata layers in standard product
             hgt_field, outname = prep_metadatalayers(
                 outname, product, dem_expanded, layer, layers,
-                is_nisar_file, proj)
+                is_nisar_file, proj, sign_multiplier=sign_multiplier)
 
             # Interpolate/intersect with DEM before cropping
             finalize_metadata(

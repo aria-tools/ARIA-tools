@@ -291,6 +291,10 @@ def export_ionosphere(
         is_nisar_file=is_nisar_file,
     )
 
+    # Invert phase to match date2_date1 convention
+    if is_nisar_file:
+        combined_iono = combined_iono * -1
+
     ARIAtools.util.stitch.write_GUNW_array(
         temp_iono_out,
         combined_iono,

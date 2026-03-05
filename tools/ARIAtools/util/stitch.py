@@ -590,7 +590,8 @@ def apply_mask_and_write(
     vrt_conn_path: str,
     binary_mask: np.ndarray,
     out_unw_path: str,
-    out_conn_path: str
+    out_conn_path: str,
+    multiply_unw_by: int = 1
     ) -> Tuple[str, str]:
     """
     Applies a NISAR binary mask to VRT datasets, writes the results to temp
@@ -627,6 +628,8 @@ def apply_mask_and_write(
 
     # Apply the mask directly to the arrays read from the VRTs
     masked_unw = ds_unw.ReadAsArray() * binary_mask
+    if multiply_unw_by == -1:
+        masked_unw = masked_unw * -1
     masked_conn = ds_conn.ReadAsArray() * binary_mask
 
     # Driver for writing standard GeoTIFFs
