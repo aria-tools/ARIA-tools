@@ -180,9 +180,10 @@ def main(inps=None):
         # DEM.
 
         # TODO make LHS a tuple
-        standardproduct_info.products[0], standardproduct_info.products[1], \
-            standardproduct_info.bbox_file, prods_TOTbbox, \
-            prods_TOTbbox_metadatalyr, arrres, proj, is_nisar_file = \
+        (standardproduct_info.products[0], standardproduct_info.products[1],
+         standardproduct_info.bbox_file, prods_TOTbbox,
+         prods_TOTbbox_metadatalyr, arrres, proj, update_mode,
+         is_nisar_file) = \
                 ARIAtools.extractProduct.merged_productbbox(
                     standardproduct_info.products[0],
                     standardproduct_info.products[1],
@@ -193,19 +194,34 @@ def main(inps=None):
 
         # Load or download mask (if specified).
         if args.mask is not None:
-            # TODO refactor these list comps, this is not understandable
+            # Extract amplitude layers (use coherence for NISAR, amplitude for S1)
+            amplitude_products = []
+            for d in standardproduct_info.products[1]:
+                if is_nisar_file:
+                    if 'coherence' in d:
+                        for item in list(set(d['coherence'])):
+                            amplitude_products.append(item)
+                else:
+                    if 'amplitude' in d:
+                        for item in list(set(d['amplitude'])):
+                            amplitude_products.append(item)
+            pair_names = [
+                item for sublist in [
+                    list(set(d['pair_name']))
+                    for d in standardproduct_info.products[1]
+                    if 'pair_name' in d]
+                for item in sublist]
             args.mask = ARIAtools.util.mask.prep_mask(
-                [[item for sublist in [list(set(d['amplitude'])) for d in standardproduct_info.products[1] if 'amplitude' in d] for item in sublist],
-                                   [item for sublist in [list(set(d['pair_name'])) for d in standardproduct_info.products[1] if 'pair_name' in d] for item in sublist]],
-                                  args.mask,
-                                  standardproduct_info.bbox_file,
-                                  prods_TOTbbox,
-                                  proj,
-                                  amp_thresh=args.amp_thresh,
-                                  arrres=arrres,
-                                  workdir=args.workdir,
-                                  outputFormat=args.outputFormat,
-                                  num_threads=args.num_threads)
+                [amplitude_products, pair_names],
+                args.mask,
+                standardproduct_info.bbox_file,
+                prods_TOTbbox,
+                proj,
+                amp_thresh=args.amp_thresh,
+                arrres=arrres,
+                workdir=args.workdir,
+                outputFormat=args.outputFormat,
+                num_threads=args.num_threads)
 
     # Make spatial extent plot
     if args.plottracks:
