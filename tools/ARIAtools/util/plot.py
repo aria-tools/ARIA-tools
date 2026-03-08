@@ -33,6 +33,17 @@ class PlotClass(object):
                  prods_TOTbbox=None, arrres=None, mask=None,
                  outputFormat='ENVI', croptounion=False, num_threads='2',
                  proj=None):
+        """Initialise PlotClass.
+
+        Parameters
+        ----------
+        proj : str, optional
+            Destination spatial reference system as a WKT string (e.g. from
+            ``gdal.Dataset.GetProjection()``). When set, passed as ``dstSRS``
+            to all internal ``gdal.Warp`` calls so that source rasters in a
+            different CRS (e.g. UTM for NISAR products) are correctly
+            reprojected to match the output bounds.
+        """
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
         self.bbox_file = bbox_file

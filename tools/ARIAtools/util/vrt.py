@@ -283,7 +283,17 @@ def resampleRaster(
 def rasterAverage(
         outname, product_dict, bounds, prods_TOTbbox, arrres,
         outputFormat='ENVI', thresh=None, proj=None):
-    """Generate average of rasters."""
+    """Generate average of rasters.
+
+    Parameters
+    ----------
+    proj : str, optional
+        Destination spatial reference system as a WKT string (e.g. from
+        ``gdal.Dataset.GetProjection()``). When set, passed as ``dstSRS``
+        to ``gdal.Warp`` so that source rasters in a different CRS (e.g.
+        UTM for NISAR products) are correctly reprojected to match the
+        output bounds.
+    """
     # Make average raster
     # Delete existing average raster file
     for i in glob.glob(outname + '*'):
