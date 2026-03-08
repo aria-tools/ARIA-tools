@@ -31,7 +31,8 @@ class PlotClass(object):
 
     def __init__(self, product_dict, workdir='./', bbox_file=None,
                  prods_TOTbbox=None, arrres=None, mask=None,
-                 outputFormat='ENVI', croptounion=False, num_threads='2'):
+                 outputFormat='ENVI', croptounion=False, num_threads='2',
+                 proj=None):
         # Pass inputs, and initialize list of pairs
         self.product_dict = product_dict
         self.bbox_file = bbox_file
@@ -41,6 +42,7 @@ class PlotClass(object):
         self.outputFormat = outputFormat
         self.croptounion = croptounion
         self.num_threads = num_threads
+        self.proj = proj
         self.pairs = None
 
         if mask is not None:
@@ -306,18 +308,23 @@ class PlotClass(object):
         fig, ax = plt.subplots()
         coh_hist = []
 
+        # Build warp kwargs; dstSRS ensures correct reprojection (e.g. NISAR UTM->WGS84)
+        warp_kwargs = dict(format="MEM",
+                           cutlineDSName=self.prods_TOTbbox,
+                           outputBounds=self.bbox_file,
+                           targetAlignedPixels=True,
+                           xRes=self.arrres[0], yRes=self.arrres[1],
+                           resampleAlg='average', multithread=True)
+        if self.proj is not None:
+            warp_kwargs['dstSRS'] = self.proj
+
         # Iterate through all IFGs
         masters = []
         slaves = []
         for i in enumerate(self.product_dict[0]):
             # Open coherence file
             with gdal.config_options({"GDAL_NUM_THREADS": self.num_threads}):
-                coh_file = gdal.Warp('', i[1], format="MEM",
-                                     cutlineDSName=self.prods_TOTbbox,
-                                     outputBounds=self.bbox_file,
-                                     targetAlignedPixels=True,
-                                     xRes=self.arrres[0], yRes=self.arrres[1],
-                                     resampleAlg='average', multithread=True)
+                coh_file = gdal.Warp('', i[1], **warp_kwargs)
 
                 # Apply mask (if specified).
                 if self.mask is not None:
@@ -400,7 +407,8 @@ class PlotClass(object):
         coh_file = rasterAverage(outname, self.product_dict[0],
                                  self.bbox_file,
                                  self.prods_TOTbbox, self.arrres,
-                                 outputFormat=self.outputFormat)
+                                 outputFormat=self.outputFormat,
+                                 proj=self.proj)
 
         # Apply mask (if specified).
         if self.mask is not None:
@@ -468,17 +476,21 @@ class PlotClass(object):
         coh_vals = []
         y1 = []
         y2 = []
+        # Build warp kwargs; dstSRS ensures correct reprojection (e.g. NISAR UTM->WGS84)
+        warp_kwargs = dict(format="MEM",
+                           cutlineDSName=self.prods_TOTbbox,
+                           outputBounds=self.bbox_file, resampleAlg='average',
+                           targetAlignedPixels=True, xRes=self.arrres[0],
+                           yRes=self.arrres[1], multithread=True)
+        if self.proj is not None:
+            warp_kwargs['dstSRS'] = self.proj
         for i in enumerate(self.pairs):  # Plot lines for each pair
             slaves.append(pd.to_datetime(i[1][:8]))
             masters.append(pd.to_datetime(i[1][9:]))
             # Open coherence file
             with gdal.config_options({"GDAL_NUM_THREADS": self.num_threads}):
                 coh_file = gdal.Warp(
-                    '', self.product_dict[2][i[0]], format="MEM",
-                    cutlineDSName=self.prods_TOTbbox,
-                    outputBounds=self.bbox_file, resampleAlg='average',
-                    targetAlignedPixels=True, xRes=self.arrres[0],
-                    yRes=self.arrres[1], multithread=True)
+                    '', self.product_dict[2][i[0]], **warp_kwargs)
 
                 # Apply mask (if specified).
                 if self.mask is not None:

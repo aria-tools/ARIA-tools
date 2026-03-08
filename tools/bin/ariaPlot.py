@@ -254,7 +254,8 @@ def main(inps=None):
                               prods_TOTbbox=prods_TOTbbox,
                               arrres=arrres,
                               mask=args.mask,
-                              num_threads=args.num_threads)
+                              num_threads=args.num_threads,
+                              proj=proj)
         make_plot.plot_coherence()
 
     # Generate average land coherence raster
@@ -268,7 +269,8 @@ def main(inps=None):
                               arrres=arrres,
                               mask=args.mask,
                               outputFormat=args.outputFormat,
-                              num_threads=args.num_threads)
+                              num_threads=args.num_threads,
+                              proj=proj)
         make_plot.plot_avgcoherence()
 
     # Make pbaseline/coherence combo plot
@@ -283,7 +285,8 @@ def main(inps=None):
                               bbox_file=standardproduct_info.bbox_file,
                               prods_TOTbbox=prods_TOTbbox,
                               arrres=arrres,
-                              mask=args.mask)
+                              mask=args.mask,
+                              proj=proj)
         make_plot.plotbperpcoh()
 
 if __name__ == '__main__':
