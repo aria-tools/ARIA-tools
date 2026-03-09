@@ -112,14 +112,24 @@ class PlotClass(object):
                                            1:ndxt2 + 1] - tbase[ndxt1:ndxt2]
             t[[i[0]], :] = [dateDict[date[1]], dateDict[date[0]]]
 
-            # Report mean
-            pbaseline_nodata = gdal.Open(i[1][0])
-            pbaseline_nodata = pbaseline_nodata.GetRasterBand(
-                1).GetNoDataValue()
-            pbaseline_val = gdal.BuildVRT('', i[1]).ReadAsArray()
-            pbaseline_val = np.ma.masked_where(
-                pbaseline_val == pbaseline_nodata, pbaseline_val)
-            pbaseline_val = pbaseline_val.mean()
+            # Report mean - handle nodata and NaN consistently for both
+            # S1 (nodata=0) and NISAR (nodata=nan) 3D baseline arrays
+            pbaseline_ds = gdal.Open(i[1][0])
+            pbaseline_nodata = pbaseline_ds.GetRasterBand(1).GetNoDataValue()
+            pbaseline_ds = None
+            
+            pbaseline_vrt = gdal.BuildVRT('', i[1])
+            pbaseline_val = pbaseline_vrt.ReadAsArray().astype(float)
+            pbaseline_vrt = None
+            
+            # Replace nodata values with NaN (if nodata is not already NaN)
+            if pbaseline_nodata is not None and not np.isnan(pbaseline_nodata):
+                pbaseline_val = np.where(
+                    pbaseline_val == pbaseline_nodata, np.nan, pbaseline_val)
+            
+            # Use np.nanmean to ignore NaN values
+            pbaseline_val = np.nanmean(pbaseline_val)
+            
             # Record baseline val for histogram
             baseline_hist.append(pbaseline_val)
             L[i[0]] = float(pbaseline_val)
@@ -202,7 +212,11 @@ class PlotClass(object):
 
         # Make Baseline histogram
         ax1 = plt.figure().add_subplot(111)
-        ax1.hist(desingMatrix[3])
+        # Filter out NaN values before histogram
+        bperp_values = np.array(desingMatrix[3])
+        bperp_valid = bperp_values[~np.isnan(bperp_values)]
+        if len(bperp_valid) > 0:
+            ax1.hist(bperp_valid)
         ax1.set_xlabel('$\\perp$ Baseline (m)', weight='bold')
         ax1.set_ylabel('Number of Interferograms', weight='bold')
         # Force y-axis to only use ints
@@ -310,14 +324,26 @@ class PlotClass(object):
         masters = []
         slaves = []
         for i in enumerate(self.product_dict[0]):
-            # Open coherence file
+            # Handle case where product_dict entries are lists
+            coh_input = i[1]
+            if isinstance(coh_input, list):
+                if len(coh_input) > 1:
+                    # Multi-frame: build VRT mosaic
+                    coh_path = gdal.BuildVRT('', coh_input)
+                else:
+                    coh_path = coh_input[0]
+            else:
+                coh_path = coh_input
+                
+            # Open coherence file with reprojection to lat/lon
             with gdal.config_options({"GDAL_NUM_THREADS": self.num_threads}):
-                coh_file = gdal.Warp('', i[1], format="MEM",
+                coh_file = gdal.Warp('', coh_path, format="MEM",
                                      cutlineDSName=self.prods_TOTbbox,
                                      outputBounds=self.bbox_file,
                                      targetAlignedPixels=True,
                                      xRes=self.arrres[0], yRes=self.arrres[1],
-                                     resampleAlg='average', multithread=True)
+                                     resampleAlg='average', multithread=True,
+                                     dstSRS='EPSG:4326')
 
                 # Apply mask (if specified).
                 if self.mask is not None:
@@ -325,8 +351,12 @@ class PlotClass(object):
                         self.mask.ReadAsArray() * coh_file.ReadAsArray())
 
                 # Record average coherence val for histogram
-                coh_hist.append(
-                    coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
+                try:
+                    coh_hist.append(
+                        coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
+                except RuntimeError:
+                    # No valid pixels - use NaN
+                    coh_hist.append(np.nan)
                 slaves.append(
                     pd.to_datetime(self.product_dict[1][i[0]][0][:8]))
                 masters.append(
@@ -376,7 +406,10 @@ class PlotClass(object):
 
         # Make average coherence histogram
         ax1 = plt.figure().add_subplot(111)
-        ax1.hist(coh_hist)
+        # Filter out NaN values before histogram
+        coh_valid = [c for c in coh_hist if not np.isnan(c)]
+        if len(coh_valid) > 0:
+            ax1.hist(coh_valid)
         ax1.set_xlabel('Average Coherence', weight='bold')
         ax1.set_ylabel('Number of Interferograms', weight='bold')
         # Force y-axis to only use ints
@@ -471,14 +504,27 @@ class PlotClass(object):
         for i in enumerate(self.pairs):  # Plot lines for each pair
             slaves.append(pd.to_datetime(i[1][:8]))
             masters.append(pd.to_datetime(i[1][9:]))
-            # Open coherence file
+            
+            # Handle case where product_dict entries are lists
+            coh_input = self.product_dict[2][i[0]]
+            if isinstance(coh_input, list):
+                if len(coh_input) > 1:
+                    # Multi-frame: build VRT mosaic
+                    coh_path = gdal.BuildVRT('', coh_input)
+                else:
+                    coh_path = coh_input[0]
+            else:
+                coh_path = coh_input
+            
+            # Open coherence file with reprojection to lat/lon
             with gdal.config_options({"GDAL_NUM_THREADS": self.num_threads}):
                 coh_file = gdal.Warp(
-                    '', self.product_dict[2][i[0]], format="MEM",
+                    '', coh_path, format="MEM",
                     cutlineDSName=self.prods_TOTbbox,
                     outputBounds=self.bbox_file, resampleAlg='average',
                     targetAlignedPixels=True, xRes=self.arrres[0],
-                    yRes=self.arrres[1], multithread=True)
+                    yRes=self.arrres[1], multithread=True,
+                    dstSRS='EPSG:4326')
 
                 # Apply mask (if specified).
                 if self.mask is not None:
@@ -486,8 +532,12 @@ class PlotClass(object):
                         self.mask.ReadAsArray() * coh_file.ReadAsArray())
 
                 # Record average coherence val for histogram
-                coh_vals.append(
-                    coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
+                try:
+                    coh_vals.append(
+                        coh_file.GetRasterBand(1).GetStatistics(0, 1)[2])
+                except RuntimeError:
+                    # No valid pixels - use NaN
+                    coh_vals.append(np.nan)
                 y1.append(offset_dict[i[1][9:]])
                 y2.append(offset_dict[i[1][:8]])
                 coh_file = None
