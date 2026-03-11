@@ -10,7 +10,6 @@ dependencies:
   - affine
   - arm_pyart
   - asf_search>=12.0.1
-     pip install "asf_search[asf-enumeration]"     # ariaOrderASF --getpairs requires the asf-enumeration extra:
   - dask
   - dem_stitcher>=2.5.8
   - gdal>=3.7.0
@@ -39,3 +38,5 @@ dependencies:
   #for ARIA-tools-docs
   #- jupyterlab
   #- jupyter_contrib_nbextensions
+  pip install "asf_search[asf-enumeration]"     # ariaOrderASF --getpairs requires the asf-enumeration extra:
+
