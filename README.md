@@ -71,12 +71,8 @@ Below we list the key dependencies for ARIA-tools. See environment.yml for compl
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 * [requests](https://2.python-requests.org/en/master/)
 * [asf_search](https://github.com/asfadmin/Discovery-asf_search) >=12.0.1
-```
-
-### Optional Python dependencies for on-demand ordering (ariaOrderASF)
-```
-* [asf_search[asf-enumeration]](https://github.com/ASFHyP3/asf-enumeration) — required for --getpairs
-* [hyp3_sdk](https://github.com/ASFHyP3/hyp3-sdk) — required for --orderpairs and --statusjobs
+* [asf_search[asf-enumeration]](https://github.com/ASFHyP3/asf-enumeration) 
+* [hyp3_sdk](https://github.com/ASFHyP3/hyp3-sdk)
 ```
 
 ### Optional Python Jupyter dependencies
