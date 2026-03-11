@@ -10,8 +10,7 @@ dependencies:
   - affine
   - arm_pyart
   - asf_search>=12.0.1
-  # NOTE: ariaOrderASF --getpairs requires the asf-enumeration extra:
-  #   pip install "asf_search[asf-enumeration]"
+     pip install "asf_search[asf-enumeration]"     # ariaOrderASF --getpairs requires the asf-enumeration extra:
   - dask
   - dem_stitcher>=2.5.8
   - gdal>=3.7.0
@@ -36,8 +35,7 @@ dependencies:
   - shapely
   - tile_mate>=0.0.12
   - xarray
-  ## optional dependencies for ariaOrderASF --orderpairs / --statusjobs mode
-  #- hyp3_sdk
+  - hyp3_sdk  # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
   #for ARIA-tools-docs
   #- jupyterlab
   #- jupyter_contrib_nbextensions
