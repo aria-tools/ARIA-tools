@@ -737,17 +737,34 @@ def filter_pairs_by_temporal_baseline(pairs, max_baseline_days):
     return filtered
 
 
-def check_existing_products(pairs, frame_id):
+def check_existing_products(pairs, frame_id, max_results=5000):
     """
-    Check which interferogram pairs already exist at ASF using
-    ``asf_enumeration.aria_s1_gunw.product_exists``.
+    Check which interferogram pairs already exist at ASF.
+
+    Uses a single bulk ``asf_search.search`` query to fetch all existing
+    GUNW products for the frame within the relevant date range, then
+    matches pairs locally.  This is dramatically faster than calling
+    ``product_exists`` per pair (1 HTTP request vs N).
+
+    The CMR backend paginates at 250 results per HTTP request.  To avoid
+    unbounded queries (and potential timeouts on very large archives),
+    a ``max_results`` safety cap is applied.  If the cap is reached, we
+    log a warning and fall back to narrower chunked queries (250 products
+    at a time — the CMR default page size) for the unmatched pairs.
 
     Parameters
     ----------
     pairs : list
         List of ``(reference_date, secondary_date)`` tuples.
+        Our convention: ``(earlier_date, later_date)``.
     frame_id : int
         ARIA frame ID.
+    max_results : int, optional
+        Upper bound on the number of products returned by the bulk query.
+        Prevents runaway pagination for very large archives.  Default 5000
+        (well above the ~1000 products expected for a single frame's full
+        history).  ``asf_search`` pages at 250 results / request, so
+        5000 corresponds to at most 20 HTTP round-trips.
 
     Returns
     -------
@@ -762,25 +779,132 @@ def check_existing_products(pairs, frame_id):
                        'which products already exist; marking all as new.')
         return {'existing': [], 'new': list(pairs)}
 
-    LOGGER.info('Checking ASF archive for existing products '
-                '(%d pairs) ...', len(pairs))
-    for i, (ref_date, sec_date) in enumerate(pairs):
-        try:
-            # ARIA GUNW convention: reference = later date,
-            # secondary = earlier date.  Our pairs are stored as
-            # (earlier, later), so pass sec_date first.
-            if aria_s1_gunw.product_exists(sec_date, ref_date,
-                                           int(frame_id)):
-                existing.append((ref_date, sec_date))
-            else:
-                new.append((ref_date, sec_date))
-        except Exception as exc:
-            LOGGER.debug('Could not check %s/%s: %s',
-                         ref_date, sec_date, exc)
-            new.append((ref_date, sec_date))
+    if not pairs:
+        return {'existing': [], 'new': []}
 
-        if (i + 1) % 50 == 0:
-            LOGGER.info('  checked %d / %d ...', i + 1, len(pairs))
+    # ------------------------------------------------------------------
+    # Bulk query: fetch existing GUNW products for this frame in one
+    # request (paginated internally by asf_search at 250/page).
+    # The ASF `start`/`end` parameters filter on the *reference*
+    # (= later) date, so we derive the range from the later date in
+    # each pair.  A 1-day buffer mirrors what
+    # asf_enumeration.aria_s1_gunw.get_product uses internally.
+    #
+    # max_results caps the total to avoid unbounded pagination.  CMR
+    # itself has no hard result-count limit, but network timeouts
+    # (30 s / page) and memory become a concern for very large sets.
+    # ------------------------------------------------------------------
+    later_dates = [max(a, b) for a, b in pairs]
+    date_buffer = datetime.timedelta(days=1)
+    query_start = min(later_dates) - date_buffer
+    query_end = max(later_dates) + date_buffer
+
+    LOGGER.info('Checking ASF archive for existing products '
+                '(%d pairs, bulk query %s → %s, max_results=%d) ...',
+                len(pairs), query_start, query_end, max_results)
+
+    truncated = False
+    try:
+        results = asf_search.search(
+            dataset=asf_search.constants.DATASET.ARIA_S1_GUNW,
+            frame=int(frame_id),
+            start=query_start,
+            end=query_end,
+            maxResults=max_results,
+        )
+        if len(results) >= max_results:
+            truncated = True
+            LOGGER.warning(
+                'Bulk query hit the %d-result safety cap — results may '
+                'be incomplete.  Unmatched pairs will be checked '
+                'individually.', max_results)
+        LOGGER.info('Bulk query returned %d existing products.', len(results))
+    except Exception as exc:
+        LOGGER.warning('Bulk ASF query failed (%s); '
+                       'marking all pairs as new.', exc)
+        return {'existing': [], 'new': list(pairs)}
+
+    # Build a set of (reference_date, secondary_date) from scene names.
+    # Scene name format: ...-YYYYMMDD_YYYYMMDD-...
+    # The first date is the reference (later), the second is secondary.
+    existing_set = set()
+    for product in results:
+        scene = product.properties.get('sceneName', '')
+        try:
+            date_part = scene.split('-')[6]  # e.g. '20230327_20230315'
+            ref_str, sec_str = date_part.split('_')
+            ref_dt = datetime.datetime.strptime(ref_str, '%Y%m%d').date()
+            sec_dt = datetime.datetime.strptime(sec_str, '%Y%m%d').date()
+            existing_set.add((ref_dt, sec_dt))
+        except (IndexError, ValueError) as exc:
+            LOGGER.debug('Could not parse dates from scene name %r: %s',
+                         scene, exc)
+
+    LOGGER.debug('Parsed %d unique (ref, sec) pairs from ASF results.',
+                 len(existing_set))
+
+    # Match each of our pairs against the bulk result set.
+    # Our pairs are (earlier, later); GUNW convention is
+    # (reference=later, secondary=earlier).
+    unmatched = []
+    for earlier, later in pairs:
+        if (later, earlier) in existing_set:
+            existing.append((earlier, later))
+        else:
+            unmatched.append((earlier, later))
+
+    # ------------------------------------------------------------------
+    # Fallback: if the bulk query was truncated (hit max_results cap),
+    # the unmatched set may contain pairs whose products were not in the
+    # truncated result.  Re-query in chunks of CMR_FALLBACK_PAGE (250,
+    # the CMR default page size) scoped to only the unmatched reference
+    # dates, rather than falling back to slow per-pair look-ups.
+    # ------------------------------------------------------------------
+    CMR_FALLBACK_PAGE = 250
+    if truncated and unmatched:
+        LOGGER.info(
+            'Bulk results were truncated — re-querying %d unmatched '
+            'pair(s) in chunks of %d ...', len(unmatched), CMR_FALLBACK_PAGE)
+
+        # Group unmatched pairs by their reference (later) date so we
+        # can issue narrower date-range queries.
+        unmatched_later = sorted({max(a, b) for a, b in unmatched})
+        for chunk_start in range(0, len(unmatched_later), CMR_FALLBACK_PAGE):
+            chunk_dates = unmatched_later[
+                chunk_start:chunk_start + CMR_FALLBACK_PAGE]
+            q_start = min(chunk_dates) - date_buffer
+            q_end = max(chunk_dates) + date_buffer
+            try:
+                extra = asf_search.search(
+                    dataset=asf_search.constants.DATASET.ARIA_S1_GUNW,
+                    frame=int(frame_id),
+                    start=q_start,
+                    end=q_end,
+                )
+                for product in extra:
+                    scene = product.properties.get('sceneName', '')
+                    try:
+                        dp = scene.split('-')[6]
+                        rs, ss = dp.split('_')
+                        existing_set.add((
+                            datetime.datetime.strptime(rs, '%Y%m%d').date(),
+                            datetime.datetime.strptime(ss, '%Y%m%d').date(),
+                        ))
+                    except (IndexError, ValueError):
+                        pass
+            except Exception as exc:
+                LOGGER.debug('Fallback chunk query failed: %s', exc)
+
+        # Re-evaluate unmatched pairs with the augmented existing_set.
+        still_new = []
+        for earlier, later in unmatched:
+            if (later, earlier) in existing_set:
+                existing.append((earlier, later))
+            else:
+                still_new.append((earlier, later))
+        new = still_new
+    else:
+        new = unmatched
 
     LOGGER.info('Existing: %d | New: %d', len(existing), len(new))
     return {'existing': existing, 'new': new}
@@ -964,16 +1088,20 @@ def plot_baseline(dates_bperp, pairs_dict, frame_id, output_dir='./',
 
     # ----- save ----- #
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir,
-                               f'aria_baseline_frame{frame_id}.png')
+    base_stem = os.path.join(output_dir,
+                             f'aria_baseline_frame{frame_id}')
+    # Find a unique stem (avoid overwriting previous runs)
+    stem = base_stem
     counter = 1
-    base_path = output_path
-    while os.path.exists(output_path):
-        output_path = base_path.replace('.png', f'_{counter}.png')
+    while (os.path.exists(f'{stem}.png')
+           or os.path.exists(f'{stem}.eps')):
+        stem = f'{base_stem}_{counter}'
         counter += 1
 
-    fig.savefig(output_path, dpi=150, bbox_inches='tight')
-    LOGGER.info('Saved baseline plot to: %s', output_path)
+    for ext in ('.png', '.eps'):
+        out = f'{stem}{ext}'
+        fig.savefig(out, dpi=150, bbox_inches='tight')
+        LOGGER.info('Saved baseline plot to: %s', out)
     plt.close(fig)
 
 
@@ -1327,15 +1455,18 @@ def plot_frames(frames, bbox_poly=None, output_dir='./'):
 
     # ----- save ----- #
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, 'aria_frames_map.png')
+    base_stem = os.path.join(output_dir, 'aria_frames_map')
+    stem = base_stem
     counter = 1
-    base_path = output_path
-    while os.path.exists(output_path):
-        output_path = base_path.replace('.png', f'_{counter}.png')
+    while (os.path.exists(f'{stem}.png')
+           or os.path.exists(f'{stem}.eps')):
+        stem = f'{base_stem}_{counter}'
         counter += 1
 
-    fig.savefig(output_path, dpi=150, bbox_inches='tight')
-    LOGGER.info('Saved frame map to: %s', output_path)
+    for ext in ('.png', '.eps'):
+        out = f'{stem}{ext}'
+        fig.savefig(out, dpi=150, bbox_inches='tight')
+        LOGGER.info('Saved frame map to: %s', out)
     plt.close(fig)
 
 
