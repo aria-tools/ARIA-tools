@@ -16,7 +16,7 @@ parallel
 pip
 pyproj
 pytest
-python>=3.8,<3.14
+#python>=3.8,<3.14
 python-dateutil
 rasterio
 rioxarray
