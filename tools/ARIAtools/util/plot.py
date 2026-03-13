@@ -190,11 +190,15 @@ class PlotClass(object):
         # Make Baseline plot
         ax.set_ylabel('$\\perp$ Baseline (m)', weight='bold')
         ax.set_xlabel('Time', weight='bold')
-        # xticks, labels = self._adaptive_xticks(list(set(dateDict.keys())))
-        # ax.set_xlim(min(xticks), max(xticks))
-        # ax.set_xticks(xticks)
-        # ax.set_xticklabels(labels)
         ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%Y-%m'))
+        
+        # Prevent duplicate month labels on short timeframes
+        x_lims = ax.get_xlim()
+        if (x_lims[1] - x_lims[0]) < 180:
+            ax.xaxis.set_major_locator(mpl.dates.MonthLocator())
+        else:
+            ax.xaxis.set_major_locator(mpl.dates.AutoDateLocator())
+            
         for label in ax.get_xticklabels():
             label.set_ha('center')
             label.set_rotation(20.)
@@ -383,11 +387,15 @@ class PlotClass(object):
         ax.set_ylim(0, 1)
         self.pairs = [i[0] for i in self.product_dict[1]]
         xticks = self.__date_list__()
-        # xticks, labels = self._adaptive_xticks(list(set(xticks.keys())))
-        # ax.set_xlim(min(xticks),max(xticks))
-        # ax.set_xticks(xticks)
-        # ax.set_xticklabels(labels)
         ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%Y-%m'))
+        
+        # Prevent duplicate month labels on short timeframes
+        x_lims = ax.get_xlim()
+        if (x_lims[1] - x_lims[0]) < 180:
+            ax.xaxis.set_major_locator(mpl.dates.MonthLocator())
+        else:
+            ax.xaxis.set_major_locator(mpl.dates.AutoDateLocator())
+            
         for label in ax.get_xticklabels():
             label.set_ha('center')
             label.set_rotation(20.)
@@ -555,11 +563,15 @@ class PlotClass(object):
         ax.set_xlabel('Time', weight='bold')
 
         # Make baseline plot
-        # xticks, labels = self._adaptive_xticks(list(set(dateDict.keys())))
-        # ax.set_xlim(min(xticks),max(xticks))
-        # ax.set_xticks(xticks)
-        # ax.set_xticklabels(labels)
         ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%Y-%m'))
+        
+        # Prevent duplicate month labels on short timeframes
+        x_lims = ax.get_xlim()
+        if (x_lims[1] - x_lims[0]) < 180:
+            ax.xaxis.set_major_locator(mpl.dates.MonthLocator())
+        else:
+            ax.xaxis.set_major_locator(mpl.dates.AutoDateLocator())
+            
         for label in ax.get_xticklabels():
             label.set_ha('center')
             label.set_rotation(20.)

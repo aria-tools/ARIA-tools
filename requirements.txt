@@ -1,6 +1,6 @@
 affine
 arm_pyart
-asf_search>=12.0.1
+asf_search[asf-enumeration]>=12.0.3   # ariaOrderASF --getpairs requires the asf-enumeration extra
 dask
 dem_stitcher>=2.5.8
 gdal>=3.7.0
@@ -16,7 +16,7 @@ parallel
 pip
 pyproj
 pytest
-python>=3.8
+python>=3.8,<3.13
 python-dateutil
 rasterio
 rioxarray
@@ -25,6 +25,7 @@ scipy>1.10.0
 shapely
 tile_mate>=0.0.12
 xarray
-## notebook dependencies, keep commented out for better compatiability with other codes
+hyp3_sdk>=7.7.6    # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
+## notebook dependencies, keep commented out for better compatibility with other codes
 #jupyterlab
 #jupyter_contrib_nbextensions

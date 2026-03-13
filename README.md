@@ -48,6 +48,7 @@ Actual time-series processing is not supported in ARIA-tools. However, outputs a
     -   [Manipulating GUNW Products](#manipulating-gunw-products)
     -   [Baseline and quality control plots for GUNW Products](#baseline-and-quality-control-plots-for-gunw-products)
     -   [Time-series set-up of GUNW Products](#time-series-set-up-of-gunw-products)
+    -   [Ordering ARIA S1 GUNW Products on demand](#ordering-aria-s1-gunw-products-on-demand)
 4.  [Documentation](#documentation)
 5.  [Citation](#citation)
 6.  [Contributors and community contributions](#contributors)
@@ -70,6 +71,8 @@ Below we list the key dependencies for ARIA-tools. See environment.yml for compl
 * [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
 * [requests](https://2.python-requests.org/en/master/)
 * [asf_search](https://github.com/asfadmin/Discovery-asf_search) >=12.0.1
+* [asf_search[asf-enumeration]](https://github.com/ASFHyP3/asf-enumeration) 
+* [hyp3_sdk](https://github.com/ASFHyP3/hyp3-sdk)
 ```
 
 ### Optional Python Jupyter dependencies
@@ -211,6 +214,9 @@ ARIA GUNW-S1/ NISAR_L2_GUNW quality and baseline plots for spatial-temporal cont
 
 ### Time-series set-up of GUNW Products
 ARIA GUNW-S1/NISAR_L2_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
+
+### Ordering ARIA S1 GUNW Products on demand
+The *ariaOrderASF.py* program supports on-demand ordering of **ARIA Sentinel-1 GUNW** products through the [ASF HyP3 on-demand processing system](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/). This tool is for GUNW-S1 products only (not NISAR) and allows users to build and order additional interferometric pairs that are not yet in the ASF archive, using each user's monthly HyP3 credit quota.  A `~/.netrc` file with NASA Earthdata credentials is required for authentication.
 
 > [!NOTE]  
 > We support extraction of correction layers (e.g. Troposphere, Ionosphere, Solid Earth Tides) as well as geometry information (e.g. incidence angle, look angle, baselines, etc) embeded within the GUNW products 

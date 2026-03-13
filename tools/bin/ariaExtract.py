@@ -7,6 +7,7 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import os
+import sys
 import argparse
 import logging
 
@@ -326,6 +327,16 @@ def main():
     LOGGER.info('Extracting products')
     arrshape = ARIAtools.extractProduct.export_products(**export_dict)
 
+    # Flush standard streams and force a hard exit for the gnu_parallel worker.
+    # This completely bypasses Python's noisy GDAL C-binding garbage collection phase.
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
+    except Exception:
+        pass
+
 
 if __name__ == '__main__':
     main()
+

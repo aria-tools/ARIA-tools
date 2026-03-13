@@ -9,7 +9,6 @@ channels:
 dependencies:
   - affine
   - arm_pyart
-  - asf_search>=12.0.1
   - dask
   - dem_stitcher>=2.5.8
   - gdal>=3.7.0
@@ -25,7 +24,7 @@ dependencies:
   - pip
   - pyproj
   - pytest
-  - python>=3.8
+  - python>=3.8,<3.13
   - python-dateutil
   - rasterio
   - rioxarray
@@ -34,6 +33,9 @@ dependencies:
   - shapely
   - tile_mate>=0.0.12
   - xarray
+  - hyp3_sdk>=7.7.6  # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
+  - pip:
+    - "asf_search[asf-enumeration]>=12.0.3"  # ariaOrderASF --getpairs requires the asf-enumeration extra
   #for ARIA-tools-docs
   #- jupyterlab
   #- jupyter_contrib_nbextensions

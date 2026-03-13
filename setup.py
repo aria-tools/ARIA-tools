@@ -50,4 +50,4 @@ setup(name='ARIAtools',
       scripts=['tools/bin/ariaPlot.py', 'tools/bin/ariaDownload.py',
                'tools/bin/ariaExtract.py', 'tools/bin/ariaTSsetup.py',
                'tools/bin/ariaAOIassist.py', 'tools/bin/ariaMisclosure.py',
-               'tools/bin/export_product.py'])
+               'tools/bin/ariaOrderASF.py', 'tools/bin/export_product.py'])

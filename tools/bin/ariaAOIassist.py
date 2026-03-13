@@ -49,10 +49,10 @@ def createParser():
              'bounds. Default : None')
     parser.add_argument(
         '-s', '--start_date', dest='startDate', type=str, default=None,
-        help='Start date. Default : None')
+        help='Start date as YYYYMMDD. Default : None')
     parser.add_argument(
         '-e', '--end_date', dest='endDate', type=str, default=None,
-        help='End date. Default : None')
+        help='End date as YYYYMMDD. Default : None')
     parser.add_argument(
         '-x', '--exclude_dates', dest='excludeDates', type=str, default=None,
         help='List of dates to exclude from kml generation. This can be '
@@ -872,7 +872,8 @@ if __name__ == "__main__":
         # Outputs
         # Plot frame centers
         track_metadata.plotFrameCenters(
-            flagPartialCoverage=inps.flagPartialCoverage, plotRaw=inps.plotRaw)
+            flagPartialCoverage=inps.flagPartialCoverage, plotRaw=inps.plotRaw
+        )
 
         # Save epochs to list
         track_metadata.saveEpochs()
