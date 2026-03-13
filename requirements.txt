@@ -1,7 +1,6 @@
 affine
 arm_pyart
-asf_search>=12.0.1
-pip install "asf_search[asf-enumeration]"`   # ariaOrderASF --getpairs requires the asf-enumeration extra:
+asf_search[asf-enumeration]>=12.0.1   # ariaOrderASF --getpairs requires the asf-enumeration extra
 dask
 dem_stitcher>=2.5.8
 gdal>=3.7.0
