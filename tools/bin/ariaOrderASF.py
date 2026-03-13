@@ -1076,7 +1076,14 @@ def plot_baseline(dates_bperp, pairs_dict, frame_id, output_dir='./',
 
     # ----- axes formatting ----- #
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+    
+    # Prevent duplicate month labels on short timeframes by forcing a month locator
+    time_span_days = (acq_dates[-1] - acq_dates[0]).days
+    if time_span_days < 180:
+        ax.xaxis.set_major_locator(mdates.MonthLocator())
+    else:
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        
     fig.autofmt_xdate(rotation=45, ha='right')
 
     ax.set_xlabel('Date', fontsize=12)
