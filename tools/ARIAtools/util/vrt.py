@@ -282,85 +282,99 @@ def resampleRaster(
 # Average rasters
 def rasterAverage(
         outname, product_dict, bounds, prods_TOTbbox, arrres,
-        outputFormat='ENVI', thresh=None):
-    """Generate average of rasters."""
+        outputFormat='ENVI', thresh=None, proj='EPSG:4326'):
+    """Generate average of rasters.
+    
+    Parameters
+    ----------
+    proj : str
+        Target projection EPSG code (default 'EPSG:4326' for lat/lon).
+        Required to handle NISAR data which is in UTM projection.
+    """
     # Make average raster
     # Delete existing average raster file
     for i in glob.glob(outname + '*'):
         os.remove(i)
 
+    # Initialize sum and count arrays
+    sum_arr = None
+    count_arr = None
+    ref_geotrans = None
+    ref_proj = None
+    ref_nodata = None
+
     # Iterate through all layers
     for i in enumerate(product_dict):
+        # Handle case where product_dict entries are lists (e.g., ['path'])
+        # For multi-frame products, build VRT mosaic first
+        if isinstance(i[1], list):
+            if len(i[1]) > 1:
+                # Multi-frame: build VRT mosaic to stitch frames
+                file_path = osgeo.gdal.BuildVRT('', i[1])
+            else:
+                file_path = i[1][0]
+        else:
+            file_path = i[1]
+        
+        # Warp to target projection (important for NISAR which is in UTM)
         warp_options = osgeo.gdal.WarpOptions(
             format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-            xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True)
+            xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
+            dstSRS=proj, multithread=True)
             
-        # --- FIX START ---
-        # 1. Capture the Warp result
-        ds_warp = osgeo.gdal.Warp('', i[1], options=warp_options)
-        
-        # 2. Read data immediately
+        # Warp and read data
+        ds_warp = osgeo.gdal.Warp('', file_path, options=warp_options)
+        if ds_warp is None:
+            LOGGER.warning('Failed to warp %s', file_path)
+            continue
+            
         nodata_value = ds_warp.GetRasterBand(1).GetNoDataValue()
         warp_arr = ds_warp.ReadAsArray()
         
-        # 3. CRITICAL: Close the Warp dataset
-        ds_warp = None 
-        # --- FIX END ---
+        # Store reference metadata from warped result (in target projection)
+        if ref_geotrans is None:
+            ref_geotrans = ds_warp.GetGeoTransform()
+            ref_proj = ds_warp.GetProjection()
+            ref_nodata = nodata_value
+        
+        ds_warp = None
 
-        arr_file_arr = np.ma.masked_where(
-            warp_arr == nodata_value, warp_arr)
-
-        # Iteratively update average raster file
-        if os.path.exists(outname):
-            # Open update file
-            ds_update = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
-            band = ds_update.GetRasterBand(1)
-            
-            # Read, Add, Write
-            current_data = band.ReadAsArray()
-            band.WriteArray(arr_file_arr + current_data)
-            
-            # Close update file
-            ds_update = None
-
+        # Create valid data mask - handle NaN nodata (nan==nan is False)
+        if nodata_value is not None and np.isnan(nodata_value):
+            valid_mask = ~np.isnan(warp_arr)
         else:
-            # If looping through first raster file, nothing to sum so just save
-            # Note: We need projection/geotransform. 
-            # We can re-open source i[1] briefly or cache it from ds_warp above.
-            # Better approach: Cache proj/gt from ds_warp before closing it above.
-            
-            # (Re-opening source for metadata is safer if ds_warp was MEM)
-            ds_src = osgeo.gdal.Open(i[1], osgeo.gdal.GA_ReadOnly)
-            renderVRT(
-                outname, arr_file_arr, geotrans=ds_src.GetGeoTransform(),
-                drivername=outputFormat, gdal_fmt=arr_file_arr.dtype.name,
-                proj=ds_src.GetProjection(),
-                nodata=nodata_value)
-            ds_src = None
+            valid_mask = warp_arr != nodata_value
+        
+        # Replace invalid values with 0 for summing
+        data_for_sum = np.where(valid_mask, warp_arr, 0)
 
-    # Take average of raster sum
-    ds_avg = osgeo.gdal.Open(outname, osgeo.gdal.GA_Update)
-    arr_sum = ds_avg.ReadAsArray()
-    
+        # Initialize or accumulate
+        if sum_arr is None:
+            sum_arr = data_for_sum.astype(np.float64)
+            count_arr = valid_mask.astype(np.int32)
+        else:
+            sum_arr += data_for_sum
+            count_arr += valid_mask.astype(np.int32)
+
+    # Compute mean where we have valid data
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
-        arr_mean = arr_sum / len(product_dict)
+        # Avoid division by zero
+        arr_mean = np.where(count_arr > 0, sum_arr / count_arr, np.nan)
+    
+    arr_mean = arr_mean.astype(np.float32)
 
     # Mask using specified raster threshold
     if thresh:
         arr_mean = np.where(arr_mean < float(thresh), 0, 1)
 
-    # Save updated array to file
-    ds_avg.GetRasterBand(1).WriteArray(arr_mean)
-    ds_avg = None  # CLOSE
-    arr_mean = None
+    # Save result
+    renderVRT(
+        outname, arr_mean, geotrans=ref_geotrans,
+        drivername=outputFormat, gdal_fmt='float32',
+        proj=ref_proj, nodata=ref_nodata)
 
-    # Load raster to pass
-    ds_final = osgeo.gdal.Open(outname)
-    final_arr = ds_final.ReadAsArray()
-    ds_final = None
-    
-    return final_arr
+    return arr_mean
 
 
 # Perform initial layer, product, and correction sanity checks

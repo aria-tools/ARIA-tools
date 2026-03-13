@@ -207,7 +207,7 @@ ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the commandline us
 ARIA GUNW-S1/NISAR_L2_GUNW products can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program. 
 
 ### Baseline and quality control plots for GUNW Products
-ARIA GUNW-S1 quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
+ARIA GUNW-S1/ NISAR_L2_GUNW quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
 
 ### Time-series set-up of GUNW Products
 ARIA GUNW-S1/NISAR_L2_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.

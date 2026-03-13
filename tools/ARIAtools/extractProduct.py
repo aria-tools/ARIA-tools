@@ -1056,12 +1056,19 @@ def extract_bperp_dict(products, num_threads):
         # 1. Open explicitly
         ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
         
-        # 2. Read data and take mean, but ignore NaN values
-        arr = ds.ReadAsArray()
-        res = np.nanmean(arr)
+        # 2. Read data and get nodata value
+        arr = ds.ReadAsArray().astype(float)
+        nodata = ds.GetRasterBand(1).GetNoDataValue()
         
         # 3. CRITICAL: Close the file explicitly
         ds = None 
+        
+        # 4. Replace nodata with NaN (if nodata is not already NaN)
+        if nodata is not None and not np.isnan(nodata):
+            arr = np.where(arr == nodata, np.nan, arr)
+        
+        # 5. Take mean ignoring NaN values
+        res = np.nanmean(arr)
         
         return res
 
