@@ -55,7 +55,14 @@ def renderVRT(
 
     # Finalize VRT
     translate_options = osgeo.gdal.TranslateOptions(**translate_options_dict)
-    osgeo.gdal.Translate(fname + '.vrt', gdalfile, options=translate_options)
+    vrt_ds = osgeo.gdal.Translate(
+        fname + '.vrt', gdalfile, options=translate_options
+    )
+    
+    # --- CLOSE EVERYTHING ---
+    vrt_ds = None    # Close the translated VRT object
+    gdalfile = None  # Close the source ENVI/raster object
+    
     return
 
 

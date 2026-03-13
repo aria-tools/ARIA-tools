@@ -9,6 +9,7 @@
 import argparse
 import json
 import os
+import sys
 
 import ARIAtools.extractProduct
 
@@ -34,6 +35,15 @@ def main():
 
     with open(outfile, 'w') as ofp:
         json.dump(outputs, ofp)
+
+    # Flush standard streams and force a hard exit for the gnu_parallel worker.
+    # This completely bypasses Python's noisy GDAL C-binding garbage collection phase.
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

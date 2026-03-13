@@ -313,7 +313,14 @@ class MetadataQualityCheck:
                         'azimuth', profprefix='corrected')
 
         self.data_array_band = None
-        return self.data_array
+        
+        # --- CLOSE THE CLASS-LEVEL POINTER ---
+        # Capture the dataset to return it, then explicitly sever 
+        # the class's internal link to the GDAL memory object.
+        safe_return_array = self.data_array
+        self.data_array = None
+        
+        return safe_return_array
 
 
 def crop_only_manager(outname, lyrname, ifg_tag, gdal_warp_kwargs):
@@ -2315,10 +2322,20 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
 
     # Update VRT
     translate_options = osgeo.gdal.TranslateOptions(format="VRT")
-    osgeo.gdal.Translate(
+    vrt_ds = osgeo.gdal.Translate(
         outname + '.vrt', outname, options=translate_options)
+    vrt_ds = None
 
     data_array = None
+
+    # --- ADD THIS: Safely destroy the incoming DEM dataset object ---
+    # This prevents anonymous gdal.Open() calls from the parent wrapper
+    # from surviving past the end of this function and crashing the GC.
+    dem = None
+    lat = None
+    lon = None
+
+    return
 
 
 def transformPoints(lats: np.ndarray, lons: np.ndarray, hgts: np.ndarray,
