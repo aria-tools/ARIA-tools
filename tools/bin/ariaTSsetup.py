@@ -14,6 +14,7 @@ analysis. Specifically, extract unwrapped interferogram, coherence, perp
 baseline, LOS file(s), and (where available) tropospheric correction layers.
 """
 import os
+import sys
 import glob
 import copy
 import logging
@@ -737,6 +738,15 @@ def main():
             msg = f'Available layers are: {list(ARIA_STACK_OUTFILES.keys())}'
             LOGGER.warning(
                 'Selected layer %s not supported in tsSetup' + msg, layer)
+
+    # Flush standard streams and force a hard exit for the gnu_parallel worker.
+    # This completely bypasses Python's noisy GDAL C-binding garbage collection phase.
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':
