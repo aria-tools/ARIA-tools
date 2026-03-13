@@ -222,7 +222,7 @@ class PlotClass(object):
         # Force y-axis to only use ints
         ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
         plt.tight_layout()
-        f = f'bperp_histogram{self.mask_ext}.eps'.format(self.mask_ext)
+        f = f'bperp_histogram{self.mask_ext}'.format(self.mask_ext)
         LOGGER.info('Saving figures %s(.eps, .png).', f)
         plt.savefig(os.path.join(self.workdir, f'{f}.eps'))
         plt.savefig(os.path.join(self.workdir, f'{f}.png'))
