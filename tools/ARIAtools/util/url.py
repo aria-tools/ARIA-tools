@@ -15,7 +15,8 @@ def url_versions(urls, user_version, wd):
 
     Uses the the latest if user_version is None else use specified ver.
     """
-    if user_version is not None and str(user_version).lower() != 'all':
+    if user_version is not None and str(user_version).lower() not in \
+            ('all', 'none'):
         user_version = user_version.lstrip('v')
         if not user_version[0].isdigit():
             raise Exception(f'Input version {user_version} not in format X* '

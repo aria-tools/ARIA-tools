@@ -25,6 +25,7 @@ from pyproj import Transformer
 import ARIAtools.constants
 import ARIAtools.util.url
 import ARIAtools.util.shp
+import ARIAtools.util.meta_cache
 
 osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -231,6 +232,43 @@ def remove_scenes(products):
     return products
 
 
+def _configure_gdal_virtual_access():
+    """Configure GDAL for optimized virtual (vsicurl) remote access."""
+    _get = osgeo.gdal.GetConfigOption
+    _set = osgeo.gdal.SetConfigOption
+
+    # Authentication: cookie-based auth for Earthdata Login
+    # Only set if user has not already configured via environment variables
+    # (see README: export GDAL_HTTP_COOKIEFILE=/tmp/cookies.txt)
+    if _get('GDAL_HTTP_COOKIEFILE') is None:
+        _set('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
+        LOGGER.warning(
+            'GDAL_HTTP_COOKIEFILE not set – defaulting to /tmp/cookies.txt. '
+            'Consider setting this environment variable permanently '
+            '(see ARIA-tools README).')
+    if _get('GDAL_HTTP_COOKIEJAR') is None:
+        _set('GDAL_HTTP_COOKIEJAR', '/tmp/cookies.txt')
+        LOGGER.warning(
+            'GDAL_HTTP_COOKIEJAR not set – defaulting to /tmp/cookies.txt. '
+            'Consider setting this environment variable permanently '
+            '(see ARIA-tools README).')
+
+    # Caching: enable and tune VSI cache for range-request efficiency
+    if _get('VSI_CACHE') is None:
+        _set('VSI_CACHE', 'YES')
+    _set('VSI_CACHE_SIZE', '67108864')           # 64 MB cache
+
+    # HTTP tuning: chunk size, retries, and range merging
+    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')   # 512 KB per request
+    _set('GDAL_HTTP_MAX_RETRY', '3')
+    _set('GDAL_HTTP_RETRY_DELAY', '2')
+    _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'YES')
+    _set('GDAL_HTTP_MULTIPLEX', 'YES')
+    _set('GDAL_HTTP_VERSION', '2')
+
+    LOGGER.debug('GDAL virtual access configured for remote files')
+
+
 # Input file(s) and bbox as either list or physical shape file.
 class Product:
     """
@@ -247,9 +285,16 @@ class Product:
         """
         self.runlog = runlog
 
+        # Store original file argument for cache path derivation
+        self._filearg = filearg
+
         # Parse through file(s)/bbox input
         self.files = []
         self.products = []
+
+        # Metadata cache for avoiding repeated remote reads
+        self._cache_file = None
+        self._cache_data = {}
 
         # Track bbox file
         self.bbox_file = None
@@ -326,12 +371,16 @@ class Product:
         self.files = [
             f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
 
+        # Initialize metadata cache for remote files
+        if any('https://' in i for i in self.files):
+            self._cache_file = ARIAtools.util.meta_cache._cache_path(
+                self._filearg)
+            self._cache_data = ARIAtools.util.meta_cache.load_cache(
+                self._cache_file)
+
         # check if virtual file reader is being captured as netcdf
         if any("https://" in i for i in self.files):
-            # must configure osgeo.gdal to load URLs
-            osgeo.gdal.SetConfigOption('GDAL_HTTP_COOKIEFILE', 'cookies.txt')
-            osgeo.gdal.SetConfigOption('GDAL_HTTP_COOKIEJAR', 'cookies.txt')
-            osgeo.gdal.SetConfigOption('VSI_CACHE', 'YES')
+            _configure_gdal_virtual_access()
 
             this_file = [s for s in self.files if 'https://' in s][0]
             fmt = osgeo.gdal.Open(this_file).GetDriver().GetDescription()
@@ -507,8 +556,15 @@ class Product:
 
         else:
             # version accessed differently between URL vs local product
-            version = str(
-                osgeo.gdal.Open(fname).GetMetadataItem('NC_GLOBAL#version'))
+            # Use metadata cache for remote files to avoid extra HTTP requests
+            cached = ARIAtools.util.meta_cache.get_or_extract(
+                fname.replace('NETCDF:"', ''), self._cache_data)
+            if cached is not None and cached.get('version') is not None:
+                version = str(cached['version'])
+            else:
+                version = str(
+                    osgeo.gdal.Open(fname).GetMetadataItem(
+                        'NC_GLOBAL#version'))
             if version == 'None':
                 LOGGER.warning(
                     '%s is not a supported file type... skipping', fname)
@@ -769,12 +825,18 @@ class Product:
                     lyr_pref + '/external/tides/solidEarth'
                     '/reference/solidEarthTide']
 
-                # get weather model name(s)
-                meta = osgeo.gdal.Info(fname)
+                # get weather model name(s) – use cache when available
+                raw_fname = fname.replace('NETCDF:"', '')
+                cached = ARIAtools.util.meta_cache.get_or_extract(
+                    raw_fname, self._cache_data)
                 model_name = []
-                for i in meta.split():
-                    if '/science/grids/corrections/external/troposphere/' in i:
-                        model_name.append(i.split('/')[-3])
+                if cached and cached.get('tropo_models'):
+                    model_name = list(cached['tropo_models'])
+                else:
+                    meta = osgeo.gdal.Info(fname)
+                    for i in meta.split():
+                        if '/science/grids/corrections/external/troposphere/' in i:
+                            model_name.append(i.split('/')[-3])
 
                 # exit if user wishes to extract a tropo layer
                 # but no valid tropo model name is specified by user
@@ -1406,5 +1468,9 @@ class Product:
             'Group GUNW products into spatiotemporally continuous '
             'interferograms.')
         self.products = self.__continuous_time__()
+
+        # Persist metadata cache to avoid re-reading on next invocation
+        ARIAtools.util.meta_cache.save_cache(
+            self._cache_file, self._cache_data)
 
         return self.products
