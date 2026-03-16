@@ -117,13 +117,13 @@ def stitch_ionosphere_frames(
         pol_dict["SV"] = "VV"
         pol_dict["SH"] = "HH"
         pol_dict["HHNA"] = "HH"
-        strp_fname = input_iono_files[0].split(":")[1]
+        strp_fname = input_iono_files[0].split('"')[1]
         basename = os.path.basename(strp_fname)
         file_pol = pol_dict[basename.split("_")[10]]
 
     # Loop through files
     for iono_file in input_iono_files:
-        filename = iono_file.split(":")[1]
+        filename = iono_file.split('"')[1]
         iono_attr_list.append(
             ARIAtools.util.stitch.get_GUNW_attr(
                 iono_file, xres=xres, yres=yres, proj=proj

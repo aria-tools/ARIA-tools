@@ -175,7 +175,11 @@ The following pages might be of use to those trying to build third party package
 
 
 ### ARIA-tools with support for S3 virtual data access
-GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools to avoid download of product during processing. 
+GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools to avoid downloading Sentinel-1 GUNW products during processing. This is currently only supported for Sentinel-1 GUNW products (not NISAR GUNW).
+
+To use virtual access, generate a URL list using `ariaDownload.py -o url`, which produces a `.txt` file of product URLs. Pass this `.txt` file directly to `ariaExtract.py`, `ariaTSsetup.py`, or `ariaPlot.py` via the `-f` option — no download step is needed. ARIA-tools will stream data on-the-fly from the ASF archive using GDAL's `/vsicurl/` driver.
+
+For virtual processing, a local metadata cache (`aria_meta_cache.json`) is automatically created on first run to avoid repeated remote reads of product headers. Subsequent runs read from this cache for faster initialization. When expanding a time series with additional products, the existing cache is reused — only new URLs trigger remote metadata reads.
 
 Minimum requirements:
 ```
@@ -196,6 +200,7 @@ export GDAL_HTTP_COOKIEFILE=/tmp/cookies.txt
 export GDAL_HTTP_COOKIEJAR=/tmp/cookies.txt
 export VSI_CACHE=YES
 ```
+If these environment variables are not set, ARIA-tools will configure them automatically and issue a warning.
 
 ------
 ## Running ARIA-tools
@@ -204,7 +209,7 @@ The ARIA-tools scripts are highly modulized in Python and therefore allows for b
 
 
 ### Commandline download of GUNW Products
-ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api.
+ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api. For Sentinel-1 GUNW, there is also the option for virtual data access by using `ariaDownload.py -o url`, which creates a `.txt` file with HTTPS paths to archived products instead of downloading them. This URL file can be passed directly to subsequent programs (*ariaExtract.py*, *ariaTSsetup.py*, *ariaPlot.py*) for streaming access without local downloads (see [ARIA-tools with support for S3 virtual data access](#aria-tools-with-support-for-s3-virtual-data-access)).
 
 ### Manipulating GUNW Products
 ARIA GUNW-S1/NISAR_L2_GUNW products can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program. 
