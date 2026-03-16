@@ -137,7 +137,11 @@ def createParser():
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
-        '--log-level', default='info', help='Logger log level')
+        '--log-level', 
+        choices=['debug', 'info', 'warning', 'error'], 
+        default='info', 
+        help='Logger log level. Default: info.'
+    )
     return parser
 
 
@@ -151,7 +155,10 @@ def main():
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
-    LOGGER.info('Extract Product Function')
+    LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
+    print('*****************************************************************')
+    LOGGER.info('*** Extract Product Function ***')
+    print('*****************************************************************')
     # Switch tropo models to None if troposphere isn't specified
     if args.layers == None or 'tropo' not in args.layers:
         args.tropo_models = None
@@ -267,7 +274,7 @@ def main():
             'rankedResampling': args.rankedResampling,
             'runlog': runlog
         }
-        LOGGER.info('Download/cropping mask')
+        LOGGER.debug('Download/cropping mask')
         maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
     else:
         maskfilename = None
@@ -290,7 +297,7 @@ def main():
             'runlog': runlog
         }
         # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        LOGGER.info('Download/cropping DEM')
+        LOGGER.debug('Download/cropping DEM')
         demfile, demfile_expanded, lat, lon = \
             ARIAtools.util.dem.prep_dem(**dem_dict)
     else:

@@ -156,7 +156,11 @@ def create_parser():
         '-verbose', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
-        '--log-level', default='info', help='Logger log level')
+        '--log-level', 
+        choices=['debug', 'info', 'warning', 'error'], 
+        default='info', 
+        help='Logger log level. Default: info.'
+    )
     return parser
 
 
@@ -473,7 +477,9 @@ def main():
         args.num_threads = 'ALL_CPUS'
 
     LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
-    LOGGER.info('Time-series Preparation Function')
+    print('*****************************************************************')
+    LOGGER.info('*** Time-series Preparation Function ***')
+    print('*****************************************************************')
     LOGGER.info(
         'Thread count specified for gdal multiprocessing = %s' % (
             args.num_threads))
@@ -551,7 +557,7 @@ def main():
     }
 
     # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-    LOGGER.info('Download/cropping DEM')
+    LOGGER.debug('Download/cropping DEM')
     demfile, demfile_expanded, lat, lon = \
         ARIAtools.util.dem.prep_dem(**dem_dict)
 
@@ -587,7 +593,7 @@ def main():
             'rankedResampling': args.rankedResampling,
             'runlog': runlog
         }
-        LOGGER.info('Download/cropping mask')
+        LOGGER.debug('Download/cropping mask')
         maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
     else:
         maskfilename = None

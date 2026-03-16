@@ -37,7 +37,11 @@ def createParser():
         '-o', '--outfile', dest='outFile', type=str, required=True,
         help='Output file name')
     parser.add_argument(
-        '--log-level', default='warning', help='Logger log level')
+        '--log-level', 
+        choices=['debug', 'info', 'warning', 'error'], 
+        default='info', 
+        help='Logger log level. Default: info.'
+    )
     return parser
 
 

@@ -129,7 +129,11 @@ def createParser():
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
     parser.add_argument(
-        '--log-level', default='info', help='Logger log level')
+        '--log-level', 
+        choices=['debug', 'info', 'warning', 'error'], 
+        default='info', 
+        help='Logger log level. Default: info.'
+    )
     return parser
 
 
@@ -448,6 +452,10 @@ def main():
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
+
+    print('*****************************************************************')
+    LOGGER.info('*** Download Function ***')
+    print('*****************************************************************')
 
     # format dates
     args.start = datetime.datetime.strptime(args.start, '%Y%m%d')
