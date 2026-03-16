@@ -371,8 +371,8 @@ class Product:
         self.files = [
             f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
 
-        # Initialize metadata cache for remote files
-        if any('https://' in i for i in self.files):
+        # Initialize metadata cache for ARIA-S1-GUNW products
+        if any('.nc' in i for i in self.files):
             self._cache_file = ARIAtools.util.meta_cache._cache_path(
                 self._filearg)
             self._cache_data = ARIAtools.util.meta_cache.load_cache(
