@@ -179,7 +179,7 @@ GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools 
 
 To use virtual access, generate a URL list using `ariaDownload.py -o url`, which produces a `.txt` file of product URLs. Pass this `.txt` file directly to `ariaExtract.py`, `ariaTSsetup.py`, or `ariaPlot.py` via the `-f` option — no download step is needed. ARIA-tools will stream data on-the-fly from the ASF archive using GDAL's `/vsicurl/` driver.
 
-For virtual processing, a local metadata cache is automatically created on first run to avoid repeated remote reads of product headers. Subsequent runs using the same URL file read from this cache for faster initialization. The cache is stored as a `.meta_cache.json` sidecar file next to the input `.txt` URL file.
+For virtual processing, a local metadata cache (`.aria_meta_cache.json`) is automatically created on first run to avoid repeated remote reads of product headers. Subsequent runs read from this cache for faster initialization. When expanding a time series with additional products, the existing cache is reused — only new URLs trigger remote metadata reads.
 
 Minimum requirements:
 ```

@@ -28,10 +28,15 @@ _MISSING = '__missing__'
 
 
 def _cache_path(url_file):
-    """Derive the cache JSON path from the URL list file or working dir."""
-    if url_file and os.path.isfile(url_file):
-        base = os.path.splitext(url_file)[0]
-        return base + '.meta_cache.json'
+    """Derive the cache JSON path from the URL list file directory.
+
+    Uses a fixed name in the same directory as the URL file so that
+    different URL files (e.g. when expanding a time series) share a
+    single cache of per-product metadata.
+    """
+    if url_file:
+        cache_dir = os.path.dirname(os.path.abspath(url_file))
+        return os.path.join(cache_dir, '.aria_meta_cache.json')
     return None
 
 
