@@ -1403,7 +1403,10 @@ class Product:
             prod_name = datalyr_dict['productBoundingBoxFrames'].split('"')[1]
 
             # Ensure product still exists where originally found
-            if prod_name in self.files and os.path.exists(prod_name):
+            # For virtual (vsicurl) paths, os.path.exists() always returns
+            # False, so we only check membership in current file list.
+            is_remote = '/vsicurl/' in prod_name
+            if prod_name in self.files and (is_remote or os.path.exists(prod_name)):
                 self.products += [product]
             else:
                 raise Exception('Product not found: %s', prod_name)
