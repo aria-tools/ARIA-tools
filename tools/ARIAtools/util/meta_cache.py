@@ -36,7 +36,7 @@ def _cache_path(url_file):
     """
     if url_file:
         cache_dir = os.path.dirname(os.path.abspath(url_file))
-        return os.path.join(cache_dir, '.aria_meta_cache.json')
+        return os.path.join(cache_dir, 'aria_meta_cache.json')
     return None
 
 
