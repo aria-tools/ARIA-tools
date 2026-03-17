@@ -73,7 +73,7 @@ def prep_mask(
         if maskfilename.lower() == 'download':
             maskfilename = 'esa_world_cover_2021'
         lyr_name = copy.deepcopy(maskfilename)
-        LOGGER.debug('Downloading water mask: %s', lyr_name)
+        LOGGER.info('Downloading water mask: %s', lyr_name)
 
         # set file names
         uncropped_maskfilename = os.path.join(workdir,
@@ -147,7 +147,7 @@ def prep_mask(
 
     # User specified mask
     else:
-        LOGGER.debug("Using user specified mask %s" % maskfilename)
+        LOGGER.info("Using user specified mask %s" % maskfilename)
         # Path to local version of user specified mask
         user_mask = os.path.abspath(maskfilename)  # for clarity
         user_mask_n = os.path.basename(os.path.splitext(user_mask)[0])

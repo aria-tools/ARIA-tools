@@ -131,7 +131,11 @@ def createParser():
         '-v', '--verbose', action='store_true', dest='verbose',
         help="Toggle verbose mode on.")
     parser.add_argument(
-        '--log-level', default='info', help='Logger log level')
+        '--log-level', 
+        choices=['debug', 'info', 'warning', 'error'], 
+        default='info', 
+        help='Logger log level. Default: info.'
+    )
     return parser
 
 
@@ -143,6 +147,7 @@ def main(inps=None):
         'debug': logging.DEBUG, 'info': logging.INFO,
         'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
+    LOGGER.info('ARIAtools version: %s' % ARIAtools.__version__)
     print('*****************************************************************')
     print('*** Plotting Function ***')
     print('*****************************************************************')

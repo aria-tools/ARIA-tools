@@ -521,9 +521,9 @@ def merged_productbbox(
 
     # Remove scenes with insufficient overlap w.r.t. bbox
     if rejected_scenes != []:
-        LOGGER.info(("%d out of %d interferograms rejected for not meeting "
-                     "specified spatial thresholds"),
-                    len(rejected_scenes), len(product_dict))
+        LOGGER.warning(("%d out of %d interferograms rejected for not "
+                        "meeting specified spatial thresholds"),
+                        len(rejected_scenes), len(product_dict))
     metadata_dict = [
         i for j, i in enumerate(metadata_dict) if j not in rejected_scenes]
     product_dict = [

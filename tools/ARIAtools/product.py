@@ -909,8 +909,9 @@ class Product:
                     addkeys.append(f'{tropo_lyrs[0]}_' + i)
                     addkeys.append(f'{tropo_lyrs[1]}_' + i)
 
-            keys_reject.extend([
-                i for i in tropo_lyrs if i not in ''.join(addkeys)])
+            if self.tropo_extract:
+                keys_reject.extend([
+                    i for i in tropo_lyrs if i not in ''.join(addkeys)])
             for i in keys_reject:
                 LOGGER.warning(
                     'Expected data layer key %s not found in %s' % (i, fname))

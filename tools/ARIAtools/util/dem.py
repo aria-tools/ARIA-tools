@@ -53,11 +53,13 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
                 '%s must be in %s' % (
                     dem_name, ', '.join(dem_stitcher.datasets.DATASETS)))
 
-        LOGGER.info("Downloading DEM...")
+        LOGGER.info('Downloading DEM: %s', dem_name)
         demfilename = download_dem(
             aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name, runlog)
 
-    else:  # checks for user specified DEM, ensure it's georeferenced
+    # checks for user specified DEM, ensure it's georeferenced
+    else:
+        LOGGER.info("Using user specified DEM %s" % demfilename)
         demfilename = os.path.abspath(demfilename)
         assert os.path.exists(demfilename), (
             f'Cannot open DEM at: {demfilename}')

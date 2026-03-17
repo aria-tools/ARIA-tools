@@ -155,7 +155,7 @@ def get_or_extract(fname, cache_data):
         LOGGER.debug('Cache hit: %s', os.path.basename(key))
         return cache_data[key]
 
-    LOGGER.info('Cache miss – extracting metadata: %s',
+    LOGGER.debug('Cache miss – extracting metadata: %s',
                 os.path.basename(key))
     meta = extract_metadata_gdal(fname)
     if meta is not None:
