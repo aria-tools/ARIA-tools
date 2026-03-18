@@ -11,15 +11,23 @@ Metadata cache for ARIA GUNW products.
 Caches per-product metadata extracted from remote (vsicurl) or local
 NetCDF files so that repeated invocations avoid re-reading product
 headers over HTTP. The cache is stored as a JSON sidecar file.
+
+Also provides h5py-based access for scalar/string HDF5 metadata
+that GDAL cannot read (e.g. boundingPolygon, centerFrequency).
 """
 
 import hashlib
+import http.cookiejar
+import io
 import json
 import logging
 import os
 import time
 
+import h5py
+import numpy as np
 import osgeo.gdal
+import requests
 
 LOGGER = logging.getLogger(__name__)
 
@@ -161,3 +169,223 @@ def get_or_extract(fname, cache_data):
     if meta is not None:
         cache_data[key] = meta
     return meta
+
+
+# ---------- h5py helpers for scalar/string HDF5 metadata ------------------
+
+
+class _HTTPRangeFile(io.RawIOBase):
+    """Seekable read-only file backed by HTTP byte-range requests.
+
+    Handles the Earthdata OAuth redirect chain by resolving the final
+    signed URL up front, then issues byte-range GET requests for each
+    read.  h5py uses this to fetch only the HDF5 chunks it needs.
+    """
+
+    def __init__(self, url, session=None):
+        super().__init__()
+        self._session = session or requests.Session()
+        self._pos = 0
+
+        # Resolve the redirect chain to get the final signed URL +
+        # determine file size.
+        resp = self._session.get(
+            url, headers={'Range': 'bytes=0-0'},
+            allow_redirects=True, stream=True, timeout=60)
+        resp.close()
+
+        # Store the final (signed) URL so subsequent requests skip
+        # the redirect chain entirely.
+        self._url = resp.url
+
+        # Parse total file size from Content-Range: bytes 0-0/<total>
+        cr = resp.headers.get('Content-Range', '')
+        if '/' in cr:
+            self._size = int(cr.split('/')[-1])
+        else:
+            head = self._session.head(self._url, timeout=60)
+            self._size = int(head.headers.get('Content-Length', 0))
+
+        LOGGER.debug('Resolved URL (size=%d bytes)', self._size)
+
+    def readable(self):
+        return True
+
+    def writable(self):
+        return False
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self._pos
+
+    def seek(self, offset, whence=io.SEEK_SET):
+        if whence == io.SEEK_SET:
+            self._pos = offset
+        elif whence == io.SEEK_CUR:
+            self._pos += offset
+        elif whence == io.SEEK_END:
+            self._pos = self._size + offset
+        return self._pos
+
+    def read(self, size=-1):
+        if self._pos >= self._size:
+            return b''
+        if size < 0:
+            size = self._size - self._pos
+        end = min(self._pos + size - 1, self._size - 1)
+        headers = {'Range': f'bytes={self._pos}-{end}'}
+        resp = self._session.get(
+            self._url, headers=headers, timeout=120)
+        resp.raise_for_status()
+        data = resp.content
+        self._pos += len(data)
+        return data
+
+    def readinto(self, b):
+        data = self.read(len(b))
+        n = len(data)
+        b[:n] = data
+        return n
+
+    @property
+    def size(self):
+        return self._size
+
+
+def _get_earthdata_session():
+    """Create a ``requests.Session`` with Earthdata cookie auth."""
+    cookie_file = osgeo.gdal.GetConfigOption(
+        'GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
+
+    session = requests.Session()
+
+    if os.path.isfile(cookie_file):
+        jar = http.cookiejar.MozillaCookieJar(cookie_file)
+        try:
+            jar.load(ignore_discard=True, ignore_expires=True)
+            session.cookies.update(jar)
+            LOGGER.debug('Loaded cookies from %s (%d cookies)',
+                         cookie_file, len(jar))
+        except Exception as exc:
+            LOGGER.debug('Could not load cookies from %s: %s',
+                         cookie_file, exc)
+
+    return session
+
+
+def open_gunw_h5(url_or_path):
+    """Open a GUNW HDF5 file (local or remote) as an h5py.File.
+
+    For remote URLs (https://...), resolves the Earthdata OAuth
+    redirect chain, then uses HTTP byte-range requests so that h5py
+    fetches only the HDF5 chunks it needs.
+
+    Parameters
+    ----------
+    url_or_path : str
+        HTTPS URL or local file path.  VSICURL prefixes
+        (``/vsicurl/``) are stripped automatically.
+
+    Returns
+    -------
+    h5py.File
+    """
+    path = url_or_path.replace('/vsicurl/', '')
+
+    if path.startswith('https://') or path.startswith('http://'):
+        LOGGER.debug('Opening remote HDF5: %s', path)
+        session = _get_earthdata_session()
+        fh = _HTTPRangeFile(path, session=session)
+        return h5py.File(fh, 'r')
+    else:
+        LOGGER.debug('Opening local HDF5: %s', path)
+        return h5py.File(path, 'r')
+
+
+# ---------- h5py scalar/string metadata caching --------------------------
+
+
+def _extract_h5_fields(fname, h5_fields):
+    """Read scalar/string metadata from an HDF5 file via h5py.
+
+    Parameters
+    ----------
+    fname : str
+        Product path or ``/vsicurl/...`` URL.
+    h5_fields : dict
+        Mapping of ``{field_name: hdf5_path}``.  Each path is read
+        from the HDF5 file and returned as a Python scalar or string.
+
+    Returns
+    -------
+    dict
+        Keys matching *h5_fields* with their scalar values.
+    """
+    result = {}
+    with open_gunw_h5(fname) as h5f:
+        for field_name, h5_path in h5_fields.items():
+            if h5_path in h5f:
+                val = h5f[h5_path][()]
+                # Decode bytes → str for string datasets
+                if isinstance(val, bytes):
+                    val = val.decode('utf-8')
+                elif isinstance(val, np.generic):
+                    val = val.item()
+                result[field_name] = val
+            else:
+                LOGGER.warning('h5py field %s not found at %s',
+                               field_name, h5_path)
+    return result
+
+
+def get_h5_field(fname, field_name, h5_fields, cache_data):
+    """Return a single h5py metadata field, using cache.
+
+    On the first call for a given product, all fields in *h5_fields*
+    are read in one ``h5py.File`` open and cached together.
+    Subsequent calls return from cache without any I/O.
+
+    Parameters
+    ----------
+    fname : str
+        Product path (may include ``/vsicurl/`` prefix).
+    field_name : str
+        One of the keys in *h5_fields*.
+    h5_fields : dict
+        Mapping of ``{field_name: hdf5_path}`` — the caller defines
+        which datasets to read.
+    cache_data : dict
+        Mutable cache dict; updated in-place on cache miss.
+
+    Returns
+    -------
+    value
+        The scalar/string value for the requested field.
+    """
+    key = _file_key(fname)
+    entry = cache_data.get(key, {})
+
+    # Check if this specific h5py field is already cached
+    h5_cache_key = f'h5_{field_name}'
+    if h5_cache_key in entry:
+        LOGGER.debug('h5py cache hit: %s [%s]',
+                     os.path.basename(key), field_name)
+        return entry[h5_cache_key]
+
+    # Cache miss — extract all requested h5py fields at once
+    LOGGER.debug('h5py cache miss – reading: %s',
+                 os.path.basename(key))
+    h5_meta = _extract_h5_fields(fname, h5_fields)
+
+    # Merge into the existing cache entry
+    if key not in cache_data:
+        cache_data[key] = {}
+    for k, v in h5_meta.items():
+        cache_data[key][f'h5_{k}'] = v
+
+    if field_name not in h5_meta:
+        raise RuntimeError(
+            f'h5py field {field_name!r} not found in {fname}')
+    return h5_meta[field_name]

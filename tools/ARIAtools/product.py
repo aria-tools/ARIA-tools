@@ -14,7 +14,6 @@ import datetime
 import itertools
 import osgeo
 
-import h5py
 import netCDF4
 import numpy as np
 import shapely.geometry
@@ -269,6 +268,44 @@ def _configure_gdal_virtual_access():
     LOGGER.debug('GDAL virtual access configured for remote files')
 
 
+def _read_hdf5_dataset(fname, dataset_path):
+    """Read a raster-like dataset from an HDF5/NetCDF-4 file via GDAL.
+
+    Uses the netCDF driver (``NETCDF:"path":dataset_path``) so that both
+    local and remote (``/vsicurl/``) files are supported transparently.
+
+    Only works for datasets that GDAL can represent as raster bands
+    (2-D or 3-D arrays).  For scalar or string datasets, use
+    ``meta_cache.get_nisar_h5_field()`` which reads via h5py with
+    caching.
+
+    Parameters
+    ----------
+    fname : str
+        GDAL-style file reference, already wrapped as
+        ``NETCDF:"<path>`` (without the trailing ``"``).
+    dataset_path : str
+        HDF5 internal path, e.g.
+        ``/science/LSAR/GUNW/metadata/radarGrid/referenceSlantRange``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array data from the dataset.
+    """
+    sds = fname + '":' + dataset_path
+    ds = osgeo.gdal.Open(sds, osgeo.gdal.GA_ReadOnly)
+
+    if ds is not None:
+        arr = ds.ReadAsArray()
+        ds = None
+        if arr is not None:
+            return arr.item() if arr.ndim == 0 else arr
+
+    raise RuntimeError(
+        f'Could not read {dataset_path} from {fname} via GDAL')
+
+
 # Input file(s) and bbox as either list or physical shape file.
 class Product:
     """
@@ -371,8 +408,9 @@ class Product:
         self.files = [
             f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
 
-        # Initialize metadata cache for ARIA-S1-GUNW products
-        if any('.nc' in i for i in self.files):
+        # Initialize metadata cache for GUNW products (S1 .nc and NISAR .h5)
+        if any(ext in i for i in self.files
+               for ext in ('.nc', '.h5')):
             self._cache_file = ARIAtools.util.meta_cache._cache_path(
                 self._filearg)
             self._cache_data = ARIAtools.util.meta_cache.load_cache(
@@ -383,24 +421,39 @@ class Product:
             _configure_gdal_virtual_access()
 
             this_file = [s for s in self.files if 'https://' in s][0]
-            fmt = osgeo.gdal.Open(this_file).GetDriver().GetDescription()
+            # Use NETCDF: prefix to force the netCDF driver — works
+            # for both .nc (S1 GUNW) and .h5 (NISAR GUNW) files since
+            # NISAR products are CF-compliant NetCDF-4.
+            try:
+                ds = osgeo.gdal.Open('NETCDF:"' + this_file + '"')
+                fmt = ds.GetDriver().GetDescription() if ds else None
+                ds = None
+            except Exception:
+                fmt = None
 
             if fmt != 'netCDF':
                 raise Exception(
                     'System update required to read requested virtual '
-                    'products: Linux kernel >=4.3 and libnetcdf >=4.5')
+                    'products via the netCDF driver. '
+                    'Requires: Linux kernel >=4.3 and libnetcdf >=4.5. '
+                    f'Got driver={fmt!r} for {os.path.basename(this_file)}')
 
         # check if local file reader is being captured as netcdf
-        check_for_urls = any("https://" not in i for i in self.files)
-        check_for_h5 = any(".h5" in i for i in self.files)
-        if check_for_urls and not check_for_h5:
-            fmt = osgeo.gdal.Open(
-                [s for s in self.files if 'https://' not in s][0]
-            ).GetDriver().GetDescription()
+        local_files = [s for s in self.files if 'https://' not in s]
+        if local_files:
+            try:
+                ds = osgeo.gdal.Open(
+                    'NETCDF:"' + local_files[0] + '"')
+                fmt = ds.GetDriver().GetDescription() if ds else None
+                ds = None
+            except Exception:
+                fmt = None
             if fmt != 'netCDF':
-                raise Exception('System update required to '
-                                'read requested local products: '
-                                'Linux kernel >=4.3 and libnetcdf >=4.5')
+                raise Exception(
+                    'System update required to read requested local '
+                    'products via the netCDF driver. '
+                    'Requires: Linux kernel >=4.3 and libnetcdf >=4.5. '
+                    f'Got driver={fmt!r} for {os.path.basename(local_files[0])}')
 
         if len(self.files) == 0:
             raise Exception('No file match found')
@@ -456,14 +509,18 @@ class Product:
                 pol_dict['SH'] = 'HH'
                 pol_dict['HHNA'] = 'HH'
                 for i in self.files:
-                    fname = 'NETCDF:"' + i
                     basename = os.path.basename(i)
                     file_pol = pol_dict[basename.split('_')[10]]
                     lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
                     lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
-                    proj_location = lyr_pref + 'projection'
-                    with h5py.File(fname[8:], 'r') as hdf_gunw:
-                        file_proj = int(hdf_gunw[proj_location][()])
+                    # Read projection from the spatial reference of a
+                    # data layer; the 'projection' scalar dataset in
+                    # HDF5 is not readable via GDAL's netCDF driver.
+                    sds = f'NETCDF:"{i}":{lyr_pref}unwrappedPhase'
+                    ds = osgeo.gdal.Open(sds, osgeo.gdal.GA_ReadOnly)
+                    srs = ds.GetSpatialRef()
+                    file_proj = int(srs.GetAuthorityCode(None))
+                    ds = None
                     record_proj.append(file_proj)
                 self.projection = int(np.median(record_proj))
             else:
@@ -978,24 +1035,45 @@ class Product:
         lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
         wrapped_lyr_pref = f'{lyr_pref}/wrappedInterferogram/{file_pol}/'
         lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
-        center_freq = '/science/LSAR/GUNW/grids/frequencyA/centerFrequency'
-        with h5py.File(fname[8:], 'r') as hdf_gunw:
-            # get bbox
-            latlon_file_bbox = hdf_gunw[sdskeys[0]]
-            latlon_file_bbox = latlon_file_bbox[()]
-            latlon_file_bbox = shapely.wkt.loads(latlon_file_bbox)
-            # get center frequency
-            center_freq_var = float(hdf_gunw[center_freq][()])
-            # get slant range info
-            rdr_slant_range = hdf_gunw[
-                '/science/LSAR/GUNW/metadata/' +
-                'radarGrid/referenceSlantRange'][()].flatten()
-            min_range = min(rdr_slant_range)
-            max_range = max(rdr_slant_range)
-            rdr_slant_range_spac = hdf_gunw['/science/LSAR/GUNW/grids/' +
-                                            'frequencyA/' +
-                                            'unwrappedInterferogram/' +
-                                            'xCoordinateSpacing'][()]
+
+        # Raw file path (without NETCDF:" prefix) for cache lookups
+        raw_fname = fname.replace('NETCDF:"', '')
+
+        # HDF5 paths for NISAR scalar/string metadata that GDAL's
+        # netCDF driver cannot read (scalars/strings).  Read once
+        # via h5py then cached in the metadata sidecar.
+        nisar_h5_fields = {
+            'boundingPolygon':
+                '/science/LSAR/identification/boundingPolygon',
+            'centerFrequency':
+                '/science/LSAR/GUNW/grids/frequencyA/centerFrequency',
+            'xCoordinateSpacing':
+                f'{lyr_pref}xCoordinateSpacing',
+        }
+
+        latlon_file_bbox = ARIAtools.util.meta_cache.get_h5_field(
+            raw_fname, 'boundingPolygon',
+            nisar_h5_fields, self._cache_data)
+        latlon_file_bbox = shapely.wkt.loads(latlon_file_bbox)
+
+        center_freq_var = float(
+            ARIAtools.util.meta_cache.get_h5_field(
+                raw_fname, 'centerFrequency',
+                nisar_h5_fields, self._cache_data))
+
+        rdr_slant_range_spac = float(
+            ARIAtools.util.meta_cache.get_h5_field(
+                raw_fname, 'xCoordinateSpacing',
+                nisar_h5_fields, self._cache_data))
+
+        # referenceSlantRange is a 3D array — readable via GDAL netCDF
+        rdr_slant_range = np.asarray(
+            _read_hdf5_dataset(
+                fname,
+                '/science/LSAR/GUNW/metadata/'
+                'radarGrid/referenceSlantRange')).flatten()
+        min_range = float(min(rdr_slant_range))
+        max_range = float(max(rdr_slant_range))
         rdrmetadata_dict['centerFrequency'] = center_freq_var
         rdrmetadata_dict[
             'wavelength'] = 299792458 / rdrmetadata_dict['centerFrequency']
