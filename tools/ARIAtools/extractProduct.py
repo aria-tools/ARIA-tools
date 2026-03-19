@@ -695,7 +695,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         format='VRT',
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=True
+        multithread=False
     )
     ds = None # Close immediately
 
@@ -714,7 +714,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         xRes=xres, yRes=yres,
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=True,
+        multithread=False,
         creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=IF_SAFER"]
     )
     ds = None # Close immediately
@@ -1393,7 +1393,7 @@ def export_product_worker(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
+        'targetAlignedPixels': True, 'multithread': False, 'dstSRS': proj}
     warp_options = osgeo.gdal.WarpOptions(
         **gdal_warp_kwargs
     )
