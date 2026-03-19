@@ -257,6 +257,10 @@ def _configure_gdal_virtual_access():
     _set('GDAL_HTTP_MULTIPLEX', 'YES')
     _set('GDAL_HTTP_VERSION', '2')
 
+    # If AWS S3 credentials are in the environment (set by the parent
+    # process), restore GDAL config so /vsis3/ paths work in workers.
+    ARIAtools.util.s3.restore_gdal_s3_from_env()
+
     LOGGER.debug(f'GDAL virtual access configured using {cookie_path}')
 
 

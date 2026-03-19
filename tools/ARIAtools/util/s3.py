@@ -206,6 +206,10 @@ def configure_gdal_s3(endpoint_key='default'):
     Automatically fetches/refreshes temporary credentials from the
     appropriate DAAC endpoint.
 
+    Credentials are also exported as environment variables so that
+    child processes (GNU parallel workers, Dask process workers)
+    inherit them automatically.
+
     Parameters
     ----------
     endpoint_key : str
@@ -221,8 +225,34 @@ def configure_gdal_s3(endpoint_key='default'):
     _set('AWS_REGION', 'us-west-2')
     _set('AWS_NO_SIGN_REQUEST', 'NO')
 
+    # Export as env vars so child processes inherit the credentials
+    os.environ['AWS_ACCESS_KEY_ID'] = creds['accessKeyId']
+    os.environ['AWS_SECRET_ACCESS_KEY'] = creds['secretAccessKey']
+    os.environ['AWS_SESSION_TOKEN'] = creds['sessionToken']
+    os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
+
     LOGGER.info('GDAL configured for S3 direct access '
                 '(endpoint: %s, region: us-west-2)', endpoint_key)
+
+
+def restore_gdal_s3_from_env():
+    """Restore GDAL S3 config from environment variables.
+
+    Called by worker processes (GNU parallel, Dask) that inherit
+    AWS credentials via environment variables but need the GDAL
+    config options set in their own process.
+    """
+    key_id = os.environ.get('AWS_ACCESS_KEY_ID')
+    if not key_id:
+        return
+
+    _set = osgeo.gdal.SetConfigOption
+    _set('AWS_ACCESS_KEY_ID', key_id)
+    _set('AWS_SECRET_ACCESS_KEY', os.environ['AWS_SECRET_ACCESS_KEY'])
+    _set('AWS_SESSION_TOKEN', os.environ['AWS_SESSION_TOKEN'])
+    _set('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-west-2'))
+    _set('AWS_NO_SIGN_REQUEST', 'NO')
+    LOGGER.debug('GDAL S3 config restored from environment variables')
 
 
 def s3uri_to_vsis3(s3_uri):
