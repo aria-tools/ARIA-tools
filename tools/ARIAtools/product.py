@@ -235,7 +235,6 @@ def _configure_gdal_virtual_access():
     """Configure GDAL for optimized virtual (vsicurl) remote access."""
     _get = osgeo.gdal.GetConfigOption
     _set = osgeo.gdal.SetConfigOption
-    import os
 
     # Create a unique cookie file for this OS process to prevent 
     # parallel workers from corrupting each other's auth sessions!
