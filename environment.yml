@@ -9,6 +9,7 @@ channels:
 dependencies:
   - affine
   - arm_pyart
+  - boto3               # optional: S3 direct download when running on AWS
   - dask
   - dem_stitcher>=2.5.8
   - gdal>=3.7.0

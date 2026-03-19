@@ -51,18 +51,26 @@ _vsis3_to_https = {}
 
 
 def is_on_aws():
-    """Detect whether the current environment is an AWS EC2 instance.
+    """Detect whether the current environment is running on AWS.
 
-    Uses IMDSv2 (Instance Metadata Service v2) with a 1.5-second
-    timeout.  Returns ``False`` on any failure, so this is safe to
-    call from any environment.
+    Detection strategy (in order):
+
+    1. **IMDSv2** — EC2 Instance Metadata Service v2.  Works on
+       standard EC2 instances.
+    2. **boto3 STS** — ``GetCallerIdentity``.  Works in containers,
+       JupyterHub on EKS/ECS, SageMaker, Lambda, and any environment
+       where IAM credentials are available (instance role, task role,
+       env vars, or config files).
+
+    Returns ``False`` on any failure, so this is safe to call from
+    any environment.
 
     Returns
     -------
     bool
     """
+    # --- Attempt 1: IMDSv2 (fast, no extra dependency) ---
     try:
-        # IMDSv2 requires a PUT to get a session token first
         token_resp = requests.put(
             'http://169.254.169.254/latest/api/token',
             headers={'X-aws-ec2-metadata-token-ttl-seconds': '60'},
@@ -70,7 +78,6 @@ def is_on_aws():
         token_resp.raise_for_status()
         token = token_resp.text
 
-        # Verify we can read instance metadata
         meta_resp = requests.get(
             'http://169.254.169.254/latest/meta-data/instance-id',
             headers={'X-aws-ec2-metadata-token': token},
@@ -80,9 +87,25 @@ def is_on_aws():
                     meta_resp.text)
         return True
     except Exception:
-        LOGGER.debug('Not running on AWS EC2 (metadata service '
-                     'unreachable)')
-        return False
+        LOGGER.debug('IMDSv2 unavailable — trying boto3 fallback')
+
+    # --- Attempt 2: boto3 STS GetCallerIdentity ---
+    try:
+        import boto3
+        import botocore.exceptions
+        sts = boto3.client('sts', region_name='us-west-2')
+        identity = sts.get_caller_identity()
+        LOGGER.info(
+            'Running on AWS (STS identity: %s)', identity.get('Arn'))
+        return True
+    except ImportError:
+        LOGGER.debug('boto3 not installed — cannot use STS fallback')
+    except Exception:
+        LOGGER.debug('boto3 STS call failed — not on AWS or no '
+                     'credentials available')
+
+    LOGGER.debug('Not running on AWS (all detection methods failed)')
+    return False
 
 
 def _fetch_s3_credentials():
