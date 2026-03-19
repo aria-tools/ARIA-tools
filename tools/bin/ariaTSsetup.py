@@ -15,6 +15,7 @@ baseline, LOS file(s), and (where available) tropospheric correction layers.
 """
 import os
 import sys
+import h5py
 import glob
 import copy
 import logging

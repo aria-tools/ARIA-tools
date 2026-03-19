@@ -233,23 +233,23 @@ def remove_scenes(products):
 
 def _configure_gdal_virtual_access():
     """Configure GDAL for optimized virtual (vsicurl) remote access."""
+    _get = osgeo.gdal.GetConfigOption
     _set = osgeo.gdal.SetConfigOption
 
-    # Create a unique cookie file for this OS process to prevent 
-    # parallel workers from locking/corrupting each other's auth sessions!
-    cookie_path = f'/tmp/cookies_{os.getpid()}.txt'
+    # Use the shared master cookie so background workers inherit the Earthdata login!
+    cookie_path = os.environ.get('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
 
-    # Force GDAL to use the unique cookie path (and skip the noisy warnings)
-    _set('GDAL_HTTP_COOKIEFILE', cookie_path)
-    _set('GDAL_HTTP_COOKIEJAR', cookie_path)
+    if _get('GDAL_HTTP_COOKIEFILE') is None:
+        _set('GDAL_HTTP_COOKIEFILE', cookie_path)
+    if _get('GDAL_HTTP_COOKIEJAR') is None:
+        _set('GDAL_HTTP_COOKIEJAR', cookie_path)
 
-    # Caching: enable and tune VSI cache for range-request efficiency
-    if osgeo.gdal.GetConfigOption('VSI_CACHE') is None:
+    # Cloud optimizations + Disable HDF5 Locking
+    _set('HDF5_USE_FILE_LOCKING', 'FALSE')
+    if _get('VSI_CACHE') is None:
         _set('VSI_CACHE', 'YES')
-    _set('VSI_CACHE_SIZE', '67108864')           # 64 MB cache
-
-    # HTTP tuning: chunk size, retries, and range merging
-    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')   # 512 KB per request
+    _set('VSI_CACHE_SIZE', '67108864')           
+    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')   
     _set('GDAL_HTTP_MAX_RETRY', '3')
     _set('GDAL_HTTP_RETRY_DELAY', '2')
     _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'YES')

@@ -695,7 +695,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         format='VRT',
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=False
+        multithread=True
     )
     ds = None # Close immediately
 
@@ -714,7 +714,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         xRes=xres, yRes=yres,
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=False,
+        multithread=True,
         creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=IF_SAFER"]
     )
     ds = None # Close immediately
@@ -1061,29 +1061,30 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
 
-    bperp_lock = threading.Lock()
-    
     def read_and_average_bperp(frame):
         """Helper function for dask multiprocessing"""
-        with bperp_lock:
-            # 1. Open explicitly
-            ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
+
+        # Re-authenticate GDAL for the isolated worker process
+        ARIAtools.product._configure_gdal_virtual_access()
+
+        # 1. Open explicitly
+        ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
         
-            # 2. Read data and get nodata value
-            arr = ds.ReadAsArray().astype(float)
-            nodata = ds.GetRasterBand(1).GetNoDataValue()
+        # 2. Read data and get nodata value
+        arr = ds.ReadAsArray().astype(float)
+        nodata = ds.GetRasterBand(1).GetNoDataValue()
         
-            # 3. CRITICAL: Close the file explicitly
-            ds = None 
+        # 3. CRITICAL: Close the file explicitly
+        ds = None 
         
-            # 4. Replace nodata with NaN (if nodata is not already NaN)
-            if nodata is not None and not np.isnan(nodata):
-                arr = np.where(arr == nodata, np.nan, arr)
+        # 4. Replace nodata with NaN (if nodata is not already NaN)
+        if nodata is not None and not np.isnan(nodata):
+            arr = np.where(arr == nodata, np.nan, arr)
         
-            # 5. Take mean ignoring NaN values
-            res = np.nanmean(arr)
+        # 5. Take mean ignoring NaN values
+        res = np.nanmean(arr)
         
-            return res
+        return res
 
     bperp_dict = {}
     for product in products:
@@ -1092,7 +1093,7 @@ def extract_bperp_dict(products, num_threads):
             jobs.append(dask.delayed(read_and_average_bperp)(frame))
 
         mean_bperp_by_frames = dask.compute(
-            jobs, num_workers=int(num_threads), scheduler='threads')[0]
+            jobs, num_workers=int(num_threads), scheduler='processes')[0]
 
         LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
             product['pair_name'][0], mean_bperp_by_frames))
@@ -1395,7 +1396,7 @@ def export_product_worker(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': False, 'dstSRS': proj}
+        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
     warp_options = osgeo.gdal.WarpOptions(
         **gdal_warp_kwargs
     )
