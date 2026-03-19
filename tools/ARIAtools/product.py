@@ -25,6 +25,7 @@ import ARIAtools.constants
 import ARIAtools.util.url
 import ARIAtools.util.shp
 import ARIAtools.util.meta_cache
+import ARIAtools.util.s3
 
 osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -367,7 +368,19 @@ class Product:
         # If list of URLs provided
         elif os.path.basename(filearg).endswith('.txt'):
             with open(filearg, 'r') as fh:
-                self.files = [f.rstrip('\n') for f in fh.readlines()]
+                lines = [f.rstrip('\n') for f in fh.readlines()]
+            # Parse 2-column format (https_url,s3_url) or legacy
+            # single-column (https_url only)
+            self.files = []
+            self._s3_url_map = {}
+            for line in lines:
+                if not line.strip():
+                    continue
+                https_url, s3_url = \
+                    ARIAtools.util.s3.parse_url_line(line)
+                self.files.append(https_url)
+                if s3_url:
+                    self._s3_url_map[https_url] = s3_url
 
         # If single file or wildcard
         else:
@@ -395,9 +408,24 @@ class Product:
                 self.files.remove(f)
                 LOGGER.warning('%s is not a supported NetCDF... skipping', f)
 
-        # If URLs, append with '/vsicurl/'
-        self.files = [
-            f'/vsicurl/{i}' if 'https://' in i else i for i in self.files]
+        # Build S3 URL list aligned to filtered self.files
+        s3_url_map = getattr(self, '_s3_url_map', {})
+        s3_urls = [s3_url_map.get(f) for f in self.files]
+
+        # For remote URLs, try S3 direct access (AWS) first,
+        # otherwise fall back to /vsicurl/ (HTTPS).
+        has_urls = any('https://' in i for i in self.files)
+        self._using_s3 = False
+        if has_urls:
+            converted, self._using_s3 = \
+                ARIAtools.util.s3.maybe_use_s3(self.files, s3_urls)
+            if self._using_s3:
+                self.files = converted
+            else:
+                # Default: wrap URLs with /vsicurl/
+                self.files = [
+                    f'/vsicurl/{i}' if 'https://' in i else i
+                    for i in self.files]
 
         # Initialize metadata cache for GUNW products (S1 .nc and NISAR .h5)
         if any(ext in i for i in self.files
@@ -408,10 +436,13 @@ class Product:
                 self._cache_file)
 
         # check if virtual file reader is being captured as netcdf
-        if any("https://" in i for i in self.files):
+        is_remote = any('/vsicurl/' in i or '/vsis3/' in i
+                        for i in self.files)
+        if is_remote:
             _configure_gdal_virtual_access()
 
-            this_file = [s for s in self.files if 'https://' in s][0]
+            this_file = [s for s in self.files
+                         if '/vsicurl/' in s or '/vsis3/' in s][0]
             # Use NETCDF: prefix to force the netCDF driver — works
             # for both .nc (S1 GUNW) and .h5 (NISAR GUNW) files since
             # NISAR products are CF-compliant NetCDF-4.
@@ -430,7 +461,8 @@ class Product:
                     f'Got driver={fmt!r} for {os.path.basename(this_file)}')
 
         # check if local file reader is being captured as netcdf
-        local_files = [s for s in self.files if 'https://' not in s]
+        local_files = [s for s in self.files
+                       if '/vsicurl/' not in s and '/vsis3/' not in s]
         if local_files:
             try:
                 ds = osgeo.gdal.Open(
@@ -1475,7 +1507,8 @@ class Product:
             # Ensure product still exists where originally found
             # For virtual (vsicurl) paths, os.path.exists() always returns
             # False, so we only check membership in current file list.
-            is_remote = '/vsicurl/' in prod_name
+            is_remote = ('/vsicurl/' in prod_name
+                         or '/vsis3/' in prod_name)
             if prod_name in self.files and (is_remote or os.path.exists(prod_name)):
                 self.products += [product]
             else:

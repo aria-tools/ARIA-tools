@@ -51,10 +51,14 @@ def _cache_path(url_file):
 def _file_key(fname):
     """Produce a stable key for a product file (URL or local path).
 
-    For remote URLs we strip the /vsicurl/ prefix so the key is the
-    canonical URL.  For local files we use the absolute path.
+    For remote URLs we strip the /vsicurl/ or /vsis3/ prefix so the
+    key is the canonical URL.  For local files we use the absolute path.
     """
-    key = fname.replace('/vsicurl/', '')
+    import re
+    key = re.sub(r'^/vsi(curl|s3)/', '', fname)
+    # Strip the bucket prefix for S3 paths to recover the original URL
+    # e.g. asf-cumulus-prod-nisar-gunw/path → path
+    # The key should be the URL path or local path, not bucket-specific
     return key
 
 
@@ -285,14 +289,26 @@ def open_gunw_h5(url_or_path):
     Parameters
     ----------
     url_or_path : str
-        HTTPS URL or local file path.  VSICURL prefixes
-        (``/vsicurl/``) are stripped automatically.
+        HTTPS URL or local file path.  VSICURL/VSIS3 prefixes
+        are stripped automatically.  For ``/vsis3/`` paths, the
+        underlying HTTPS URL is resolved via the reverse mapping
+        built by ``ARIAtools.util.s3.maybe_use_s3()``.
 
     Returns
     -------
     h5py.File
     """
     path = url_or_path.replace('/vsicurl/', '')
+
+    # For /vsis3/ paths, resolve back to HTTPS for h5py access
+    if path.startswith('/vsis3/'):
+        from ARIAtools.util.s3 import vsis3_to_https
+        https_url = vsis3_to_https(path)
+        if https_url:
+            path = https_url
+        else:
+            LOGGER.warning(
+                'Cannot resolve /vsis3/ path to HTTPS: %s', path)
 
     if path.startswith('https://') or path.startswith('http://'):
         LOGGER.debug('Opening remote HDF5: %s', path)

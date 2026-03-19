@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Brett A. Buzzanga
+# Author: Brett A. Buzzanga, David Bekaert
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
@@ -175,6 +175,27 @@ def make_bbox(inp_bbox):
     return poly
 
 
+def _get_s3_data_url(scene):
+    """Extract the S3 data URL for the main product file from a scene.
+
+    ASF search results include ``s3Urls`` with multiple files (browse,
+    metadata, QA, etc.).  This returns the S3 URL matching the
+    product's primary data file (same filename as the HTTPS URL).
+
+    Returns
+    -------
+    str or None
+        ``s3://bucket/path/file`` or ``None`` if not available.
+    """
+    props = scene.geojson()['properties']
+    filename = props.get('fileName', '')
+    s3_urls = props.get('s3Urls', [])
+    for s3_url in s3_urls:
+        if s3_url.endswith(filename):
+            return s3_url
+    return None
+
+
 def get_url_ifg(scenes):
     """Get url, ifg of fetched ASF scene"""
     urls, ifgs = [], []
@@ -267,7 +288,7 @@ class Downloader:
         if self.args.output == "Count":
             LOGGER.info("Found -- %d -- products", len(scenes))
         elif self.args.output == "Url":
-            self.write_urls(urls)
+            self.write_urls(urls, scenes)
         elif self.args.output == "Download":
             self.download_scenes(scenes)
             
@@ -359,11 +380,12 @@ class Downloader:
         elap_chk = self.args.daysgt <= elap <= self.args.dayslt
         return sten_chk and elap_chk
 
-    def write_urls(self, urls):
+    def write_urls(self, urls, scenes):
         dst = fmt_dst(self.args)
         with open(dst, "w") as fh:
-            for url in urls:
-                print(url, file=fh)
+            for url, scene in zip(urls, scenes):
+                s3_url = _get_s3_data_url(scene) or ''
+                print(f'{url},{s3_url}', file=fh)
         LOGGER.info("Wrote -- %d -- product urls to: %s", len(urls), dst)
 
     def download_scenes(self, scenes):
