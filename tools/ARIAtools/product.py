@@ -235,20 +235,24 @@ def _configure_gdal_virtual_access():
     """Configure GDAL for optimized virtual (vsicurl) remote access."""
     _get = osgeo.gdal.GetConfigOption
     _set = osgeo.gdal.SetConfigOption
+    import os
+
+    # Create a unique cookie file for this OS process to prevent 
+    # parallel workers from corrupting each other's auth sessions!
+    cookie_path = f'/tmp/cookies_{os.getpid()}.txt'
 
     # Authentication: cookie-based auth for Earthdata Login
     # Only set if user has not already configured via environment variables
-    # (see README: export GDAL_HTTP_COOKIEFILE=/tmp/cookies.txt)
     if _get('GDAL_HTTP_COOKIEFILE') is None:
-        _set('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
+        _set('GDAL_HTTP_COOKIEFILE', cookie_path)
         LOGGER.warning(
-            'GDAL_HTTP_COOKIEFILE not set – defaulting to /tmp/cookies.txt. '
+            f'GDAL_HTTP_COOKIEFILE not set – defaulting to {cookie_path}. '
             'Consider setting this environment variable permanently '
             '(see ARIA-tools README).')
     if _get('GDAL_HTTP_COOKIEJAR') is None:
-        _set('GDAL_HTTP_COOKIEJAR', '/tmp/cookies.txt')
+        _set('GDAL_HTTP_COOKIEJAR', cookie_path)
         LOGGER.warning(
-            'GDAL_HTTP_COOKIEJAR not set – defaulting to /tmp/cookies.txt. '
+            f'GDAL_HTTP_COOKIEJAR not set – defaulting to {cookie_path}. '
             'Consider setting this environment variable permanently '
             '(see ARIA-tools README).')
 
