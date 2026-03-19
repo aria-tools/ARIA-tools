@@ -37,13 +37,22 @@ import requests
 
 LOGGER = logging.getLogger(__name__)
 
-# ASF DAAC S3 credential endpoint — returns temporary AWS credentials
-# for in-cloud access to NASA Earthdata products hosted on S3.
-_ASF_S3_CREDS_URL = 'https://cumulus.asf.alaska.edu/s3credentials'
+# S3 credential endpoints — each NASA DAAC Cumulus deployment has its
+# own endpoint that exchanges Earthdata Login tokens for temporary
+# AWS credentials scoped to that DAAC's S3 bucket(s).
+_S3_CREDS_ENDPOINTS = {
+    'default': 'https://cumulus.asf.alaska.edu/s3credentials',
+    'nisar':   'https://nisar.asf.earthdatacloud.nasa.gov/s3credentials',
+}
 
-# Cached credentials (module-level) — refreshed when expired
-_s3_creds = None
-_s3_creds_expiry = 0
+# Map S3 bucket names to credential endpoint keys
+_BUCKET_TO_ENDPOINT = {
+    'sds-n-cumulus-prod-nisar-products': 'nisar',
+}
+
+# Cached credentials (module-level) — keyed by endpoint name
+_s3_creds_cache = {}       # endpoint_key → creds dict
+_s3_creds_expiry_cache = {}  # endpoint_key → expiry timestamp
 
 # Reverse mapping: /vsis3/ path → HTTPS URL, populated by maybe_use_s3.
 # Used by open_gunw_h5 to resolve /vsis3/ paths back to HTTPS for h5py.
@@ -108,11 +117,28 @@ def is_on_aws():
     return False
 
 
-def _fetch_s3_credentials():
-    """Fetch temporary S3 credentials from the ASF DAAC endpoint.
+def _endpoint_key_for_bucket(bucket):
+    """Return the credential endpoint key for a given S3 bucket."""
+    return _BUCKET_TO_ENDPOINT.get(bucket, 'default')
+
+
+def _endpoint_key_for_s3uri(s3_uri):
+    """Return the credential endpoint key for an ``s3://`` URI."""
+    bucket = s3_uri[len('s3://'):].split('/', 1)[0]
+    return _endpoint_key_for_bucket(bucket)
+
+
+def _fetch_s3_credentials(endpoint_key='default'):
+    """Fetch temporary S3 credentials from a DAAC endpoint.
 
     Requires Earthdata Login credentials in ``~/.netrc``.  The
     returned credentials are valid for ~1 hour.
+
+    Parameters
+    ----------
+    endpoint_key : str
+        Key into ``_S3_CREDS_ENDPOINTS`` (e.g. ``'default'``,
+        ``'nisar'``).
 
     Returns
     -------
@@ -125,14 +151,15 @@ def _fetch_s3_credentials():
     RuntimeError
         If credential retrieval fails.
     """
-    LOGGER.info('Fetching temporary S3 credentials from ASF')
+    url = _S3_CREDS_ENDPOINTS[endpoint_key]
+    LOGGER.info('Fetching temporary S3 credentials from %s', url)
     try:
-        resp = requests.get(_ASF_S3_CREDS_URL, timeout=30)
+        resp = requests.get(url, timeout=30)
         resp.raise_for_status()
         creds = resp.json()
     except Exception as exc:
         raise RuntimeError(
-            f'Failed to fetch S3 credentials from {_ASF_S3_CREDS_URL}: '
+            f'Failed to fetch S3 credentials from {url}: '
             f'{exc}') from exc
 
     required = ('accessKeyId', 'secretAccessKey', 'sessionToken')
@@ -141,36 +168,51 @@ def _fetch_s3_credentials():
             raise RuntimeError(
                 f'S3 credential response missing key {key!r}')
 
-    LOGGER.debug('S3 credentials obtained (expires: %s)',
-                 creds.get('expiration', 'unknown'))
+    LOGGER.debug('S3 credentials obtained from %s (expires: %s)',
+                 endpoint_key, creds.get('expiration', 'unknown'))
     return creds
 
 
-def get_s3_credentials():
+def get_s3_credentials(endpoint_key='default'):
     """Return cached S3 credentials, refreshing if expired.
+
+    Parameters
+    ----------
+    endpoint_key : str
+        Key into ``_S3_CREDS_ENDPOINTS`` (e.g. ``'default'``,
+        ``'nisar'``).
 
     Returns
     -------
     dict
         Keys: ``accessKeyId``, ``secretAccessKey``, ``sessionToken``.
     """
-    global _s3_creds, _s3_creds_expiry
+    expiry = _s3_creds_expiry_cache.get(endpoint_key, 0)
 
     # Refresh 5 minutes before expiry to avoid mid-operation failures
-    if _s3_creds is None or time.time() > (_s3_creds_expiry - 300):
-        _s3_creds = _fetch_s3_credentials()
+    if endpoint_key not in _s3_creds_cache or \
+            time.time() > (expiry - 300):
+        _s3_creds_cache[endpoint_key] = \
+            _fetch_s3_credentials(endpoint_key)
         # Default to 1 hour if no expiration provided
-        _s3_creds_expiry = time.time() + 3600
-    return _s3_creds
+        _s3_creds_expiry_cache[endpoint_key] = time.time() + 3600
+    return _s3_creds_cache[endpoint_key]
 
 
-def configure_gdal_s3():
-    """Set GDAL config options for S3 access using ASF credentials.
+def configure_gdal_s3(endpoint_key='default'):
+    """Set GDAL config options for S3 access.
 
     Should be called once before opening ``/vsis3/`` paths with GDAL.
-    Automatically fetches/refreshes temporary credentials.
+    Automatically fetches/refreshes temporary credentials from the
+    appropriate DAAC endpoint.
+
+    Parameters
+    ----------
+    endpoint_key : str
+        Key into ``_S3_CREDS_ENDPOINTS`` (e.g. ``'default'``,
+        ``'nisar'``).
     """
-    creds = get_s3_credentials()
+    creds = get_s3_credentials(endpoint_key)
 
     _set = osgeo.gdal.SetConfigOption
     _set('AWS_ACCESS_KEY_ID', creds['accessKeyId'])
@@ -179,7 +221,8 @@ def configure_gdal_s3():
     _set('AWS_REGION', 'us-west-2')
     _set('AWS_NO_SIGN_REQUEST', 'NO')
 
-    LOGGER.info('GDAL configured for S3 direct access (region: us-west-2)')
+    LOGGER.info('GDAL configured for S3 direct access '
+                '(endpoint: %s, region: us-west-2)', endpoint_key)
 
 
 def s3uri_to_vsis3(s3_uri):
@@ -254,8 +297,12 @@ def maybe_use_s3(https_urls, s3_urls):
         LOGGER.info('Not on AWS — using HTTPS (vsicurl) access')
         return https_urls, False
 
+    # Determine credential endpoint from the first available S3 URL
+    first_s3 = next(u for u in s3_urls if u is not None)
+    endpoint_key = _endpoint_key_for_s3uri(first_s3)
+
     # We're on AWS with S3 URLs — set up credentials and convert
-    configure_gdal_s3()
+    configure_gdal_s3(endpoint_key)
 
     converted = []
     for https_url, s3_url in zip(https_urls, s3_urls):
@@ -284,23 +331,36 @@ def vsis3_to_https(vsis3_path):
     return _vsis3_to_https.get(vsis3_path)
 
 
-def get_s3_client():
-    """Create a boto3 S3 client using ASF temporary credentials.
+def get_s3_client(endpoint_key='default', max_pool_connections=10):
+    """Create a boto3 S3 client using temporary DAAC credentials.
 
-    Credentials are automatically fetched/refreshed.
+    Parameters
+    ----------
+    endpoint_key : str
+        Key into ``_S3_CREDS_ENDPOINTS`` (e.g. ``'default'``,
+        ``'nisar'``).
+    max_pool_connections : int
+        Maximum number of connections in the urllib3 pool.
+        Set this to match the number of concurrent download
+        threads to avoid connection pool overflow warnings.
 
     Returns
     -------
     boto3.client
     """
     import boto3
-    creds = get_s3_credentials()
+    from botocore.config import Config
+    creds = get_s3_credentials(endpoint_key)
+    config = Config(
+        max_pool_connections=max_pool_connections,
+    )
     return boto3.client(
         's3',
         aws_access_key_id=creds['accessKeyId'],
         aws_secret_access_key=creds['secretAccessKey'],
         aws_session_token=creds['sessionToken'],
-        region_name='us-west-2')
+        region_name='us-west-2',
+        config=config)
 
 
 def parse_s3_uri(s3_uri):

@@ -398,9 +398,18 @@ class Downloader:
         use_s3 = ARIAtools.util.s3.is_on_aws()
         s3_client = None
         if use_s3:
+            # Determine credential endpoint from first S3 URL
+            first_s3 = next(
+                (_get_s3_data_url(s) for s in scenes
+                 if _get_s3_data_url(s)), None)
+            endpoint_key = ARIAtools.util.s3._endpoint_key_for_s3uri(
+                first_s3) if first_s3 else 'default'
             try:
-                s3_client = ARIAtools.util.s3.get_s3_client()
-                LOGGER.info('Using S3 direct download')
+                s3_client = ARIAtools.util.s3.get_s3_client(
+                    endpoint_key,
+                    max_pool_connections=max(nt, 10))
+                LOGGER.info('Using S3 direct download (endpoint: %s)',
+                            endpoint_key)
             except Exception as exc:
                 LOGGER.warning('S3 client setup failed, falling back '
                                'to HTTPS: %s', exc)
