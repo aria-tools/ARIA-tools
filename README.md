@@ -194,14 +194,6 @@ echo "machine urs.earthdata.nasa.gov login myUsername password myPassword" > ~/.
 chmod 600 ~/.netrc
 ```
 
-In addition, users should set the following environment variables:
-```.bash
-export GDAL_HTTP_COOKIEFILE=/tmp/cookies.txt
-export GDAL_HTTP_COOKIEJAR=/tmp/cookies.txt
-export VSI_CACHE=YES
-```
-If these environment variables are not set, ARIA-tools will configure them automatically and issue a warning.
-
 ------
 ## Running ARIA-tools
 
