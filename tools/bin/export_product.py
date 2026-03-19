@@ -34,7 +34,6 @@ os.environ['GDAL_HTTP_MULTIPLEX'] = 'YES'
 
 # 3. Disable HDF5 locking and remote directory scanning
 os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
-os.environ['GDAL_DISABLE_READDIR_ON_OPEN'] = 'EMPTY_DIR'
 os.environ['VSI_CACHE'] = 'YES'
 # ---------------------------------------------------------
 
