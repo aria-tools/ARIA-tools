@@ -6,21 +6,36 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import argparse
-import json
 import os
 import sys
+import argparse
+import logging
+import json
+import shutil
 
 # --- INJECT THIS BLOCK BEFORE ANY ARIA OR GDAL IMPORTS ---
-# Force completely unique cookie files at the OS level. 
-# This guarantees GDAL obeys the isolation, regardless of site-packages!
-cookie_path = f"/tmp/cookies_worker_{os.getpid()}.txt"
-os.environ['GDAL_HTTP_COOKIEFILE'] = cookie_path
-os.environ['GDAL_HTTP_COOKIEJAR'] = cookie_path
-os.environ['VSI_CACHE'] = 'YES'
+# 1. Inherit Earthdata cookies from parent to avoid unauthenticated 403s
+reference_cookie = os.environ.get('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
+secondary_cookie = f"/tmp/cookies_worker_{os.getpid()}.txt"
 
-# --- ADD THIS: Disable HDF5 file locking for cloud streaming ---
+if os.path.exists(reference_cookie):
+    try:
+        shutil.copy(reference_cookie, secondary_cookie)
+    except Exception:
+        pass
+
+os.environ['GDAL_HTTP_COOKIEFILE'] = secondary_cookie
+os.environ['GDAL_HTTP_COOKIEJAR'] = secondary_cookie
+
+# 2. Aggressive GDAL HTTP Retry settings (Catches AWS 503 SlowDown / 429 Rate Limits)
+os.environ['GDAL_HTTP_MAX_RETRY'] = '10'
+os.environ['GDAL_HTTP_RETRY_DELAY'] = '3'
+os.environ['GDAL_HTTP_MULTIPLEX'] = 'YES'
+
+# 3. Disable HDF5 locking and remote directory scanning
 os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+os.environ['GDAL_DISABLE_READDIR_ON_OPEN'] = 'EMPTY_DIR'
+os.environ['VSI_CACHE'] = 'YES'
 # ---------------------------------------------------------
 
 import ARIAtools.extractProduct
