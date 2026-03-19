@@ -623,8 +623,8 @@ def main():
     LOGGER.info('Extracting %s for each interferogram pair' % layers)
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
-        rankedResampling=args.rankedResampling, multiproc_method='threads',
-        **export_dict, runlog=runlog)
+        rankedResampling=args.rankedResampling,
+        multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = collections.defaultdict(list)

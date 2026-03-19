@@ -32,6 +32,7 @@ import numpy as np
 import scipy.interpolate
 import shapely.geometry
 
+import ARIAtools.product
 import ARIAtools.util.ionosphere
 import ARIAtools.util.vrt
 import ARIAtools.util.shp
@@ -1057,27 +1058,30 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
 def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
+
+    bperp_lock = threading.Lock()
     
     def read_and_average_bperp(frame):
         """Helper function for dask multiprocessing"""
-        # 1. Open explicitly
-        ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
+        with bperp_lock:
+            # 1. Open explicitly
+            ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
         
-        # 2. Read data and get nodata value
-        arr = ds.ReadAsArray().astype(float)
-        nodata = ds.GetRasterBand(1).GetNoDataValue()
+            # 2. Read data and get nodata value
+            arr = ds.ReadAsArray().astype(float)
+            nodata = ds.GetRasterBand(1).GetNoDataValue()
         
-        # 3. CRITICAL: Close the file explicitly
-        ds = None 
+            # 3. CRITICAL: Close the file explicitly
+            ds = None 
         
-        # 4. Replace nodata with NaN (if nodata is not already NaN)
-        if nodata is not None and not np.isnan(nodata):
-            arr = np.where(arr == nodata, np.nan, arr)
+            # 4. Replace nodata with NaN (if nodata is not already NaN)
+            if nodata is not None and not np.isnan(nodata):
+                arr = np.where(arr == nodata, np.nan, arr)
         
-        # 5. Take mean ignoring NaN values
-        res = np.nanmean(arr)
+            # 5. Take mean ignoring NaN values
+            res = np.nanmean(arr)
         
-        return res
+            return res
 
     bperp_dict = {}
     for product in products:
@@ -1382,6 +1386,9 @@ def export_product_worker(
     Worker function for export_products for parallel execution with
     multiprocessing package.
     """
+    # Re-authenticate GDAL for the isolated worker process
+    ARIAtools.product._configure_gdal_virtual_access()
+
     # Initialize warp dict
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
