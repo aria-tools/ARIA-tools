@@ -14,27 +14,26 @@ import json
 import shutil
 
 # --- INJECT THIS BLOCK BEFORE ANY ARIA OR GDAL IMPORTS ---
-# 1. Inherit Earthdata cookies from parent to avoid unauthenticated 403s
-reference_cookie = os.environ.get('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
-secondary_cookie = f"/tmp/cookies_worker_{os.getpid()}.txt"
+# 1. Unique cookies per process to prevent Auth collisions
+cookie_path = f"/tmp/cookies_worker_{os.getpid()}.txt"
+os.environ['GDAL_HTTP_COOKIEFILE'] = cookie_path
+os.environ['GDAL_HTTP_COOKIEJAR'] = cookie_path
 
-if os.path.exists(reference_cookie):
-    try:
-        shutil.copy(reference_cookie, secondary_cookie)
-    except Exception:
-        pass
-
-os.environ['GDAL_HTTP_COOKIEFILE'] = secondary_cookie
-os.environ['GDAL_HTTP_COOKIEJAR'] = secondary_cookie
-
-# 2. Aggressive GDAL HTTP Retry settings (Catches AWS 503 SlowDown / 429 Rate Limits)
-os.environ['GDAL_HTTP_MAX_RETRY'] = '10'
-os.environ['GDAL_HTTP_RETRY_DELAY'] = '3'
-os.environ['GDAL_HTTP_MULTIPLEX'] = 'YES'
-
-# 3. Disable HDF5 locking and remote directory scanning
+# 2. Disable HDF5 locking and enable heavy caching
 os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
 os.environ['VSI_CACHE'] = 'YES'
+os.environ['VSI_CACHE_SIZE'] = '536870912' # 512MB cache to prevent thrashing
+
+# 3. CRITICAL: Disable HTTP Multiplexing and Range Merging
+# This prevents GDAL from merging the losX and losY byte requests, 
+# which corrupts the HDF5 C-library's strict byte parser.
+os.environ['GDAL_HTTP_MULTIPLEX'] = 'NO'
+os.environ['GDAL_HTTP_MERGE_CONSECUTIVE_RANGES'] = 'NO'
+os.environ['CPL_VSIL_CURL_USE_HEAD'] = 'NO'
+
+# 4. Aggressive Retries for AWS Rate Limits
+os.environ['GDAL_HTTP_MAX_RETRY'] = '10'
+os.environ['GDAL_HTTP_RETRY_DELAY'] = '3'
 # ---------------------------------------------------------
 
 import ARIAtools.extractProduct
