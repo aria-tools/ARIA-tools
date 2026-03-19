@@ -407,7 +407,7 @@ class Downloader:
             try:
                 s3_client = ARIAtools.util.s3.get_s3_client(
                     endpoint_key,
-                    max_pool_connections=max(nt, 10))
+                    max_pool_connections=nt * 10)
                 LOGGER.info('Using S3 direct download (endpoint: %s)',
                             endpoint_key)
             except Exception as exc:
