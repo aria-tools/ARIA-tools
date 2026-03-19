@@ -11,6 +11,18 @@ import json
 import os
 import sys
 
+# --- INJECT THIS BLOCK BEFORE ANY ARIA OR GDAL IMPORTS ---
+# Force completely unique cookie files at the OS level. 
+# This guarantees GDAL obeys the isolation, regardless of site-packages!
+cookie_path = f"/tmp/cookies_worker_{os.getpid()}.txt"
+os.environ['GDAL_HTTP_COOKIEFILE'] = cookie_path
+os.environ['GDAL_HTTP_COOKIEJAR'] = cookie_path
+os.environ['VSI_CACHE'] = 'YES'
+
+# --- ADD THIS: Disable HDF5 file locking for cloud streaming ---
+os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+# ---------------------------------------------------------
+
 import ARIAtools.extractProduct
 
 

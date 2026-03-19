@@ -233,30 +233,18 @@ def remove_scenes(products):
 
 def _configure_gdal_virtual_access():
     """Configure GDAL for optimized virtual (vsicurl) remote access."""
-    _get = osgeo.gdal.GetConfigOption
     _set = osgeo.gdal.SetConfigOption
 
     # Create a unique cookie file for this OS process to prevent 
-    # parallel workers from corrupting each other's auth sessions!
+    # parallel workers from locking/corrupting each other's auth sessions!
     cookie_path = f'/tmp/cookies_{os.getpid()}.txt'
 
-    # Authentication: cookie-based auth for Earthdata Login
-    # Only set if user has not already configured via environment variables
-    if _get('GDAL_HTTP_COOKIEFILE') is None:
-        _set('GDAL_HTTP_COOKIEFILE', cookie_path)
-        LOGGER.warning(
-            f'GDAL_HTTP_COOKIEFILE not set – defaulting to {cookie_path}. '
-            'Consider setting this environment variable permanently '
-            '(see ARIA-tools README).')
-    if _get('GDAL_HTTP_COOKIEJAR') is None:
-        _set('GDAL_HTTP_COOKIEJAR', cookie_path)
-        LOGGER.warning(
-            f'GDAL_HTTP_COOKIEJAR not set – defaulting to {cookie_path}. '
-            'Consider setting this environment variable permanently '
-            '(see ARIA-tools README).')
+    # Force GDAL to use the unique cookie path (and skip the noisy warnings)
+    _set('GDAL_HTTP_COOKIEFILE', cookie_path)
+    _set('GDAL_HTTP_COOKIEJAR', cookie_path)
 
     # Caching: enable and tune VSI cache for range-request efficiency
-    if _get('VSI_CACHE') is None:
+    if osgeo.gdal.GetConfigOption('VSI_CACHE') is None:
         _set('VSI_CACHE', 'YES')
     _set('VSI_CACHE_SIZE', '67108864')           # 64 MB cache
 
@@ -268,7 +256,7 @@ def _configure_gdal_virtual_access():
     _set('GDAL_HTTP_MULTIPLEX', 'YES')
     _set('GDAL_HTTP_VERSION', '2')
 
-    LOGGER.debug('GDAL virtual access configured for remote files')
+    LOGGER.debug(f'GDAL virtual access configured using {cookie_path}')
 
 
 def _read_hdf5_dataset(fname, dataset_path):
