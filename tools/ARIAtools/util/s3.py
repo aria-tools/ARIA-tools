@@ -259,3 +259,40 @@ def vsis3_to_https(vsis3_path):
     str or None
     """
     return _vsis3_to_https.get(vsis3_path)
+
+
+def get_s3_client():
+    """Create a boto3 S3 client using ASF temporary credentials.
+
+    Credentials are automatically fetched/refreshed.
+
+    Returns
+    -------
+    boto3.client
+    """
+    import boto3
+    creds = get_s3_credentials()
+    return boto3.client(
+        's3',
+        aws_access_key_id=creds['accessKeyId'],
+        aws_secret_access_key=creds['secretAccessKey'],
+        aws_session_token=creds['sessionToken'],
+        region_name='us-west-2')
+
+
+def parse_s3_uri(s3_uri):
+    """Split an ``s3://bucket/key`` URI into bucket and key.
+
+    Parameters
+    ----------
+    s3_uri : str
+        e.g. ``s3://sds-n-cumulus-prod-nisar-products/path/file.h5``
+
+    Returns
+    -------
+    tuple of (str, str)
+        ``(bucket, key)``
+    """
+    without_scheme = s3_uri[len('s3://'):]
+    bucket, key = without_scheme.split('/', 1)
+    return bucket, key

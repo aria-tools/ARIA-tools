@@ -26,6 +26,7 @@ from requests.exceptions import RequestException
 import ARIAtools.util.log
 from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
+import ARIAtools.util.s3
 
 LOGGER = logging.getLogger('ariaDownload.py')
 
@@ -393,11 +394,24 @@ class Downloader:
         nt = int(self.args.num_threads)
         LOGGER.info("Downloading %d products...", len(scenes))
 
+        # Check if we can use S3 direct download (on AWS)
+        use_s3 = ARIAtools.util.s3.is_on_aws()
+        s3_client = None
+        if use_s3:
+            try:
+                s3_client = ARIAtools.util.s3.get_s3_client()
+                LOGGER.info('Using S3 direct download')
+            except Exception as exc:
+                LOGGER.warning('S3 client setup failed, falling back '
+                               'to HTTPS: %s', exc)
+                use_s3 = False
+
         session = asf_search.ASFSession()
         if self.args.user:
             session.auth_with_creds(self.args.user, self.args.passw)
 
-        def download_file(url, max_retries=3, retry_delay=5):
+        def download_file(scene, max_retries=3, retry_delay=5):
+            url = scene.properties['url']
             local_filename = url.split("/")[-1]
             filepath = os.path.join(self.args.wd, local_filename)
 
@@ -407,6 +421,31 @@ class Downloader:
                 LOGGER.info("Product already in directory: %s", filepath)
                 return filepath
 
+            # Try S3 download first if available
+            s3_url = _get_s3_data_url(scene) if use_s3 else None
+            if s3_client and s3_url:
+                attempt = 0
+                while attempt < max_retries:
+                    attempt += 1
+                    try:
+                        bucket, key = \
+                            ARIAtools.util.s3.parse_s3_uri(s3_url)
+                        s3_client.download_file(
+                            bucket, key, filepath)
+                        LOGGER.debug('S3 download: %s', filepath)
+                        return filepath
+                    except Exception as exc:
+                        LOGGER.warning(
+                            'S3 download attempt %d failed: %s',
+                            attempt, exc)
+                        if os.path.exists(filepath):
+                            os.remove(filepath)
+                        if attempt < max_retries:
+                            time.sleep(retry_delay)
+                LOGGER.warning('S3 download failed, falling back '
+                               'to HTTPS for %s', local_filename)
+
+            # HTTPS download (default or fallback)
             attempt = 0
             while attempt < max_retries:
                 attempt += 1
@@ -415,7 +454,8 @@ class Downloader:
                     response.raise_for_status()
 
                     with open(filepath, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
+                        for chunk in response.iter_content(
+                                chunk_size=8192):
                             if chunk:
                                 f.write(chunk)
 
@@ -426,36 +466,41 @@ class Downloader:
                     file_size = os.path.getsize(filepath)
                     if expected_size > 0 and file_size < expected_size:
                         LOGGER.warning(
-                            "Incomplete download detected (%d/%d bytes). "
-                            "Retrying...",
+                            "Incomplete download detected "
+                            "(%d/%d bytes). Retrying...",
                             file_size, expected_size
                         )
                         os.remove(filepath)
                         time.sleep(retry_delay)
-                        continue  # Retry download
+                        continue
 
                 except RequestException as e:
-                    LOGGER.error("Error downloading %s: %s", url, e)
+                    LOGGER.error("Error downloading %s: %s",
+                                 url, e)
 
             return filepath
 
         # Create a progress bar
-        pbar = tqdm.tqdm(total=len(scenes), unit="file", desc="Downloading")
+        pbar = tqdm.tqdm(total=len(scenes), unit="file",
+                         desc="Downloading")
         try:
-            urls = [scene.properties["url"] for scene in scenes]
-            with concurrent.futures.ThreadPoolExecutor(max_workers=nt) \
-                as executor:
-                future_to_url = {
-                    executor.submit(download_file, url): url for url in urls
+            with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=nt) as executor:
+                future_to_scene = {
+                    executor.submit(download_file, scene): scene
+                    for scene in scenes
                 }
-                for future in concurrent.futures.as_completed(future_to_url):
-                    url = future_to_url[future]
+                for future in concurrent.futures.as_completed(
+                        future_to_scene):
+                    scene = future_to_scene[future]
                     try:
                         filepath = future.result()
                         LOGGER.debug("Downloaded: %s", filepath)
                         pbar.update(1)
                     except Exception as exc:
-                        LOGGER.error("%s generated an exception: %s", url, exc)
+                        LOGGER.error(
+                            "%s generated an exception: %s",
+                            scene.properties['url'], exc)
         finally:
             pbar.close()
 
