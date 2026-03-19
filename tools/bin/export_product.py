@@ -30,6 +30,7 @@ os.environ['VSI_CACHE_SIZE'] = '536870912' # 512MB cache to prevent thrashing
 os.environ['GDAL_HTTP_MULTIPLEX'] = 'NO'
 os.environ['GDAL_HTTP_MERGE_CONSECUTIVE_RANGES'] = 'NO'
 os.environ['CPL_VSIL_CURL_USE_HEAD'] = 'NO'
+os.environ['GDAL_MAX_DATASET_POOL_SIZE'] = '0'
 
 # 4. Aggressive Retries for AWS Rate Limits
 os.environ['GDAL_HTTP_MAX_RETRY'] = '10'

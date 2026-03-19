@@ -938,12 +938,14 @@ def prep_metadatalayers(
 
                     # Add height info
                     if hgt_field is not None:
-                        # Write height layers
-                        ds_meta = osgeo.gdal.Open(metadata_arr[0])
+                        # Fetch height from the LOCAL file
+                        ds_meta = osgeo.gdal.Open(losx_name + '.vrt')
                         hgt_meta = ds_meta.GetMetadataItem(hgt_field)
                         ds_meta = None  # Close file
 
-                        ds_vrt = osgeo.gdal.Open(outname + '.vrt')
+                        # Also added GA_Update so GDAL does not fail
+                        # silently when saving metadata)
+                        ds_vrt = osgeo.gdal.Open(outname + '.vrt', osgeo.gdal.GA_Update)
                         ds_vrt.SetMetadataItem(hgt_field, hgt_meta)
                         ds_vrt = None  # Close file
 
