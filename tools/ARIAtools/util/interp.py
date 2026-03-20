@@ -5,8 +5,57 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import logging
+import math
+
 import numpy as np
 import scipy.interpolate
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _compute_dem_range(dem_ds):
+    """Compute the (min, max) elevation of a DEM dataset, skipping nodata.
+
+    GDAL's ``ComputeRasterMinMax`` can silently include nodata pixels
+    when the nodata value cannot be represented in the band's data type
+    (e.g. NaN nodata on an Int16 band — former NaN pixels become 0 and
+    are counted as valid).  This function reads the band array and masks
+    nodata explicitly with numpy to ensure correct results.
+
+    Parameters
+    ----------
+    dem_ds : gdal.Dataset
+        Opened GDAL dataset for the DEM.
+
+    Returns
+    -------
+    tuple of (float, float)
+        ``(dem_min, dem_max)`` excluding nodata pixels.
+
+    Raises
+    ------
+    ValueError
+        If all DEM pixels are nodata.
+    """
+    band = dem_ds.GetRasterBand(1)
+    arr = band.ReadAsArray().astype(np.float64)
+    nodata = band.GetNoDataValue()
+
+    if nodata is not None and math.isnan(nodata):
+        mask = ~np.isnan(arr)
+    elif nodata is not None:
+        mask = arr != nodata
+    else:
+        mask = np.ones(arr.shape, dtype=bool)
+
+    if not np.any(mask):
+        raise ValueError('All DEM pixels are nodata')
+
+    dem_min = float(np.min(arr[mask]))
+    dem_max = float(np.max(arr[mask]))
+    LOGGER.debug('DEM range (nodata-aware): %.1f to %.1f m', dem_min, dem_max)
+    return dem_min, dem_max
 
 
 def _get_height_subset_indices(heights, dem_min, dem_max, pad=1):

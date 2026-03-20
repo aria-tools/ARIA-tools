@@ -59,12 +59,15 @@ def _detect_access_mode(file_arg):
 
 
 def _get_dem_range(demfile):
-    """Return (min, max) elevation from the DEM."""
+    """Return (min, max) elevation from the DEM, skipping nodata."""
     ds = osgeo.gdal.Open(demfile)
     if ds is None:
         return None, None
-    band = ds.GetRasterBand(1)
-    vmin, vmax = band.ComputeRasterMinMax(True)
+    from ARIAtools.util.interp import _compute_dem_range
+    try:
+        vmin, vmax = _compute_dem_range(ds)
+    except ValueError:
+        vmin, vmax = None, None
     ds = None
     return vmin, vmax
 

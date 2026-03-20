@@ -26,7 +26,96 @@ import pytest
 import scipy.interpolate
 
 # ── units under test ────────────────────────────────────────────────
-from ARIAtools.util.interp import InterpCube, _get_height_subset_indices
+from ARIAtools.util.interp import (
+    InterpCube, _get_height_subset_indices, _compute_dem_range,
+)
+
+
+# ====================================================================
+# 0. _compute_dem_range — nodata-aware DEM min/max
+# ====================================================================
+class TestComputeDemRange:
+    """Verify _compute_dem_range correctly skips nodata pixels."""
+
+    @staticmethod
+    def _make_dem(arr, nodata=None, dtype=None):
+        """Create an in-memory GDAL dataset from a 2-D numpy array."""
+        from osgeo import gdal, osr
+        if dtype is None:
+            dtype = gdal.GDT_Float32
+        drv = gdal.GetDriverByName('MEM')
+        ny, nx = arr.shape
+        ds = drv.Create('', nx, ny, 1, dtype)
+        ds.SetGeoTransform([0, 1, 0, ny, 0, -1])
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(4326)
+        ds.SetProjection(srs.ExportToWkt())
+        band = ds.GetRasterBand(1)
+        if nodata is not None:
+            band.SetNoDataValue(nodata)
+        band.WriteArray(arr)
+        band.FlushCache()
+        return ds
+
+    def test_no_nodata(self):
+        """Without nodata, returns simple min/max."""
+        arr = np.array([[100, 200], [300, 400]], dtype=np.float32)
+        ds = self._make_dem(arr)
+        assert _compute_dem_range(ds) == (100.0, 400.0)
+
+    def test_nan_nodata_float(self):
+        """Float DEM with NaN nodata — NaN pixels excluded."""
+        arr = np.array([[np.nan, 500], [1000, np.nan]], dtype=np.float32)
+        ds = self._make_dem(arr, nodata=float('nan'))
+        assert _compute_dem_range(ds) == (500.0, 1000.0)
+
+    def test_nan_nodata_warped_to_int16(self):
+        """NaN nodata on Int16 band — NaN can't match integer pixels.
+
+        Without dstNodata in gdal.Warp, NaN pixels become 0 and nodata
+        stays NaN.  _compute_dem_range reads the nodata as-is; since
+        NaN never matches integer values, those 0s are treated as valid.
+        The real fix is in dem.py (dstNodata=-32768).
+        """
+        from osgeo import gdal
+        src_arr = np.array([[np.nan, 500], [2200, 3679]], dtype=np.float32)
+        ds_src = self._make_dem(src_arr, nodata=float('nan'))
+        # Warp to Int16 without dstNodata (legacy behavior)
+        ds_int16 = gdal.Warp('', ds_src, format='MEM',
+                             outputType=gdal.GDT_Int16)
+        dem_min, dem_max = _compute_dem_range(ds_int16)
+        # 0 is included because NaN nodata can't match integer pixels
+        assert dem_min == 0.0
+        assert dem_max == 3679.0
+
+    def test_zero_nodata_int16(self):
+        """Int16 DEM with explicit nodata=0 — zeros excluded."""
+        arr = np.array([[0, 100], [200, 0]], dtype=np.int16)
+        ds = self._make_dem(arr, nodata=0, dtype=__import__('osgeo').gdal.GDT_Int16)
+        assert _compute_dem_range(ds) == (100.0, 200.0)
+
+    def test_all_nodata_raises(self):
+        """All-nodata DEM raises ValueError."""
+        arr = np.array([[0, 0], [0, 0]], dtype=np.int16)
+        ds = self._make_dem(arr, nodata=0, dtype=__import__('osgeo').gdal.GDT_Int16)
+        with pytest.raises(ValueError, match='All DEM pixels are nodata'):
+            _compute_dem_range(ds)
+
+    def test_proper_dstNodata_int16(self):
+        """Int16 DEM with dstNodata=-32768 (new dem.py pipeline).
+
+        With the fix in dem.py, NaN→-32768 and real 0m elevation
+        pixels are preserved.  _compute_dem_range should correctly
+        include 0 and exclude -32768.
+        """
+        from osgeo import gdal
+        src_arr = np.array([[np.nan, 0], [2200, 3679]], dtype=np.float32)
+        ds_src = self._make_dem(src_arr, nodata=float('nan'))
+        ds_fixed = gdal.Warp('', ds_src, format='MEM',
+                             outputType=gdal.GDT_Int16, dstNodata=-32768)
+        dem_min, dem_max = _compute_dem_range(ds_fixed)
+        assert dem_min == 0.0, "Real 0m elevation must be preserved"
+        assert dem_max == 3679.0
 
 
 # ====================================================================

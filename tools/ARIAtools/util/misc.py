@@ -78,6 +78,10 @@ class ProgressBar:
             self.prog_bar = '%s[%s]' % (self.prefix, '=' * allFull)
             if suffix:
                 self.prog_bar += ' %s' % (suffix)
+            # time info
+            elapsed_time = time.time() - self.start_time
+            self.prog_bar += '%5ds / %5ds' % (
+                int(elapsed_time), 0)
         else:
             self.prog_bar = '[%s>%s]' % (
                 '=' * (numHashes - 1), ' ' * (allFull - numHashes))
