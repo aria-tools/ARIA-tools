@@ -361,6 +361,55 @@ def vsis3_to_https(vsis3_path):
     return _vsis3_to_https.get(vsis3_path)
 
 
+def fixup_vrt_s3_paths(directory):
+    """Replace ``/vsis3/`` paths with ``/vsicurl/`` paths in all VRT files.
+
+    VRT files are persistent output artifacts consumed by downstream
+    tools (e.g. MintPy) that don't have ARIA-tools' S3 credential
+    setup.  This function rewrites ``/vsis3/bucket/key`` references
+    to ``/vsicurl/https_url`` using the reverse mapping built by
+    ``maybe_use_s3()``, making the VRTs portable.
+
+    Should be called after all extraction/export is complete and
+    before downstream tools read the VRTs.
+
+    Parameters
+    ----------
+    directory : str
+        Root directory to scan for ``.vrt`` files (recursive).
+    """
+    if not _vsis3_to_https:
+        return  # No S3 paths were used — nothing to fix
+
+    import glob as _glob
+    vrt_files = _glob.glob(os.path.join(directory, '**', '*.vrt'),
+                           recursive=True)
+    n_fixed = 0
+    for vrt_path in vrt_files:
+        try:
+            with open(vrt_path, 'r') as f:
+                content = f.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        if '/vsis3/' not in content:
+            continue
+
+        new_content = content
+        for vsis3_path, https_url in _vsis3_to_https.items():
+            new_content = new_content.replace(
+                vsis3_path, f'/vsicurl/{https_url}')
+
+        if new_content != content:
+            with open(vrt_path, 'w') as f:
+                f.write(new_content)
+            n_fixed += 1
+
+    if n_fixed:
+        LOGGER.info('Fixed %d VRT file(s): replaced /vsis3/ with '
+                     '/vsicurl/ for downstream compatibility', n_fixed)
+
+
 def get_s3_client(endpoint_key='default', max_pool_connections=10):
     """Create a boto3 S3 client using temporary DAAC credentials.
 

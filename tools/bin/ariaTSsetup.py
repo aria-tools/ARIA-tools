@@ -36,6 +36,7 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
+import ARIAtools.util.s3
 import ARIAtools.constants
 import ARIAtools.util.runlog
 
@@ -698,6 +699,10 @@ def main():
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
+
+    # Fix VRT files: replace /vsis3/ paths with /vsicurl/ for
+    # downstream tool compatibility (e.g. MintPy).
+    ARIAtools.util.s3.fixup_vrt_s3_paths(args.workdir)
 
     # Generate UNW stack
     ref_dlist = generate_stack(
