@@ -6,10 +6,11 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import argparse
-import json
 import os
 import sys
+import h5py
+import argparse
+import json
 
 import ARIAtools.extractProduct
 

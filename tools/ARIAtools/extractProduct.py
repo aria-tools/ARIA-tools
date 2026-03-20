@@ -32,6 +32,7 @@ import numpy as np
 import scipy.interpolate
 import shapely.geometry
 
+import ARIAtools.product
 import ARIAtools.util.ionosphere
 import ARIAtools.util.vrt
 import ARIAtools.util.shp
@@ -937,12 +938,14 @@ def prep_metadatalayers(
 
                     # Add height info
                     if hgt_field is not None:
-                        # Write height layers
-                        ds_meta = osgeo.gdal.Open(metadata_arr[0])
+                        # Fetch height from the LOCAL file
+                        ds_meta = osgeo.gdal.Open(losx_name + '.vrt')
                         hgt_meta = ds_meta.GetMetadataItem(hgt_field)
                         ds_meta = None  # Close file
 
-                        ds_vrt = osgeo.gdal.Open(outname + '.vrt')
+                        # Also added GA_Update so GDAL does not fail
+                        # silently when saving metadata)
+                        ds_vrt = osgeo.gdal.Open(outname + '.vrt', osgeo.gdal.GA_Update)
                         ds_vrt.SetMetadataItem(hgt_field, hgt_meta)
                         ds_vrt = None  # Close file
 
@@ -1057,9 +1060,13 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
 
 def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
-    
+
     def read_and_average_bperp(frame):
         """Helper function for dask multiprocessing"""
+
+        # Re-authenticate GDAL for the isolated worker process
+        ARIAtools.product._configure_gdal_virtual_access()
+
         # 1. Open explicitly
         ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
         
@@ -1086,7 +1093,7 @@ def extract_bperp_dict(products, num_threads):
             jobs.append(dask.delayed(read_and_average_bperp)(frame))
 
         mean_bperp_by_frames = dask.compute(
-            jobs, num_workers=int(num_threads), scheduler='threads')[0]
+            jobs, num_workers=int(num_threads), scheduler='processes')[0]
 
         LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
             product['pair_name'][0], mean_bperp_by_frames))
@@ -1382,6 +1389,9 @@ def export_product_worker(
     Worker function for export_products for parallel execution with
     multiprocessing package.
     """
+    # Re-authenticate GDAL for the isolated worker process
+    ARIAtools.product._configure_gdal_virtual_access()
+
     # Initialize warp dict
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,

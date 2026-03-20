@@ -1,6 +1,7 @@
 affine
 arm_pyart
 asf_search[asf-enumeration]>=12.0.3   # ariaOrderASF --getpairs requires the asf-enumeration extra
+boto3               # optional: S3 direct download when running on AWS
 dask
 dem_stitcher>=2.5.8
 gdal>=3.7.0

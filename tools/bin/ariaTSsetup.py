@@ -15,6 +15,7 @@ baseline, LOS file(s), and (where available) tropospheric correction layers.
 """
 import os
 import sys
+import h5py
 import glob
 import copy
 import logging
@@ -35,6 +36,7 @@ import ARIAtools.util.log
 import ARIAtools.util.mask
 import ARIAtools.util.misc
 import ARIAtools.util.vrt
+import ARIAtools.util.s3
 import ARIAtools.constants
 import ARIAtools.util.runlog
 
@@ -58,10 +60,10 @@ def create_parser():
         '-f', '--file', dest='imgfile', type=str, required=True,
         help='List of Sentinel-1 GUNW or NISAR GUNW products '
              '(wildcards supported) or txt file with product urls '
-             'for virtual access without downloading (only for '
-             'Sentinel-1 GUNW). For virtual processing a local '
-             'metadata cache is created on first run; subsequent '
-             'runs read from the cache for faster initialization.')
+             'for virtual access without downloading. For virtual '
+             'processing a local metadata cache is created on '
+             'first run; subsequent runs read from the cache for '
+             'faster initialization.')
     parser.add_argument(
         '-w', '--workdir', dest='workdir', default='./',
         help='Specify directory to deposit all outputs. Default is local '
@@ -623,8 +625,8 @@ def main():
     LOGGER.info('Extracting %s for each interferogram pair' % layers)
     ref_arr_record = ARIAtools.extractProduct.export_products(
         standardproduct_info.products[1], tropo_total=False, layers=layers,
-        rankedResampling=args.rankedResampling, multiproc_method='threads',
-        **export_dict, runlog=runlog)
+        rankedResampling=args.rankedResampling,
+        multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
     # Remove pairing and pass combined dictionary of all layers
     extract_dict = collections.defaultdict(list)
@@ -697,6 +699,10 @@ def main():
 
         # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
+
+    # Fix VRT files: replace /vsis3/ paths with /vsicurl/ for
+    # downstream tool compatibility (e.g. MintPy).
+    ARIAtools.util.s3.fixup_vrt_s3_paths(args.workdir)
 
     # Generate UNW stack
     ref_dlist = generate_stack(

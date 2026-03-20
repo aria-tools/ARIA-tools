@@ -42,10 +42,10 @@ def createParser():
         '-f', '--file', dest='imgfile', type=str, required=True,
         help='List of Sentinel-1 GUNW or NISAR GUNW products '
              '(wildcards supported) or txt file with product urls '
-             'for virtual access without downloading (only for '
-             'Sentinel-1 GUNW). For virtual processing a local '
-             'metadata cache is created on first run; subsequent '
-             'runs read from the cache for faster initialization.')
+             'for virtual access without downloading. For virtual '
+             'processing a local metadata cache is created on '
+             'first run; subsequent runs read from the cache for '
+             'faster initialization.')
     parser.add_argument(
         '-w', '--workdir', dest='workdir', default='./',
         help='Specify directory to deposit all outputs. Default is local '
