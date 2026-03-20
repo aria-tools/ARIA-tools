@@ -758,6 +758,32 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
     )
     ds = None # Close immediately
 
+    # 3b) Fix stale NETCDF dimension metadata after band subsetting.
+    #     gdal.Warp propagates the original height dimension metadata
+    #     (e.g. 20 values) even though the data now has fewer bands.
+    #     rioxarray uses this metadata to build coordinates, causing a
+    #     dimension mismatch.  Update it to match the actual band count.
+    if subsetted_heightsMeta is not None:
+        ds_fix = osgeo.gdal.Open(mosaic_tif, osgeo.gdal.GA_Update)
+        if ds_fix is not None:
+            meta = ds_fix.GetMetadata()
+            for key in list(meta.keys()):
+                if key.startswith('NETCDF_DIM_') and key.endswith('_VALUES'):
+                    dim_name = key[len('NETCDF_DIM_'):-len('_VALUES')]
+                    new_vals = '{' + ','.join(
+                        str(h) for h in subsetted_heightsMeta) + '}'
+                    ds_fix.SetMetadataItem(key, new_vals)
+                    def_key = f'NETCDF_DIM_{dim_name}_DEF'
+                    if def_key in meta:
+                        old_def = meta[def_key]
+                        dtype_str = old_def.strip('{}[]').split(',')[-1]
+                        ds_fix.SetMetadataItem(
+                            def_key,
+                            '{' + str(len(subsetted_heightsMeta)) +
+                            ',' + dtype_str + '}')
+            ds_fix.FlushCache()
+            ds_fix = None
+
     # 4) Open with rioxarray (Context Manager prevents locking)
     with rioxarray.open_rasterio(mosaic_tif, masked=True) as da:
         da = da.rio.write_nodata(np.nan, encoded=True)

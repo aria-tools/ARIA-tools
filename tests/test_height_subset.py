@@ -119,6 +119,251 @@ class TestComputeDemRange:
 
 
 # ====================================================================
+# 0b. Rioxarray dimension metadata consistency after band subsetting
+# ====================================================================
+class TestWarpedMetadataConsistency:
+    """Verify that NETCDF dimension metadata is updated after subsetting.
+
+    When create_raster_from_gunw subsets bands (e.g. 20→8) via
+    gdal.Translate + gdal.Warp, the warped TIF inherits the original
+    NETCDF_DIM_*_VALUES metadata with all 20 values.  rioxarray parses
+    this metadata to build a coordinate dimension, causing a shape
+    mismatch.  The fix updates the metadata to match the actual bands.
+    """
+
+    @staticmethod
+    def _make_source_tif(tmpdir, n_bands=20):
+        """Create a GeoTIFF with NETCDF height dimension metadata."""
+        from osgeo import gdal, osr
+        src_tif = os.path.join(tmpdir, 'src.tif')
+        drv = gdal.GetDriverByName('GTiff')
+        ds = drv.Create(src_tif, 10, 10, n_bands, gdal.GDT_Float32)
+        ds.SetGeoTransform([-99.5, 0.01, 0, 19.5, 0, -0.01])
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(4326)
+        ds.SetProjection(srs.ExportToWkt())
+        heights = np.linspace(-500, 9000, n_bands)
+        heights_str = '{' + ','.join(str(h) for h in heights) + '}'
+        ds.SetMetadataItem(
+            'NETCDF_DIM_EXTRA', '{heightAboveEllipsoid}')
+        ds.SetMetadataItem(
+            'NETCDF_DIM_heightAboveEllipsoid_DEF',
+            '{' + str(n_bands) + ',6}')
+        ds.SetMetadataItem(
+            'NETCDF_DIM_heightAboveEllipsoid_VALUES', heights_str)
+        for b in range(1, n_bands + 1):
+            ds.GetRasterBand(b).WriteArray(
+                np.ones((10, 10), dtype=np.float32) * b)
+        ds.FlushCache()
+        ds = None
+        return src_tif, heights
+
+    def test_rioxarray_crash_without_fix(self):
+        """Demonstrate that stale metadata causes rioxarray to crash."""
+        import tempfile
+        import shutil
+        from osgeo import gdal
+        import rioxarray
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            src_tif, _ = self._make_source_tif(tmpdir, n_bands=20)
+
+            # Subset to 8 bands
+            sub_vrt = os.path.join(tmpdir, 'subset.vrt')
+            opts = gdal.TranslateOptions(
+                format='VRT', bandList=list(range(5, 13)))
+            gdal.Translate(sub_vrt, src_tif, options=opts)
+
+            # Warp (propagates stale metadata)
+            mosaic_tif = os.path.join(tmpdir, 'warp.tif')
+            ds = gdal.Warp(
+                mosaic_tif, sub_vrt, format='GTiff',
+                dstNodata=float('nan'))
+            ds = None
+
+            # Confirm stale metadata
+            ds_check = gdal.Open(mosaic_tif)
+            assert ds_check.RasterCount == 8
+            vals = ds_check.GetMetadataItem(
+                'NETCDF_DIM_heightAboveEllipsoid_VALUES')
+            n_meta = len(vals[1:-1].split(','))
+            assert n_meta == 20, "Metadata still has 20 values"
+            ds_check = None
+
+            # rioxarray should crash
+            with pytest.raises(ValueError, match='conflicting sizes'):
+                rioxarray.open_rasterio(mosaic_tif, masked=True)
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_updated_metadata_allows_rioxarray(self):
+        """After fixing metadata, rioxarray opens successfully."""
+        import tempfile
+        import shutil
+        from osgeo import gdal
+        import rioxarray
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            src_tif, heights = self._make_source_tif(tmpdir, n_bands=20)
+            band_indices = list(range(4, 12))  # 0-based → bands 5-12
+            subset_heights = np.array(heights)[band_indices]
+
+            # Subset to 8 bands
+            sub_vrt = os.path.join(tmpdir, 'subset.vrt')
+            band_list = [i + 1 for i in band_indices]
+            opts = gdal.TranslateOptions(format='VRT', bandList=band_list)
+            gdal.Translate(sub_vrt, src_tif, options=opts)
+
+            # Warp
+            mosaic_tif = os.path.join(tmpdir, 'warp.tif')
+            ds = gdal.Warp(
+                mosaic_tif, sub_vrt, format='GTiff',
+                dstNodata=float('nan'))
+            ds = None
+
+            # Apply the fix: update metadata
+            ds_fix = gdal.Open(mosaic_tif, gdal.GA_Update)
+            new_vals = '{' + ','.join(str(h) for h in subset_heights) + '}'
+            ds_fix.SetMetadataItem(
+                'NETCDF_DIM_heightAboveEllipsoid_VALUES', new_vals)
+            ds_fix.SetMetadataItem(
+                'NETCDF_DIM_heightAboveEllipsoid_DEF',
+                '{' + str(len(subset_heights)) + ',6}')
+            ds_fix.FlushCache()
+            ds_fix = None
+
+            # rioxarray should now succeed
+            da = rioxarray.open_rasterio(mosaic_tif, masked=True)
+            assert da.sizes['heightAboveEllipsoid'] == 8
+            da.close()
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_no_metadata_no_crash(self):
+        """Without NETCDF dimension metadata, no fix needed."""
+        import tempfile
+        import shutil
+        from osgeo import gdal
+        import rioxarray
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Source without NETCDF metadata
+            src_tif = os.path.join(tmpdir, 'plain.tif')
+            drv = gdal.GetDriverByName('GTiff')
+            ds = drv.Create(src_tif, 10, 10, 4, gdal.GDT_Float32)
+            ds.SetGeoTransform([-99.5, 0.01, 0, 19.5, 0, -0.01])
+            from osgeo import osr
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(4326)
+            ds.SetProjection(srs.ExportToWkt())
+            for b in range(1, 5):
+                ds.GetRasterBand(b).WriteArray(
+                    np.ones((10, 10), dtype=np.float32) * b)
+            ds.FlushCache()
+            ds = None
+
+            # Subset to 2 bands
+            sub_vrt = os.path.join(tmpdir, 'sub.vrt')
+            gdal.Translate(sub_vrt, src_tif,
+                           options=gdal.TranslateOptions(
+                               format='VRT', bandList=[1, 2]))
+            warp_tif = os.path.join(tmpdir, 'warp.tif')
+            ds = gdal.Warp(warp_tif, sub_vrt, format='GTiff')
+            ds = None
+
+            # Should open fine
+            da = rioxarray.open_rasterio(warp_tif, masked=True)
+            assert da.sizes['band'] == 2
+            da.close()
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_create_raster_from_gunw_with_subsetting(self):
+        """End-to-end: create_raster_from_gunw subsets and writes
+        consistent metadata that rioxarray can open."""
+        import tempfile
+        import shutil
+        from osgeo import gdal, osr
+        import rioxarray
+
+        n_h, n_lat, n_lon = 20, 30, 40
+        heights = np.linspace(-500, 9000, n_h).astype(np.float32)
+        lat0, lon0 = 19.3, -99.5
+        dlat, dlon = -0.01, 0.01
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # Source GeoTIFF with 20 bands + NETCDF dim metadata
+            src_tif = os.path.join(tmpdir, 'src.tif')
+            drv = gdal.GetDriverByName('GTiff')
+            ds = drv.Create(src_tif, n_lon, n_lat, n_h, gdal.GDT_Float32)
+            ds.SetGeoTransform([lon0, dlon, 0, lat0, 0, dlat])
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(4326)
+            ds.SetProjection(srs.ExportToWkt())
+            hgt_str = '{' + ','.join(str(h) for h in heights) + '}'
+            ds.SetMetadataItem(
+                'NETCDF_DIM_EXTRA', '{heightAboveEllipsoid}')
+            ds.SetMetadataItem(
+                'NETCDF_DIM_heightAboveEllipsoid_DEF',
+                '{' + str(n_h) + ',6}')
+            ds.SetMetadataItem(
+                'NETCDF_DIM_heightAboveEllipsoid_VALUES', hgt_str)
+            for b in range(1, n_h + 1):
+                ds.GetRasterBand(b).WriteArray(
+                    np.full((n_lat, n_lon), 30 + b, dtype=np.float32))
+            ds.FlushCache()
+            ds = None
+
+            # DEM with elevation range 2000–4000 m
+            dem_tif = os.path.join(tmpdir, 'dem.tif')
+            dem_ds = drv.Create(dem_tif, n_lon, n_lat, 1, gdal.GDT_Int16)
+            dem_ds.SetGeoTransform([lon0, dlon, 0, lat0, 0, dlat])
+            dem_ds.SetProjection(srs.ExportToWkt())
+            dem_ds.GetRasterBand(1).SetNoDataValue(-32768)
+            dem_ds.GetRasterBand(1).WriteArray(
+                np.random.RandomState(42).randint(
+                    2000, 4000, (n_lat, n_lon)).astype(np.int16))
+            dem_ds.FlushCache()
+            dem_ds = None
+
+            dem_ds = gdal.Open(dem_tif)
+            from ARIAtools.extractProduct import create_raster_from_gunw
+
+            outname = os.path.join(tmpdir, 'output')
+            create_raster_from_gunw(
+                outname, [src_tif], 'EPSG:4326', 'ENVI',
+                hgt_field='NETCDF_DIM_heightAboveEllipsoid_VALUES',
+                dem=dem_ds)
+            dem_ds = None
+
+            # Verify output VRT has consistent metadata
+            ds_out = gdal.Open(outname + '.vrt')
+            assert ds_out is not None
+            n_bands = ds_out.RasterCount
+            assert n_bands < n_h, \
+                f"Expected subsetting but got {n_bands} bands"
+            hgt_meta = ds_out.GetMetadataItem(
+                'NETCDF_DIM_heightAboveEllipsoid_VALUES')
+            assert hgt_meta is not None
+            n_vals = len(hgt_meta[1:-1].split(','))
+            assert n_vals == n_bands, (
+                f"Metadata has {n_vals} height values "
+                f"but output has {n_bands} bands")
+            ds_out = None
+
+            # Verify rioxarray can open the intermediate warped TIF
+            # (the fix prevents the crash)
+            da = rioxarray.open_rasterio(outname, masked=True)
+            da.close()
+        finally:
+            shutil.rmtree(tmpdir)
+
+
+# ====================================================================
 # Helper: build a synthetic 3D cube that mimics a GUNW metadata layer
 # ====================================================================
 def _make_synthetic_cube(n_heights=15, n_lat=50, n_lon=60, seed=42):
