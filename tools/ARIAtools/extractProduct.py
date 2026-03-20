@@ -34,6 +34,7 @@ import shapely.geometry
 
 import ARIAtools.product
 import ARIAtools.util.ionosphere
+import ARIAtools.util.interp
 import ARIAtools.util.vrt
 import ARIAtools.util.shp
 import ARIAtools.util.misc
@@ -2198,18 +2199,73 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     ref_geotrans = dem.GetGeoTransform()
     dem_arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
 
-    # load layered metadata array
+    # Check if this layer needs height-based DEM intersection
+    NOHGT_LYRS = ['ionosphere']
+    metadatalyr_name = outname.split('/')[-2]
+    needs_height_interp = metadatalyr_name not in NOHGT_LYRS
+
+    # --- Height-based band subsetting optimisation ---
+    # Only load the vertical layers that span the DEM elevation range
+    # instead of the entire 3D cube.  This reduces I/O, memory, and
+    # interpolation cost.
     tmp_name = outname + '.vrt'
+    warp_src = tmp_name
+    heightsMeta = None
+    subset_vrt = None
+
+    if needs_height_interp:
+        # Get height levels from VRT metadata (no data loading)
+        heightsMeta_str = ARIAtools.util.vrt.get_hgt_meta(
+            tmp_name, hgt_field)
+        heightsMeta = np.array(
+            heightsMeta_str[1:-1].split(','), dtype='float32')
+
+        # Get DEM elevation range (cheap GDAL operation)
+        dem_min, dem_max = dem.GetRasterBand(1).ComputeRasterMinMax(True)
+
+        # Compute which height bands are needed
+        # Set ARIA_DISABLE_HEIGHT_SUBSET=1 to bypass for benchmarking
+        if not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET'):
+            band_indices = ARIAtools.util.interp._get_height_subset_indices(
+                heightsMeta, dem_min, dem_max, pad=1)
+        else:
+            band_indices = np.arange(len(heightsMeta))
+
+        if len(band_indices) < len(heightsMeta):
+            LOGGER.info(
+                'Subsetting 3D cube from %d to %d height levels '
+                '(DEM range: %.1f to %.1f)',
+                len(heightsMeta), len(band_indices), dem_min, dem_max)
+
+            # Create band-selected VRT to avoid loading unnecessary bands
+            band_list = [int(i + 1) for i in band_indices]  # GDAL 1-based
+            subset_vrt = outname + '_hsubset.vrt'
+            translate_opts = osgeo.gdal.TranslateOptions(
+                format='VRT', bandList=band_list)
+            ds_sub = osgeo.gdal.Translate(
+                subset_vrt, tmp_name, options=translate_opts)
+            ds_sub = None
+            warp_src = subset_vrt
+            heightsMeta = heightsMeta[band_indices]
+
+    # load layered metadata array (possibly band-subsetted)
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(format="MEM")
-        # Explicitly close the warp result immediately
-        ds_warp = osgeo.gdal.Warp('', tmp_name, options=warp_options)
+        ds_warp = osgeo.gdal.Warp('', warp_src, options=warp_options)
         data_array_nodata = ds_warp.GetRasterBand(1).GetNoDataValue()
         data_array = ds_warp.ReadAsArray().astype('float32')
         gt_mem = ds_warp.GetGeoTransform()
         x_size = ds_warp.RasterXSize
         y_size = ds_warp.RasterYSize
-        ds_warp = None # CLOSE
+        ds_warp = None  # CLOSE
+
+    # Clean up subset VRT if created
+    if subset_vrt is not None and os.path.exists(subset_vrt):
+        os.remove(subset_vrt)
+
+    # Ensure data_array is 3-D even when only one band was loaded
+    if data_array.ndim == 2:
+        data_array = data_array[np.newaxis, ...]
 
     # get minimum version
     version_check = []
@@ -2224,7 +2280,6 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         version_check.append(v_num)
     version_check = min(version_check)
 
-    metadatalyr_name = outname.split('/')[-2]
     if ((metadatalyr_name in GEOM_LYRS and version_check < '2_0_4')
             and not is_nisar_file):
         # create directory for quality control plots
@@ -2239,18 +2294,10 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             outname,
             verbose).data_array
 
-    # only perform DEM intersection for rasters with valid height levels
-    NOHGT_LYRS = ['ionosphere']
-    metadatalyr_name = outname.split('/')[-2]
-
-    if metadatalyr_name not in NOHGT_LYRS:
+    if needs_height_interp:
         tmp_name = outname + '_temp'
 
-        # ... [Height/Lat/Lon definitions remain the same] ...
-        heightsMeta = ARIAtools.util.vrt.get_hgt_meta(
-            outname + '.vrt', hgt_field
-        )
-        heightsMeta = np.array(heightsMeta[1:-1].split(','), dtype='float32')
+        # heightsMeta already extracted above
 
         latitudeMeta = np.linspace(
             gt_mem[3], gt_mem[3] + (gt_mem[5] * (y_size - 1)),
@@ -2280,7 +2327,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         pnts = transformPoints(
             lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
-        # set up the interpolator with the GUNW cube
+        # set up the interpolator with the (subsetted) GUNW cube
         interper = scipy.interpolate.RegularGridInterpolator(
             (latitudeMeta, longitudeMeta, heightsMeta),
             data_array.transpose(1, 2, 0),

@@ -323,6 +323,11 @@ def maybe_use_s3(https_urls, s3_urls):
         LOGGER.info('No S3 URLs in URL file — using HTTPS access')
         return https_urls, False
 
+    # Allow forcing HTTPS (vsicurl) for benchmarking / debugging
+    if os.environ.get('ARIA_FORCE_HTTPS'):
+        LOGGER.info('ARIA_FORCE_HTTPS set — using HTTPS (vsicurl) access')
+        return https_urls, False
+
     if not is_on_aws():
         LOGGER.info('Not on AWS — using HTTPS (vsicurl) access')
         return https_urls, False
