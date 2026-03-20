@@ -58,7 +58,7 @@ def _compute_dem_range(dem_ds):
     return dem_min, dem_max
 
 
-def _get_height_subset_indices(heights, dem_min, dem_max, pad=1):
+def _get_height_subset_indices(heights, dem_min, dem_max, pad=0):
     """Determine which height layers span the DEM elevation range.
 
     Parameters
@@ -68,7 +68,7 @@ def _get_height_subset_indices(heights, dem_min, dem_max, pad=1):
     dem_min, dem_max : float
         Minimum / maximum DEM elevation.
     pad : int, optional
-        Extra layers on each side of the bracket (default 1).
+        Extra layers on each side of the bracket (default 0).
 
     Returns
     -------

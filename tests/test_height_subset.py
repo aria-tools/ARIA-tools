@@ -400,9 +400,9 @@ class TestGetHeightSubsetIndices:
         """Ascending heights, DEM range inside cube → proper bracket."""
         heights = np.array(
             [-1000, 0, 1000, 2000, 3000, 4000, 5000], dtype='float32')
-        idx = _get_height_subset_indices(heights, -100, 2100, pad=1)
+        idx = _get_height_subset_indices(heights, -100, 2100, pad=0)
         # Bracket: -1000 ≤ -100 < 0, 2000 < 2100 ≤ 3000 → [0,4]
-        # Pad=1  : [max(0,-1), min(6,5)] → [0, 5]
+        # Pad=0  : [max(0,0), min(6,4)] → [0, 4]
         selected = heights[idx]
         assert selected[0] <= -100, "Must include layer ≤ dem_min"
         assert selected[-1] >= 2100, "Must include layer ≥ dem_max"
@@ -412,7 +412,7 @@ class TestGetHeightSubsetIndices:
         """Descending heights → same logic, reversed indices."""
         heights = np.array(
             [5000, 4000, 3000, 2000, 1000, 0, -1000], dtype='float32')
-        idx = _get_height_subset_indices(heights, -100, 2100, pad=1)
+        idx = _get_height_subset_indices(heights, -100, 2100, pad=0)
         selected = heights[idx]
         assert np.min(selected) <= -100
         assert np.max(selected) >= 2100
@@ -421,26 +421,26 @@ class TestGetHeightSubsetIndices:
     def test_dem_covers_full_range(self):
         """DEM range covers or exceeds cube → all bands returned."""
         heights = np.array([-1000, 0, 1000, 2000], dtype='float32')
-        idx = _get_height_subset_indices(heights, -2000, 5000, pad=1)
+        idx = _get_height_subset_indices(heights, -2000, 5000, pad=0)
         np.testing.assert_array_equal(idx, np.arange(len(heights)))
 
     def test_single_height(self):
         """Single height level → always returns index [0]."""
         heights = np.array([500.0], dtype='float32')
-        idx = _get_height_subset_indices(heights, 0, 1000, pad=1)
+        idx = _get_height_subset_indices(heights, 0, 1000, pad=0)
         np.testing.assert_array_equal(idx, np.array([0]))
 
     def test_exact_boundary(self):
         """DEM min/max exactly on height levels."""
         heights = np.array(
             [-1000, 0, 1000, 2000, 3000], dtype='float32')
-        idx = _get_height_subset_indices(heights, 0, 2000, pad=1)
+        idx = _get_height_subset_indices(heights, 0, 2000, pad=0)
         selected = heights[idx]
         assert 0 in selected
         assert 2000 in selected
-        # With pad=1: should include -1000 and 3000
-        assert -1000 in selected
-        assert 3000 in selected
+        # With pad=0: only the spanning levels are selected
+        assert -1000 not in selected
+        assert 3000 not in selected
 
     def test_pad_zero(self):
         """pad=0 gives the tightest bracket."""
@@ -452,12 +452,12 @@ class TestGetHeightSubsetIndices:
         assert selected[-1] >= 2500
 
     def test_pad_two(self):
-        """pad=2 gives a wider bracket (for cubic interpolation)."""
+        """pad=2 gives a wider bracket than pad=0."""
         heights = np.array(
             [-1000, 0, 1000, 2000, 3000, 4000, 5000], dtype='float32')
-        idx_p1 = _get_height_subset_indices(heights, 1500, 2500, pad=1)
+        idx_p0 = _get_height_subset_indices(heights, 1500, 2500, pad=0)
         idx_p2 = _get_height_subset_indices(heights, 1500, 2500, pad=2)
-        assert len(idx_p2) >= len(idx_p1)
+        assert len(idx_p2) >= len(idx_p0)
 
     def test_pad_never_exceeds_bounds(self):
         """Large pad values are clamped to available height range."""
@@ -528,7 +528,7 @@ class TestRegularGridInterpolatorSubset:
             data, heights, lats, lons, dem_z)
 
         # Subsetted cube
-        idx = _get_height_subset_indices(heights, 200, 3500, pad=1)
+        idx = _get_height_subset_indices(heights, 200, 3500, pad=0)
         result_sub = self._interpolate_cube(
             data[idx], heights[idx], lats, lons, dem_z)
 
@@ -539,7 +539,7 @@ class TestRegularGridInterpolatorSubset:
     def test_subset_smaller_memory(self, cube_data):
         """Subsetted cube uses less memory than the full cube."""
         data, heights, lats, lons = cube_data
-        idx = _get_height_subset_indices(heights, 200, 3500, pad=1)
+        idx = _get_height_subset_indices(heights, 200, 3500, pad=0)
         assert data[idx].nbytes < data.nbytes
 
     def test_subset_is_faster_large(self):
@@ -557,7 +557,7 @@ class TestRegularGridInterpolatorSubset:
         n_q = (len(lons) - 10, len(lats) - 10)
         dem_z = rng.uniform(1000, 3000, size=n_q).astype('float32')
 
-        idx = _get_height_subset_indices(heights, 1000, 3000, pad=1)
+        idx = _get_height_subset_indices(heights, 1000, 3000, pad=0)
 
         # Warm up
         self._interpolate_cube(data, heights, lats, lons, dem_z)
@@ -658,7 +658,7 @@ def test_interpolation_accuracy_parametrized(
     data, heights, lats, lons = _make_synthetic_cube(
         n_heights=n_heights, n_lat=40, n_lon=50)
 
-    idx = _get_height_subset_indices(heights, dem_lo, dem_hi, pad=1)
+    idx = _get_height_subset_indices(heights, dem_lo, dem_hi, pad=0)
 
     rng = np.random.RandomState(123)
     n_q = (len(lons) - 10, len(lats) - 10)
@@ -712,26 +712,26 @@ class TestEdgeCases:
     def test_dem_below_all_heights(self):
         """DEM entirely below lowest height → uses bottom layers."""
         heights = np.array([0, 1000, 2000, 3000], dtype='float32')
-        idx = _get_height_subset_indices(heights, -500, -100, pad=1)
+        idx = _get_height_subset_indices(heights, -500, -100, pad=0)
         assert 0 in idx  # Must include the lowest available
 
     def test_dem_above_all_heights(self):
         """DEM entirely above highest height → uses top layers."""
         heights = np.array([0, 1000, 2000, 3000], dtype='float32')
-        idx = _get_height_subset_indices(heights, 3500, 5000, pad=1)
+        idx = _get_height_subset_indices(heights, 3500, 5000, pad=0)
         assert len(heights) - 1 in idx  # Must include the highest
 
     def test_two_heights_only(self):
         """Only 2 height levels → no subsetting possible."""
         heights = np.array([0, 5000], dtype='float32')
-        idx = _get_height_subset_indices(heights, 100, 4000, pad=1)
+        idx = _get_height_subset_indices(heights, 100, 4000, pad=0)
         np.testing.assert_array_equal(idx, np.array([0, 1]))
 
     def test_negative_heights(self):
         """Heights can be negative (below sea level)."""
         heights = np.array(
             [-3000, -2000, -1000, 0, 1000], dtype='float32')
-        idx = _get_height_subset_indices(heights, -2500, -500, pad=1)
+        idx = _get_height_subset_indices(heights, -2500, -500, pad=0)
         selected = heights[idx]
         assert np.min(selected) <= -2500
         assert np.max(selected) >= -500
@@ -815,7 +815,7 @@ class TestGeometryLayerSubset:
 
         # Typical mid-elevation DEM range
         dem_min, dem_max = 200.0, 3500.0
-        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=1)
+        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=0)
 
         rng = np.random.RandomState(77)
         n_q = (len(lons) - 6, len(lats) - 6)
@@ -849,7 +849,7 @@ class TestGeometryLayerSubset:
     def test_subset_reduces_bands(self, layer_name):
         """Subsetting actually reduces number of height bands."""
         data, heights, lats, lons = _make_geometry_cube(layer_name)
-        idx = _get_height_subset_indices(heights, 200, 3500, pad=1)
+        idx = _get_height_subset_indices(heights, 200, 3500, pad=0)
         assert len(idx) < len(heights), (
             f"Expected fewer bands for {layer_name}")
 
@@ -857,7 +857,7 @@ class TestGeometryLayerSubset:
         """Test with high-altitude DEM (e.g., Himalayas, 4000-6000 m)."""
         data, heights, lats, lons = _make_geometry_cube(layer_name)
         dem_min, dem_max = 4000.0, 6000.0
-        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=1)
+        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=0)
 
         rng = np.random.RandomState(55)
         n_q = (len(lons) - 6, len(lats) - 6)
@@ -890,7 +890,7 @@ class TestGeometryLayerSubset:
         """Test with low/negative DEM (e.g., Death Valley, -100 to 500 m)."""
         data, heights, lats, lons = _make_geometry_cube(layer_name)
         dem_min, dem_max = -100.0, 500.0
-        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=1)
+        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=0)
 
         rng = np.random.RandomState(33)
         n_q = (len(lons) - 6, len(lats) - 6)
@@ -977,7 +977,7 @@ class TestRealGUNWData:
 
         # Typical California DEM range
         dem_min, dem_max = -50.0, 2500.0
-        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=1)
+        idx = _get_height_subset_indices(heights, dem_min, dem_max, pad=0)
 
         print(f"\n  {layer_name}: heights={list(heights)}, "
               f"subset indices={list(idx)}, "
@@ -1027,10 +1027,10 @@ class TestRealGUNWData:
 
         # Narrow range: should subset
         idx_narrow = _get_height_subset_indices(
-            heights, 100, 1500, pad=1)
+            heights, 100, 1500, pad=0)
         # Wide range: should return all
         idx_wide = _get_height_subset_indices(
-            heights, -2000, 10000, pad=1)
+            heights, -2000, 10000, pad=0)
 
         assert len(idx_wide) == len(heights), (
             "Wide DEM range should use all heights")

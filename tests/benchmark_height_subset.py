@@ -219,7 +219,7 @@ def main():
         from ARIAtools.util.interp import _get_height_subset_indices
         if dem_min is not None:
             idx = _get_height_subset_indices(
-                np.array(height_levels), dem_min, dem_max, pad=1)
+                np.array(height_levels), dem_min, dem_max, pad=0)
             print(f"  Subset levels: {[height_levels[i] for i in idx]} "
                   f"({len(idx)} bands)")
             print(f"  Band reduction: {len(height_levels)} → {len(idx)} "

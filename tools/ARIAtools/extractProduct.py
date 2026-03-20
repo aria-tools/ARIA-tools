@@ -707,7 +707,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
                     ARIAtools.util.interp._compute_dem_range(dem))
                 band_indices = (
                     ARIAtools.util.interp._get_height_subset_indices(
-                        heightsMeta, dem_min, dem_max, pad=1))
+                        heightsMeta, dem_min, dem_max, pad=0))
 
                 if len(band_indices) < len(heightsMeta):
                     band_list = [int(i + 1) for i in band_indices]
@@ -1080,7 +1080,7 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                     ARIAtools.util.interp._compute_dem_range(dem))
                 band_indices = (
                     ARIAtools.util.interp._get_height_subset_indices(
-                        heightsMeta, dem_min, dem_max, pad=1))
+                        heightsMeta, dem_min, dem_max, pad=0))
 
                 if len(band_indices) < len(heightsMeta):
                     band_list = [int(i + 1) for i in band_indices]
@@ -1344,12 +1344,17 @@ def handle_epoch_layers(
                 dem_min, dem_max = (
                     ARIAtools.util.interp._compute_dem_range(dem))
                 idx = ARIAtools.util.interp._get_height_subset_indices(
-                    hts, dem_min, dem_max, pad=1)
+                    hts, dem_min, dem_max, pad=0)
                 if len(idx) < len(hts):
                     LOGGER.info(
                         'Height subsetting %s: %d → %d levels '
                         '(DEM range: %.0f to %.0f m)',
                         key, len(hts), len(idx), dem_min, dem_max)
+                else:
+                    LOGGER.info(
+                        'Using all %d height levels for %s '
+                        '(DEM range: %.0f to %.0f m)',
+                        len(hts), key, dem_min, dem_max)
         except Exception:
             pass
 
@@ -2235,12 +2240,17 @@ def export_products(
                                 dem_expanded))
                         idx = (ARIAtools.util.interp
                                ._get_height_subset_indices(
-                                   hts, d_min, d_max, pad=1))
+                                   hts, d_min, d_max, pad=0))
                         if len(idx) < len(hts):
                             LOGGER.info(
                                 'Height subsetting %s: %d \u2192 %d levels '
                                 '(DEM range: %.0f to %.0f m)',
                                 layer, len(hts), len(idx), d_min, d_max)
+                        else:
+                            LOGGER.info(
+                                'Using all %d height levels for %s '
+                                '(DEM range: %.0f to %.0f m)',
+                                len(hts), layer, d_min, d_max)
             except Exception:
                 pass
 
@@ -2427,7 +2437,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         # Set ARIA_DISABLE_HEIGHT_SUBSET=1 to bypass for benchmarking
         if not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET'):
             band_indices = ARIAtools.util.interp._get_height_subset_indices(
-                heightsMeta, dem_min, dem_max, pad=1)
+                heightsMeta, dem_min, dem_max, pad=0)
         else:
             band_indices = np.arange(len(heightsMeta))
 
