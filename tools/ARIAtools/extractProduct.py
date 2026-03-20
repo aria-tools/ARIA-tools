@@ -852,7 +852,7 @@ def prep_metadatalayers(
             # compute differential
             generate_diff(
                 ref_outname, sec_outname, outname, layer, layer, False,
-                hgt_field, proj, driver)
+                hgt_field, proj, driver, dem=dem)
 
         # write raster to file if it does not exist
         if layer in layers:
@@ -976,7 +976,7 @@ def prep_metadatalayers(
 
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
-                  hgt_field, proj, driver, sign_multiplier=1):
+                  hgt_field, proj, driver, sign_multiplier=1, dem=None):
     """ Compute differential from reference and secondary scenes (Multi-dim safe) """
 
     # if specified workdir doesn't exist, create it
@@ -984,15 +984,59 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # --- Height-based band subsetting optimisation ---
+    # Subset to only the height bands spanning the DEM range.
+    subset_vrts = []  # track temp VRTs for cleanup
+    ref_vrt_path = ref_outname + '.vrt'
+    sec_vrt_path = sec_outname + '.vrt'
+
+    if (dem is not None and hgt_field
+            and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')):
+        try:
+            heightsMeta_str = ARIAtools.util.vrt.get_hgt_meta(
+                ref_vrt_path, hgt_field)
+            if heightsMeta_str:
+                heightsMeta = np.array(
+                    heightsMeta_str[1:-1].split(','), dtype='float32')
+                dem_min, dem_max = dem.GetRasterBand(
+                    1).ComputeRasterMinMax(True)
+                band_indices = (
+                    ARIAtools.util.interp._get_height_subset_indices(
+                        heightsMeta, dem_min, dem_max, pad=1))
+
+                if len(band_indices) < len(heightsMeta):
+                    band_list = [int(i + 1) for i in band_indices]
+                    translate_opts = osgeo.gdal.TranslateOptions(
+                        format='VRT', bandList=band_list)
+
+                    for src_path, label in [
+                            (ref_vrt_path, 'ref'), (sec_vrt_path, 'sec')]:
+                        sub_vrt = outname + f'_{label}_hsubset.vrt'
+                        ds_sub = osgeo.gdal.Translate(
+                            sub_vrt, src_path, options=translate_opts)
+                        ds_sub = None
+                        subset_vrts.append(sub_vrt)
+
+                    ref_vrt_path = subset_vrts[0]
+                    sec_vrt_path = subset_vrts[1]
+
+                    LOGGER.debug(
+                        'Subsetting %s inputs from %d to %d height '
+                        'levels (DEM range: %.1f to %.1f)',
+                        key, len(heightsMeta), len(band_indices),
+                        dem_min, dem_max)
+        except Exception:
+            pass  # fall back to reading all bands
+
     # 1. Open Inputs with Context Managers (Closes files automatically)
-    with rioxarray.open_rasterio(sec_outname + '.vrt', masked=True) as da_sec:
+    with rioxarray.open_rasterio(sec_vrt_path, masked=True) as da_sec:
         # Copy attributes and crs while file is open
         sec_attrs = da_sec.attrs
         sec_crs = da_sec.rio.crs
         sec_nodata = da_sec.rio.nodata
         
         # Open Reference inside the first block or separately
-        with rioxarray.open_rasterio(ref_outname + '.vrt', masked=True) as da_ref:
+        with rioxarray.open_rasterio(ref_vrt_path, masked=True) as da_ref:
             arr_ref = da_ref.data
             arr_sec = da_sec.data # Read data while open
 
@@ -1055,6 +1099,11 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
                  
     ds_vrt.SetMetadata(da_attrs)
     ds_vrt = None
+
+    # Clean up temporary subset VRTs
+    for v in subset_vrts:
+        if os.path.exists(v):
+            os.remove(v)
 
     return
 
@@ -1187,6 +1236,45 @@ def handle_epoch_layers(
         'solidEarthTide', 'troposphereWet', 
         'troposphereHydrostatic', 'troposphereTotal']) else 1
 
+    # Log height subsetting info once for this layer group
+    if (dem is not None
+            and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')):
+        try:
+            sample_vrt = None
+            for d in all_workdirs:
+                vrts = glob.glob(os.path.join(d, '*.vrt'))
+                if vrts:
+                    sample_vrt = vrts[0]
+                    break
+            if sample_vrt is None:
+                # VRTs not yet created; use first product to peek at heights
+                ds_tmp = osgeo.gdal.Open(product_dict[0][0][0])
+                zdim = ds_tmp.GetMetadataItem('NETCDF_DIM_EXTRA')[1:-1]
+                hgt_field_tmp = f'NETCDF_DIM_{zdim}_VALUES'
+                ds_tmp = None
+                hgt_str = ARIAtools.util.vrt.get_hgt_meta(
+                    product_dict[0][0][0], hgt_field_tmp)
+            else:
+                hgt_field_tmp = [k for k in
+                    osgeo.gdal.Open(sample_vrt).GetMetadata()
+                    if 'DIM_' in k and 'VALUES' in k]
+                hgt_field_tmp = hgt_field_tmp[0] if hgt_field_tmp else None
+                hgt_str = (ARIAtools.util.vrt.get_hgt_meta(
+                    sample_vrt, hgt_field_tmp) if hgt_field_tmp else None)
+            if hgt_str:
+                hts = np.array(hgt_str[1:-1].split(','), dtype='float32')
+                dem_min, dem_max = dem.GetRasterBand(
+                    1).ComputeRasterMinMax(True)
+                idx = ARIAtools.util.interp._get_height_subset_indices(
+                    hts, dem_min, dem_max, pad=1)
+                if len(idx) < len(hts):
+                    LOGGER.info(
+                        'Height subsetting %s: %d → %d levels '
+                        '(DEM range: %.0f to %.0f m)',
+                        key, len(hts), len(idx), dem_min, dem_max)
+        except Exception:
+            pass
+
     # Iterate through all IFGs
     all_outputs = []
     prog_bar = ARIAtools.util.misc.ProgressBar(
@@ -1263,7 +1351,8 @@ def handle_epoch_layers(
                     if not os.path.exists(outname_diff):
                         generate_diff(
                             ref_diff, sec_diff, outname_diff, key, sec_key,
-                            tropo_total, hgt_field, proj, outputFormat)
+                            tropo_total, hgt_field, proj, outputFormat,
+                            dem=dem)
                     # compute secondary diff
                     ref_diff = os.path.join(os.path.dirname(ref_outname),
                                             ifg.split('_')[1])
@@ -1274,7 +1363,8 @@ def handle_epoch_layers(
                     if not os.path.exists(outname_diff):
                         generate_diff(
                             ref_diff, sec_diff, outname_diff, key, sec_key,
-                            tropo_total, hgt_field, proj, outputFormat)
+                            tropo_total, hgt_field, proj, outputFormat,
+                            dem=dem)
 
                     # compute total diff
                     ref_diff = os.path.join(ref_workdir, model_name, ifg)
@@ -1288,7 +1378,7 @@ def handle_epoch_layers(
                 outname = os.path.join(model_dir, ifg)
                 generate_diff(
                     ref_diff, sec_diff, outname, key, sec_key, tropo_total,
-                    hgt_field, proj, outputFormat)
+                    hgt_field, proj, outputFormat, dem=dem)
 
         else:
             sec_outname = os.path.dirname(ref_outname)
@@ -2044,6 +2134,36 @@ def export_products(
         if not os.path.exists(workdir):
             os.mkdir(workdir)
 
+        # Log height subsetting info once per geometry layer
+        if (dem_expanded is not None
+                and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')
+                and any(':/science/grids/imagingGeometry' in s
+                        for s in product_dict[0][0])
+                and layer not in ['ionosphere']):
+            try:
+                ds_tmp = osgeo.gdal.Open(product_dict[0][0][0])
+                zdim = ds_tmp.GetMetadataItem('NETCDF_DIM_EXTRA')
+                ds_tmp = None
+                if zdim:
+                    hgt_field_tmp = f'NETCDF_DIM_{zdim[1:-1]}_VALUES'
+                    hgt_str = ARIAtools.util.vrt.get_hgt_meta(
+                        product_dict[0][0][0], hgt_field_tmp)
+                    if hgt_str:
+                        hts = np.array(
+                            hgt_str[1:-1].split(','), dtype='float32')
+                        d_min, d_max = dem_expanded.GetRasterBand(
+                            1).ComputeRasterMinMax(True)
+                        idx = (ARIAtools.util.interp
+                               ._get_height_subset_indices(
+                                   hts, d_min, d_max, pad=1))
+                        if len(idx) < len(hts):
+                            LOGGER.info(
+                                'Height subsetting %s: %d \u2192 %d levels '
+                                '(DEM range: %.0f to %.0f m)',
+                                layer, len(hts), len(idx), d_min, d_max)
+            except Exception:
+                pass
+
         mp_args = []
         # Iterate through all IFGs
         for ii, product in enumerate(product_dict[0]):
@@ -2232,7 +2352,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             band_indices = np.arange(len(heightsMeta))
 
         if len(band_indices) < len(heightsMeta):
-            LOGGER.info(
+            LOGGER.debug(
                 'Subsetting 3D cube from %d to %d height levels '
                 '(DEM range: %.1f to %.1f)',
                 len(heightsMeta), len(band_indices), dem_min, dem_max)
@@ -2249,8 +2369,24 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             heightsMeta = heightsMeta[band_indices]
 
     # load layered metadata array (possibly band-subsetted)
+    # Spatially crop to DEM extent, padded by 2 native grid cells of the
+    # source 3D cube to avoid interpolation artefacts at the edges.
+    # RegularGridInterpolator (linear) needs ≥1 cell; we use 2 for safety.
+    ds_src = osgeo.gdal.Open(warp_src, osgeo.gdal.GA_ReadOnly)
+    src_gt = ds_src.GetGeoTransform()
+    src_xres = abs(src_gt[1])
+    src_yres = abs(src_gt[5])
+    ds_src = None
+    pad_cells = 2
+    padded_bounds = [
+        dem_bounds[0] - pad_cells * src_xres,   # xmin
+        dem_bounds[1] - pad_cells * src_yres,   # ymin
+        dem_bounds[2] + pad_cells * src_xres,   # xmax
+        dem_bounds[3] + pad_cells * src_yres,   # ymax
+    ]
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-        warp_options = osgeo.gdal.WarpOptions(format="MEM")
+        warp_options = osgeo.gdal.WarpOptions(
+            format="MEM", outputBounds=padded_bounds)
         ds_warp = osgeo.gdal.Warp('', warp_src, options=warp_options)
         data_array_nodata = ds_warp.GetRasterBand(1).GetNoDataValue()
         data_array = ds_warp.ReadAsArray().astype('float32')
