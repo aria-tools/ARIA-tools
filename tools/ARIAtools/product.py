@@ -249,13 +249,22 @@ def _configure_gdal_virtual_access():
     _set('HDF5_USE_FILE_LOCKING', 'FALSE')
     if _get('VSI_CACHE') is None:
         _set('VSI_CACHE', 'YES')
-    _set('VSI_CACHE_SIZE', '67108864')           
-    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')   
-    _set('GDAL_HTTP_MAX_RETRY', '3')
-    _set('GDAL_HTTP_RETRY_DELAY', '2')
-    _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'YES')
-    _set('GDAL_HTTP_MULTIPLEX', 'YES')
-    _set('GDAL_HTTP_VERSION', '2')
+    _set('VSI_CACHE_SIZE', '67108864')
+
+    # HTTP tuning: chunk size, retries, and range merging
+    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')   # 512 KB per request
+    _set('GDAL_HTTP_MAX_RETRY', '10')            # Boosted for rate limits
+    _set('GDAL_HTTP_RETRY_DELAY', '3')
+    
+    # CRITICAL: Disable HTTP multiplexing to prevent HDF5 parser corruption
+    _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'NO')
+    _set('GDAL_HTTP_MULTIPLEX', 'NO')
+    _set('CPL_VSIL_CURL_USE_HEAD', 'NO')
+    
+    # CRITICAL: Destroy dead sockets to prevent connection timeouts
+    _set('GDAL_MAX_DATASET_POOL_SIZE', '0')
+
+    LOGGER.debug(f'GDAL virtual access configured using {cookie_path}')
 
     # If AWS S3 credentials are in the environment (set by the parent
     # process), restore GDAL config so /vsis3/ paths work in workers.
