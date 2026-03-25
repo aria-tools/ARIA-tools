@@ -909,16 +909,24 @@ class Product:
                     lyr_pref + '/external/tides/solidEarth'
                     '/reference/solidEarthTide']
 
-                # get weather model name(s) – use cache when available
+                # Track available subdatasets once so cache hits can avoid
+                # a second GDAL metadata read.
                 raw_fname = fname.replace('NETCDF:"', '')
                 cached = ARIAtools.util.meta_cache.get_or_extract(
                     raw_fname, self._cache_data)
+                available_sds = []
                 model_name = []
-                if cached and cached.get('tropo_models'):
-                    model_name = list(cached['tropo_models'])
-                else:
+                if cached:
+                    available_sds = list(cached.get('subdatasets') or [])
+                    if cached.get('tropo_models'):
+                        model_name = list(cached['tropo_models'])
+
+                if not available_sds:
                     meta = osgeo.gdal.Info(fname)
-                    for i in meta.split():
+                    available_sds = meta.split() if meta else []
+
+                if not model_name:
+                    for i in available_sds:
                         if '/science/grids/corrections/external/troposphere/' in i:
                             model_name.append(i.split('/')[-3])
 
@@ -946,7 +954,7 @@ class Product:
                     LOGGER.error(error_msg)
                     raise Exception(error_msg)
 
-                model_name = list(set(model_name))
+                model_name = sorted(set(model_name))
                 for i in model_name:
                     sdskeys_addlyrs.append(
                         lyr_pref +
@@ -956,7 +964,9 @@ class Product:
                         'troposphereHydrostatic')
 
                 # remove keys not found in product
-                sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
+                sdskeys_addlyrs = [
+                    i for i in sdskeys_addlyrs
+                    if any(i in sds for sds in available_sds)]
                 sdskeys.extend(sdskeys_addlyrs)
         return rdrmetadata_dict, sdskeys, file_bbox
 
