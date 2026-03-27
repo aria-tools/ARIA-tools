@@ -124,9 +124,14 @@ def extract_metadata_gdal(fname):
     version = nc_global.get('NC_GLOBAL#version', None)
 
     # Collect subdataset names
-    subdatasets_raw = metadata.get('SUBDATASETS', {})
-    subdatasets = [
-        v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
+    if fname.endswith('.nc'):
+        subdatasets_raw = metadata.get('SUBDATASETS', {})
+        subdatasets = [
+            v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
+    if fname.endswith('.h5'):
+        subdatasets_raw = metadata.get('Subdatasets', {})
+        subdatasets = [
+            v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
 
     # Identify available troposphere models from subdataset paths
     tropo_models = set()
@@ -380,18 +385,49 @@ def get_h5_field(fname, field_name, h5_fields, cache_data):
     value
         The scalar/string value for the requested field.
     """
+
     key = _file_key(fname)
     entry = cache_data.get(key, {})
+
+    # handle subdatasets behavior differently
+    # full filename path is expected in this workflow
+    if field_name == 'subdatasets':
+        
+        # Check if this specific field is already cached
+        if field_name in entry:
+            LOGGER.debug(
+                'Cache hit: %s [%s]', os.path.basename(key), field_name
+            )
+            return entry
+
+        # Cache miss - extract using GDAL Info
+        LOGGER.debug(
+            'Cache miss - reading: %s [%s]', os.path.basename(key), field_name
+        )
+        
+        # GDAL Info requires NETCDF prefix to properly read HDF5 subdatasets
+        gdal_fname = f'NETCDF:"{fname}'
+        meta = osgeo.gdal.Info(gdal_fname)
+        
+        # Filter the requested fields against the GDAL metadata
+        sdskeys_addlyrs = [k for k in h5_fields if k in meta]
+        
+        # Merge into the existing cache entry safely
+        if key not in cache_data:
+            cache_data[key] = {}
+        cache_data[key][field_name] = sdskeys_addlyrs
+
+        return cache_data[key]
 
     # Check if this specific h5py field is already cached
     h5_cache_key = f'h5_{field_name}'
     if h5_cache_key in entry:
-        LOGGER.debug('h5py cache hit: %s [%s]',
+        LOGGER.debug('Cache hit: %s [%s]',
                      os.path.basename(key), field_name)
         return entry[h5_cache_key]
 
     # Cache miss — extract all requested h5py fields at once
-    LOGGER.debug('h5py cache miss – reading: %s',
+    LOGGER.debug('Cache miss – reading: %s',
                  os.path.basename(key))
     h5_meta = _extract_h5_fields(fname, h5_fields)
 

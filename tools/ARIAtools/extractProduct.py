@@ -592,7 +592,7 @@ def merged_productbbox(
     OG_bounds = list(
         ARIAtools.util.shp.open_shp(bbox_file).bounds)
     gdal_warp_kwargs = {
-        'format': 'MEM', 'multithread': True, 'dstSRS': f'EPSG:{lyr_proj}'}
+        'format': 'MEM', 'multithread': False, 'dstSRS': f'EPSG:{lyr_proj}'}
     ds_vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
@@ -734,7 +734,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         format='VRT',
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=True
+        multithread=False
     )
     ds = None # Close immediately
 
@@ -753,7 +753,7 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         xRes=xres, yRes=yres,
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=True,
+        multithread=False,
         creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=IF_SAFER"]
     )
     ds = None # Close immediately
@@ -797,9 +797,8 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         if sign_multiplier == -1:
             da = da * -1
             
-        # Enforce threading during the write
-        with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'): 
-            da.rio.to_raster(fname, driver=driver, crs=proj)
+        # Let GDAL use its safe, default thread pool
+        da.rio.to_raster(fname, driver=driver, crs=proj)
 
     # 5) Clean up (Now safe because 'da' is closed)
     if os.path.exists(mosaic_tif):
@@ -1156,9 +1155,7 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
             # -------------------------------------------------------------
 
             # 4. Write to disk
-            # Using rasterio.Env to ensure threading settings are respected
-            with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'):
-                da_total.rio.to_raster(outname, driver=driver, crs=proj)
+            da_total.rio.to_raster(outname, driver=driver, crs=proj)
 
     # 5. Build VRT (Pure GDAL)
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
@@ -1190,11 +1187,7 @@ def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
 
     def read_and_average_bperp(frame):
-        """Helper function for dask multiprocessing"""
-
-        # Re-authenticate GDAL for the isolated worker process
-        ARIAtools.product._configure_gdal_virtual_access()
-
+        """Helper function to read and average baseline"""
         # 1. Open explicitly
         ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
         
@@ -1216,12 +1209,13 @@ def extract_bperp_dict(products, num_threads):
 
     bperp_dict = {}
     for product in products:
-        jobs = []
+        mean_bperp_by_frames = []
+        
+        # Read frames sequentially! 
+        # Baseline grids are tiny, so this is fast and 
+        # completely avoids triggering Earthdata WAF rate limits.
         for frame in product['bPerpendicular']:
-            jobs.append(dask.delayed(read_and_average_bperp)(frame))
-
-        mean_bperp_by_frames = dask.compute(
-            jobs, num_workers=int(num_threads), scheduler='processes')[0]
+            mean_bperp_by_frames.append(read_and_average_bperp(frame))
 
         LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
             product['pair_name'][0], mean_bperp_by_frames))
@@ -1570,7 +1564,7 @@ def export_product_worker(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
+        'targetAlignedPixels': True, 'multithread': False, 'dstSRS': proj}
     warp_options = osgeo.gdal.WarpOptions(
         **gdal_warp_kwargs
     )
@@ -2017,7 +2011,7 @@ def export_products(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': epsg_code}
+        'targetAlignedPixels': True, 'multithread': False, 'dstSRS': epsg_code}
 
     # track if files need to be updated
     lyr_input_dict['update_mode'] = update_mode
@@ -2579,7 +2573,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
             'outputBounds': dem_bounds, 'dstNodata': data_array_nodata,
             'xRes': dem_arrres[0], 'yRes': dem_arrres[1],
-            'targetAlignedPixels': True, 'multithread': True}
+            'targetAlignedPixels': True, 'multithread': False}
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
         ds = osgeo.gdal.Warp(
             tmp_name + '_temp', tmp_name, options=warp_options
@@ -2592,7 +2586,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
             'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
             'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
-            'multithread': True}
+            'multithread': False}
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
         ds = osgeo.gdal.Warp(
             outname, tmp_name + '_temp', options=warp_options
