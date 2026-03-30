@@ -85,7 +85,7 @@ def resampleRaster(
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(
             format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-            multithread=True)
+            multithread=False)
         ds = osgeo.gdal.Warp('', fname, options=warp_options)
         # Get output res
         arrres = [abs(ds.GetGeoTransform()[1]) * multilooking,
@@ -97,7 +97,7 @@ def resampleRaster(
         warp_options = osgeo.gdal.WarpOptions(
             format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
             xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-            resampleAlg='near', multithread=True)
+            resampleAlg='near', multithread=False)
         ds = osgeo.gdal.Warp('', fname, options=warp_options)
         geotrans = ds.GetGeoTransform()
         proj = ds.GetProjection()
@@ -202,7 +202,7 @@ def resampleRaster(
                     format=outputFormat, cutlineDSName=prods_TOTbbox,
                     outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
                     targetAlignedPixels=True, resampleAlg='mode',
-                    multithread=True,
+                    multithread=False,
                     options=['-overwrite'])
                 osgeo.gdal.Warp(
                     fnameconcomp, fnameconcomp, options=warp_options)
@@ -225,7 +225,7 @@ def resampleRaster(
                     format=outputFormat, cutlineDSName=prods_TOTbbox,
                     outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
                     targetAlignedPixels=True, resampleAlg='average',
-                    multithread=True,
+                    multithread=False,
                     options=['-overwrite'])
                 osgeo.gdal.Warp(fnameunw, fnameunw, options=warp_options)
 
@@ -259,7 +259,7 @@ def resampleRaster(
                     format=outputFormat, cutlineDSName=prods_TOTbbox,
                     outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
                     targetAlignedPixels=True, resampleAlg='near',
-                    multithread=True, options=['-overwrite'])
+                    multithread=False, options=['-overwrite'])
                 osgeo.gdal.Warp(
                     fnameconcomp, fnameconcomp, options=warp_options)
 
@@ -276,7 +276,7 @@ def resampleRaster(
                 format=outputFormat, cutlineDSName=prods_TOTbbox,
                 outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
                 targetAlignedPixels=True, resampleAlg='lanczos',
-                multithread=True, options=['-overwrite'])
+                multithread=False, options=['-overwrite'])
             osgeo.gdal.Warp(fname, inputname, options=warp_options)
 
     if outputFormat != 'VRT':
@@ -327,7 +327,7 @@ def rasterAverage(
         warp_options = osgeo.gdal.WarpOptions(
             format="MEM", cutlineDSName=prods_TOTbbox, outputBounds=bounds,
             xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-            dstSRS=proj, multithread=True)
+            dstSRS=proj, multithread=False)
             
         # Warp and read data
         ds_warp = osgeo.gdal.Warp('', file_path, options=warp_options)

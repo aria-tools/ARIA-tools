@@ -35,8 +35,9 @@ dependencies:
   - tile_mate>=0.0.12
   - xarray
   - hyp3_sdk>=7.7.6  # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
+  - asf_search >=12.0.3
+  - asf_enumeration >=0.4.0
   - pip:
-    - "asf_search[asf-enumeration]>=12.0.3"  # ariaOrderASF --getpairs requires the asf-enumeration extra
   #for ARIA-tools-docs
   #- jupyterlab
   #- jupyter_contrib_nbextensions

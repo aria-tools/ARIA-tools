@@ -34,6 +34,7 @@ import shapely.geometry
 
 import ARIAtools.product
 import ARIAtools.util.ionosphere
+import ARIAtools.util.interp
 import ARIAtools.util.vrt
 import ARIAtools.util.shp
 import ARIAtools.util.misc
@@ -591,7 +592,7 @@ def merged_productbbox(
     OG_bounds = list(
         ARIAtools.util.shp.open_shp(bbox_file).bounds)
     gdal_warp_kwargs = {
-        'format': 'MEM', 'multithread': True, 'dstSRS': f'EPSG:{lyr_proj}'}
+        'format': 'MEM', 'multithread': False, 'dstSRS': f'EPSG:{lyr_proj}'}
     ds_vrt = osgeo.gdal.BuildVRT('', product_dict[0]['unwrappedPhase'][0])
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
@@ -684,18 +685,56 @@ def merged_productbbox(
 
 
 def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
-    sign_multiplier=1):
+    sign_multiplier=1, dem=None):
     """Wrapper to create raster and apply projection using Rioxarray (Safe)"""
+
+    # --- Height-based band subsetting optimisation ---
+    # If a DEM is provided, subset to only the height bands that span the
+    # DEM elevation range *before* the expensive remote I/O Warp.
+    subset_vrts = []
+    effective_data_lis = data_lis
+    subsetted_heightsMeta = None
+
+    if (dem is not None and hgt_field
+            and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')):
+        try:
+            heightsMeta_str = ARIAtools.util.vrt.get_hgt_meta(
+                data_lis[0], hgt_field)
+            if heightsMeta_str:
+                heightsMeta = np.array(
+                    heightsMeta_str[1:-1].split(','), dtype='float32')
+                dem_min, dem_max = (
+                    ARIAtools.util.interp._compute_dem_range(dem))
+                band_indices = (
+                    ARIAtools.util.interp._get_height_subset_indices(
+                        heightsMeta, dem_min, dem_max, pad=0))
+
+                if len(band_indices) < len(heightsMeta):
+                    band_list = [int(i + 1) for i in band_indices]
+                    translate_opts = osgeo.gdal.TranslateOptions(
+                        format='VRT', bandList=band_list)
+                    subsetted_data = []
+                    for idx, src in enumerate(data_lis):
+                        sub_vrt = fname + f'_src{idx}_hsubset.vrt'
+                        ds_sub = osgeo.gdal.Translate(
+                            sub_vrt, src, options=translate_opts)
+                        ds_sub = None
+                        subset_vrts.append(sub_vrt)
+                        subsetted_data.append(sub_vrt)
+                    effective_data_lis = subsetted_data
+                    subsetted_heightsMeta = heightsMeta[band_indices]
+        except Exception:
+            pass  # fall back to reading all bands
 
     # 1) Build a lightweight reference warp (VRT)
     ref_vrt = fname + "_ref.vrt"
     ds = osgeo.gdal.Warp(
         ref_vrt,
-        data_lis[0],
+        effective_data_lis[0],
         format='VRT',
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=True
+        multithread=False
     )
     ds = None # Close immediately
 
@@ -709,15 +748,41 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
     mosaic_tif = fname + "_warp.tif"
     ds = osgeo.gdal.Warp(
         mosaic_tif,
-        data_lis,
+        effective_data_lis,
         format='GTiff',
         xRes=xres, yRes=yres,
         dstSRS=proj,
         dstNodata=np.nan,
-        multithread=True,
+        multithread=False,
         creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=IF_SAFER"]
     )
     ds = None # Close immediately
+
+    # 3b) Fix stale NETCDF dimension metadata after band subsetting.
+    #     gdal.Warp propagates the original height dimension metadata
+    #     (e.g. 20 values) even though the data now has fewer bands.
+    #     rioxarray uses this metadata to build coordinates, causing a
+    #     dimension mismatch.  Update it to match the actual band count.
+    if subsetted_heightsMeta is not None:
+        ds_fix = osgeo.gdal.Open(mosaic_tif, osgeo.gdal.GA_Update)
+        if ds_fix is not None:
+            meta = ds_fix.GetMetadata()
+            for key in list(meta.keys()):
+                if key.startswith('NETCDF_DIM_') and key.endswith('_VALUES'):
+                    dim_name = key[len('NETCDF_DIM_'):-len('_VALUES')]
+                    new_vals = '{' + ','.join(
+                        str(h) for h in subsetted_heightsMeta) + '}'
+                    ds_fix.SetMetadataItem(key, new_vals)
+                    def_key = f'NETCDF_DIM_{dim_name}_DEF'
+                    if def_key in meta:
+                        old_def = meta[def_key]
+                        dtype_str = old_def.strip('{}[]').split(',')[-1]
+                        ds_fix.SetMetadataItem(
+                            def_key,
+                            '{' + str(len(subsetted_heightsMeta)) +
+                            ',' + dtype_str + '}')
+            ds_fix.FlushCache()
+            ds_fix = None
 
     # 4) Open with rioxarray (Context Manager prevents locking)
     with rioxarray.open_rasterio(mosaic_tif, masked=True) as da:
@@ -732,9 +797,8 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
         if sign_multiplier == -1:
             da = da * -1
             
-        # Enforce threading during the write
-        with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'): 
-            da.rio.to_raster(fname, driver=driver, crs=proj)
+        # Let GDAL use its safe, default thread pool
+        da.rio.to_raster(fname, driver=driver, crs=proj)
 
     # 5) Clean up (Now safe because 'da' is closed)
     if os.path.exists(mosaic_tif):
@@ -751,13 +815,24 @@ def create_raster_from_gunw(fname, data_lis, proj, driver, hgt_field=None,
 
     # 7) Add height info
     if hgt_field is not None:
-        hgt_meta = ARIAtools.util.vrt.get_hgt_meta(data_lis[0], hgt_field)
+        if subsetted_heightsMeta is not None:
+            # Write the subsetted height values
+            hgt_meta = '{' + ','.join(
+                str(h) for h in subsetted_heightsMeta) + '}'
+        else:
+            hgt_meta = ARIAtools.util.vrt.get_hgt_meta(
+                data_lis[0], hgt_field)
         
         ds_meta_update = osgeo.gdal.Open(
             fname + '.vrt', osgeo.gdal.GA_Update
         )
         ds_meta_update.SetMetadataItem(hgt_field, hgt_meta)
         ds_meta_update = None # Close immediately
+
+    # Clean up temporary subset VRTs
+    for v in subset_vrts:
+        if os.path.exists(v):
+            os.remove(v)
 
     return
 
@@ -845,13 +920,13 @@ def prep_metadatalayers(
                 if os.path.isfile(j):
                     os.remove(j)
             create_raster_from_gunw(i[0], i[1], proj, driver, hgt_field,
-                sign_multiplier)
+                sign_multiplier, dem=dem)
 
         if not is_nisar_file:
             # compute differential
             generate_diff(
                 ref_outname, sec_outname, outname, layer, layer, False,
-                hgt_field, proj, driver)
+                hgt_field, proj, driver, dem=dem)
 
         # write raster to file if it does not exist
         if layer in layers:
@@ -876,10 +951,12 @@ def prep_metadatalayers(
                     losy_name = os.path.join(out_dir, f'temp_{ifg}_losy_arr')
 
                     create_raster_from_gunw(
-                        losx_name, losx_arr, proj, driver, hgt_field
+                        losx_name, losx_arr, proj, driver, hgt_field,
+                        dem=dem
                     )
                     create_raster_from_gunw(
-                        losy_name, losy_arr, proj, driver, hgt_field
+                        losy_name, losy_arr, proj, driver, hgt_field,
+                        dem=dem
                     )
 
                     # Get NoData value from input
@@ -958,7 +1035,8 @@ def prep_metadatalayers(
                                 pass
                 else:
                     create_raster_from_gunw(outname, metadata_arr,
-                        proj, driver, hgt_field, sign_multiplier)
+                        proj, driver, hgt_field, sign_multiplier,
+                        dem=dem)
             else:
                 ds_vrt = osgeo.gdal.BuildVRT(outname + '.vrt', metadata_arr)
                 
@@ -975,7 +1053,7 @@ def prep_metadatalayers(
 
 
 def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
-                  hgt_field, proj, driver, sign_multiplier=1):
+                  hgt_field, proj, driver, sign_multiplier=1, dem=None):
     """ Compute differential from reference and secondary scenes (Multi-dim safe) """
 
     # if specified workdir doesn't exist, create it
@@ -983,15 +1061,59 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # --- Height-based band subsetting optimisation ---
+    # Subset to only the height bands spanning the DEM range.
+    subset_vrts = []  # track temp VRTs for cleanup
+    ref_vrt_path = ref_outname + '.vrt'
+    sec_vrt_path = sec_outname + '.vrt'
+
+    if (dem is not None and hgt_field
+            and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')):
+        try:
+            heightsMeta_str = ARIAtools.util.vrt.get_hgt_meta(
+                ref_vrt_path, hgt_field)
+            if heightsMeta_str:
+                heightsMeta = np.array(
+                    heightsMeta_str[1:-1].split(','), dtype='float32')
+                dem_min, dem_max = (
+                    ARIAtools.util.interp._compute_dem_range(dem))
+                band_indices = (
+                    ARIAtools.util.interp._get_height_subset_indices(
+                        heightsMeta, dem_min, dem_max, pad=0))
+
+                if len(band_indices) < len(heightsMeta):
+                    band_list = [int(i + 1) for i in band_indices]
+                    translate_opts = osgeo.gdal.TranslateOptions(
+                        format='VRT', bandList=band_list)
+
+                    for src_path, label in [
+                            (ref_vrt_path, 'ref'), (sec_vrt_path, 'sec')]:
+                        sub_vrt = outname + f'_{label}_hsubset.vrt'
+                        ds_sub = osgeo.gdal.Translate(
+                            sub_vrt, src_path, options=translate_opts)
+                        ds_sub = None
+                        subset_vrts.append(sub_vrt)
+
+                    ref_vrt_path = subset_vrts[0]
+                    sec_vrt_path = subset_vrts[1]
+
+                    LOGGER.debug(
+                        'Subsetting %s inputs from %d to %d height '
+                        'levels (DEM range: %.1f to %.1f)',
+                        key, len(heightsMeta), len(band_indices),
+                        dem_min, dem_max)
+        except Exception:
+            pass  # fall back to reading all bands
+
     # 1. Open Inputs with Context Managers (Closes files automatically)
-    with rioxarray.open_rasterio(sec_outname + '.vrt', masked=True) as da_sec:
+    with rioxarray.open_rasterio(sec_vrt_path, masked=True) as da_sec:
         # Copy attributes and crs while file is open
         sec_attrs = da_sec.attrs
         sec_crs = da_sec.rio.crs
         sec_nodata = da_sec.rio.nodata
         
         # Open Reference inside the first block or separately
-        with rioxarray.open_rasterio(ref_outname + '.vrt', masked=True) as da_ref:
+        with rioxarray.open_rasterio(ref_vrt_path, masked=True) as da_ref:
             arr_ref = da_ref.data
             arr_sec = da_sec.data # Read data while open
 
@@ -1033,9 +1155,7 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
             # -------------------------------------------------------------
 
             # 4. Write to disk
-            # Using rasterio.Env to ensure threading settings are respected
-            with rasterio.Env(GDAL_NUM_THREADS='ALL_CPUS'):
-                da_total.rio.to_raster(outname, driver=driver, crs=proj)
+            da_total.rio.to_raster(outname, driver=driver, crs=proj)
 
     # 5. Build VRT (Pure GDAL)
     buildvrt_options = osgeo.gdal.BuildVRTOptions(outputSRS=proj)
@@ -1055,6 +1175,11 @@ def generate_diff(ref_outname, sec_outname, outname, key, OG_key, tropo_total,
     ds_vrt.SetMetadata(da_attrs)
     ds_vrt = None
 
+    # Clean up temporary subset VRTs
+    for v in subset_vrts:
+        if os.path.exists(v):
+            os.remove(v)
+
     return
 
 
@@ -1062,11 +1187,7 @@ def extract_bperp_dict(products, num_threads):
     """Extracts bPerpendicular mean over frames for each product in products"""
 
     def read_and_average_bperp(frame):
-        """Helper function for dask multiprocessing"""
-
-        # Re-authenticate GDAL for the isolated worker process
-        ARIAtools.product._configure_gdal_virtual_access()
-
+        """Helper function to read and average baseline"""
         # 1. Open explicitly
         ds = osgeo.gdal.Open(frame, osgeo.gdal.GA_ReadOnly)
         
@@ -1088,12 +1209,13 @@ def extract_bperp_dict(products, num_threads):
 
     bperp_dict = {}
     for product in products:
-        jobs = []
+        mean_bperp_by_frames = []
+        
+        # Read frames sequentially! 
+        # Baseline grids are tiny, so this is fast and 
+        # completely avoids triggering Earthdata WAF rate limits.
         for frame in product['bPerpendicular']:
-            jobs.append(dask.delayed(read_and_average_bperp)(frame))
-
-        mean_bperp_by_frames = dask.compute(
-            jobs, num_workers=int(num_threads), scheduler='processes')[0]
+            mean_bperp_by_frames.append(read_and_average_bperp(frame))
 
         LOGGER.debug('Pair name: %s, bPerpendicular %s' % (
             product['pair_name'][0], mean_bperp_by_frames))
@@ -1186,6 +1308,50 @@ def handle_epoch_layers(
         'solidEarthTide', 'troposphereWet', 
         'troposphereHydrostatic', 'troposphereTotal']) else 1
 
+    # Log height subsetting info once for this layer group
+    if (dem is not None
+            and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')):
+        try:
+            sample_vrt = None
+            for d in all_workdirs:
+                vrts = glob.glob(os.path.join(d, '*.vrt'))
+                if vrts:
+                    sample_vrt = vrts[0]
+                    break
+            if sample_vrt is None:
+                # VRTs not yet created; use first product to peek at heights
+                ds_tmp = osgeo.gdal.Open(product_dict[0][0][0])
+                zdim = ds_tmp.GetMetadataItem('NETCDF_DIM_EXTRA')[1:-1]
+                hgt_field_tmp = f'NETCDF_DIM_{zdim}_VALUES'
+                ds_tmp = None
+                hgt_str = ARIAtools.util.vrt.get_hgt_meta(
+                    product_dict[0][0][0], hgt_field_tmp)
+            else:
+                hgt_field_tmp = [k for k in
+                    osgeo.gdal.Open(sample_vrt).GetMetadata()
+                    if 'DIM_' in k and 'VALUES' in k]
+                hgt_field_tmp = hgt_field_tmp[0] if hgt_field_tmp else None
+                hgt_str = (ARIAtools.util.vrt.get_hgt_meta(
+                    sample_vrt, hgt_field_tmp) if hgt_field_tmp else None)
+            if hgt_str:
+                hts = np.array(hgt_str[1:-1].split(','), dtype='float32')
+                dem_min, dem_max = (
+                    ARIAtools.util.interp._compute_dem_range(dem))
+                idx = ARIAtools.util.interp._get_height_subset_indices(
+                    hts, dem_min, dem_max, pad=0)
+                if len(idx) < len(hts):
+                    LOGGER.info(
+                        'Height subsetting %s: %d → %d levels '
+                        '(DEM range: %.0f to %.0f m)',
+                        key, len(hts), len(idx), dem_min, dem_max)
+                else:
+                    LOGGER.info(
+                        'Using all %d height levels for %s '
+                        '(DEM range: %.0f to %.0f m)',
+                        len(hts), key, dem_min, dem_max)
+        except Exception:
+            pass
+
     # Iterate through all IFGs
     all_outputs = []
     prog_bar = ARIAtools.util.misc.ProgressBar(
@@ -1262,7 +1428,8 @@ def handle_epoch_layers(
                     if not os.path.exists(outname_diff):
                         generate_diff(
                             ref_diff, sec_diff, outname_diff, key, sec_key,
-                            tropo_total, hgt_field, proj, outputFormat)
+                            tropo_total, hgt_field, proj, outputFormat,
+                            dem=dem)
                     # compute secondary diff
                     ref_diff = os.path.join(os.path.dirname(ref_outname),
                                             ifg.split('_')[1])
@@ -1273,7 +1440,8 @@ def handle_epoch_layers(
                     if not os.path.exists(outname_diff):
                         generate_diff(
                             ref_diff, sec_diff, outname_diff, key, sec_key,
-                            tropo_total, hgt_field, proj, outputFormat)
+                            tropo_total, hgt_field, proj, outputFormat,
+                            dem=dem)
 
                     # compute total diff
                     ref_diff = os.path.join(ref_workdir, model_name, ifg)
@@ -1287,7 +1455,7 @@ def handle_epoch_layers(
                 outname = os.path.join(model_dir, ifg)
                 generate_diff(
                     ref_diff, sec_diff, outname, key, sec_key, tropo_total,
-                    hgt_field, proj, outputFormat)
+                    hgt_field, proj, outputFormat, dem=dem)
 
         else:
             sec_outname = os.path.dirname(ref_outname)
@@ -1396,7 +1564,7 @@ def export_product_worker(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': proj}
+        'targetAlignedPixels': True, 'multithread': False, 'dstSRS': proj}
     warp_options = osgeo.gdal.WarpOptions(
         **gdal_warp_kwargs
     )
@@ -1843,7 +2011,7 @@ def export_products(
     gdal_warp_kwargs = {
         'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
         'outputBounds': bounds, 'xRes': arrres[0], 'yRes': arrres[1],
-        'targetAlignedPixels': True, 'multithread': True, 'dstSRS': epsg_code}
+        'targetAlignedPixels': True, 'multithread': False, 'dstSRS': epsg_code}
 
     # track if files need to be updated
     lyr_input_dict['update_mode'] = update_mode
@@ -2043,6 +2211,43 @@ def export_products(
         if not os.path.exists(workdir):
             os.mkdir(workdir)
 
+        # Log height subsetting info once per geometry layer
+        if (dem_expanded is not None
+                and not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET')
+                and any(':/science/grids/imagingGeometry' in s
+                        or ':/science/LSAR/GUNW/metadata/radarGrid' in s
+                        for s in product_dict[0][0])
+                and layer not in ['ionosphere']):
+            try:
+                ds_tmp = osgeo.gdal.Open(product_dict[0][0][0])
+                zdim = ds_tmp.GetMetadataItem('NETCDF_DIM_EXTRA')
+                ds_tmp = None
+                if zdim:
+                    hgt_field_tmp = f'NETCDF_DIM_{zdim[1:-1]}_VALUES'
+                    hgt_str = ARIAtools.util.vrt.get_hgt_meta(
+                        product_dict[0][0][0], hgt_field_tmp)
+                    if hgt_str:
+                        hts = np.array(
+                            hgt_str[1:-1].split(','), dtype='float32')
+                        d_min, d_max = (
+                            ARIAtools.util.interp._compute_dem_range(
+                                dem_expanded))
+                        idx = (ARIAtools.util.interp
+                               ._get_height_subset_indices(
+                                   hts, d_min, d_max, pad=0))
+                        if len(idx) < len(hts):
+                            LOGGER.info(
+                                'Height subsetting %s: %d \u2192 %d levels '
+                                '(DEM range: %.0f to %.0f m)',
+                                layer, len(hts), len(idx), d_min, d_max)
+                        else:
+                            LOGGER.info(
+                                'Using all %d height levels for %s '
+                                '(DEM range: %.0f to %.0f m)',
+                                len(hts), layer, d_min, d_max)
+            except Exception:
+                pass
+
         mp_args = []
         # Iterate through all IFGs
         for ii, product in enumerate(product_dict[0]):
@@ -2198,18 +2403,89 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
     ref_geotrans = dem.GetGeoTransform()
     dem_arrres = [abs(ref_geotrans[1]), abs(ref_geotrans[-1])]
 
-    # load layered metadata array
+    # Check if this layer needs height-based DEM intersection
+    NOHGT_LYRS = ['ionosphere']
+    metadatalyr_name = outname.split('/')[-2]
+    needs_height_interp = metadatalyr_name not in NOHGT_LYRS
+
+    # --- Height-based band subsetting optimisation ---
+    # Only load the vertical layers that span the DEM elevation range
+    # instead of the entire 3D cube.  This reduces I/O, memory, and
+    # interpolation cost.
     tmp_name = outname + '.vrt'
+    warp_src = tmp_name
+    heightsMeta = None
+    subset_vrt = None
+
+    if needs_height_interp:
+        # Get height levels from VRT metadata (no data loading)
+        heightsMeta_str = ARIAtools.util.vrt.get_hgt_meta(
+            tmp_name, hgt_field)
+        heightsMeta = np.array(
+            heightsMeta_str[1:-1].split(','), dtype='float32')
+
+        # Get DEM elevation range (nodata-aware)
+        dem_min, dem_max = ARIAtools.util.interp._compute_dem_range(dem)
+
+        # Compute which height bands are needed
+        # Set ARIA_DISABLE_HEIGHT_SUBSET=1 to bypass for benchmarking
+        if not os.environ.get('ARIA_DISABLE_HEIGHT_SUBSET'):
+            band_indices = ARIAtools.util.interp._get_height_subset_indices(
+                heightsMeta, dem_min, dem_max, pad=0)
+        else:
+            band_indices = np.arange(len(heightsMeta))
+
+        if len(band_indices) < len(heightsMeta):
+            LOGGER.debug(
+                'Subsetting 3D cube from %d to %d height levels '
+                '(DEM range: %.1f to %.1f)',
+                len(heightsMeta), len(band_indices), dem_min, dem_max)
+
+            # Create band-selected VRT to avoid loading unnecessary bands
+            band_list = [int(i + 1) for i in band_indices]  # GDAL 1-based
+            subset_vrt = outname + '_hsubset.vrt'
+            translate_opts = osgeo.gdal.TranslateOptions(
+                format='VRT', bandList=band_list)
+            ds_sub = osgeo.gdal.Translate(
+                subset_vrt, tmp_name, options=translate_opts)
+            ds_sub = None
+            warp_src = subset_vrt
+            heightsMeta = heightsMeta[band_indices]
+
+    # load layered metadata array (possibly band-subsetted)
+    # Spatially crop to DEM extent, padded by 2 native grid cells of the
+    # source 3D cube to avoid interpolation artefacts at the edges.
+    # RegularGridInterpolator (linear) needs ≥1 cell; we use 2 for safety.
+    ds_src = osgeo.gdal.Open(warp_src, osgeo.gdal.GA_ReadOnly)
+    src_gt = ds_src.GetGeoTransform()
+    src_xres = abs(src_gt[1])
+    src_yres = abs(src_gt[5])
+    ds_src = None
+    pad_cells = 2
+    padded_bounds = [
+        dem_bounds[0] - pad_cells * src_xres,   # xmin
+        dem_bounds[1] - pad_cells * src_yres,   # ymin
+        dem_bounds[2] + pad_cells * src_xres,   # xmax
+        dem_bounds[3] + pad_cells * src_yres,   # ymax
+    ]
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
-        warp_options = osgeo.gdal.WarpOptions(format="MEM")
-        # Explicitly close the warp result immediately
-        ds_warp = osgeo.gdal.Warp('', tmp_name, options=warp_options)
+        warp_options = osgeo.gdal.WarpOptions(
+            format="MEM", outputBounds=padded_bounds)
+        ds_warp = osgeo.gdal.Warp('', warp_src, options=warp_options)
         data_array_nodata = ds_warp.GetRasterBand(1).GetNoDataValue()
         data_array = ds_warp.ReadAsArray().astype('float32')
         gt_mem = ds_warp.GetGeoTransform()
         x_size = ds_warp.RasterXSize
         y_size = ds_warp.RasterYSize
-        ds_warp = None # CLOSE
+        ds_warp = None  # CLOSE
+
+    # Clean up subset VRT if created
+    if subset_vrt is not None and os.path.exists(subset_vrt):
+        os.remove(subset_vrt)
+
+    # Ensure data_array is 3-D even when only one band was loaded
+    if data_array.ndim == 2:
+        data_array = data_array[np.newaxis, ...]
 
     # get minimum version
     version_check = []
@@ -2224,7 +2500,6 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         version_check.append(v_num)
     version_check = min(version_check)
 
-    metadatalyr_name = outname.split('/')[-2]
     if ((metadatalyr_name in GEOM_LYRS and version_check < '2_0_4')
             and not is_nisar_file):
         # create directory for quality control plots
@@ -2239,18 +2514,10 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             outname,
             verbose).data_array
 
-    # only perform DEM intersection for rasters with valid height levels
-    NOHGT_LYRS = ['ionosphere']
-    metadatalyr_name = outname.split('/')[-2]
-
-    if metadatalyr_name not in NOHGT_LYRS:
+    if needs_height_interp:
         tmp_name = outname + '_temp'
 
-        # ... [Height/Lat/Lon definitions remain the same] ...
-        heightsMeta = ARIAtools.util.vrt.get_hgt_meta(
-            outname + '.vrt', hgt_field
-        )
-        heightsMeta = np.array(heightsMeta[1:-1].split(','), dtype='float32')
+        # heightsMeta already extracted above
 
         latitudeMeta = np.linspace(
             gt_mem[3], gt_mem[3] + (gt_mem[5] * (y_size - 1)),
@@ -2280,7 +2547,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
         pnts = transformPoints(
             lat, lon, da_dem1.data, 'EPSG:4326', 'EPSG:4326')
 
-        # set up the interpolator with the GUNW cube
+        # set up the interpolator with the (subsetted) GUNW cube
         interper = scipy.interpolate.RegularGridInterpolator(
             (latitudeMeta, longitudeMeta, heightsMeta),
             data_array.transpose(1, 2, 0),
@@ -2306,7 +2573,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
             'outputBounds': dem_bounds, 'dstNodata': data_array_nodata,
             'xRes': dem_arrres[0], 'yRes': dem_arrres[1],
-            'targetAlignedPixels': True, 'multithread': True}
+            'targetAlignedPixels': True, 'multithread': False}
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
         ds = osgeo.gdal.Warp(
             tmp_name + '_temp', tmp_name, options=warp_options
@@ -2319,7 +2586,7 @@ def finalize_metadata(outname, bbox_bounds, arrres, dem_bounds, prods_TOTbbox,
             'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
             'outputBounds': bbox_bounds, 'dstNodata': data_array_nodata,
             'xRes': arrres[0], 'yRes': arrres[1], 'targetAlignedPixels': True,
-            'multithread': True}
+            'multithread': False}
         warp_options = osgeo.gdal.WarpOptions(**gdal_warp_kwargs)
         ds = osgeo.gdal.Warp(
             outname, tmp_name + '_temp', options=warp_options
