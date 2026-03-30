@@ -1,7 +1,7 @@
 affine
 arm_pyart
 asf_search >=12.0.3
-asf_enumeration
+asf_enumeration >=0.4.0
 boto3               # optional: S3 direct download when running on AWS
 dask
 dem_stitcher>=2.5.8
