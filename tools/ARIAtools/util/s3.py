@@ -48,6 +48,7 @@ _S3_CREDS_ENDPOINTS = {
 # Map S3 bucket names to credential endpoint keys
 _BUCKET_TO_ENDPOINT = {
     'sds-n-cumulus-prod-nisar-products': 'nisar',
+    'sds-n-cumulus-prod-nisar-products-ea': 'nisar',
 }
 
 # Cached credentials (module-level) — keyed by endpoint name
