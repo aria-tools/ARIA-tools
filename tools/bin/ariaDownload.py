@@ -331,8 +331,14 @@ class Downloader:
                 end=end,
             )
         elif self.args.mission.upper() == "NISAR":
-            return asf_search.geo_search(
-                collections=["C2850261892-ASF"],
+            # Authenticate so the private ephemeral archive
+            # collection (C4052499921-ASF) is visible in CMR.
+            session = self._get_asf_session()
+            opts = asf_search.ASFSearchOptions(
+                collections=[
+                    "C2850261892-ASF",   # public NISAR GUNW
+                    "C4052499921-ASF",   # private ephemeral archive
+                ],
                 dataset=asf_search.constants.NISAR,
                 processingLevel=asf_search.constants.GUNW,
                 relativeOrbit=tracks,
@@ -340,7 +346,41 @@ class Downloader:
                 intersectsWith=bbox_wkt,
                 start=start,
                 end=end,
+                session=session,
             )
+            return asf_search.geo_search(opts=opts)
+
+    def _get_asf_session(self):
+        """Return an authenticated ASFSession.
+
+        Uses explicit user/pass args when provided, otherwise falls
+        back to ~/.netrc credentials for urs.earthdata.nasa.gov.
+        Returns an unauthenticated session with a warning when no
+        credentials are available.
+        """
+        session = asf_search.ASFSession()
+        if self.args.user:
+            session.auth_with_creds(
+                self.args.user,
+                self.args.passw or getpass.getpass("NASA Earthdata password: ")
+            )
+        else:
+            try:
+                import netrc as _netrc
+                nrc = _netrc.netrc()
+                auth = nrc.authenticators('urs.earthdata.nasa.gov')
+                if auth:
+                    session.auth_with_creds(auth[0], auth[2])
+                else:
+                    LOGGER.warning(
+                        'No urs.earthdata.nasa.gov entry in ~/.netrc. '
+                        'Private collections (e.g. NISAR ephemeral '
+                        'archive) will not be visible.')
+            except FileNotFoundError:
+                LOGGER.warning(
+                    '~/.netrc not found. Private collections (e.g. '
+                    'NISAR ephemeral archive) will not be visible.')
+        return session
 
     def filter_scenes(self, scenes, urls, ifgs, is_nisar_file):
         filtered_scenes, filtered_urls, filtered_ifgs = [], [], []
