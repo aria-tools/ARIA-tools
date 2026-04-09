@@ -238,24 +238,36 @@ def _configure_gdal_virtual_access():
     _set = osgeo.gdal.SetConfigOption
 
     # Use the shared master cookie so background workers inherit the Earthdata login!
+    # 1. Share the cookie AND let GDAL write to it. This prevents 
+    # the workers from constantly hammering the Earthdata URS login!
     cookie_path = os.environ.get('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
 
     if _get('GDAL_HTTP_COOKIEFILE') is None:
         _set('GDAL_HTTP_COOKIEFILE', cookie_path)
     if _get('GDAL_HTTP_COOKIEJAR') is None:
-        _set('GDAL_HTTP_COOKIEJAR', cookie_path)
+        _set('GDAL_HTTP_COOKIEJAR', cookie_path) 
 
-    # Cloud optimizations + Disable HDF5 Locking
+    # 2. Re-enable the VSI Cache! (Without this, GDAL downloads 
+    # the same HDF5 headers hundreds of times)
     _set('HDF5_USE_FILE_LOCKING', 'FALSE')
     if _get('VSI_CACHE') is None:
         _set('VSI_CACHE', 'YES')
-    _set('VSI_CACHE_SIZE', '67108864')           
-    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')   
-    _set('GDAL_HTTP_MAX_RETRY', '3')
-    _set('GDAL_HTTP_RETRY_DELAY', '2')
-    _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'YES')
-    _set('GDAL_HTTP_MULTIPLEX', 'YES')
-    _set('GDAL_HTTP_VERSION', '2')
+    _set('VSI_CACHE_SIZE', '536870912')
+
+    # 3. Re-enable Connection Pooling! (Reuses HTTPS sockets)
+    _set('GDAL_MAX_DATASET_POOL_SIZE', '1000')
+
+    # 4. Disable HTTP Multiplexing (Earthdata WAF rejects these)
+    _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'NO')
+    _set('GDAL_HTTP_MULTIPLEX', 'NO')
+    _set('CPL_VSIL_CURL_USE_HEAD', 'NO')
+
+    # 5. Network tuning
+    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')
+    _set('GDAL_HTTP_MAX_RETRY', '10')
+    _set('GDAL_HTTP_RETRY_DELAY', '3')
+
+    LOGGER.debug(f'GDAL virtual access configured using {cookie_path}')
 
     # If AWS S3 credentials are in the environment (set by the parent
     # process), restore GDAL config so /vsis3/ paths work in workers.
@@ -909,17 +921,20 @@ class Product:
                     lyr_pref + '/external/tides/solidEarth'
                     '/reference/solidEarthTide']
 
-                # get weather model name(s) – use cache when available
+                # Get weather model name(s) - use cache when available
                 raw_fname = fname.replace('NETCDF:"', '')
-                cached = ARIAtools.util.meta_cache.get_or_extract(
-                    raw_fname, self._cache_data)
+                cached_meta = ARIAtools.util.meta_cache.get_or_extract(
+                    raw_fname, self._cache_data
+                )
+
                 model_name = []
-                if cached and cached.get('tropo_models'):
-                    model_name = list(cached['tropo_models'])
+                if cached_meta and cached_meta.get('tropo_models'):
+                    model_name = list(cached_meta['tropo_models'])
                 else:
                     meta = osgeo.gdal.Info(fname)
                     for i in meta.split():
-                        if '/science/grids/corrections/external/troposphere/' in i:
+                        trop_path = '/science/grids/corrections/external/troposphere/'
+                        if trop_path in i:
                             model_name.append(i.split('/')[-3])
 
                 # exit if user wishes to extract a tropo layer
@@ -949,15 +964,28 @@ class Product:
                 model_name = list(set(model_name))
                 for i in model_name:
                     sdskeys_addlyrs.append(
-                        lyr_pref +
-                        f'/external/troposphere/{i}/reference/troposphereWet')
+                        f'{lyr_pref}/external/troposphere/{i}/'
+                        'reference/troposphereWet'
+                    )
                     sdskeys_addlyrs.append(
-                        lyr_pref + f'/external/troposphere/{i}/reference/'
-                        'troposphereHydrostatic')
+                        f'{lyr_pref}/external/troposphere/{i}/'
+                        'reference/troposphereHydrostatic'
+                    )
 
-                # remove keys not found in product
-                sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
+                # Fast cache lookup to remove keys not found in product
+                if cached_meta and cached_meta.get('subdatasets'):
+                    sdskeys_addlyrs = [
+                        key for key in sdskeys_addlyrs
+                        if any(key in sds for sds in cached_meta['subdatasets'])
+                    ]
+                else:
+                    meta = osgeo.gdal.Info(fname)
+                    sdskeys_addlyrs = [
+                        key for key in sdskeys_addlyrs if key in meta
+                    ]
+
                 sdskeys.extend(sdskeys_addlyrs)
+
         return rdrmetadata_dict, sdskeys, file_bbox
 
     def __mappingData__(self, fname, rdrmetadata_dict, sdskeys, version):
@@ -1140,15 +1168,30 @@ class Product:
             lyr_pref + 'losUnitVectorY',  # derive azimuthAngle from this
             lyr_pref + 'elevationAngle'   # the equivalent of lookAngle
         ])
-        # track and add additional correction layers, if they exist
+
+        # Track and add additional correction layers, if they exist
         sdskeys_addlyrs = [
-            lyr_pref + 'slantRangeSolidEarthTidesPhase',
-            lyr_pref + 'hydrostaticTroposphericPhaseScreen',
-            lyr_pref + 'wetTroposphericPhaseScreen'
+            f'{lyr_pref}slantRangeSolidEarthTidesPhase',
+            f'{lyr_pref}hydrostaticTroposphericPhaseScreen',
+            f'{lyr_pref}wetTroposphericPhaseScreen'
         ]
-        meta = osgeo.gdal.Info(fname)
-        # remove keys not found in product
-        sdskeys_addlyrs = [i for i in sdskeys_addlyrs if i in meta]
+
+        cached_meta = ARIAtools.util.meta_cache.get_h5_field(
+                raw_fname, 'subdatasets',
+                sdskeys_addlyrs, self._cache_data
+        )
+
+        # Fast lookup: check if target strings exist in cached subdatasets
+        if cached_meta and cached_meta.get('subdatasets'):
+            sdskeys_addlyrs = [
+                key for key in sdskeys_addlyrs
+                if any(key in sds for sds in cached_meta['subdatasets'])
+            ]
+        else:
+            # Fallback to slow GDAL info if the cache is empty/fails
+            meta = osgeo.gdal.Info(fname)
+            sdskeys_addlyrs = [key for key in sdskeys_addlyrs if key in meta]
+
         sdskeys.extend(sdskeys_addlyrs)
 
         return rdrmetadata_dict, sdskeys, file_bbox

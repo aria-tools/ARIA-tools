@@ -35,7 +35,7 @@ def get_GUNW_attr(filename: Union[str, Path],
     warp_kwargs = dict(
         format="MEM",
         dstSRS=proj,
-        multithread=True,
+        multithread=False,
     )
 
     # set pixel spacing
@@ -138,7 +138,7 @@ def get_GUNW_array(filename: Union[str, Path],
         format="MEM",
         dstSRS=proj,
         resampleAlg=resample,
-        multithread=True,
+        multithread=False,
         outputType=gdal.GDT_Float32
     )
 

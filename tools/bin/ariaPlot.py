@@ -183,7 +183,7 @@ def main(inps=None):
         'Thread count specified for gdal multiprocessing = %s',
         args.num_threads)
 
-    if args.plottracks or args.plotcoh or args.makeavgoh or args.plotbperpcoh:
+    if args.plottracks or args.plotbperp or args.plotcoh or args.makeavgoh or args.plotbperpcoh:
         # extract/merge productBoundingBox layers for each pair and update
         # dict, report common track bbox (default is to take common
         # intersection, but user may specify union), and expected shape for

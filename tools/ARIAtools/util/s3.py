@@ -48,6 +48,7 @@ _S3_CREDS_ENDPOINTS = {
 # Map S3 bucket names to credential endpoint keys
 _BUCKET_TO_ENDPOINT = {
     'sds-n-cumulus-prod-nisar-products': 'nisar',
+    'sds-n-cumulus-prod-nisar-products-ea': 'nisar',
 }
 
 # Cached credentials (module-level) — keyed by endpoint name
@@ -321,6 +322,11 @@ def maybe_use_s3(https_urls, s3_urls):
     has_s3 = any(u is not None for u in s3_urls)
     if not has_s3:
         LOGGER.info('No S3 URLs in URL file — using HTTPS access')
+        return https_urls, False
+
+    # Allow forcing HTTPS (vsicurl) for benchmarking / debugging
+    if os.environ.get('ARIA_FORCE_HTTPS'):
+        LOGGER.info('ARIA_FORCE_HTTPS set — using HTTPS (vsicurl) access')
         return https_urls, False
 
     if not is_on_aws():

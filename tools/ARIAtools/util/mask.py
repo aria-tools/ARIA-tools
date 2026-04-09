@@ -93,7 +93,7 @@ def prep_mask(
                 bounds, tile_shortname=lyr_name)
 
             # fill permanent water body
-            if lyr_name == 'esa_world_cover_2021':
+            if lyr_name in ('esa_world_cover_2020', 'esa_world_cover_2021'):
                 dat_arr[dat_arr == 80] = 0
                 dat_arr[dat_arr != 0] = 1
 
@@ -221,6 +221,7 @@ def prep_mask(
     mask_array = mask.ReadAsArray()
     mask_array[mask_array != 1] = 0
     mask.GetRasterBand(1).WriteArray(mask_array)
+    mask = None  # flush and close before re-opening for Translate
 
     # Update VRT
     translate_options = osgeo.gdal.TranslateOptions(format="VRT")

@@ -20,7 +20,6 @@ import copy
 import logging
 import argparse
 import datetime
-import collections
 import contextlib
 import json
 
@@ -627,21 +626,20 @@ def main():
         rankedResampling=args.rankedResampling,
         multiproc_method='processes', **export_dict, runlog=runlog)
 
-    # Remove pairing and pass combined dictionary of all layers
-    extract_dict = collections.defaultdict(list)
-    for d in standardproduct_info.products[1]:
-        for key in standardproduct_info.products[1][0].keys():
-            if key in d.keys():
-                for item in list(set(d[key])):
-                    extract_dict[key].append(item)
+    # Clear stale curl state before reusing GDAL for geometry extraction.
+    osgeo.gdal.VSICurlClearCache()
 
-    layers = ARIAtools.constants.ARIA_STANDARD_GEOM_LAYERS
+    # Geometry layers should come from one pristine pair description rather
+    # than from a cross-pair merged dictionary.
+    first_pair_dict = standardproduct_info.products[1][0]
+
+    geom_layers = ARIAtools.constants.ARIA_STANDARD_GEOM_LAYERS
     LOGGER.info(
         'Extracting single %s '
-        'files valid over common interferometric grid' % layers)
+        'files valid over common interferometric grid' % geom_layers)
     prod_arr_record = ARIAtools.extractProduct.export_products(
-        [extract_dict], tropo_total=False, layers=layers,
-        multiproc_method='processes', **export_dict, runlog=runlog)
+        [first_pair_dict], tropo_total=False, layers=geom_layers,
+        multiproc_method='single', **export_dict, runlog=runlog)
 
     # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)

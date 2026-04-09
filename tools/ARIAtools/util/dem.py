@@ -81,6 +81,7 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
             gdal_warp_kwargs = {
                 'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
                 'outputBounds': bounds, 'outputType': osgeo.gdal.GDT_Int16,
+                'dstNodata': -32768,
                 'xRes': arrres[0], 'yRes': arrres[1],
                 'targetAlignedPixels': True, 'multithread': True}
             osgeo.gdal.Warp(
@@ -101,7 +102,9 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         gdal_warp_kwargs = {
-            'format': outputFormat, 'outputBounds': bounds, 'xRes': arrres[0],
+            'format': outputFormat, 'outputBounds': bounds,
+            'dstNodata': -32768,
+            'xRes': arrres[0],
             'yRes': arrres[1], 'targetAlignedPixels': True,
             'multithread': True, 'options': ['-overwrite']}
         demfile_expanded = aria_dem.replace('.dem', '_expanded.dem')
