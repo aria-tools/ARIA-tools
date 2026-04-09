@@ -207,7 +207,7 @@ def configure_gdal_s3(endpoint_key='default'):
     appropriate DAAC endpoint.
 
     Credentials are also exported as environment variables so that
-    child processes (GNU parallel workers, Dask process workers)
+    child processes (native process workers, Dask process workers)
     inherit them automatically.
 
     Parameters
@@ -238,7 +238,7 @@ def configure_gdal_s3(endpoint_key='default'):
 def restore_gdal_s3_from_env():
     """Restore GDAL S3 config from environment variables.
 
-    Called by worker processes (GNU parallel, Dask) that inherit
+    Called by worker processes that inherit
     AWS credentials via environment variables but need the GDAL
     config options set in their own process.
     """

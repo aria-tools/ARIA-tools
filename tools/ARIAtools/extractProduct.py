@@ -19,7 +19,6 @@ import shutil
 import logging
 import datetime
 import tarfile
-import subprocess
 import threading
 
 import dask
@@ -38,6 +37,7 @@ import ARIAtools.util.vrt
 import ARIAtools.util.shp
 import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
+import aria_tools.execution.workers
 
 from ARIAtools.constants import ARIA_PX_SIZES
 
@@ -1379,6 +1379,48 @@ def export_product_worker_helper(args):
     return export_product_worker(*args)
 
 
+def _export_worker_count(num_threads):
+    """Return a concrete process/thread count for export workers."""
+
+    return aria_tools.execution.workers.resolve_worker_count(num_threads)
+
+
+def _collect_export_outputs(outputs, ref_arr):
+    """Check output dimensions and return the updated ref/outname pair."""
+
+    prev_outname = None
+    for _, _, outname, prod_arr in outputs:
+        if ref_arr is None:
+            ref_arr = copy.deepcopy(prod_arr)
+        else:
+            ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
+        prev_outname = outname
+
+    return ref_arr, prev_outname
+
+
+def _run_export_products_with_processes(mp_args, num_workers, layer):
+    """Run product export workers with native Python processes."""
+
+    prog_bar = ARIAtools.util.misc.ProgressBar(
+        maxValue=len(mp_args), prefix=f'Exporting {layer}: '
+    )
+
+    def update_progress(completed):
+        prog_bar.update(completed)
+        sys.stdout.flush()
+
+    try:
+        return aria_tools.execution.workers.run_process_pool(
+            export_product_worker_helper,
+            mp_args,
+            max_workers=num_workers,
+            on_complete=update_progress,
+        )
+    finally:
+        prog_bar.close()
+
+
 def export_product_worker(
         ii, ilayer, product, proj, full_product_dict_file, layers, workdir,
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
@@ -2061,7 +2103,9 @@ def export_products(
                 multilooking, verbose, is_nisar_file, range_correction,
                 rankedResampling, update_mode))
 
-        if int(num_threads) == 1 or multiproc_method in ['single', 'threads']:
+        num_workers = _export_worker_count(num_threads)
+
+        if num_workers == 1 or multiproc_method in ['single', 'threads']:
             
             # Initialize the custom ARIA progress bar
             prog_bar = ARIAtools.util.misc.ProgressBar(
@@ -2100,73 +2144,21 @@ def export_products(
 
                 # Compute all jobs
                 outputs = dask.compute(
-                    jobs, num_workers=int(num_threads), scheduler='threads'
+                    jobs, num_workers=num_workers, scheduler='threads'
                 )[0]
                 prog_bar.close()
 
-            for ii_out, ilayer_out, outname, prod_arr in outputs:
-                if ref_arr is None:
-                    ref_arr = copy.deepcopy(prod_arr)
-                else:
-                    ARIAtools.util.vrt.dim_check(ref_arr, prod_arr)
-                prev_outname = outname
+        elif multiproc_method == 'processes':
+            LOGGER.debug('Running %d total jobs with processes', len(mp_args))
+            outputs = _run_export_products_with_processes(
+                mp_args, num_workers, layer)
 
-        elif multiproc_method == 'gnu_parallel':
-            export_workers_temp_dir = os.path.join(outDir, 'export_workers')
-            if os.path.isdir(export_workers_temp_dir):
-                shutil.rmtree(export_workers_temp_dir)
-            os.mkdir(export_workers_temp_dir)
+        else:
+            raise ValueError(
+                f'Unknown multiproc_method "{multiproc_method}". Expected '
+                '"single", "threads", or "processes".')
 
-            for ii_arg, args in enumerate(mp_args):
-                this_json_file = os.path.join(
-                    outDir, 'export_workers',
-                    'export_product_args_%2.2d.json' % ii_arg)
-                with open(this_json_file, 'w') as ofp:
-                    json.dump(args, ofp)
-
-            LOGGER.debug('Running %d total jobs in parallel' % len(mp_args))
-            
-            prog_bar = ARIAtools.util.misc.ProgressBar(
-                maxValue=len(mp_args), prefix=f'Exporting {layer}: '
-            )
-
-            # Run the export worker jobs with GNU parallel in the background
-            proc = subprocess.Popen((
-                'find %s/export_workers -name "export_product_args_*.json" | '
-                'parallel -j %d export_product.py {}') % (
-                    outDir, int(num_threads)), shell=True)
-
-            # Poll the directory for completed JSON files to update progress
-            while proc.poll() is None:
-                num_done = len(glob.glob(
-                    os.path.join(export_workers_temp_dir, 'outputs_*.json')
-                ))
-                prog_bar.update(num_done)
-                time.sleep(1.0)
-
-            # Catch the final update immediately after the process finishes
-            num_done = len(glob.glob(
-                os.path.join(export_workers_temp_dir, 'outputs_*.json')
-            ))
-            prog_bar.update(num_done)
-            prog_bar.close()
-
-            # load in output files and verify dimensions
-            output_files = glob.glob(os.path.join(
-                export_workers_temp_dir, 'outputs_*.json'))
-
-            if len(output_files) > 0:
-                # Remove hardcoded 0_0 so it grabs the correct layer file
-                if ref_arr is None:
-                    with open(output_files[0]) as ifp:
-                        output_dict = json.load(ifp)
-                        ref_arr = copy.deepcopy(output_dict['prod_arr'])
-
-                for output_file in output_files:
-                    with open(output_file) as ifp:
-                        output_dict = json.load(ifp)
-                    ARIAtools.util.vrt.dim_check(ref_arr, output_dict['prod_arr'])
-                    prev_outname = output_dict['outname']
+        ref_arr, prev_outname = _collect_export_outputs(outputs, ref_arr)
 
     end_time = time.time()
     LOGGER.debug(

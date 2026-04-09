@@ -260,7 +260,6 @@ class Downloader:
         self.args = args
         self.args.output = self.args.output.title()
         self.args.wd = os.path.abspath(self.args.wd)
-        os.makedirs(self.args.wd, exist_ok=True)
         LOGGER.setLevel(logging.DEBUG if self.args.verbose else logging.INFO)
 
     def __call__(self):
@@ -382,6 +381,7 @@ class Downloader:
         return sten_chk and elap_chk
 
     def write_urls(self, urls, scenes):
+        os.makedirs(self.args.wd, exist_ok=True)
         dst = fmt_dst(self.args)
         with open(dst, "w") as fh:
             for url, scene in zip(urls, scenes):
@@ -390,6 +390,7 @@ class Downloader:
         LOGGER.info("Wrote -- %d -- product urls to: %s", len(urls), dst)
 
     def download_scenes(self, scenes):
+        os.makedirs(self.args.wd, exist_ok=True)
         scenes = asf_search.ASFSearchResults(scenes)
         nt = int(self.args.num_threads)
         LOGGER.info("Downloading %d products...", len(scenes))
