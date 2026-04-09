@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ARIAtools"
+version = "2.0"
+description = "Command-line tools for ARIA standard product workflows"
+readme = "README.md"
+requires-python = ">=3.8,<3.14"
+license = { text = "See LICENSE" }
+authors = [
+  { name = "ARIA-tools developers" },
+]
+dependencies = [
+  "affine",
+  "asf-search>=12.0.3",
+  "dask",
+  "dem-stitcher>=2.5.8",
+  "GDAL>=3.7.0",
+  "h5py",
+  "netCDF4",
+  "numpy",
+  "pandas",
+  "pyproj",
+  "python-dateutil",
+  "rasterio",
+  "rioxarray",
+  "requests",
+  "scipy>1.10.0",
+  "shapely",
+  "tile-mate>=0.0.12",
+  "xarray",
+]
+
+[project.optional-dependencies]
+aws = [
+  "boto3",
+]
+order = [
+  "asf-search[asf-enumeration]>=12.0.3",
+  "hyp3-sdk>=7.7.6",
+]
+plot = [
+  "matplotlib",
+]
+dev = [
+  "pre-commit",
+  "pytest",
+  "ruff",
+]
+all = [
+  "asf-search[asf-enumeration]>=12.0.3",
+  "boto3",
+  "hyp3-sdk>=7.7.6",
+  "matplotlib",
+]
+
+[project.scripts]
+aria-tools = "aria_tools.cli.app:main"
+
+[tool.setuptools]
+packages = [
+  "aria_tools",
+  "aria_tools.cli",
+  "aria_tools.commands",
+  "aria_tools.commands.legacy",
+  "aria_tools.config",
+  "aria_tools.execution",
+  "ARIAtools",
+  "ARIAtools.util",
+]
+script-files = [
+  "tools/bin/ariaPlot.py",
+  "tools/bin/ariaDownload.py",
+  "tools/bin/ariaExtract.py",
+  "tools/bin/ariaTSsetup.py",
+  "tools/bin/ariaAOIassist.py",
+  "tools/bin/ariaMisclosure.py",
+  "tools/bin/ariaOrderASF.py",
+  "tools/bin/ariaKml2box.py",
+]
+
+[tool.setuptools.package-dir]
+aria_tools = "src/aria_tools"
+"aria_tools.cli" = "src/aria_tools/cli"
+"aria_tools.commands" = "src/aria_tools/commands"
+"aria_tools.commands.legacy" = "src/aria_tools/commands/legacy"
+"aria_tools.config" = "src/aria_tools/config"
+"aria_tools.execution" = "src/aria_tools/execution"
+ARIAtools = "tools/ARIAtools"
+"ARIAtools.util" = "tools/ARIAtools/util"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

@@ -25,6 +25,14 @@ cd aria-tools
 git remote add my_user_name https://github.com/my_user_name/aria-tools.git
 ```
 
+Install the package in editable mode after activating a GDAL-capable
+environment:
+
+```.tcsh
+python -m pip install -e ".[dev]"
+pre-commit install
+```
+
 ### Setting up the documentation environment ###
 
 Fork aria-tools/aria-tools-docs from GitHub UI, and then

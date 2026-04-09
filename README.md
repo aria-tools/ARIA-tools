@@ -147,15 +147,14 @@ mamba env create -f environment.yml
 conda activate ARIA-tools
 ```
 
-We have included a `setup.py` script which allows for easy installation and setting up the ARIA-tools package itself (python and command line tools).
+ARIA-tools uses modern `pyproject.toml` packaging. Install the package and command line tools with an editable install:
 ```.tcsh
 python -m pip install -e .
 ```
 
-If not using the setup.py, users should compile third-party packages manually and ensure ARIA-tools and dependencies are included on their PATH and PYTHONPATH. For `TCSH` shell this can be done as follows (replace `{$PWD}/tools/ARIAtools` to the location where you have cloned the ARIAtools repository):
+For optional command groups, install the matching extras after the GDAL-capable environment is active:
 ```.tcsh
-setenv PYTHONPATH ${PYTHONPATH}:{$PWD}/tools/ARIAtools
-setenv PATH ${PATH}:${PWD}/tools/bin
+python -m pip install -e ".[aws,order,plot,dev]"
 ```
 
 To avoid potential issues associated with dependencies when cloning new ARIA-tools commits, it is advised to regularly maintain your conda environment as so (making sure to adjust the conda environment argument name `--name ARIA-tools` as appropriate):
@@ -163,9 +162,11 @@ To avoid potential issues associated with dependencies when cloning new ARIA-too
 mamba env update --name ARIA-tools --file environment.yml --prune
 ```
 
-GNU Parallel (https://www.gnu.org/software/parallel/) will write output to stdout that requests that the user cite their paper. We can use this command to suppress this output:
-```
-echo 'will cite' | parallel --citation
+The modern command shell is available as `aria-tools <command> [options]`. Legacy script entry points remain installed during the migration. For example:
+```.tcsh
+aria-tools download --track 004 --output count
+aria-tools extract -f "products/*.nc" -d Download
+aria-tools timeseries -f "products/*.nc"
 ```
 
 ### Other installation options
@@ -239,4 +240,3 @@ Buzzanga, B., Bekaert, D. P. S., Hamlington, B. D., & Sangha, S. S. (2020). Towa
 -   [other community members](https://github.com/aria-tools/ARIA-tools/graphs/contributors)
 
 We welcome community contributions. For instructions see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md).
-

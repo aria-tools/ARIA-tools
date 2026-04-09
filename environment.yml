@@ -21,7 +21,6 @@ dependencies:
   - netcdf4
   - numpy
   - pandas
-  - parallel
   - pip
   - pyproj
   - pytest
