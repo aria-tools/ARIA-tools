@@ -142,6 +142,13 @@ def createParser():
         default='info', 
         help='Logger log level. Default: info.'
     )
+    parser.add_argument(
+        '--bandwidth', dest='bandwidth', default=None, type=str,
+        choices=('4000', '2000', '7700', '0500', '0000'),
+        help='Specify NISAR bandwidth mode to filter products. '
+             'Warns if multiple bandwidths are mixed. Default captures '
+             'all.'
+    )
     return parser
 
 
@@ -211,7 +218,8 @@ def main():
         url_version=args.version, nc_version=args.nc_version,
         verbose=args.verbose, tropo_models=args.tropo_models,
         layers=args.layers, croptounion=args.croptounion, runlog=runlog,
-        demfile=args.demfile, mask=args.mask)
+        demfile=args.demfile, mask=args.mask,
+        bandwidth=args.bandwidth)
 
     # Perform initial layer, product, and correction sanity checks
     args.layers, args.tropo_total, \

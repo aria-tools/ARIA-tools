@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Simran Sangha & David Bekaert
+# Author: Simran Sangha, David Bekaert
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
@@ -136,6 +136,13 @@ def createParser():
         default='info', 
         help='Logger log level. Default: info.'
     )
+    parser.add_argument(
+        '--bandwidth', dest='bandwidth', default=None, type=str,
+        choices=('4000', '2000', '7700', '0500', '0000'),
+        help='Specify NISAR bandwidth mode to filter products. '
+             'Warns if multiple bandwidths are mixed. Default captures '
+             'all.'
+    )
     return parser
 
 
@@ -161,7 +168,8 @@ def main(inps=None):
     standardproduct_info = ARIAtools.product.Product(
         args.imgfile, bbox=args.bbox, workdir=args.workdir,
         num_threads=args.num_threads, url_version=args.version,
-        nc_version=args.nc_version, verbose=args.verbose)
+        nc_version=args.nc_version, verbose=args.verbose,
+        bandwidth=args.bandwidth)
 
     # If user requests to generate all plots.
     if args.plotall:

@@ -1,13 +1,20 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Emre Havazli
+# Author: Emre Havazli, Simran Sangha
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import logging
+import os
 import sys
 import time
+from collections import Counter
+
 import numpy as np
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ProgressBar:
@@ -124,3 +131,98 @@ class ProgressBar:
         of future statements."""
         if self.print_msg:
             print(' ')
+
+def filter_and_check_nisar_bandwidths(filenames, requested_bw=None):
+    """
+    Checks NISAR filenames for heterogeneous bandwidths and filters.
+    
+    Parameters
+    ----------
+    filenames : list
+        List of strings (paths or URLs)
+    requested_bw : str, optional
+        Bandwidth mode (e.g., '7700', '2005') to filter by.
+    
+    Returns
+    -------
+    list
+        Filtered filenames
+    """
+    bandwidths = []
+    parsed_files = []
+    
+    # Standard NISAR polarizations used in file naming
+    valid_pols = [
+        'SH', 'SV', 'DH', 'DV', 'QP', 'HHNA', 'VVNA', 'CL', 'CR'
+    ]
+
+    for f in filenames:
+        basename = os.path.basename(f)
+        # Skip non-NISAR files
+        if not basename.startswith('NISAR_'):
+            parsed_files.append((f, None))
+            continue
+            
+        parts = basename.split('_')
+        bw = None
+        
+        # Locate bandwidth: usually the segment just before polarization
+        for i, part in enumerate(parts):
+            if part in valid_pols and i > 0:
+                bw = parts[i-1] 
+                break
+        
+        # Fallback index if polarization segment wasn't matched
+        if bw is None and len(parts) > 8:
+            bw = parts[8] 
+                
+        bandwidths.append(bw)
+        parsed_files.append((f, bw))
+
+    # If no NISAR files were found, just return original list
+    if not bandwidths:
+        return filenames 
+        
+    # Filter if requested
+    if requested_bw is not None:
+        filtered = [
+            f for f, bw in parsed_files 
+            if bw == requested_bw or bw is None
+        ]
+        
+        if len(filtered) < len(filenames):
+            LOGGER.info(
+                f"Filtered out {len(filenames) - len(filtered)} "
+                f"products not matching bandwidth '{requested_bw}'."
+            )
+            
+        parsed_files = [
+            (f, bw) for f, bw in parsed_files 
+            if bw == requested_bw or bw is None
+        ]
+        bandwidths = [bw for _, bw in parsed_files if bw is not None]
+        filenames = [f for f, bw in parsed_files]
+
+    # Check heterogeneity
+    bw_counts = Counter(bandwidths)
+    if len(bw_counts) > 1:
+        LOGGER.warning("*" * 70)
+        LOGGER.warning(
+            "WARNING: Heterogeneous NISAR bandwidth modes detected!"
+        )
+        LOGGER.warning(
+            "Mixing bandwidths can introduce severe resolution "
+            "and phase discontinuities."
+        )
+        LOGGER.warning("Breakdown of bandwidths found:")
+        
+        total = len(bandwidths)
+        for bw, count in bw_counts.items():
+            pct = (count / total) * 100
+            LOGGER.warning(
+                f" - Mode {bw}: {count} file(s) ({pct:.1f}%)"
+            )
+        LOGGER.warning("*" * 70)
+            
+    return filenames
+
