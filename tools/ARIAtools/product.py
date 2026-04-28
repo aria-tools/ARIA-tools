@@ -1567,7 +1567,7 @@ class Product:
             if file not in prev_files:
                 self.products += self.__readproduct__(file)
             else:
-                LOGGER.info('Product already read: %s', prod_name)
+                LOGGER.info('Product already read: %s', file)
 
         if self.runlog is not None:
             self.runlog.update('files', self.files)
