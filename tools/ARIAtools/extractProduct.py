@@ -19,9 +19,7 @@ import shutil
 import logging
 import datetime
 import tarfile
-import threading
 
-import dask
 import rioxarray
 import rasterio
 import osgeo
@@ -1589,6 +1587,38 @@ def _run_export_products_with_processes(mp_args, num_workers, layer):
         prog_bar.close()
 
 
+def _run_export_jobs(mp_args, num_workers, layer, multiproc_method):
+    """Dispatch export jobs to the supported serial or process backends."""
+
+    if multiproc_method == 'single' or num_workers == 1:
+        if multiproc_method == 'processes' and num_workers == 1:
+            LOGGER.debug(
+                'Running %d total jobs serially because worker count is 1',
+                len(mp_args),
+            )
+
+        prog_bar = ARIAtools.util.misc.ProgressBar(
+            maxValue=len(mp_args), prefix=f'Exporting {layer}: '
+        )
+        try:
+            outputs = []
+            for i, arg in enumerate(mp_args):
+                outputs.append(export_product_worker_helper(arg))
+                prog_bar.update(i + 1)
+                sys.stdout.flush()
+            return outputs
+        finally:
+            prog_bar.close()
+
+    if multiproc_method == 'processes':
+        LOGGER.debug('Running %d total jobs with processes', len(mp_args))
+        return _run_export_products_with_processes(mp_args, num_workers, layer)
+
+    raise ValueError(
+        f'Unknown multiproc_method "{multiproc_method}". Expected '
+        '"single" or "processes".')
+
+
 def export_product_worker(
         ii, ilayer, product, proj, full_product_dict_file, layers, workdir,
         bounds, prods_TOTbbox, demfile, demfile_expanded, maskfile,
@@ -1935,7 +1965,7 @@ def export_products(
         iono_filter, is_nisar_file, rankedResampling=False, demfile=None,
         demfile_expanded=None, lat=None, lon=None, maskfile=None, outDir='./',
         outputFormat='VRT', verbose=None, num_threads='2', multilooking=None,
-        tropo_total=False, model_names=[], multiproc_method='single',
+        tropo_total=False, model_names=[], multiproc_method='processes',
         runlog=None):
     """
     Export layer and 2D meta-data layers (at the product resolution).
@@ -2310,58 +2340,9 @@ def export_products(
 
         num_workers = _export_worker_count(num_threads)
 
-        if num_workers == 1 or multiproc_method in ['single', 'threads']:
-            
-            # Initialize the custom ARIA progress bar
-            prog_bar = ARIAtools.util.misc.ProgressBar(
-                maxValue=len(mp_args), prefix=f'Exporting {layer}: '
-            )
-
-            if multiproc_method == 'single':
-                outputs = []
-                for i, arg in enumerate(mp_args):
-                    outputs.append(export_product_worker_helper(arg))
-                    prog_bar.update(i + 1)
-                    sys.stdout.flush()
-                prog_bar.close()
-                
-            else:
-                LOGGER.debug('Running %d total jobs with threads', len(mp_args))
-
-                # Set up a thread-safe counter for Dask
-                lock = threading.Lock()
-                completed = 0
-
-                def update_progress(result):
-                    nonlocal completed
-                    with lock:
-                        completed += 1
-                        prog_bar.update(completed)
-                    return result
-
-                # Create jobs wrapped with our thread-safe progress updater
-                jobs = []
-                for arg in mp_args:
-                    job = dask.delayed(
-                        lambda x: update_progress(export_product_worker(*x))
-                    )(arg)
-                    jobs.append(job)
-
-                # Compute all jobs
-                outputs = dask.compute(
-                    jobs, num_workers=num_workers, scheduler='threads'
-                )[0]
-                prog_bar.close()
-
-        elif multiproc_method == 'processes':
-            LOGGER.debug('Running %d total jobs with processes', len(mp_args))
-            outputs = _run_export_products_with_processes(
-                mp_args, num_workers, layer)
-
-        else:
-            raise ValueError(
-                f'Unknown multiproc_method "{multiproc_method}". Expected '
-                '"single", "threads", or "processes".')
+        outputs = _run_export_jobs(
+            mp_args, num_workers, layer, multiproc_method
+        )
 
         ref_arr, prev_outname = _collect_export_outputs(outputs, ref_arr)
 

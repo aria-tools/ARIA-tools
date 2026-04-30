@@ -336,7 +336,9 @@ def main():
 
     # Extract user expected layers
     LOGGER.info('Extracting products')
-    ARIAtools.extractProduct.export_products(**export_dict)
+    ARIAtools.extractProduct.export_products(
+        multiproc_method='processes', **export_dict
+    )
 
 
 if __name__ == '__main__':
