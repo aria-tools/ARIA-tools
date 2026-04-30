@@ -22,10 +22,6 @@ import json
 import logging
 import os
 
-import matplotlib.dates as mdates
-import matplotlib.lines as mlines
-import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
 import numpy as np
 import requests
 from shapely.geometry import shape, Polygon
@@ -68,6 +64,26 @@ NETWORK_TYPES = ['sequential', 'seasonal', 'annual']
 # HyP3 credit costs
 CREDITS_PER_PAIR = 60
 ASF_MONTHLY_QUOTA = 8000
+
+
+def _extra_install_hint(extra_name):
+    """Return a repo-friendly install hint for an optional dependency set."""
+    return f'python -m pip install -e ".[{extra_name}]"'
+
+
+def _require_matplotlib():
+    """Import matplotlib lazily for plotting-only code paths."""
+    try:
+        import matplotlib.dates as mdates
+        import matplotlib.lines as mlines
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ImportError(
+            'matplotlib is required for ARIA order plotting outputs.\n'
+            f'Install the plot extra with:\n  {_extra_install_hint("plot")}'
+        ) from exc
+
+    return mdates, mlines, plt
 
 
 def create_parser():
@@ -573,7 +589,8 @@ def get_acquisitions_for_frame(frame_id, start_date, end_date):
     if not HAS_ASF_ENUMERATION:
         raise ImportError(
             'asf_enumeration is required for acquisition queries.\n'
-            'Install with:  pip install "asf_search[asf-enumeration]"')
+            'Install the order extra with:\n'
+            f'  {_extra_install_hint("order")}')
 
     LOGGER.info('Querying acquisitions for frame %s via '
                 'asf_enumeration ...', frame_id)
@@ -1043,6 +1060,7 @@ def plot_baseline(dates_bperp, pairs_dict, frame_id, output_dir='./',
     """
     existing = pairs_dict['existing']
     new = pairs_dict['new']
+    mdates, mlines, plt = _require_matplotlib()
 
     fig, ax = plt.subplots(figsize=(14, 6))
 
@@ -1358,6 +1376,7 @@ def plot_frames(frames, bbox_poly=None, output_dir='./'):
     if not frames:
         LOGGER.warning('No frames to plot.')
         return
+    _, mlines, plt = _require_matplotlib()
 
     # ----- compute extent from frames + bbox ----- #
     all_bounds = []
@@ -1590,8 +1609,9 @@ def order_pairs(frame_id, pairs_file, job_name=None, dry_run=False,
     """
     if not HAS_HYP3_SDK:
         raise ImportError(
-            'hyp3_sdk is required for --orderpairs.  Install it with:\n'
-            '  pip install hyp3_sdk')
+            'hyp3_sdk is required for --orderpairs.\n'
+            'Install the order extra with:\n'
+            f'  {_extra_install_hint("order")}')
 
     # --- read pairs CSV --- #
     pairs_to_order = _read_pairs_csv(pairs_file)
@@ -1752,8 +1772,9 @@ def status_jobs(status_name=None, job_ids=None):
     """
     if not HAS_HYP3_SDK:
         raise ImportError(
-            'hyp3_sdk is required for --statusjobs.  Install it with:\n'
-            '  pip install hyp3_sdk')
+            'hyp3_sdk is required for --statusjobs.\n'
+            'Install the order extra with:\n'
+            f'  {_extra_install_hint("order")}')
 
     if not status_name and not job_ids:
         raise ValueError(
