@@ -12,10 +12,12 @@ license = { text = "See LICENSE" }
 authors = [
   { name = "ARIA-tools developers" },
 ]
+# Authoritative pip install surface for ARIA-tools.
+# Contributor environment files may include additional optional command
+# dependencies and test tooling for repo work and CI.
 dependencies = [
   "affine",
   "asf-search>=12.0.3",
-  "dask",
   "dem-stitcher>=2.5.8",
   "GDAL>=3.7.0",
   "h5py",
@@ -34,6 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional command groups install on top of the core dependencies above.
 aws = [
   "boto3",
 ]

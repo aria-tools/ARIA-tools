@@ -56,7 +56,9 @@ Actual time-series processing is not supported in ARIA-tools. However, outputs a
 ------
 
 ## Software Dependencies
-Below we list the key dependencies for ARIA-tools. See environment.yml for complete list.
+Below we list the key dependencies for ARIA-tools. `pyproject.toml` defines
+the authoritative pip install surface, while `environment.yml` provides a
+full contributor environment for repo work and CI.
 
 ### Packages
 ```
@@ -152,6 +154,11 @@ ARIA-tools uses modern `pyproject.toml` packaging. Install the package and comma
 python -m pip install -e .
 ```
 
+`pyproject.toml` is the authoritative install surface for pip installs. The
+repo-level `requirements.txt` and `environment.yml` are broader contributor
+environment definitions that intentionally include optional command
+dependencies and test tooling used for local development and CI.
+
 For optional command groups, install the matching extras after the GDAL-capable environment is active:
 ```.tcsh
 python -m pip install -e ".[aws,order,plot,dev]"
@@ -178,7 +185,7 @@ The following pages might be of use to those trying to build third party package
 ### ARIA-tools with support for virtual data access
 GDAL Virtual File Systems capabilities (vsicurl) can be leveraged in ARIA-tools to avoid downloading GUNW products during processing. This is supported for both **Sentinel-1 GUNW** and **NISAR GUNW** products.
 
-To use virtual access, generate a URL list using `ariaDownload.py -o url`, which produces a `.txt` file of product URLs. Pass this `.txt` file directly to `ariaExtract.py`, `ariaTSsetup.py`, or `ariaPlot.py` via the `-f` option — no download step is needed. ARIA-tools will stream data on-the-fly from the ASF archive using GDAL's `/vsicurl/` driver.
+To use virtual access, generate a URL list using `aria-tools download -o url`, which produces a `.txt` file of product URLs. Pass this `.txt` file directly to `aria-tools extract`, `aria-tools timeseries`, or `aria-tools plot` via the `-f` option; no download step is needed. ARIA-tools will stream data on-the-fly from the ASF archive using GDAL's `/vsicurl/` driver. Legacy script shims such as `ariaDownload.py` and `ariaExtract.py` remain available during the migration.
 
 For virtual processing, a local metadata cache (`aria_meta_cache.json`) is automatically created on first run to avoid repeated remote reads of product headers. Subsequent runs read from this cache for faster initialization. When expanding a time series with additional products, the existing cache is reused — only new URLs trigger remote metadata reads.
 
@@ -202,16 +209,16 @@ The ARIA-tools scripts are highly modulized in Python and therefore allows for b
 
 
 ### Commandline download of GUNW Products
-ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the commandline using the *ariaDownload.py* program, which wraps around the ASF DAAC api. There is the option for virtual data access by using `ariaDownload.py -o url`, which creates a `.txt` file with HTTPS paths to archived products instead of downloading them. This URL file can be passed directly to subsequent programs (*ariaExtract.py*, *ariaTSsetup.py*, *ariaPlot.py*) for streaming access without local downloads (see [ARIA-tools with support for virtual data access](#aria-tools-with-support-for-virtual-data-access)).
+ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the command line using `aria-tools download`, which wraps the ASF DAAC API. There is also a virtual-access path using `aria-tools download -o url`, which creates a `.txt` file with HTTPS paths to archived products instead of downloading them. This URL file can be passed directly to `aria-tools extract`, `aria-tools timeseries`, and `aria-tools plot` for streaming access without local downloads (see [ARIA-tools with support for virtual data access](#aria-tools-with-support-for-virtual-data-access)).
 
 ### Manipulating GUNW Products
-ARIA GUNW-S1/NISAR_L2_GUNW products can be manipulated (cropped, stitched, extracted) using the *ariaExtract.py* program. 
+ARIA GUNW-S1/NISAR_L2_GUNW products can be manipulated (cropped, stitched, extracted) using `aria-tools extract`.
 
 ### Baseline and quality control plots for GUNW Products
-ARIA GUNW-S1/ NISAR_L2_GUNW quality and baseline plots for spatial-temporal contiguous interferograms can be made using the *ariaPlot.py* program.
+ARIA GUNW-S1/ NISAR_L2_GUNW quality and baseline plots for spatial-temporal contiguous interferograms can be made using `aria-tools plot`.
 
 ### Time-series set-up of GUNW Products
-ARIA GUNW-S1/NISAR_L2_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using the *ariaTSsetup.py* program.
+ARIA GUNW-S1/NISAR_L2_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using `aria-tools timeseries`.
 
 ### Ordering ARIA S1 GUNW Products on demand
 The *ariaOrderASF.py* program supports on-demand ordering of **ARIA Sentinel-1 GUNW** products through the [ASF HyP3 on-demand processing system](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/). This tool is for GUNW-S1 products only (not NISAR) and allows users to build and order additional interferometric pairs that are not yet in the ASF archive, using each user's monthly HyP3 credit quota.  A `~/.netrc` file with NASA Earthdata credentials is required for authentication.

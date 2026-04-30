@@ -38,4 +38,5 @@ jobs:
         run: |
           echo $TOPO_API_KEY > ~/.topoapi
           python -m pip install .
+          python -m pytest tests/unit tests/integration -q
           source tests/test.sh

@@ -1,13 +1,13 @@
+# Contributor environment for repo work and CI.
+# This file is intentionally broader than the pip install surface in
+# pyproject.toml: it includes optional command extras and test tooling.
 affine
-arm_pyart
 asf_search >=12.0.3
 asf_enumeration >=0.4.0
 boto3               # optional: S3 direct download when running on AWS
-dask
 dem_stitcher>=2.5.8
 gdal>=3.7.0
 h5py
-joblib
 libgdal-hdf5
 libgdal-netcdf
 matplotlib
