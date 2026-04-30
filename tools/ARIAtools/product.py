@@ -26,6 +26,7 @@ import ARIAtools.util.url
 import ARIAtools.util.shp
 import ARIAtools.util.meta_cache
 import ARIAtools.util.s3
+from aria_tools.errors import AriaToolsError
 
 osgeo.gdal.UseExceptions()
 osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
@@ -411,6 +412,12 @@ class Product:
 
             # Convert relative paths to absolute paths
             self.files = [os.path.abspath(i) for i in self.files]
+
+        if not self.files:
+            raise AriaToolsError(
+                'No input products matched the provided file argument: '
+                f'{filearg}'
+            )
 
         # capture and remove duplicate files (if applicable)
         self.files = ARIAtools.util.url.url_versions(
