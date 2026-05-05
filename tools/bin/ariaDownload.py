@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Brett A. Buzzanga, David Bekaert
+# Author: Brett A. Buzzanga, David Bekaert, Simran Sangha
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
@@ -26,6 +26,7 @@ from requests.exceptions import RequestException
 import ARIAtools.util.log
 from ARIAtools.util.shp import open_shp
 from ARIAtools.util.url import url_versions
+import ARIAtools.util.misc
 import ARIAtools.util.s3
 
 LOGGER = logging.getLogger('ariaDownload.py')
@@ -134,6 +135,13 @@ def createParser():
         choices=['debug', 'info', 'warning', 'error'], 
         default='info', 
         help='Logger log level. Default: info.'
+    )
+    parser.add_argument(
+        '--bandwidth', dest='bandwidth', default=None, type=str,
+        choices=('4000', '2000', '7700', '0500', '0000'),
+        help='Specify NISAR bandwidth mode to filter products. '
+             'Warns if multiple bandwidths are mixed. Default captures '
+             'all.'
     )
     return parser
 
@@ -266,6 +274,19 @@ class Downloader:
     def __call__(self):
         scenes = self.query_asf()
         urls, ifgs, is_nisar_file = get_url_ifg(scenes)
+
+        if is_nisar_file:
+            filtered_urls = (
+                ARIAtools.util.misc.filter_and_check_nisar_bandwidths(
+                    urls, 
+                    requested_bw=self.args.bandwidth
+                )
+            )
+            
+            # Realign scenes and ifgs based on the filtered urls
+            scenes = [s for s, u in zip(scenes, urls) if u in filtered_urls]
+            ifgs = [i for i, u in zip(ifgs, urls) if u in filtered_urls]
+            urls = filtered_urls
 
         # Subset everything by version
         if is_nisar_file and self.args.version is not None:

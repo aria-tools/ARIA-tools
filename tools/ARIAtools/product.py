@@ -1,6 +1,6 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# Author: Simran Sangha & David Bekaert
+# Author: Simran Sangha, David Bekaert
 # Copyright (c) 2023, by the California Institute of Technology. ALL RIGHTS
 # RESERVED. United States Government Sponsorship acknowledged.
 #
@@ -25,6 +25,7 @@ import ARIAtools.constants
 import ARIAtools.util.url
 import ARIAtools.util.shp
 import ARIAtools.util.meta_cache
+import ARIAtools.util.misc
 import ARIAtools.util.s3
 
 osgeo.gdal.UseExceptions()
@@ -323,8 +324,9 @@ class Product:
 
     def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
                  url_version='None', nc_version='None', projection='4326',
-                 verbose=False, tropo_models=None, layers=None, croptounion=False,
-                 runlog=None, demfile=None, mask=None):
+                 verbose=False, tropo_models=None, layers=None, 
+                 croptounion=False, runlog=None, demfile=None, mask=None, 
+                 bandwidth=None):
         """
         Parse products and input bounding box (if specified)
         """
@@ -411,6 +413,12 @@ class Product:
 
             # Convert relative paths to absolute paths
             self.files = [os.path.abspath(i) for i in self.files]
+
+        # Filter and check NISAR bandwidths
+        self.files = ARIAtools.util.misc.filter_and_check_nisar_bandwidths(
+            self.files, 
+            requested_bw=bandwidth
+        )
 
         # capture and remove duplicate files (if applicable)
         self.files = ARIAtools.util.url.url_versions(
