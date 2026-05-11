@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import contextlib
+import copy
+import datetime
 import glob
 import json
+import logging
 import os
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -13,13 +16,20 @@ from typing import Any
 import ARIAtools
 import ARIAtools.extractProduct
 import ARIAtools.product
-import ARIAtools.util.s3
 import ARIAtools.util.dem
+import ARIAtools.util.misc
 import ARIAtools.util.mask
 import ARIAtools.util.runlog
+import ARIAtools.util.s3
 import ARIAtools.util.vrt
 import osgeo.gdal
-from ARIAtools.constants import ARIA_LAYERS
+from ARIAtools.constants import (
+    ARIA_EXTERNAL_CORRECTIONS,
+    ARIA_LAYERS,
+    ARIA_TROPO_MODELS,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 
 def create_runlog(args: Any, *, routine_name: str):
@@ -352,7 +362,6 @@ def run_timeseries_workflow(
     args: Any,
     *,
     logger: Any,
-    generate_stack_func: Any,
     stack_defaults: list[str],
     stack_outputs: dict[str, str],
 ) -> None:
@@ -501,7 +510,7 @@ def run_timeseries_workflow(
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
     ARIAtools.util.s3.fixup_vrt_s3_paths(args.workdir)
-    ref_dlist = generate_stack_func(
+    ref_dlist = generate_stack(
         context.product_info,
         "unwrappedPhase",
         "unwrapStack",
@@ -509,47 +518,315 @@ def run_timeseries_workflow(
         is_nisar_file=context.is_nisar_file,
     )
 
-    layers += stack_defaults
-    layers.remove("unwrappedPhase")
-    layers = sorted(set(layers))
-    available_layers: list[str] = []
-    for layer in layers:
-        if os.path.exists(os.path.join(args.workdir, layer)):
-            available_layers.append(layer)
-    layers = available_layers
-    if args.tropo_total is False and "troposphereTotal" in layers:
-        layers.remove("troposphereTotal")
-
-    stack_kwargs = {
-        "workdir": args.workdir,
-        "ref_dlist": ref_dlist,
-        "is_nisar_file": context.is_nisar_file,
-    }
-    for layer in layers:
-        if layer not in stack_outputs:
-            logger.warning(
-                "Selected layer %s not supported in tsSetupAvailable layers are: %s",
-                layer,
-                list(stack_outputs.keys()),
-            )
-            continue
-
-        if "tropo" in layer and not context.is_nisar_file:
-            model_dirs = glob.glob(args.workdir + f"/{layer}/*", recursive=True)
-            model_dirs = [os.path.basename(i) for i in model_dirs]
-            for sublyr in model_dirs:
-                generate_stack_func(
-                    context.product_info,
-                    sublyr,
-                    stack_outputs[sublyr],
-                    ref_tropokey=layer,
-                    **stack_kwargs,
-                )
-            continue
-
-        generate_stack_func(
+    stack_layers = resolve_stack_layers_for_generation(
+        layers,
+        workdir=args.workdir,
+        stack_defaults=stack_defaults,
+        tropo_total=args.tropo_total,
+    )
+    for stack_layer, output_name, ref_tropokey in iter_stack_generation_requests(
+        stack_layers,
+        workdir=args.workdir,
+        is_nisar_file=context.is_nisar_file,
+        stack_outputs=stack_outputs,
+    ):
+        generate_stack(
             context.product_info,
-            layer,
-            stack_outputs[layer],
-            **stack_kwargs,
+            stack_layer,
+            output_name,
+            workdir=args.workdir,
+            ref_dlist=ref_dlist,
+            ref_tropokey=ref_tropokey,
+            is_nisar_file=context.is_nisar_file,
         )
+
+
+def extract_bperp_dict_ts(domain_name, aria_prod):
+    """Extract mean perpendicular baseline values from products."""
+
+    os.environ["GDAL_PAM_ENABLED"] = "NO"
+    meta = {}
+    for item in aria_prod:
+        pair_name = item[-21:-4]
+        stat = 0
+        if domain_name == "unwrappedPhase":
+            b_perp = item.split("/")
+            b_perp[-2] = "bPerpendicular"
+            b_perp = "/".join(b_perp)
+            if os.path.exists(b_perp):
+                data_set = None
+                try:
+                    data_set = osgeo.gdal.Open(b_perp, osgeo.gdal.GA_ReadOnly)
+                    if data_set is not None:
+                        band = data_set.GetRasterBand(1)
+                        try:
+                            stat = band.GetStatistics(True, True)[2]
+                        except Exception:
+                            stat = band.GetStatistics(False, True)[2]
+                        band = None
+                finally:
+                    data_set = None
+
+        meta[pair_name] = stat
+
+    return meta
+
+
+def extract_utc_time(aria_dates, aztime_list):
+    """Extract UTC time metadata for stack records."""
+
+    utc_dict = {}
+    utc_time = None
+    for index, pair_name in enumerate(aria_dates):
+        if ([aztime_list[0]] * len(aztime_list) != aztime_list) or utc_time is None:
+            mid_time = []
+            for time_str in aztime_list[index]:
+                mid_time.append(
+                    datetime.datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%f")
+                )
+            min_mid_time = min(mid_time)
+            max_mid_time = max(mid_time)
+            time_delta = (max_mid_time - min_mid_time) / 2
+            utc_time = (min_mid_time + time_delta).time()
+
+        utc_dict[pair_name] = utc_time.strftime("%H:%M:%S.%f")
+    return utc_dict
+
+
+def generate_stack(
+    aria_prod,
+    stack_layer,
+    output_file_name,
+    workdir="./",
+    ref_tropokey=None,
+    ref_dlist=None,
+    is_nisar_file=False,
+):
+    """Generate a time-series VRT stack for the requested layer."""
+
+    os.environ["GDAL_PAM_ENABLED"] = "YES"
+    stack_dir = os.path.join(workdir, "stack")
+    if not os.path.exists(stack_dir):
+        os.makedirs(stack_dir)
+
+    domain_name = copy.deepcopy(stack_layer)
+    data_type = "Int16" if domain_name == "connectedComponents" else "Float32"
+
+    if domain_name in ARIA_TROPO_MODELS:
+        stack_layer = f"{ref_tropokey}/{stack_layer}"
+        stack_dir = os.path.join(stack_dir, ref_tropokey)
+        if not os.path.exists(stack_dir):
+            os.makedirs(stack_dir)
+
+    if (
+        domain_name in ARIA_EXTERNAL_CORRECTIONS
+        or domain_name in ARIA_TROPO_MODELS
+    ) and not is_nisar_file:
+        stack_layer = f"{stack_layer}/dates"
+
+    aria_dates = sorted([prod["pair_name"][0] for prod in aria_prod.products[0]])
+    if not is_nisar_file and (
+        domain_name in ARIA_EXTERNAL_CORRECTIONS or domain_name in ARIA_TROPO_MODELS
+    ):
+        aria_indiv_dates = []
+        rejected_dates = []
+        for aria_date in aria_dates:
+            dates = aria_date.split("_")
+            dt1_fname = os.path.join(workdir, stack_layer, dates[0] + ".vrt")
+            if os.path.exists(dt1_fname):
+                aria_indiv_dates += [dates[0]]
+            else:
+                rejected_dates += [dates[0]]
+
+            dt2_fname = os.path.join(workdir, stack_layer, dates[1] + ".vrt")
+            if os.path.exists(dt2_fname):
+                aria_indiv_dates += [dates[1]]
+            else:
+                rejected_dates += [dates[1]]
+
+        aria_dates = sorted(list(set(aria_indiv_dates)))
+        rejected_dates = sorted(list(set(rejected_dates)))
+        if rejected_dates:
+            LOGGER.warning(
+                "The following %d date(s) lack %s layers: %s",
+                len(rejected_dates),
+                domain_name,
+                ", ".join(rejected_dates),
+            )
+
+    dlist = sorted(
+        [os.path.join(workdir, stack_layer, aria_date + ".vrt") for aria_date in aria_dates]
+    )
+    prog_bar = ARIAtools.util.misc.ProgressBar(
+        maxValue=len(dlist),
+        prefix=f"Exporting {output_file_name}: ",
+    )
+
+    b_perp = []
+    new_dlist = [os.path.basename(item).split(".vrt")[0] for item in dlist]
+    if is_nisar_file or (
+        domain_name not in ARIA_EXTERNAL_CORRECTIONS
+        and domain_name not in ARIA_TROPO_MODELS
+    ):
+        aztime_list = [
+            product["azimuthZeroDopplerMidTime"] for product in aria_prod.products[0]
+        ]
+        b_perp_json_file = os.path.join(workdir, "bPerpendicular", "bperp.json")
+        if os.path.isfile(b_perp_json_file):
+            with open(b_perp_json_file) as ifp:
+                b_perp = json.loads(ifp.read())
+        else:
+            b_perp = extract_bperp_dict_ts(domain_name, dlist)
+
+        if ref_dlist and new_dlist != ref_dlist:
+            subset_ind = []
+            for index, stack_name in enumerate(new_dlist):
+                if stack_name in ref_dlist:
+                    subset_ind.append(index)
+            new_dlist = [new_dlist[index] for index in subset_ind]
+            dlist = [dlist[index] for index in subset_ind]
+    else:
+        aztime_list = len(aria_dates) * [
+            aria_prod.products[0][0]["azimuthZeroDopplerMidTime"]
+        ]
+
+    utc_time = extract_utc_time(aria_dates, aztime_list)
+    width, height, geo_trans, projection, no_data = ARIAtools.util.vrt.get_basic_attrs(
+        dlist[0]
+    )
+    ymin, ymax, xmin, xmax = [0, height, 0, width]
+    xsize = xmax - xmin
+    ysize = ymax - ymin
+
+    wvl = aria_prod.products[0][0]["wavelength"][0]
+    start_range = aria_prod.products[0][0]["slantRangeStart"][0]
+    end_range = aria_prod.products[0][0]["slantRangeEnd"][0]
+    range_spacing = aria_prod.products[0][0]["slantRangeSpacing"][0]
+    if is_nisar_file:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), "_")[6]
+        platform = "NISAR"
+    else:
+        orbit_direction = str.split(os.path.basename(aria_prod.files[0]), "-")[2]
+        platform = "Sen"
+
+    with open(os.path.join(stack_dir, output_file_name + ".vrt"), "w") as fid:
+        fid.write(
+            (
+                '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'
+                "        <SRS>{proj}</SRS>\n"
+                "        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n\n"
+            ).format(
+                xsize=xsize,
+                ysize=ysize,
+                proj=projection,
+                GT0=geo_trans[0],
+                GT1=geo_trans[1],
+                GT2=geo_trans[2],
+                GT3=geo_trans[3],
+                GT4=geo_trans[4],
+                GT5=geo_trans[5],
+            )
+        )
+
+        for index, data in enumerate(dlist, start=1):
+            dates = data.split("/")[-1][:-4]
+            prog_bar.update(index, suffix=dates)
+            try:
+                acq = utc_time[dates]
+            except BaseException:
+                continue
+
+            if orbit_direction == "D":
+                orb_dir = "DESCENDING"
+            elif orbit_direction == "A":
+                orb_dir = "ASCENDING"
+            else:
+                orb_dir = "UNKNOWN"
+
+            path = os.path.relpath(os.path.abspath(data), start=stack_dir)
+            outstr = f'''  <VRTRasterBand dataType="{data_type}" band="{index}">
+        <NoDataValue>{no_data}</NoDataValue>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="1">{path}</SourceFilename>
+            <SourceBand>1</SourceBand>
+            <SourceProperties RasterXSize="{width}" RasterYSize="{height}"
+                DataType="{data_type}"/>
+            <SrcRect xOff="{xmin}" yOff="{ymin}" xSize="{xsize}"
+                ySize="{ysize}"/>
+            <DstRect xOff="0" yOff="0" xSize="{xsize}" ySize="{ysize}"/>
+        </SimpleSource>
+        <Metadata domain='{domain_name}'>
+            <MDI key="Dates">{dates}</MDI>
+            <MDI key="Wavelength (m)">{wvl}</MDI>
+            <MDI key="UTCTime (HH:MM:SS.ss)">{acq}</MDI>
+            <MDI key="startRange">{start_range}</MDI>
+            <MDI key="endRange">{end_range}</MDI>
+            <MDI key="slantRangeSpacing">{range_spacing}</MDI>
+            <MDI key="orbitDirection">{orb_dir}</MDI>
+            <MDI key="PLATFORM">{platform}</MDI>'''
+            fid.write(outstr)
+            if b_perp:
+                fid.write(
+                    f'''
+            <MDI key="perpendicularBaseline">{b_perp[dates]}</MDI>'''
+                )
+            fid.write(
+                '''
+        </Metadata>
+    </VRTRasterBand>\n'''
+            )
+        fid.write("</VRTDataset>\n")
+        prog_bar.close()
+
+    return new_dlist
+
+
+def resolve_stack_layers_for_generation(
+    layers: list[str],
+    *,
+    workdir: str,
+    stack_defaults: list[str],
+    tropo_total: bool,
+) -> list[str]:
+    """Resolve the set of stack layers that should be generated."""
+
+    resolved_layers = sorted(set(layers + stack_defaults))
+    if "unwrappedPhase" in resolved_layers:
+        resolved_layers.remove("unwrappedPhase")
+
+    available_layers = []
+    for layer in resolved_layers:
+        if os.path.exists(os.path.join(workdir, layer)):
+            available_layers.append(layer)
+
+    if not tropo_total and "troposphereTotal" in available_layers:
+        available_layers.remove("troposphereTotal")
+
+    return available_layers
+
+
+def iter_stack_generation_requests(
+    layers: list[str],
+    *,
+    workdir: str,
+    is_nisar_file: bool,
+    stack_outputs: dict[str, str],
+) -> list[tuple[str, str, str | None]]:
+    """Expand stack layers into concrete stack-generation requests."""
+
+    requests = []
+    for layer in layers:
+        if "tropo" in layer and not is_nisar_file:
+            model_dirs = glob.glob(workdir + f"/{layer}/*", recursive=True)
+            model_dirs = [os.path.basename(path) for path in model_dirs]
+            for sublayer in model_dirs:
+                if sublayer in stack_outputs:
+                    requests.append((sublayer, stack_outputs[sublayer], layer))
+            continue
+
+        if layer not in stack_outputs:
+            continue
+
+        requests.append((layer, stack_outputs[layer], None))
+
+    return requests
