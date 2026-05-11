@@ -16,9 +16,9 @@ import ARIAtools.extractProduct
 import ARIAtools.util.vrt
 import ARIAtools.util.dem
 import ARIAtools.util.log
-import ARIAtools.util.mask
-import ARIAtools.product
-import ARIAtools.util.runlog
+from aria_tools.core.workflows import (
+    run_extract_workflow,
+)
 
 from ARIAtools.constants import ARIA_LAYERS
 
@@ -191,154 +191,7 @@ def main():
                 LOGGER.error(error_msg)
                 raise Exception(error_msg)
 
-    # Establish log file and update with basic parameters
-    runlog = ARIAtools.util.runlog.RunLog(args.workdir)
-    runlog.update('aria_version', ARIAtools.__version__)
-    runlog.update('aria_routine', 'ariaExtract.py')
-    runlog.update('args', args)
-
-    # if user bbox was specified, file(s) not meeting imposed spatial criteria
-    # are rejected.
-    # Outputs = arrays ['standardproduct_info.products'] containing grouped
-    # “radarmetadata info” and “data layer keys+paths” dictionaries for each
-    # standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file'] (if
-    # bbox specified)
-    standardproduct_info = ARIAtools.product.Product(
-        args.imgfile, bbox=args.bbox, projection=args.projection,
-        workdir=args.workdir, num_threads=args.num_threads,
-        url_version=args.version, nc_version=args.nc_version,
-        verbose=args.verbose, tropo_models=args.tropo_models,
-        layers=args.layers, croptounion=args.croptounion, runlog=runlog,
-        demfile=args.demfile, mask=args.mask)
-
-    # Perform initial layer, product, and correction sanity checks
-    args.layers, args.tropo_total, \
-        model_names = ARIAtools.util.vrt.layerCheck(
-            standardproduct_info.products[1], args.layers, args.nc_version,
-            args.tropo_models, extract_or_ts='extract')
-
-    # pass number of threads for gdal multiprocessing computation
-    if args.num_threads.lower() == 'all':
-        args.num_threads = 'ALL_CPUS'
-
-    LOGGER.info(
-        'Thread count specified for gdal multiprocessing = %s' % (
-            args.num_threads))
-
-    # extract/merge productBoundingBox layers for each pair and update dict,
-    # report common track bbox (default is to take common intersection,
-    # but user may specify union), and expected shape for DEM.
-    LOGGER.info('Extracting and merging product bounding boxes')
-    (standardproduct_info.products[0], standardproduct_info.products[1],
-     standardproduct_info.bbox_file, prods_TOTbbox,
-     prods_TOTbbox_metadatalyr, arrres,
-     proj, update_mode,
-     is_nisar_file) = ARIAtools.extractProduct.merged_productbbox(
-        standardproduct_info.products[0], standardproduct_info.products[1],
-        os.path.join(args.workdir, 'productBoundingBox'),
-        standardproduct_info.bbox_file, args.croptounion,
-        num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
-        verbose=args.verbose, runlog=runlog)
-
-    # Load or download mask (if specified).
-    if standardproduct_info.mask is not None:
-        # Extract amplitude layers
-        amplitude_products = []
-        for d in standardproduct_info.products[1]:
-            # for NISAR GUNW
-            if is_nisar_file:
-                if 'coherence' in d:
-                    for item in list(set(d['coherence'])):
-                        amplitude_products.append(item)
-            # for S1 GUNW
-            else:
-                if 'amplitude' in d:
-                    for item in list(set(d['amplitude'])):
-                        amplitude_products.append(item)
-
-        # mask parms
-        mask_dict = {
-            'product_dict': amplitude_products,
-            'maskfilename': standardproduct_info.mask,
-            'bbox_file': standardproduct_info.bbox_file,
-            'prods_TOTbbox': prods_TOTbbox,
-            'proj': proj,
-            'amp_thresh': args.amp_thresh,
-            'arrres': arrres,
-            'workdir': args.workdir,
-            'outputFormat': args.outputFormat,
-            'num_threads': args.num_threads,
-            'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling,
-            'runlog': runlog
-        }
-        LOGGER.debug('Download/cropping mask')
-        maskfilename = ARIAtools.util.mask.prep_mask(**mask_dict)
-    else:
-        maskfilename = None
-
-    # Download/Load DEM & Lat/Lon arrays, providing bbox,
-    # expected DEM shape, and output dir as input.
-    if standardproduct_info.demfile is not None:
-        dem_dict = {
-            'demfilename': standardproduct_info.demfile,
-            'bbox_file': standardproduct_info.bbox_file,
-            'prods_TOTbbox': prods_TOTbbox,
-            'prods_TOTbbox_metadatalyr': prods_TOTbbox_metadatalyr,
-            'proj': proj,
-            'arrres': arrres,
-            'workdir': args.workdir,
-            'outputFormat': args.outputFormat,
-            'num_threads': args.num_threads,
-            'multilooking': args.multilooking,
-            'rankedResampling': args.rankedResampling,
-            'runlog': runlog
-        }
-        # Pass DEM-filename, loaded DEM array, and lat/lon arrays
-        LOGGER.debug('Download/cropping DEM')
-        demfile, demfile_expanded, lat, lon = \
-            ARIAtools.util.dem.prep_dem(**dem_dict)
-    else:
-        demfile, demfile_expanded, lat, lon = None, None, None, None
-
-    # Capture existing output layers not captured in cmdline
-    if update_mode == 'crop_only':
-        args.layers = ARIAtools.extractProduct.track_existing_outputs(
-            args.workdir, args.layers, ARIA_LAYERS, [])
-
-    # Extract
-    # aria_extract default parms
-    export_dict = {
-        'full_product_dict': standardproduct_info.products[1],
-        'bbox_file': standardproduct_info.bbox_file,
-        'prods_TOTbbox': prods_TOTbbox,
-        'proj': proj,
-        'layers': args.layers,
-        'iono_filter':  args.iono_filter,
-        'is_nisar_file': is_nisar_file,
-        'arrres': arrres,
-        'rankedResampling': args.rankedResampling,
-        'demfile': demfile,
-        'demfile_expanded': demfile_expanded,
-        'lat': lat,
-        'lon': lon,
-        'maskfile': maskfilename,
-        'outDir': args.workdir,
-        'outputFormat': args.outputFormat,
-        'verbose': args.verbose,
-        'num_threads': args.num_threads,
-        'multilooking': args.multilooking,
-        'tropo_total': args.tropo_total,
-        'model_names': model_names,
-        'runlog': runlog
-    }
-
-    # Extract user expected layers
-    LOGGER.info('Extracting products')
-    ARIAtools.extractProduct.export_products(
-        multiproc_method='processes', **export_dict
-    )
+    run_extract_workflow(args, logger=LOGGER, valid_layers=ARIA_LAYERS)
 
 
 if __name__ == '__main__':

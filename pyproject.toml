@@ -69,6 +69,7 @@ packages = [
   "aria_tools.commands",
   "aria_tools.commands.legacy",
   "aria_tools.config",
+  "aria_tools.core",
   "aria_tools.execution",
   "ARIAtools",
   "ARIAtools.util",
@@ -90,6 +91,7 @@ aria_tools = "src/aria_tools"
 "aria_tools.commands" = "src/aria_tools/commands"
 "aria_tools.commands.legacy" = "src/aria_tools/commands/legacy"
 "aria_tools.config" = "src/aria_tools/config"
+"aria_tools.core" = "src/aria_tools/core"
 "aria_tools.execution" = "src/aria_tools/execution"
 ARIAtools = "tools/ARIAtools"
 "ARIAtools.util" = "tools/ARIAtools/util"
