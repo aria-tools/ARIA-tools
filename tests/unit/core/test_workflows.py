@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from aria_tools.core import workflows
@@ -250,3 +251,48 @@ def test_prepare_dem_builds_expected_kwargs(monkeypatch) -> None:
         "rankedResampling": False,
         "runlog": "runlog",
     }
+
+
+def test_resolve_stack_layers_for_generation_filters_expected_layers(tmp_path: Path) -> None:
+    (tmp_path / "coherence").mkdir()
+    (tmp_path / "troposphereTotal").mkdir()
+    (tmp_path / "connectedComponents").mkdir()
+
+    result = workflows.resolve_stack_layers_for_generation(
+        ["coherence", "unwrappedPhase", "missing"],
+        workdir=str(tmp_path),
+        stack_defaults=["connectedComponents", "troposphereTotal"],
+        tropo_total=False,
+    )
+
+    assert result == ["coherence", "connectedComponents"]
+
+
+def test_iter_stack_generation_requests_expands_tropo_models(
+    monkeypatch: object,
+) -> None:
+    monkeypatch.setattr(
+        workflows.glob,
+        "glob",
+        lambda pattern, recursive=False: [
+            "/tmp/job/troposphereWet/ERA5",
+            "/tmp/job/troposphereWet/MERRA2",
+        ],
+    )
+
+    result = workflows.iter_stack_generation_requests(
+        ["coherence", "troposphereWet", "unsupported"],
+        workdir="/tmp/job",
+        is_nisar_file=False,
+        stack_outputs={
+            "coherence": "cohStack",
+            "ERA5": "era5Stack",
+            "MERRA2": "merra2Stack",
+        },
+    )
+
+    assert result == [
+        ("coherence", "cohStack", None),
+        ("ERA5", "era5Stack", "troposphereWet"),
+        ("MERRA2", "merra2Stack", "troposphereWet"),
+    ]
