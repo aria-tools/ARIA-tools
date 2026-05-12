@@ -1525,26 +1525,28 @@ class Product:
                 prev_products = log_data['products']
 
             # dedup DEM file
-            if 'demfile' in log_data.keys() \
-                and self.demfile != log_data['demfile']:
+            prev_demfile = log_data.get('demfile')
+            if prev_demfile is not None and self.demfile != prev_demfile:
                 if self.demfile is None:
-                    self.demfile = log_data['demfile']
-                if self.demfile.lower() == 'download':
+                    self.demfile = prev_demfile
+                elif isinstance(self.demfile, str) and \
+                        self.demfile.lower() == 'download':
                     LOGGER.warning(
                         'specified DEM download, when DEM %s already exists',
-                    log_data['demfile'])
-                    self.demfile = log_data['demfile']
+                        prev_demfile)
+                    self.demfile = prev_demfile
 
             # dedup mask file
-            if 'maskfilename' in log_data.keys() \
-                and self.mask != log_data['maskfilename']:
+            prev_maskfile = log_data.get('maskfilename')
+            if prev_maskfile is not None and self.mask != prev_maskfile:
                 if self.mask is None:
-                    self.mask = log_data['maskfilename']
-                if self.mask.lower() == 'download':
+                    self.mask = prev_maskfile
+                elif isinstance(self.mask, str) and \
+                        self.mask.lower() == 'download':
                     LOGGER.warning(
                         'specified msk download, when msk %s already exists',
-                    log_data['maskfilename'])
-                    self.mask = log_data['maskfilename']
+                        prev_maskfile)
+                    self.mask = prev_maskfile
 
             # check for crop to union inconsistency
             if ('croptounion' in log_data.keys()) \
