@@ -7,7 +7,7 @@ name = "ARIAtools"
 version = "2.0"
 description = "Command-line tools for ARIA standard product workflows"
 readme = "README.md"
-requires-python = ">=3.8,<3.14"
+requires-python = ">=3.8"
 license = { text = "See LICENSE" }
 authors = [
   { name = "ARIA-tools developers" },
@@ -50,6 +50,7 @@ plot = [
 dev = [
   "pre-commit",
   "pytest",
+  "pytest-cov",
   "ruff",
 ]
 all = [
@@ -98,6 +99,31 @@ ARIAtools = "tools/ARIAtools"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "offline: tests that should run without network access or credentials.",
+  "slow: tests intentionally excluded from the default quick test lane.",
+  "network_required: tests that reach external services.",
+  "credentialed: tests that require configured credentials.",
+]
+
+[tool.coverage.run]
+source = ["src/aria_tools"]
+omit = [
+  "tests/*",
+  "*/commands/legacy/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "if typing.TYPE_CHECKING:",
+]
 
 [tool.ruff]
 line-length = 88

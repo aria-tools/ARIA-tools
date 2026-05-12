@@ -33,6 +33,21 @@ python -m pip install -e ".[dev]"
 pre-commit install
 ```
 
+Run the focused quality checks intentionally:
+
+```.tcsh
+python -m ruff check src/aria_tools tests/unit tests/integration
+python -m ruff format --check src/aria_tools tests/unit tests/integration
+python -m pytest tests/unit -q
+python -m pytest tests/integration -q
+python -m pytest tests/regression -q --run-slow --run-network --run-credentialed
+pre-commit run --all-files
+```
+
+The default quick lanes are install-first and offline. Tests marked
+`slow`, `network_required`, or `credentialed` stay out of the default run
+unless you opt in with the matching pytest flags.
+
 ### Setting up the documentation environment ###
 
 Fork aria-tools/aria-tools-docs from GitHub UI, and then

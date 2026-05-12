@@ -22,16 +22,21 @@ dependencies:
   - numpy
   - pandas
   - pip
+  - pre-commit
   - pyproj
   - pytest
+  - pytest-cov
+  - ruff
   - python>=3.8,<3.14
   - python-dateutil
   - rasterio
   - rioxarray
   - requests
   - scipy>1.10.0
+  - setuptools>=68
   - shapely
   - tile_mate>=0.0.12
+  - wheel
   - xarray
   - hyp3_sdk>=7.7.6  # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
   - asf_search >=12.0.3

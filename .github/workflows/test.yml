@@ -1,4 +1,4 @@
-name: Test
+name: CI
 
 on:
   push:
@@ -9,20 +9,38 @@ on:
       - dev
 
 jobs:
-  test:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mamba-org/provision-with-micromamba@v15
+        with:
+          environment-name: ARIA-tools
+          environment-file: environment.yml
+          extra-specs: |
+            python=3.10
+
+      - name: install package in conda environment
+        shell: bash -l {0}
+        run: |
+          python -m pip install -e . --no-build-isolation
+
+      - name: run ruff checks
+        shell: bash -l {0}
+        run: |
+          python -m ruff check src/aria_tools tests/unit tests/integration
+          python -m ruff format --check src/aria_tools tests/unit tests/integration
+
+  tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9","3.10"]
+        python-version: ["3.9", "3.10"]
 
     steps:
-      - uses: actions/checkout@v2
-
-      - uses: extractions/netrc@v1
-        with:
-          machine: urs.earthdata.nasa.gov
-          username: ${{ secrets.EARTHDATA_USERNAME }}
-          password: ${{ secrets.EARTHDATA_PASSWORD }}
+      - uses: actions/checkout@v4
 
       - uses: mamba-org/provision-with-micromamba@v15
         with:
@@ -31,12 +49,26 @@ jobs:
           extra-specs: |
             python=${{ matrix.python-version }}
 
-      - name: test in conda environment
+      - name: install package in conda environment
         shell: bash -l {0}
-        env:
-          TOPO_API_KEY: ${{ secrets.TOPOAPI }}
         run: |
-          echo $TOPO_API_KEY > ~/.topoapi
-          python -m pip install .
-          python -m pytest tests/unit tests/integration -q
-          source tests/test.sh
+          python -m pip install -e ".[dev]" --no-build-isolation
+
+      - name: run unit tests with coverage
+        shell: bash -l {0}
+        run: |
+          python -m pytest tests/unit -q --cov=src/aria_tools --cov-report=term-missing --cov-report=xml
+
+      - name: run integration tests
+        shell: bash -l {0}
+        run: |
+          python -m pytest tests/integration -q --cov=src/aria_tools --cov-append --cov-report=term-missing --cov-report=xml
+
+      - name: upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.10'
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
