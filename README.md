@@ -279,7 +279,7 @@ aria-tools order --track 004 --start 20200101 --end 20200201
 ```
 
 > [!NOTE]
-> **Legacy Script Compatibility**: For users migrating from ARIA-tools v1, legacy script entry points (`ariaDownload.py`, `ariaExtract.py`, etc.) remain available during the transition period. See [docs/modernization/MIGRATION.md](docs/modernization/MIGRATION.md) for the command mapping guide.
+> **Legacy Script Compatibility**: For users migrating from ARIA-tools v1, legacy script entry points (`ariaDownload.py`, `ariaExtract.py`, etc.) remain available during the transition period. See [docs/MIGRATION.md](docs/MIGRATION.md) for the command mapping guide.
 
 > [!NOTE]  
 > We support extraction of correction layers (e.g. Troposphere, Ionosphere, Solid Earth Tides) as well as geometry information (e.g. incidence angle, look angle, baselines, etc) embeded within the GUNW products 
@@ -290,9 +290,8 @@ See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-do
 
 For repo-local modernization notes, see:
 
-- [docs/modernization/MIGRATION.md](docs/modernization/MIGRATION.md)
-- [docs/modernization/ARCHITECTURE.md](docs/modernization/ARCHITECTURE.md)
-- [docs/modernization/RELEASE_CHECKLIST.md](docs/modernization/RELEASE_CHECKLIST.md)
+- [docs/MIGRATION.md](docs/MIGRATION.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ------
 ## Citation
