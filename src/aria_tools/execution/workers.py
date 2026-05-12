@@ -29,9 +29,7 @@ def run_process_pool(
     """Run work items in a process pool and collect results in memory."""
 
     results: list[R] = []
-    with concurrent.futures.ProcessPoolExecutor(
-        max_workers=max_workers
-    ) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(worker, item) for item in work_items]
         for completed, future in enumerate(
             concurrent.futures.as_completed(futures), start=1

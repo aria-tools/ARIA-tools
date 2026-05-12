@@ -23,6 +23,7 @@ def load_order_module(
     original_import = builtins.__import__
 
     if block_matplotlib:
+
         def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
             if name == "matplotlib" or name.startswith("matplotlib."):
                 raise ImportError("No module named 'matplotlib'")

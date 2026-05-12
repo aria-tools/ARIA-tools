@@ -253,7 +253,9 @@ def test_prepare_dem_builds_expected_kwargs(monkeypatch) -> None:
     }
 
 
-def test_resolve_stack_layers_for_generation_filters_expected_layers(tmp_path: Path) -> None:
+def test_resolve_stack_layers_for_generation_filters_expected_layers(
+    tmp_path: Path,
+) -> None:
     (tmp_path / "coherence").mkdir()
     (tmp_path / "troposphereTotal").mkdir()
     (tmp_path / "connectedComponents").mkdir()

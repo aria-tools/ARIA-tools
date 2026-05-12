@@ -32,7 +32,7 @@ class FakeProcessPoolExecutor:
         self.max_workers = max_workers
         self.submitted: list[FakeFuture] = []
 
-    def __enter__(self) -> "FakeProcessPoolExecutor":
+    def __enter__(self) -> FakeProcessPoolExecutor:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

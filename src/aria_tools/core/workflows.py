@@ -17,8 +17,8 @@ import ARIAtools
 import ARIAtools.extractProduct
 import ARIAtools.product
 import ARIAtools.util.dem
-import ARIAtools.util.misc
 import ARIAtools.util.mask
+import ARIAtools.util.misc
 import ARIAtools.util.runlog
 import ARIAtools.util.s3
 import ARIAtools.util.vrt
@@ -32,7 +32,7 @@ from ARIAtools.constants import (
 LOGGER = logging.getLogger(__name__)
 
 
-def create_runlog(args: Any, *, routine_name: str):
+def create_runlog(args: Any, *, routine_name: str) -> Any:
     """Create and populate the standard ARIA run log for a command."""
 
     runlog = ARIAtools.util.runlog.RunLog(args.workdir)
@@ -42,7 +42,7 @@ def create_runlog(args: Any, *, routine_name: str):
     return runlog
 
 
-def build_standard_product_info(args: Any, *, runlog: Any):
+def build_standard_product_info(args: Any, *, runlog: Any) -> Any:
     """Build the shared ARIA product model from command arguments."""
 
     return ARIAtools.product.Product(
@@ -68,7 +68,7 @@ def merge_product_bounding_boxes(
     *,
     product_info: Any,
     runlog: Any,
-):
+) -> tuple[Any, ...]:
     """Merge product bounding boxes for extract/timeseries setup."""
 
     return ARIAtools.extractProduct.merged_productbbox(
@@ -115,7 +115,7 @@ def prepare_mask(
     proj: Any,
     arrres: Any,
     runlog: Any,
-):
+) -> Any | None:
     """Prepare the optional workflow mask from shared command arguments."""
 
     if product_info.mask is None:
@@ -151,7 +151,7 @@ def prepare_dem(
     proj: Any,
     arrres: Any,
     runlog: Any,
-):
+) -> tuple[Any, Any, Any, Any]:
     """Prepare the shared workflow DEM inputs for extract/timeseries."""
 
     return ARIAtools.util.dem.prep_dem(
@@ -170,7 +170,7 @@ def prepare_dem(
     )
 
 
-def normalize_runtime_num_threads(num_threads: Any) -> Any:
+def normalize_runtime_num_threads(num_threads: int | str) -> int | str:
     """Normalize CLI-style worker settings for runtime helpers."""
 
     if isinstance(num_threads, str) and num_threads.lower() == "all":
@@ -376,7 +376,9 @@ def run_timeseries_workflow(
             args.layers = ",".join(layers)
 
     if args.layers.lower() == "standard":
-        logger.debug("Using standard layers: %s", ARIAtools.constants.ARIA_STANDARD_LAYERS)
+        logger.debug(
+            "Using standard layers: %s", ARIAtools.constants.ARIA_STANDARD_LAYERS
+        )
         args.layers = ",".join(ARIAtools.constants.ARIA_STANDARD_LAYERS)
 
     if "tropo" not in args.layers:
@@ -490,7 +492,8 @@ def run_timeseries_workflow(
     if layers or args.tropo_total is True:
         if layers:
             logger.info(
-                "Extracting optional, user-specified layers %s for each interferogram pair",
+                "Extracting optional, user-specified layers %s for each "
+                "interferogram pair",
                 layers,
             )
         if args.tropo_total is True:
@@ -619,8 +622,7 @@ def generate_stack(
             os.makedirs(stack_dir)
 
     if (
-        domain_name in ARIA_EXTERNAL_CORRECTIONS
-        or domain_name in ARIA_TROPO_MODELS
+        domain_name in ARIA_EXTERNAL_CORRECTIONS or domain_name in ARIA_TROPO_MODELS
     ) and not is_nisar_file:
         stack_layer = f"{stack_layer}/dates"
 
@@ -655,7 +657,10 @@ def generate_stack(
             )
 
     dlist = sorted(
-        [os.path.join(workdir, stack_layer, aria_date + ".vrt") for aria_date in aria_dates]
+        [
+            os.path.join(workdir, stack_layer, aria_date + ".vrt")
+            for aria_date in aria_dates
+        ]
     )
     prog_bar = ARIAtools.util.misc.ProgressBar(
         maxValue=len(dlist),
@@ -711,21 +716,12 @@ def generate_stack(
 
     with open(os.path.join(stack_dir, output_file_name + ".vrt"), "w") as fid:
         fid.write(
-            (
-                '<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'
-                "        <SRS>{proj}</SRS>\n"
-                "        <GeoTransform>{GT0},{GT1},{GT2},{GT3},{GT4},{GT5}</GeoTransform>\n\n"
-            ).format(
-                xsize=xsize,
-                ysize=ysize,
-                proj=projection,
-                GT0=geo_trans[0],
-                GT1=geo_trans[1],
-                GT2=geo_trans[2],
-                GT3=geo_trans[3],
-                GT4=geo_trans[4],
-                GT5=geo_trans[5],
-            )
+            f'<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n'
+            f"        <SRS>{projection}</SRS>\n"
+            f"        <GeoTransform>"
+            f"{geo_trans[0]},{geo_trans[1]},{geo_trans[2]},"
+            f"{geo_trans[3]},{geo_trans[4]},{geo_trans[5]}"
+            f"</GeoTransform>\n\n"
         )
 
         for index, data in enumerate(dlist, start=1):
@@ -767,13 +763,13 @@ def generate_stack(
             fid.write(outstr)
             if b_perp:
                 fid.write(
-                    f'''
-            <MDI key="perpendicularBaseline">{b_perp[dates]}</MDI>'''
+                    f"""
+            <MDI key="perpendicularBaseline">{b_perp[dates]}</MDI>"""
                 )
             fid.write(
-                '''
+                """
         </Metadata>
-    </VRTRasterBand>\n'''
+    </VRTRasterBand>\n"""
             )
         fid.write("</VRTDataset>\n")
         prog_bar.close()

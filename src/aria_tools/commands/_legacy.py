@@ -6,8 +6,8 @@ import importlib.util
 import runpy
 import sys
 import textwrap
-from types import ModuleType
 from collections.abc import Sequence
+from types import ModuleType
 
 from aria_tools.cli.common import legacy_script_path
 
@@ -187,8 +187,11 @@ def run_legacy_script(script_name: str, argv: Sequence[str] | None = None) -> No
     try:
         runpy.run_path(str(script_path), run_name="__main__")
     except ModuleNotFoundError as exc:
-        if _wants_help(argv) and script_name in LEGACY_HELP and (
-                _is_missing_optional_dependency(exc)):
+        if (
+            _wants_help(argv)
+            and script_name in LEGACY_HELP
+            and (_is_missing_optional_dependency(exc))
+        ):
             _print_static_help(script_name)
             return
         raise
