@@ -85,7 +85,7 @@ The local metadata cache sidecar, `aria_meta_cache.json`, is still part of that
 workflow. The first remote run is expected to be slower because metadata has to
 be discovered before it can be reused.
 
-Week 8 validation status:
+Validation status:
 
 - text-file URL inputs are still part of the supported interface
 - metadata-cache helper behavior is covered by unit tests
