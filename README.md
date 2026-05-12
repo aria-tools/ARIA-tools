@@ -1,6 +1,7 @@
 # ARIA-tools
-[![Language](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Language](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green.svg)](https://github.com/aria-tools/ARIA-tools/blob/master/LICENSE)
+[![Version](https://img.shields.io/badge/version-2.0-orange.svg)](https://github.com/aria-tools/ARIA-tools/releases)
 
 ARIA-tools is an open-source package in Python which contains tools to manipulate standard InSAR products from Sentinel-1 (ARIA GUNW-S1) and NISAR (NISAR_L2_GUNW). This software is open source under the terms of the [Apache 2.0 License](LICENSE). Its development was funded under the ROSES awards from the NASA Sea-level Change Team (NSLCT) program, the Earth Surface and Interior (ESI) program, and under the NISAR Science Team (NISAR-ST) program.
 
@@ -68,14 +69,13 @@ full contributor environment for repo work and CI.
 ```
 
 ### Python dependencies
-```
-* [SciPy](https://www.scipy.org/)
-* [netcdf4](http://unidata.github.io/netcdf4-python/netCDF4/index.html)
-* [requests](https://2.python-requests.org/en/master/)
-* [asf_search](https://github.com/asfadmin/Discovery-asf_search) >=12.0.1
-* [asf_search[asf-enumeration]](https://github.com/ASFHyP3/asf-enumeration) 
-* [hyp3_sdk](https://github.com/ASFHyP3/hyp3-sdk)
-```
+Core dependencies are automatically installed with the package. Optional command groups can be installed with extras:
+- `pip install ARIAtools[aws]` - AWS S3 direct access support
+- `pip install ARIAtools[order]` - On-demand product ordering via HyP3
+- `pip install ARIAtools[plot]` - Plotting and visualization
+- `pip install ARIAtools[dev]` - Development tools (testing, linting)
+
+See [pyproject.toml](pyproject.toml) for the complete dependency specification.
 
 ### Optional Python Jupyter dependencies
 ```
@@ -205,30 +205,94 @@ chmod 600 ~/.netrc
 ------
 ## Running ARIA-tools
 
-The ARIA-tools scripts are highly modulized in Python and therefore allows for building your own processing workflow. Below, we show how to call some of the functionality. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs). We welcome the community to contribute other examples on how to leverage the ARIA-tools (see [here](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
+ARIA-tools provides a unified command-line interface through the `aria-tools` command. The package is highly modular and allows for building custom processing workflows. Below, we show how to use the main commands. For detailed documentation, examples, and Jupyter notebooks see the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs). We welcome the community to contribute examples (see [CONTRIBUTING.md](https://github.com/aria-tools/ARIA-tools/blob/master/CONTRIBUTING.md) for instructions).
 
+### Quick Start
+
+The primary interface is `aria-tools <command> [options]`. Available commands:
+
+```bash
+# Get help
+aria-tools --help
+aria-tools extract --help
+
+# Download products (or generate URL list)
+aria-tools download --track 004 --output count
+
+# Extract layers from products
+aria-tools extract -f "products/*.nc" -w workdir -l unwrappedPhase,coherence
+
+# Prepare time-series stack
+aria-tools timeseries -f "products/*.nc" -w workdir
+
+# Generate quality plots
+aria-tools plot -f "products/*.nc" -w workdir
+```
 
 ### Commandline download of GUNW Products
-ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the command line using `aria-tools download`, which wraps the ASF DAAC API. There is also a virtual-access path using `aria-tools download -o url`, which creates a `.txt` file with HTTPS paths to archived products instead of downloading them. This URL file can be passed directly to `aria-tools extract`, `aria-tools timeseries`, and `aria-tools plot` for streaming access without local downloads (see [ARIA-tools with support for virtual data access](#aria-tools-with-support-for-virtual-data-access)).
+ARIA GUNW-S1/NISAR_L2_GUNW products can be downloaded through the command line using `aria-tools download`, which wraps the ASF DAAC API. 
+
+**Virtual Access Mode**: Use `aria-tools download -o url` to create a `.txt` file with HTTPS URLs to archived products instead of downloading them. This URL file can be passed directly to `aria-tools extract`, `aria-tools timeseries`, and `aria-tools plot` for streaming access without local downloads (see [ARIA-tools with support for virtual data access](#aria-tools-with-support-for-virtual-data-access)).
+
+Example:
+```bash
+# Download products
+aria-tools download --track 004 --start 20200101
+
+# Or generate URL list for virtual access
+aria-tools download --track 004 --start 20200101 --output url
+```
 
 ### Manipulating GUNW Products
 ARIA GUNW-S1/NISAR_L2_GUNW products can be manipulated (cropped, stitched, extracted) using `aria-tools extract`.
 
+Example:
+```bash
+# Extract specific layers with DEM
+aria-tools extract -f "products/*.nc" -w workdir \
+  -l unwrappedPhase,coherence,amplitude \
+  -d Download -b "33 35 -118 -116"
+```
+
 ### Baseline and quality control plots for GUNW Products
-ARIA GUNW-S1/ NISAR_L2_GUNW quality and baseline plots for spatial-temporal contiguous interferograms can be made using `aria-tools plot`.
+Quality and baseline plots for spatial-temporal contiguous interferograms can be generated using `aria-tools plot`.
+
+Example:
+```bash
+aria-tools plot -f "products/*.nc" -w workdir
+```
 
 ### Time-series set-up of GUNW Products
-ARIA GUNW-S1/NISAR_L2_GUNW time-series set-up with spatial-temporal contiguous unwrapped interferograms and coherence can be done using `aria-tools timeseries`.
+Time-series preparation with spatial-temporal contiguous unwrapped interferograms and coherence can be done using `aria-tools timeseries`.
+
+Example:
+```bash
+aria-tools timeseries -f "products/*.nc" -w workdir
+```
 
 ### Ordering ARIA S1 GUNW Products on demand
-The *ariaOrderASF.py* program supports on-demand ordering of **ARIA Sentinel-1 GUNW** products through the [ASF HyP3 on-demand processing system](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/). This tool is for GUNW-S1 products only (not NISAR) and allows users to build and order additional interferometric pairs that are not yet in the ASF archive, using each user's monthly HyP3 credit quota.  A `~/.netrc` file with NASA Earthdata credentials is required for authentication.
+On-demand ordering of **ARIA Sentinel-1 GUNW** products is supported through `aria-tools order`, which interfaces with the [ASF HyP3 on-demand processing system](https://hyp3-docs.asf.alaska.edu/guides/gunw_product_guide/). This is for GUNW-S1 products only (not NISAR) and allows users to build and order additional interferometric pairs not yet in the ASF archive, using your monthly HyP3 credit quota. A `~/.netrc` file with NASA Earthdata credentials is required for authentication.
+
+Example:
+```bash
+aria-tools order --track 004 --start 20200101 --end 20200201
+```
+
+> [!NOTE]
+> **Legacy Script Compatibility**: For users migrating from ARIA-tools v1, legacy script entry points (`ariaDownload.py`, `ariaExtract.py`, etc.) remain available during the transition period. See [docs/modernization/MIGRATION.md](docs/modernization/MIGRATION.md) for the command mapping guide.
 
 > [!NOTE]  
 > We support extraction of correction layers (e.g. Troposphere, Ionosphere, Solid Earth Tides) as well as geometry information (e.g. incidence angle, look angle, baselines, etc) embeded within the GUNW products 
 
 ------
 ## Documentation
-See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs) for all documentation and Jupyter Notebook Tutorials.
+See the [ARIA-tools-docs repository](https://github.com/aria-tools/ARIA-tools-docs) for tutorials and notebook material.
+
+For repo-local modernization notes, see:
+
+- [docs/modernization/MIGRATION.md](docs/modernization/MIGRATION.md)
+- [docs/modernization/ARCHITECTURE.md](docs/modernization/ARCHITECTURE.md)
+- [docs/modernization/RELEASE_CHECKLIST.md](docs/modernization/RELEASE_CHECKLIST.md)
 
 ------
 ## Citation
