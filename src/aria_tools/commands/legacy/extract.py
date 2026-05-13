@@ -280,7 +280,17 @@ def main():
                 LOGGER.error(error_msg)
                 raise AriaToolsError(error_msg)
 
-    run_extract_workflow(args, logger=LOGGER, valid_layers=ARIA_LAYERS)
+    try:
+        run_extract_workflow(args, logger=LOGGER, valid_layers=ARIA_LAYERS)
+        print("*****************************************************************")
+        LOGGER.info("*** Product extraction completed successfully ***")
+        print("*****************************************************************")
+    except Exception as e:
+        print("*****************************************************************")
+        LOGGER.error("*** Product extraction FAILED ***")
+        LOGGER.error(f"Error: {e}")
+        print("*****************************************************************")
+        raise
 
 
 if __name__ == "__main__":

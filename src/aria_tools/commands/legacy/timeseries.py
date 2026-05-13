@@ -250,12 +250,23 @@ def main():
     print("*****************************************************************")
     LOGGER.info("*** Time-series Preparation Function ***")
     print("*****************************************************************")
-    run_timeseries_workflow(
-        args,
-        logger=LOGGER,
-        stack_defaults=ARIA_STACK_DEFAULTS,
-        stack_outputs=ARIA_STACK_OUTFILES,
-    )
+
+    try:
+        run_timeseries_workflow(
+            args,
+            logger=LOGGER,
+            stack_defaults=ARIA_STACK_DEFAULTS,
+            stack_outputs=ARIA_STACK_OUTFILES,
+        )
+        print("*****************************************************************")
+        LOGGER.info("*** Time-series preparation completed successfully ***")
+        print("*****************************************************************")
+    except Exception as e:
+        print("*****************************************************************")
+        LOGGER.error("*** Time-series preparation FAILED ***")
+        LOGGER.error(f"Error: {e}")
+        print("*****************************************************************")
+        raise
 
 
 if __name__ == "__main__":
