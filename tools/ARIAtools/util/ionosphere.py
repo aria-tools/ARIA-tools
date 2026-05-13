@@ -11,16 +11,18 @@ import pathlib
 import typing
 from typing import Optional
 
-import ARIAtools.util.stitch
 import numpy as np
 import osgeo
-import xarray as xr
+
+import ARIAtools.util.stitch
 
 GUNW_LAYERS = {
     "unwrappedPhase": 'NETCDF:"%s":/science/grids/data/unwrappedPhase',
     "coherence": 'NETCDF:"%s":/science/grids/data/coherence',
     "connectedComponents": 'NETCDF:"%s":/science/grids/data/connectedComponents',
-    "ionosphere": 'NETCDF:"%s":/science/grids/corrections/derived/ionosphere/ionosphere',
+    "ionosphere": (
+        'NETCDF:"%s":/science/grids/corrections/derived/ionosphere/ionosphere'
+    ),
 }
 
 NISAR_GUNW_LAYERS = {
@@ -105,7 +107,6 @@ def stitch_ionosphere_frames(
     iono_filter: typing.Optional[bool] = True,
     is_nisar_file: typing.Optional[bool] = True,
 ):
-
     # Initalize variables for raster attributes
     iono_attr_list = []  # ionosphere raster metadata
     iono_xr_list = []
@@ -133,14 +134,10 @@ def stitch_ionosphere_frames(
         # 1. Fetch NISAR mask if applicable
         nisar_mask = None
         if is_nisar_file:
-            nisar_mask = (
-                ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
-                    iono_file
-                )
+            nisar_mask = ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                iono_file
             )
-            conn_file = NISAR_GUNW_LAYERS["connectedComponents"] % (
-                filename, file_pol
-            )
+            conn_file = NISAR_GUNW_LAYERS["connectedComponents"] % (filename, file_pol)
         else:
             conn_file = GUNW_LAYERS["connectedComponents"] % filename
 
@@ -236,16 +233,12 @@ def stitch_ionosphere_frames(
     # Mask combined_iono before surface fitting
     mask = ~np.nan_to_num(combined_mask[0], 0).astype(np.bool_)
     combined_iono_arr[mask] = np.nan
-    if (
-        (iono_filter and is_nisar_file)
-        or not is_nisar_file
-    ):
+    if (iono_filter and is_nisar_file) or not is_nisar_file:
         # Get surface
         surface = fit_surface(combined_iono_arr)
         surface = np.ma.masked_array(surface, mask=np.isnan(combined_iono[0]))
         combined_iono_arr = surface.filled(fill_value=0.0)
         del surface
-        
 
     return combined_iono_arr, combined_iono[1], combined_iono[2]
 
@@ -267,7 +260,6 @@ def export_ionosphere(
     verbose: typing.Optional[bool] = False,
     overwrite: typing.Optional[bool] = True,
 ) -> None:
-
     if output_format == "VRT":
         output_format = "ENVI"
 
@@ -335,8 +327,7 @@ def export_ionosphere(
         ds = osgeo.gdal.Open(str(output_iono), osgeo.gdal.GA_Update)
         band = ds.GetRasterBand(1)
         osgeo.gdal.FillNodata(
-            targetBand=band, maskBand=None, maxSearchDist=100,
-            smoothingIterations=0
+            targetBand=band, maskBand=None, maxSearchDist=100, smoothingIterations=0
         )
         band = None
         ds = None

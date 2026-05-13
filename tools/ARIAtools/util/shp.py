@@ -6,20 +6,20 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-import os
 import logging
+import os
 
 import numpy as np
+import osgeo.gdal
 import pyproj
 import shapely
 import shapely.wkt
-import osgeo.gdal
 
 LOGGER = logging.getLogger(__name__)
 
 osgeo.gdal.UseExceptions()
 # Suppress warnings
-osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
+osgeo.gdal.PushErrorHandler("CPLQuietErrorHandler")
 
 
 def open_shp(fname, lyrind=0, ftind=0):
@@ -39,7 +39,7 @@ def open_shp(fname, lyrind=0, ftind=0):
     return file_bbox
 
 
-def save_shp(fname, polygon, projection, drivername='GeoJSON'):
+def save_shp(fname, polygon, projection, drivername="GeoJSON"):
     """Save a polygon shapefile."""
     # Define the target spatial reference system
     target_srs = osgeo.ogr.osr.SpatialReference()
@@ -49,14 +49,14 @@ def save_shp(fname, polygon, projection, drivername='GeoJSON'):
     ds = osgeo.ogr.GetDriverByName(drivername).CreateDataSource(fname)
 
     # create layer
-    layer = ds.CreateLayer('', target_srs, osgeo.ogr.wkbPolygon)
+    layer = ds.CreateLayer("", target_srs, osgeo.ogr.wkbPolygon)
 
     # Add 1 attribute
-    layer.CreateField(osgeo.ogr.FieldDefn('id', osgeo.ogr.OFTInteger))
+    layer.CreateField(osgeo.ogr.FieldDefn("id", osgeo.ogr.OFTInteger))
 
     # Create a new feature (attribute and geometry)
     feat = osgeo.ogr.Feature(layer.GetLayerDefn())
-    feat.SetField('id', 0)
+    feat.SetField("id", 0)
 
     # Make a geometry, from input Shapely object
     geom = osgeo.ogr.CreateGeometryFromWkb(polygon.wkb)
@@ -71,14 +71,12 @@ def shp_area(file_bbox, projection, bounds=False):
     shape_area = 0
 
     # pass single polygon as list
-    if file_bbox.geom_type == 'Polygon':
+    if file_bbox.geom_type == "Polygon":
         file_bbox = [file_bbox]
 
     for polyobj in file_bbox:
-
         # need to reproject if not already in UTM
         if projection == 4326:
-
             # get coords
             if bounds:
                 # Pass coordinates of bounds as opposed to cutline
@@ -91,9 +89,10 @@ def shp_area(file_bbox, projection, bounds=False):
 
             # use equal area projection centered on/bracketing AOI
             pa = pyproj.Proj(
-                "+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-                    min(lat), max(lat), (max(lat) + min(lat)) / 2,
-                    (max(lon) + min(lon)) / 2))
+                f"+proj=aea +lat_1={min(lat)} +lat_2={max(lat)} "
+                f"+lat_0={(max(lat) + min(lat)) / 2} "
+                f"+lon_0={(max(lon) + min(lon)) / 2}"
+            )
             x, y = pa(lon, lat)
             cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
 
@@ -121,21 +120,18 @@ def chunk_area(WSEN):
         cols = np.linspace(W, E, n + 1)
         rows = np.linspace(S, N, n + 1)
         Wi, Si, Ei, Ni = [cols[0], rows[0], cols[1], rows[1]]
-        poly = shapely.geometry.Polygon(
-            [(Wi, Ni), (Wi, Si), (Ei, Si), (Ei, Ni)])
+        poly = shapely.geometry.Polygon([(Wi, Ni), (Wi, Si), (Ei, Si), (Ei, Ni)])
         area = shp_area(poly)
         n += 1
         if n > 100:
-            LOGGER.error(
-                'There was a problem chunking the DEM; check input bounds')
-            raise Exception(
-                "There was a problem chunking the DEM; check input bounds")
+            LOGGER.error("There was a problem chunking the DEM; check input bounds")
+            raise Exception("There was a problem chunking the DEM; check input bounds")
     return rows, cols
 
 
 def plot_shp(fname):
-    import matplotlib.path as mpath
     import matplotlib.patches as mpatches
+    import matplotlib.path as mpath
     import matplotlib.pyplot as plt
 
     # Extract first layer of features from shapefile using OGR
@@ -160,7 +156,7 @@ def plot_shp(fname):
         for i in range(geom.GetGeometryCount()):
             # Read ring geometry and create path
             r = geom.GetGeometryRef(i)
-            if geom_name == 'MULTIPOLYGON':
+            if geom_name == "MULTIPOLYGON":
                 r = geom.GetGeometryRef(i)
                 for j in range(r.GetGeometryCount()):
                     p = r.GetGeometryRef(j)
@@ -176,8 +172,8 @@ def plot_shp(fname):
         path = mpath.Path(np.column_stack((all_x, all_y)), codes)
         paths.append(path)
 
-    plt_style = 'classic'
-    for test_style in ['seaborn-v0_8', 'seaborn']:
+    plt_style = "classic"
+    for test_style in ["seaborn-v0_8", "seaborn"]:
         if test_style in plt.style.available:
             plt_style = test_style
             break
@@ -191,14 +187,13 @@ def plot_shp(fname):
         # Add paths as patches to axes
         for path in paths:
             patch = mpatches.PathPatch(
-                path, fill=False, facecolor='blue', edgecolor='black',
-                linewidth=1)
+                path, fill=False, facecolor="blue", edgecolor="black", linewidth=1
+            )
             ax.add_patch(patch)
 
-        ax.set_xlabel('longitude', labelpad=15, fontsize=15)
-        ax.set_ylabel('latitude', labelpad=15, fontsize=15)
-        ax.set_title(
-            os.path.basename(os.path.splitext(fname)[0]), fontsize=15)
+        ax.set_xlabel("longitude", labelpad=15, fontsize=15)
+        ax.set_ylabel("latitude", labelpad=15, fontsize=15)
+        ax.set_title(os.path.basename(os.path.splitext(fname)[0]), fontsize=15)
         ax.set_aspect(1.0)
         ax.grid(False)
     plt.show()

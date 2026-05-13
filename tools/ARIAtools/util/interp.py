@@ -50,11 +50,11 @@ def _compute_dem_range(dem_ds):
         mask = np.ones(arr.shape, dtype=bool)
 
     if not np.any(mask):
-        raise ValueError('All DEM pixels are nodata')
+        raise ValueError("All DEM pixels are nodata")
 
     dem_min = float(np.min(arr[mask]))
     dem_max = float(np.max(arr[mask]))
-    LOGGER.debug('DEM range (nodata-aware): %.1f to %.1f m', dem_min, dem_max)
+    LOGGER.debug("DEM range (nodata-aware): %.1f to %.1f m", dem_min, dem_max)
     return dem_min, dem_max
 
 
@@ -82,8 +82,8 @@ def _get_height_subset_indices(heights, dem_min, dem_max, pad=0):
     ascending = heights[-1] > heights[0]
     h_sorted = heights if ascending else heights[::-1]
 
-    idx_lo = int(np.searchsorted(h_sorted, dem_min, side='right')) - 1
-    idx_hi = int(np.searchsorted(h_sorted, dem_max, side='left'))
+    idx_lo = int(np.searchsorted(h_sorted, dem_min, side="right")) - 1
+    idx_hi = int(np.searchsorted(h_sorted, dem_max, side="left"))
 
     idx_lo = max(0, idx_lo - pad)
     idx_hi = min(n - 1, idx_hi + pad)
@@ -94,7 +94,7 @@ def _get_height_subset_indices(heights, dem_min, dem_max, pad=0):
     return np.arange(idx_lo, idx_hi + 1)
 
 
-class InterpCube(object):
+class InterpCube:
     """Class to interpolate intersection of cube with DEM."""
 
     def __init__(self, inobj, hgtobj, latobj, lonobj, dem_range=None):
@@ -124,7 +124,8 @@ class InterpCube(object):
         if dem_range is not None:
             # Cubic vertical interp needs 2 extra layers on each side
             idx = _get_height_subset_indices(
-                hgts_full, dem_range[0], dem_range[1], pad=2)
+                hgts_full, dem_range[0], dem_range[1], pad=2
+            )
             self.hgts = hgts_full[idx]
             self.data = data_full[idx]
         else:
@@ -137,11 +138,14 @@ class InterpCube(object):
         """Create interpolators."""
         self.offset = np.mean(self.data)
         for i in range(len(self.hgts)):
-            self.interp.append(scipy.interpolate.RectBivariateSpline(
-                self.latobj, self.lonobj, self.data[i] - self.offset))
+            self.interp.append(
+                scipy.interpolate.RectBivariateSpline(
+                    self.latobj, self.lonobj, self.data[i] - self.offset
+                )
+            )
 
     def __call__(self, line, pix, h):
         """Interpolate at a single point."""
         vals = np.array([x(line, pix)[0, 0] for x in self.interp])
-        est = scipy.interpolate.interp1d(self.hgts, vals, kind='cubic')
+        est = scipy.interpolate.interp1d(self.hgts, vals, kind="cubic")
         return est(h) + self.offset

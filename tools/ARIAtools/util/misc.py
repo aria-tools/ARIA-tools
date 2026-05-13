@@ -7,6 +7,7 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import sys
 import time
+
 import numpy as np
 
 
@@ -27,13 +28,15 @@ class ProgressBar:
             prog_bar.update(i[0]+1,suffix=product_dict[1][i[0]][0])
         prog_bar.close()
     """
-    def __init__(self, maxValue=100, prefix='', minValue=0,
-                 totalWidth=70, print_msg=True):
+
+    def __init__(
+        self, maxValue=100, prefix="", minValue=0, totalWidth=70, print_msg=True
+    ):
         self.prog_bar = "[]"  # This holds the progress bar string
         self.min = minValue
         self.max = maxValue
         self.span = maxValue - minValue
-        self.suffix = ''
+        self.suffix = ""
         self.prefix = prefix
 
         self.print_msg = print_msg
@@ -45,7 +48,7 @@ class ProgressBar:
         self.amount = 0  # When amount == max, we are 100% done
         self.update_amount(0)  # Build progress bar string
 
-    def update_amount(self, newAmount=0, suffix=''):
+    def update_amount(self, newAmount=0, suffix=""):
         """
         Update the progress bar with the new amount (with min and max
         values set at initialization; if it is over or under, it takes the
@@ -73,41 +76,44 @@ class ProgressBar:
         # Build a progress bar with an arrow of equal signs; special cases for
         # empty and full
         if numHashes == 0:
-            self.prog_bar = '%s[>%s]' % (self.prefix, ' ' * (allFull - 1))
+            self.prog_bar = f"{self.prefix}[>{' ' * (allFull - 1)}]"
         elif numHashes == allFull:
-            self.prog_bar = '%s[%s]' % (self.prefix, '=' * allFull)
+            self.prog_bar = f"{self.prefix}[{'=' * allFull}]"
             if suffix:
-                self.prog_bar += ' %s' % (suffix)
+                self.prog_bar += f" {suffix}"
             # time info
             elapsed_time = time.time() - self.start_time
-            self.prog_bar += '%5ds / %5ds' % (
-                int(elapsed_time), 0)
+            self.prog_bar += f"{int(elapsed_time):5d}s / {0:5d}s"
         else:
-            self.prog_bar = '[%s>%s]' % (
-                '=' * (numHashes - 1), ' ' * (allFull - numHashes))
+            self.prog_bar = f"[{'=' * (numHashes - 1)}>{' ' * (allFull - numHashes)}]"
 
             # figure out where to put the percentage, roughly centered
             percentPlace = int(len(self.prog_bar) / 2 - len(str(percentDone)))
-            percentString = ' ' + str(percentDone) + '% '
+            percentString = " " + str(percentDone) + "% "
 
             # slice the percentage into the bar
-            self.prog_bar = ''.join([
-                self.prog_bar[0:percentPlace], percentString,
-                self.prog_bar[percentPlace + len(percentString):]])
+            self.prog_bar = "".join(
+                [
+                    self.prog_bar[0:percentPlace],
+                    percentString,
+                    self.prog_bar[percentPlace + len(percentString) :],
+                ]
+            )
 
             # prefix and suffix
             self.prog_bar = self.prefix + self.prog_bar
             if suffix:
-                self.prog_bar += ' %s' % (suffix)
+                self.prog_bar += f" {suffix}"
 
             # time info - elapsed time and estimated remaining time
             if percentDone > 0:
                 elapsed_time = time.time() - self.start_time
-                self.prog_bar += '%5ds / %5ds' % (
-                    int(elapsed_time),
-                    int(elapsed_time * (100. / percentDone - 1)))
+                self.prog_bar += (
+                    f"{int(elapsed_time):5d}s / "
+                    f"{int(elapsed_time * (100.0 / percentDone - 1)):5d}s"
+                )
 
-    def update(self, value, every=1, suffix=''):
+    def update(self, value, every=1, suffix=""):
         """
         Updates the amount, and writes to stdout. Prints a
         carriage return first, so it will overwrite the current
@@ -116,11 +122,11 @@ class ProgressBar:
         if value % every == 0 or value >= self.max:
             self.update_amount(newAmount=value, suffix=suffix)
             if self.print_msg:
-                sys.stdout.write('\r' + self.prog_bar)
+                sys.stdout.write("\r" + self.prog_bar)
                 sys.stdout.flush()
 
     def close(self):
         """Prints a blank space at the end to ensure proper printing
         of future statements."""
         if self.print_msg:
-            print(' ')
+            print(" ")

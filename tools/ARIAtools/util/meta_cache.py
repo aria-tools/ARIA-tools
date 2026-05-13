@@ -16,7 +16,6 @@ Also provides h5py-based access for scalar/string HDF5 metadata
 that GDAL cannot read (e.g. boundingPolygon, centerFrequency).
 """
 
-import hashlib
 import http.cookiejar
 import io
 import json
@@ -33,7 +32,7 @@ import requests
 LOGGER = logging.getLogger(__name__)
 
 # Sentinel used when a key is genuinely absent from a product
-_MISSING = '__missing__'
+_MISSING = "__missing__"
 
 # Thread lock for cache operations
 _cache_lock = threading.RLock()
@@ -48,7 +47,7 @@ def _cache_path(url_file):
     """
     if url_file:
         cache_dir = os.path.dirname(os.path.abspath(url_file))
-        return os.path.join(cache_dir, 'aria_meta_cache.json')
+        return os.path.join(cache_dir, "aria_meta_cache.json")
     return None
 
 
@@ -59,7 +58,8 @@ def _file_key(fname):
     key is the canonical URL.  For local files we use the absolute path.
     """
     import re
-    key = re.sub(r'^/vsi(curl|s3)/', '', fname)
+
+    key = re.sub(r"^/vsi(curl|s3)/", "", fname)
     # Strip the bucket prefix for S3 paths to recover the original URL
     # e.g. asf-cumulus-prod-nisar-gunw/path → path
     # The key should be the URL path or local path, not bucket-specific
@@ -72,12 +72,12 @@ def load_cache(cache_file):
         try:
             with open(cache_file) as fh:
                 data = json.load(fh)
-            LOGGER.debug('Loaded metadata cache with %d entries from %s',
-                         len(data), cache_file)
+            LOGGER.debug(
+                "Loaded metadata cache with %d entries from %s", len(data), cache_file
+            )
             return data
         except (json.JSONDecodeError, OSError) as exc:
-            LOGGER.warning('Could not load metadata cache %s: %s',
-                           cache_file, exc)
+            LOGGER.warning("Could not load metadata cache %s: %s", cache_file, exc)
     return {}
 
 
@@ -87,13 +87,13 @@ def save_cache(cache_file, cache_data):
         return
     with _cache_lock:
         try:
-            with open(cache_file, 'w') as fh:
+            with open(cache_file, "w") as fh:
                 json.dump(cache_data, fh, indent=1)
-            LOGGER.debug('Saved metadata cache (%d entries) to %s',
-                         len(cache_data), cache_file)
+            LOGGER.debug(
+                "Saved metadata cache (%d entries) to %s", len(cache_data), cache_file
+            )
         except OSError as exc:
-            LOGGER.warning('Could not write metadata cache %s: %s',
-                           cache_file, exc)
+            LOGGER.warning("Could not write metadata cache %s: %s", cache_file, exc)
 
 
 def extract_metadata_gdal(fname):
@@ -129,35 +129,33 @@ def extract_metadata_gdal(fname):
     netcdf_fname = f'NETCDF:"{fname}'
 
     # gdal.Info with -json returns everything we need in one call
-    info_str = osgeo.gdal.Info(netcdf_fname, options=['-json'])
+    info_str = osgeo.gdal.Info(netcdf_fname, options=["-json"])
     if info_str is None:
-        LOGGER.warning('gdal.Info returned None for %s', fname)
+        LOGGER.warning("gdal.Info returned None for %s", fname)
         return None
 
     info = json.loads(info_str) if isinstance(info_str, str) else info_str
 
     # Extract version from NC_GLOBAL metadata
-    metadata = info.get('metadata', {})
-    nc_global = metadata.get('', {})
-    version = nc_global.get('NC_GLOBAL#version', None)
+    metadata = info.get("metadata", {})
+    nc_global = metadata.get("", {})
+    version = nc_global.get("NC_GLOBAL#version", None)
 
     # Collect subdataset names
     subdatasets = []
-    if fname.endswith('.nc'):
-        subdatasets_raw = metadata.get('SUBDATASETS', {})
-        subdatasets = [
-            v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
-    elif fname.endswith('.h5'):
-        subdatasets_raw = metadata.get('Subdatasets', {})
-        subdatasets = [
-            v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
+    if fname.endswith(".nc"):
+        subdatasets_raw = metadata.get("SUBDATASETS", {})
+        subdatasets = [v for k, v in sorted(subdatasets_raw.items()) if "NAME" in k]
+    elif fname.endswith(".h5"):
+        subdatasets_raw = metadata.get("Subdatasets", {})
+        subdatasets = [v for k, v in sorted(subdatasets_raw.items()) if "NAME" in k]
 
     # Identify available troposphere models from subdataset paths
     tropo_models = set()
     for sd in subdatasets:
-        parts = sd.split('/')
-        if 'troposphere' in parts:
-            idx = parts.index('troposphere')
+        parts = sd.split("/")
+        if "troposphere" in parts:
+            idx = parts.index("troposphere")
             if idx + 1 < len(parts):
                 tropo_models.add(parts[idx + 1])
 
@@ -165,8 +163,8 @@ def extract_metadata_gdal(fname):
 
     # Extract projection/SRS
     projection = None
-    coord_system = info.get('coordinateSystem', {})
-    wkt = coord_system.get('wkt')
+    coord_system = info.get("coordinateSystem", {})
+    wkt = coord_system.get("wkt")
     if wkt:
         try:
             srs = osgeo.osr.SpatialReference()
@@ -176,25 +174,25 @@ def extract_metadata_gdal(fname):
             if epsg_code:
                 projection = str(epsg_code)
         except Exception as e:
-            LOGGER.debug('Could not extract projection from WKT: %s', e)
+            LOGGER.debug("Could not extract projection from WKT: %s", e)
 
     # Extract geotransform
-    geotransform = info.get('geoTransform', None)
+    geotransform = info.get("geoTransform", None)
 
     # Extract size
-    size = info.get('size', [None, None])
+    size = info.get("size", [None, None])
 
     # Extract bounds from corner coordinates
     bounds = None
-    corners = info.get('cornerCoordinates', {})
-    if 'upperLeft' in corners and 'lowerRight' in corners:
+    corners = info.get("cornerCoordinates", {})
+    if "upperLeft" in corners and "lowerRight" in corners:
         try:
-            ul = corners['upperLeft']
-            lr = corners['lowerRight']
+            ul = corners["upperLeft"]
+            lr = corners["lowerRight"]
             # [minX, minY, maxX, maxY]
             bounds = [ul[0], lr[1], lr[0], ul[1]]
         except (KeyError, IndexError, TypeError) as e:
-            LOGGER.debug('Could not extract bounds from corners: %s', e)
+            LOGGER.debug("Could not extract bounds from corners: %s", e)
 
     # Alternative: compute bounds from geotransform and size
     if bounds is None and geotransform and size[0] and size[1]:
@@ -207,30 +205,32 @@ def extract_metadata_gdal(fname):
             minY = gt[3] + gt[5] * height
             bounds = [minX, minY, maxX, maxY]
         except Exception as e:
-            LOGGER.debug('Could not compute bounds from geotransform: %s', e)
+            LOGGER.debug("Could not compute bounds from geotransform: %s", e)
 
     # Track completeness for cache validation
-    cache_complete = all([
-        version is not None,
-        projection is not None,
-        geotransform is not None,
-        bounds is not None,
-        size[0] is not None,
-    ])
+    cache_complete = all(
+        [
+            version is not None,
+            projection is not None,
+            geotransform is not None,
+            bounds is not None,
+            size[0] is not None,
+        ]
+    )
 
     return {
-        'version': version,
-        'driver': info.get('driverShortName', None),
-        'subdatasets': subdatasets,
-        'tropo_models': sorted(tropo_models),
-        'nc_global': nc_global,
+        "version": version,
+        "driver": info.get("driverShortName", None),
+        "subdatasets": subdatasets,
+        "tropo_models": sorted(tropo_models),
+        "nc_global": nc_global,
         # New fields for Phase 1 optimization:
-        'projection': projection,
-        'geotransform': geotransform,
-        'bounds': bounds,
-        'size': size,
-        '_cache_complete': cache_complete,
-        'gdal_info_ts': time.time(),
+        "projection": projection,
+        "geotransform": geotransform,
+        "bounds": bounds,
+        "size": size,
+        "_cache_complete": cache_complete,
+        "gdal_info_ts": time.time(),
     }
 
 
@@ -252,35 +252,41 @@ def _is_cache_stale(fname, cached_meta, ttl_seconds=3600):
         True if cache entry is stale and should be refreshed.
     """
     # Check if timestamp exists
-    cache_ts = cached_meta.get('gdal_info_ts')
+    cache_ts = cached_meta.get("gdal_info_ts")
     if cache_ts is None:
         return True  # No timestamp = stale
 
     # Check completeness flag for expanded cache fields
-    if not cached_meta.get('_cache_complete', False):
-        LOGGER.debug('Cache entry incomplete, needs refresh')
+    if not cached_meta.get("_cache_complete", False):
+        LOGGER.debug("Cache entry incomplete, needs refresh")
         return True
 
-    is_remote = fname.startswith(('http://', 'https://', '/vsicurl/', '/vsis3/'))
+    is_remote = fname.startswith(("http://", "https://", "/vsicurl/", "/vsis3/"))
 
     if is_remote:
         # Remote files: use TTL
         age_seconds = time.time() - cache_ts
         if age_seconds > ttl_seconds:
-            LOGGER.debug('Remote cache entry expired (age: %.1f min, TTL: %.1f min)',
-                        age_seconds / 60, ttl_seconds / 60)
+            LOGGER.debug(
+                "Remote cache entry expired (age: %.1f min, TTL: %.1f min)",
+                age_seconds / 60,
+                ttl_seconds / 60,
+            )
             return True
     else:
         # Local files: check mtime
         try:
             file_mtime = os.path.getmtime(fname)
             if file_mtime > cache_ts:
-                LOGGER.debug('Local file modified since cache (file mtime: %s, cache: %s)',
-                           file_mtime, cache_ts)
+                LOGGER.debug(
+                    "Local file modified since cache (file mtime: %s, cache: %s)",
+                    file_mtime,
+                    cache_ts,
+                )
                 return True
         except OSError:
             # File doesn't exist or not accessible
-            LOGGER.debug('Cannot stat local file: %s', fname)
+            LOGGER.debug("Cannot stat local file: %s", fname)
             return True
 
     return False
@@ -313,7 +319,7 @@ def get_or_extract(fname, cache_data, ttl_seconds=3600):
     if key in cache_data:
         cached_meta = cache_data[key]
         if not _is_cache_stale(fname, cached_meta, ttl_seconds):
-            LOGGER.debug('Cache hit (fresh): %s', os.path.basename(key))
+            LOGGER.debug("Cache hit (fresh): %s", os.path.basename(key))
             return cached_meta
 
     # Slow path: cache miss or stale - acquire lock for extraction
@@ -322,13 +328,14 @@ def get_or_extract(fname, cache_data, ttl_seconds=3600):
         if key in cache_data:
             cached_meta = cache_data[key]
             if not _is_cache_stale(fname, cached_meta, ttl_seconds):
-                LOGGER.debug('Cache hit (fresh, after lock): %s', os.path.basename(key))
+                LOGGER.debug("Cache hit (fresh, after lock): %s", os.path.basename(key))
                 return cached_meta
             else:
-                LOGGER.debug('Cache hit (stale) – refreshing: %s', os.path.basename(key))
+                LOGGER.debug(
+                    "Cache hit (stale) – refreshing: %s", os.path.basename(key)
+                )
         else:
-            LOGGER.debug('Cache miss – extracting metadata: %s',
-                        os.path.basename(key))
+            LOGGER.debug("Cache miss – extracting metadata: %s", os.path.basename(key))
 
         # Extract metadata (may be slow for remote files)
         meta = extract_metadata_gdal(fname)
@@ -356,8 +363,12 @@ class _HTTPRangeFile(io.RawIOBase):
         # Resolve the redirect chain to get the final signed URL +
         # determine file size.
         resp = self._session.get(
-            url, headers={'Range': 'bytes=0-0'},
-            allow_redirects=True, stream=True, timeout=60)
+            url,
+            headers={"Range": "bytes=0-0"},
+            allow_redirects=True,
+            stream=True,
+            timeout=60,
+        )
         resp.close()
 
         # Store the final (signed) URL so subsequent requests skip
@@ -365,14 +376,14 @@ class _HTTPRangeFile(io.RawIOBase):
         self._url = resp.url
 
         # Parse total file size from Content-Range: bytes 0-0/<total>
-        cr = resp.headers.get('Content-Range', '')
-        if '/' in cr:
-            self._size = int(cr.split('/')[-1])
+        cr = resp.headers.get("Content-Range", "")
+        if "/" in cr:
+            self._size = int(cr.split("/")[-1])
         else:
             head = self._session.head(self._url, timeout=60)
-            self._size = int(head.headers.get('Content-Length', 0))
+            self._size = int(head.headers.get("Content-Length", 0))
 
-        LOGGER.debug('Resolved URL (size=%d bytes)', self._size)
+        LOGGER.debug("Resolved URL (size=%d bytes)", self._size)
 
     def readable(self):
         return True
@@ -397,13 +408,12 @@ class _HTTPRangeFile(io.RawIOBase):
 
     def read(self, size=-1):
         if self._pos >= self._size:
-            return b''
+            return b""
         if size < 0:
             size = self._size - self._pos
         end = min(self._pos + size - 1, self._size - 1)
-        headers = {'Range': f'bytes={self._pos}-{end}'}
-        resp = self._session.get(
-            self._url, headers=headers, timeout=120)
+        headers = {"Range": f"bytes={self._pos}-{end}"}
+        resp = self._session.get(self._url, headers=headers, timeout=120)
         resp.raise_for_status()
         data = resp.content
         self._pos += len(data)
@@ -422,8 +432,7 @@ class _HTTPRangeFile(io.RawIOBase):
 
 def _get_earthdata_session():
     """Create a ``requests.Session`` with Earthdata cookie auth."""
-    cookie_file = osgeo.gdal.GetConfigOption(
-        'GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
+    cookie_file = osgeo.gdal.GetConfigOption("GDAL_HTTP_COOKIEFILE", "/tmp/cookies.txt")
 
     session = requests.Session()
 
@@ -432,11 +441,9 @@ def _get_earthdata_session():
         try:
             jar.load(ignore_discard=True, ignore_expires=True)
             session.cookies.update(jar)
-            LOGGER.debug('Loaded cookies from %s (%d cookies)',
-                         cookie_file, len(jar))
+            LOGGER.debug("Loaded cookies from %s (%d cookies)", cookie_file, len(jar))
         except Exception as exc:
-            LOGGER.debug('Could not load cookies from %s: %s',
-                         cookie_file, exc)
+            LOGGER.debug("Could not load cookies from %s: %s", cookie_file, exc)
 
     return session
 
@@ -460,26 +467,26 @@ def open_gunw_h5(url_or_path):
     -------
     h5py.File
     """
-    path = url_or_path.replace('/vsicurl/', '')
+    path = url_or_path.replace("/vsicurl/", "")
 
     # For /vsis3/ paths, resolve back to HTTPS for h5py access
-    if path.startswith('/vsis3/'):
+    if path.startswith("/vsis3/"):
         from ARIAtools.util.s3 import vsis3_to_https
+
         https_url = vsis3_to_https(path)
         if https_url:
             path = https_url
         else:
-            LOGGER.warning(
-                'Cannot resolve /vsis3/ path to HTTPS: %s', path)
+            LOGGER.warning("Cannot resolve /vsis3/ path to HTTPS: %s", path)
 
-    if path.startswith('https://') or path.startswith('http://'):
-        LOGGER.debug('Opening remote HDF5: %s', path)
+    if path.startswith("https://") or path.startswith("http://"):
+        LOGGER.debug("Opening remote HDF5: %s", path)
         session = _get_earthdata_session()
         fh = _HTTPRangeFile(path, session=session)
-        return h5py.File(fh, 'r')
+        return h5py.File(fh, "r")
     else:
-        LOGGER.debug('Opening local HDF5: %s', path)
-        return h5py.File(path, 'r')
+        LOGGER.debug("Opening local HDF5: %s", path)
+        return h5py.File(path, "r")
 
 
 # ---------- h5py scalar/string metadata caching --------------------------
@@ -508,13 +515,12 @@ def _extract_h5_fields(fname, h5_fields):
                 val = h5f[h5_path][()]
                 # Decode bytes → str for string datasets
                 if isinstance(val, bytes):
-                    val = val.decode('utf-8')
+                    val = val.decode("utf-8")
                 elif isinstance(val, np.generic):
                     val = val.item()
                 result[field_name] = val
             else:
-                LOGGER.warning('h5py field %s not found at %s',
-                               field_name, h5_path)
+                LOGGER.warning("h5py field %s not found at %s", field_name, h5_path)
     return result
 
 
@@ -548,27 +554,22 @@ def get_h5_field(fname, field_name, h5_fields, cache_data):
 
     # handle subdatasets behavior differently
     # full filename path is expected in this workflow
-    if field_name == 'subdatasets':
-        
+    if field_name == "subdatasets":
         # Check if this specific field is already cached
         if field_name in entry:
-            LOGGER.debug(
-                'Cache hit: %s [%s]', os.path.basename(key), field_name
-            )
+            LOGGER.debug("Cache hit: %s [%s]", os.path.basename(key), field_name)
             return entry
 
         # Cache miss - extract using GDAL Info
-        LOGGER.debug(
-            'Cache miss - reading: %s [%s]', os.path.basename(key), field_name
-        )
-        
+        LOGGER.debug("Cache miss - reading: %s [%s]", os.path.basename(key), field_name)
+
         # GDAL Info requires NETCDF prefix to properly read HDF5 subdatasets
         gdal_fname = f'NETCDF:"{fname}'
         meta = osgeo.gdal.Info(gdal_fname)
-        
+
         # Filter the requested fields against the GDAL metadata
         sdskeys_addlyrs = [k for k in h5_fields if k in meta]
-        
+
         # Merge into the existing cache entry safely
         if key not in cache_data:
             cache_data[key] = {}
@@ -577,24 +578,21 @@ def get_h5_field(fname, field_name, h5_fields, cache_data):
         return cache_data[key]
 
     # Check if this specific h5py field is already cached
-    h5_cache_key = f'h5_{field_name}'
+    h5_cache_key = f"h5_{field_name}"
     if h5_cache_key in entry:
-        LOGGER.debug('Cache hit: %s [%s]',
-                     os.path.basename(key), field_name)
+        LOGGER.debug("Cache hit: %s [%s]", os.path.basename(key), field_name)
         return entry[h5_cache_key]
 
     # Cache miss — extract all requested h5py fields at once
-    LOGGER.debug('Cache miss – reading: %s',
-                 os.path.basename(key))
+    LOGGER.debug("Cache miss – reading: %s", os.path.basename(key))
     h5_meta = _extract_h5_fields(fname, h5_fields)
 
     # Merge into the existing cache entry
     if key not in cache_data:
         cache_data[key] = {}
     for k, v in h5_meta.items():
-        cache_data[key][f'h5_{k}'] = v
+        cache_data[key][f"h5_{k}"] = v
 
     if field_name not in h5_meta:
-        raise RuntimeError(
-            f'h5py field {field_name!r} not found in {fname}')
+        raise RuntimeError(f"h5py field {field_name!r} not found in {fname}")
     return h5_meta[field_name]

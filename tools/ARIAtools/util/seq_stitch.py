@@ -5,7 +5,7 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-'''
+"""
 Sequential stitcher relies on connected components [region of pixels] in the
 overlap between two frames with assumption that each component is unwrapped
 correctly by SNAPHU. This might not always be the case. If there are
@@ -26,13 +26,15 @@ sake of consistency, add function to re-enumerate components.
 
 DISCLAIMER : This is development script. Requires some additional clean-up
 and restructuring
-'''
-import osgeo
-import pathlib
+"""
+
 import logging
-import numpy as np
-from numpy.typing import NDArray
+import pathlib
 from typing import List, Optional, Tuple
+
+import numpy as np
+import osgeo
+from numpy.typing import NDArray
 
 import ARIAtools.util.stitch
 
@@ -41,17 +43,18 @@ LOGGER = logging.getLogger(__name__)
 #  STITCHING SUBROUTINES
 
 
-def stitch_unwrapped_frames(input_unw_files: List[str],
-                            input_conncomp_files: List[str],
-                            is_nisar_file: Optional[bool] = False,
-                            proj: Optional[str] = 'EPSG:4326',
-                            xres: Optional[float] = None,
-                            yres: Optional[float] = None,
-                            correction_method: Optional[str] = 'cycle2pi',
-                            range_correction: Optional[bool] = True,
-                            direction_N_S: Optional[bool] = False,
-                            verbose: Optional[bool] = False):
-
+def stitch_unwrapped_frames(
+    input_unw_files: List[str],
+    input_conncomp_files: List[str],
+    is_nisar_file: Optional[bool] = False,
+    proj: Optional[str] = "EPSG:4326",
+    xres: Optional[float] = None,
+    yres: Optional[float] = None,
+    correction_method: Optional[str] = "cycle2pi",
+    range_correction: Optional[bool] = True,
+    direction_N_S: Optional[bool] = False,
+    verbose: Optional[bool] = False,
+):
     # Get raster attributes [SNWE, latlon_spacing, length, width, nodata]
     # from each input file
 
@@ -64,12 +67,18 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
     temp_snwe_list = []
     for unw_file, conn_file in zip(input_unw_files, input_conncomp_files):
         unw_attr_dicts.append(
-            ARIAtools.util.stitch.get_GUNW_attr(unw_file, xres=xres, yres=yres, proj=proj))
+            ARIAtools.util.stitch.get_GUNW_attr(
+                unw_file, xres=xres, yres=yres, proj=proj
+            )
+        )
         conncomp_attr_dicts.append(
-            ARIAtools.util.stitch.get_GUNW_attr(conn_file, xres=xres, yres=yres, proj=proj))
+            ARIAtools.util.stitch.get_GUNW_attr(
+                conn_file, xres=xres, yres=yres, proj=proj
+            )
+        )
 
         # get frame bounds, assume are the same for unw and conncomp
-        temp_snwe_list.append(unw_attr_dicts[-1]['SNWE'])
+        temp_snwe_list.append(unw_attr_dicts[-1]["SNWE"])
 
     # get sorted indices for frame bounds, from South to North
     sorted_ix = np.argsort(np.array(temp_snwe_list)[:, 0], axis=0)
@@ -80,21 +89,20 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
         sorted_ix = sorted_ix[::-1]
 
     # Wrap stitching parameters into dict
-    stitching_dict = dict(correction_method=correction_method,
-                          range_correction=range_correction,
-                          verbose=verbose)
+    stitching_dict = dict(
+        correction_method=correction_method,
+        range_correction=range_correction,
+        verbose=verbose,
+    )
 
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
-
-            LOGGER.info(50 * '*')
-            frame1_prods = unw_attr_dicts[ix1][
-                'PATH'].split('"')[1].split('/')[-1]
-            LOGGER.info('Frame-1: ', frame1_prods)
-            frame2_prods = unw_attr_dicts[ix2][
-                'PATH'].split('"')[1].split('/')[-1]
-            LOGGER.info('Frame-2: ', frame2_prods)
+            LOGGER.info(50 * "*")
+            frame1_prods = unw_attr_dicts[ix1]["PATH"].split('"')[1].split("/")[-1]
+            LOGGER.info("Frame-1: ", frame1_prods)
+            frame2_prods = unw_attr_dicts[ix2]["PATH"].split('"')[1].split("/")[-1]
+            LOGGER.info("Frame-2: ", frame2_prods)
 
         # apply embedded artifact mask if NISAR GUNW
         frame1_nisar_msk = None
@@ -105,56 +113,67 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
             # In subsequent iterations, Frame 1 is the
             # already-masked `corr_unw`.
             if i == 0:
-                frame1_nisar_msk = \
+                frame1_nisar_msk = (
                     ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
-                    unw_attr_dicts[ix1]['PATH']
+                        unw_attr_dicts[ix1]["PATH"]
+                    )
                 )
-            
-            frame2_nisar_msk = \
-                ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
-                unw_attr_dicts[ix2]['PATH']
+
+            frame2_nisar_msk = ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+                unw_attr_dicts[ix2]["PATH"]
             )
 
         # Get numpy masked arrays
         # Frame1
         frame1_unw_array = ARIAtools.util.stitch.get_GUNW_array(
-            filename=unw_attr_dicts[ix1]['PATH'],
+            filename=unw_attr_dicts[ix1]["PATH"],
             proj=proj,
-            xres=xres, yres=yres,
-            nodata=unw_attr_dicts[ix1]['NODATA'],
-            mask=frame1_nisar_msk)
+            xres=xres,
+            yres=yres,
+            nodata=unw_attr_dicts[ix1]["NODATA"],
+            mask=frame1_nisar_msk,
+        )
 
         frame1_conn_array = ARIAtools.util.stitch.get_GUNW_array(
-            filename=conncomp_attr_dicts[ix1]['PATH'],
+            filename=conncomp_attr_dicts[ix1]["PATH"],
             proj=proj,
-            xres=xres, yres=yres,
-            nodata=conncomp_attr_dicts[ix1]['NODATA'],
-            mask=frame1_nisar_msk)
+            xres=xres,
+            yres=yres,
+            nodata=conncomp_attr_dicts[ix1]["NODATA"],
+            mask=frame1_nisar_msk,
+        )
 
         # Frame2
         frame2_unw_array = ARIAtools.util.stitch.get_GUNW_array(
-            filename=unw_attr_dicts[ix2]['PATH'],
+            filename=unw_attr_dicts[ix2]["PATH"],
             proj=proj,
-            xres=xres, yres=yres,
-            nodata=unw_attr_dicts[ix2]['NODATA'],
-            mask=frame2_nisar_msk)
+            xres=xres,
+            yres=yres,
+            nodata=unw_attr_dicts[ix2]["NODATA"],
+            mask=frame2_nisar_msk,
+        )
 
         frame2_conn_array = ARIAtools.util.stitch.get_GUNW_array(
-            filename=conncomp_attr_dicts[ix2]['PATH'],
+            filename=conncomp_attr_dicts[ix2]["PATH"],
             proj=proj,
-            xres=xres, yres=yres,
-            nodata=conncomp_attr_dicts[ix2]['NODATA'],
-            mask=frame2_nisar_msk)
+            xres=xres,
+            yres=yres,
+            nodata=conncomp_attr_dicts[ix2]["NODATA"],
+            mask=frame2_nisar_msk,
+        )
 
         # capture all lyr nodata values
         conncomp_nodata_values = [
-            0, -1, conncomp_attr_dicts[ix1]['NODATA'],
-            conncomp_attr_dicts[ix2]['NODATA']
+            0,
+            -1,
+            conncomp_attr_dicts[ix1]["NODATA"],
+            conncomp_attr_dicts[ix2]["NODATA"],
         ]
         conncomp_nodata_values = list(set(conncomp_nodata_values))
         unw_nodata_values = [
-            0, unw_attr_dicts[ix1]['NODATA'],
-            unw_attr_dicts[ix2]['NODATA']
+            0,
+            unw_attr_dicts[ix1]["NODATA"],
+            unw_attr_dicts[ix2]["NODATA"],
         ]
         unw_nodata_values = list(set(unw_nodata_values))
 
@@ -165,38 +184,50 @@ def stitch_unwrapped_frames(input_unw_files: List[str],
         unw_mask_ix2 = np.isin(frame2_unw_array, conncomp_nodata_values)
 
         # apply mask
-        frame1_unw_array = np.ma.masked_where(unw_mask_ix1,
-                                              frame1_unw_array)
-        frame1_conn_array = np.ma.masked_where(conncomp_mask_ix1,
-                                               frame1_conn_array)
-        frame2_unw_array = np.ma.masked_where(unw_mask_ix2,
-                                              frame2_unw_array)
-        frame2_conn_array = np.ma.masked_where(conncomp_mask_ix2,
-                                               frame2_conn_array)
+        frame1_unw_array = np.ma.masked_where(unw_mask_ix1, frame1_unw_array)
+        frame1_conn_array = np.ma.masked_where(conncomp_mask_ix1, frame1_conn_array)
+        frame2_unw_array = np.ma.masked_where(unw_mask_ix2, frame2_unw_array)
+        frame2_conn_array = np.ma.masked_where(conncomp_mask_ix2, frame2_conn_array)
 
         if i == 0:
             (corr_unw, corr_conn, corr_dict) = stitch_unw2frames(
-                frame1_unw_array, frame1_conn_array, unw_attr_dicts[ix1],
-                frame2_unw_array, frame2_conn_array, unw_attr_dicts[ix2],
-                **stitching_dict)
+                frame1_unw_array,
+                frame1_conn_array,
+                unw_attr_dicts[ix1],
+                frame2_unw_array,
+                frame2_conn_array,
+                unw_attr_dicts[ix2],
+                **stitching_dict,
+            )
         else:
             (corr_unw, corr_conn, corr_dict) = stitch_unw2frames(
-                corr_unw, corr_conn, corr_dict, frame2_unw_array,
-                frame2_conn_array, unw_attr_dicts[ix2], **stitching_dict)
+                corr_unw,
+                corr_conn,
+                corr_dict,
+                frame2_unw_array,
+                frame2_conn_array,
+                unw_attr_dicts[ix2],
+                **stitching_dict,
+            )
 
     # replace nan with 0.0
     corr_unw = np.nan_to_num(corr_unw.data, nan=0.0)
     corr_conn = np.nan_to_num(corr_conn.data, nan=-1.0)
 
-    return corr_unw, corr_conn, corr_dict['SNWE']
+    return corr_unw, corr_conn, corr_dict["SNWE"]
 
 
-def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
-                      unw_data2: NDArray, conn_data2: NDArray, rdict2: dict,
-                      correction_method: Optional[str] = 'cycle2pi',
-                      range_correction: Optional[bool] = False,
-                      verbose: Optional[bool] = False) -> \
-        Tuple[NDArray, NDArray, dict]:
+def stitch_unw2frames(
+    unw_data1: NDArray,
+    conn_data1: NDArray,
+    rdict1: dict,
+    unw_data2: NDArray,
+    conn_data2: NDArray,
+    rdict2: dict,
+    correction_method: Optional[str] = "cycle2pi",
+    range_correction: Optional[bool] = False,
+    verbose: Optional[bool] = False,
+) -> Tuple[NDArray, NDArray, dict]:
     """
     Function to sequentially stitch two frames along the same track. Mean
     offset or 2pi integer cycles are estimated for each overlapping connected
@@ -248,36 +279,46 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
 
     # GET FRAME OVERLAP
     box_1, box_2 = ARIAtools.util.stitch.frame_overlap(
-        rdict1['SNWE'], rdict2['SNWE'],
-        [rdict1['LAT_SPACING'], rdict1['LON_SPACING']],
-        [rdict2['LAT_SPACING'], rdict2['LON_SPACING']],
-        [rdict1['LAT_SPACING'], rdict1['LON_SPACING']])
+        rdict1["SNWE"],
+        rdict2["SNWE"],
+        [rdict1["LAT_SPACING"], rdict1["LON_SPACING"]],
+        [rdict2["LAT_SPACING"], rdict2["LON_SPACING"]],
+        [rdict1["LAT_SPACING"], rdict1["LON_SPACING"]],
+    )
 
     # LOOP OVER COMPONENTS WITHIN THE OVERLAP
     # Get connected component pairs
     if verbose:
-        LOGGER.info('Getting overlapping components')
+        LOGGER.info("Getting overlapping components")
 
     # Forward correction
     conn_pairs = get_overlapping_conn(conn_data1[box_1], conn_data2[box_2])
 
     for pair in conn_pairs:
         diff, cycles2pi, range_corr = _integer_2pi_cycles(
-            unw_data1[box_1], conn_data1[box_1], np.float32(pair[1]),
-            unw_data2[box_2], conn_data2[box_2], np.float32(pair[0]),
-            range_correction=range_correction, print_msg=verbose)
+            unw_data1[box_1],
+            conn_data1[box_1],
+            np.float32(pair[1]),
+            unw_data2[box_2],
+            conn_data2[box_2],
+            np.float32(pair[0]),
+            range_correction=range_correction,
+            print_msg=verbose,
+        )
 
         # Correction methods: mean difference, 2pi integer cycles
-        if correction_method == 'cycle2pi':
+        if correction_method == "cycle2pi":
             correction = cycles2pi
 
-        elif correction_method == 'meanoff':
+        elif correction_method == "meanoff":
             correction = diff
             range_correction = False
 
         else:
-            raise ValueError(f'Wrong correction method {correction_method}, ',
-                             'Select one of available: "cycle2pi", "meanoff"')
+            raise ValueError(
+                f"Wrong correction method {correction_method}, ",
+                'Select one of available: "cycle2pi", "meanoff"',
+            )
 
         # add range correction
         if range_correction:
@@ -296,25 +337,32 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
 
     for pair in conn_reverse:
         if verbose:
-            LOGGER.info('Going backward!')
+            LOGGER.info("Going backward!")
 
         diff, cycles2pi, range_corr = _integer_2pi_cycles(
-            unw1=unw_data1[box_1], concom1=conn_data1[box_1],
-            ix1=np.float32(pair[0]), unw2=unw_data2[box_2],
-            concom2=conn_data2[box_2], ix2=np.float32(pair[1]),
-            range_correction=range_correction, print_msg=verbose)
+            unw1=unw_data1[box_1],
+            concom1=conn_data1[box_1],
+            ix1=np.float32(pair[0]),
+            unw2=unw_data2[box_2],
+            concom2=conn_data2[box_2],
+            ix2=np.float32(pair[1]),
+            range_correction=range_correction,
+            print_msg=verbose,
+        )
 
         # Correction methods: mean difference, 2pi integer cycles
-        if correction_method == 'cycle2pi':
+        if correction_method == "cycle2pi":
             correction = cycles2pi
 
-        elif correction_method == 'meanoff':
+        elif correction_method == "meanoff":
             correction = diff
             range_correction = False
 
         else:
-            raise ValueError(f'Wrong correction method {correction_method}, ',
-                             'Select one of available: "cycle2pi", "meanoff"')
+            raise ValueError(
+                f"Wrong correction method {correction_method}, ",
+                'Select one of available: "cycle2pi", "meanoff"',
+            )
 
         # add range correction
         if range_correction:
@@ -330,37 +378,53 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
     conn_data2 = update_connect_components(conn_data2, idx, idx1 + 1)
 
     # Combine corrected unwrappedPhase and connectedComponents arrays
-    comb_snwe = [rdict1['SNWE'], rdict2['SNWE']]
-    comb_latlon = [[rdict1['LAT_SPACING'], rdict1['LON_SPACING']],
-                   [rdict2['LAT_SPACING'], rdict2['LON_SPACING']]]
+    comb_snwe = [rdict1["SNWE"], rdict2["SNWE"]]
+    comb_latlon = [
+        [rdict1["LAT_SPACING"], rdict1["LON_SPACING"]],
+        [rdict2["LAT_SPACING"], rdict2["LON_SPACING"]],
+    ]
 
-    (combined_unwrap, combined_snwe, combined_latlon_spacing) = \
+    (combined_unwrap, combined_snwe, combined_latlon_spacing) = (
         ARIAtools.util.stitch.combine_data_to_single(
-            [ARIAtools.util.stitch._nan_filled_array(unw_data1),
-             ARIAtools.util.stitch._nan_filled_array(unw_data2)],
-            comb_snwe, comb_latlon, method='mean', latlon_step=comb_latlon[0])
+            [
+                ARIAtools.util.stitch._nan_filled_array(unw_data1),
+                ARIAtools.util.stitch._nan_filled_array(unw_data2),
+            ],
+            comb_snwe,
+            comb_latlon,
+            method="mean",
+            latlon_step=comb_latlon[0],
+        )
+    )
 
     combined_conn, _, _ = ARIAtools.util.stitch.combine_data_to_single(
-        [ARIAtools.util.stitch._nan_filled_array(conn_data1),
-         ARIAtools.util.stitch._nan_filled_array(conn_data2)],
-        comb_snwe, comb_latlon, method='min', latlon_step=comb_latlon[0])
+        [
+            ARIAtools.util.stitch._nan_filled_array(conn_data1),
+            ARIAtools.util.stitch._nan_filled_array(conn_data2),
+        ],
+        comb_snwe,
+        comb_latlon,
+        method="min",
+        latlon_step=comb_latlon[0],
+    )
 
     # combined dict
     combined_dict = dict(
-        SNWE=combined_snwe, LAT_SPACING=combined_latlon_spacing[0],
-        LON_SPACING=combined_latlon_spacing[1])
+        SNWE=combined_snwe,
+        LAT_SPACING=combined_latlon_spacing[0],
+        LON_SPACING=combined_latlon_spacing[1],
+    )
 
     combined_unwrap = np.ma.masked_invalid(combined_unwrap)
-    np.ma.set_fill_value(combined_unwrap, 0.)
+    np.ma.set_fill_value(combined_unwrap, 0.0)
 
     combined_conn = np.ma.masked_invalid(combined_conn)
-    np.ma.set_fill_value(combined_conn, -1.)
+    np.ma.set_fill_value(combined_conn, -1.0)
 
     return combined_unwrap, combined_conn, combined_dict
 
 
-def get_overlapping_conn(conn1: NDArray,
-                         conn2: NDArray) -> Tuple[NDArray, NDArray]:
+def get_overlapping_conn(conn1: NDArray, conn2: NDArray) -> Tuple[NDArray, NDArray]:
     """
     Get forward and backward pairs of overlapping connected components with
     the number of overlaping pixels.
@@ -396,14 +460,13 @@ def get_overlapping_conn(conn1: NDArray,
     # Loop through them and connect size and number of overlapping data
     for ix2 in concomp2:
         for ix1 in concomp1:
-
             # Skip 0 component combination with other components
             if not ix1 == 0 and not ix2 == 0:
                 idx = np.where((conn1 == ix1) & (conn2 == ix2))[0]
                 if np.count_nonzero(idx) > 0:
                     carray = np.array(
-                        [ix2, ix1, np.count_nonzero(idx)], dtype=np.int32,
-                        ndmin=2)
+                        [ix2, ix1, np.count_nonzero(idx)], dtype=np.int32, ndmin=2
+                    )
                     conn_union = np.concatenate((conn_union, carray), axis=0)
 
             # Get 0 components in both frames
@@ -411,8 +474,8 @@ def get_overlapping_conn(conn1: NDArray,
                 idx = np.where((conn1 == ix2) & (conn2 == ix1))[0]
                 if np.count_nonzero(idx) > 0:
                     carray = np.array(
-                        [ix2, ix1, np.count_nonzero(idx)], dtype=np.int32,
-                        ndmin=2)
+                        [ix2, ix1, np.count_nonzero(idx)], dtype=np.int32, ndmin=2
+                    )
                     conn_union = np.concatenate((conn_union, carray), axis=0)
 
     # Find components to correct in Frame 2
@@ -428,8 +491,7 @@ def get_overlapping_conn(conn1: NDArray,
             max_points = np.max(conn_union[ik][:, 2])
 
             # Select the one with the most points
-            ik = np.where(
-                (conn_union[:, 0] == k) & (conn_union[:, 2] == max_points))[0]
+            ik = np.where((conn_union[:, 0] == k) & (conn_union[:, 2] == max_points))[0]
 
             # Select first if there are more pairs with same num of points
             ik = np.array(ik[0], ndmin=1) if ik.shape[0] > 1 else ik
@@ -439,20 +501,25 @@ def get_overlapping_conn(conn1: NDArray,
     return conn_pairs
 
 
-def update_connect_components(conncomp_array: NDArray,
-                              unique_components: NDArray,
-                              renumber_from: int = 21) -> NDArray:
+def update_connect_components(
+    conncomp_array: NDArray, unique_components: NDArray, renumber_from: int = 21
+) -> NDArray:
     c = conncomp_array.copy()
     for ix, component in enumerate(unique_components):
         c[conncomp_array == component] = renumber_from + ix
     return conncomp_array
 
 
-def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
-                        unw2: NDArray, concom2: NDArray, ix2: np.float32,
-                        range_correction: Optional[bool] = False,
-                        print_msg: Optional[bool] = False) -> \
-        Tuple[np.float32, np.float32, np.float32]:
+def _integer_2pi_cycles(
+    unw1: NDArray,
+    concom1: NDArray,
+    ix1: np.float32,
+    unw2: NDArray,
+    concom2: NDArray,
+    ix2: np.float32,
+    range_correction: Optional[bool] = False,
+    print_msg: Optional[bool] = False,
+) -> Tuple[np.float32, np.float32, np.float32]:
     """
     Get mean difference of unwrapped Phase values for overlapping
     connected components as 2pi int cycles
@@ -501,11 +568,11 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
     n_points = np.count_nonzero(diff)
 
     # Number of 2pi integer jumps
-    num_jump = (np.abs(median_diff) + np.pi) // (2. * np.pi)
+    num_jump = (np.abs(median_diff) + np.pi) // (2.0 * np.pi)
     if median_diff < 0:
         num_jump *= -1
 
-    correction2pi = 2. * np.pi * num_jump
+    correction2pi = 2.0 * np.pi * num_jump
 
     # Get range_correction if selected
     if range_correction:
@@ -521,21 +588,22 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
 
     if print_msg:
         print(
-            f' Frame-1 component: {ix1} - Frame-2 component: {ix2}\n'
-            f'   Number of points: {n_points}\n'
-            f'   Median diff: {median_diff:.2f}, std: {std_value:.2f} rad\n'
-            f'   Number of 2pi cycles: {num_jump}\n'
-            f'   Correction2pi: {correction2pi:.2f}')
+            f" Frame-1 component: {ix1} - Frame-2 component: {ix2}\n"
+            f"   Number of points: {n_points}\n"
+            f"   Median diff: {median_diff:.2f}, std: {std_value:.2f} rad\n"
+            f"   Number of 2pi cycles: {num_jump}\n"
+            f"   Correction2pi: {correction2pi:.2f}"
+        )
         if range_correction:
             print(
-                f'   Range Corr: {range_corr:.2f} \n',
-                f' 2piCorr + RangeCorr: {correction2pi + range_corr:.2f}\n')
+                f"   Range Corr: {range_corr:.2f} \n",
+                f" 2piCorr + RangeCorr: {correction2pi + range_corr:.2f}\n",
+            )
 
     return median_diff, correction2pi, range_corr
 
 
-def _range_correction(unw1: NDArray,
-                      unw2: NDArray) -> np.float32:
+def _range_correction(unw1: NDArray, unw2: NDArray) -> np.float32:
     """
     Calculate range correction due to small non 2-pi shift caused by ESD
     different between frames. If ESD is not used, this correction
@@ -566,10 +634,14 @@ def _range_correction(unw1: NDArray,
 
 # Stitching routines for another layers
 
+
 def stitch_2frames_metadata(
-        unw_data1: NDArray, rdict1: dict,
-        unw_data2: NDArray, rdict2: dict,
-        verbose: Optional[bool] = False) -> Tuple[NDArray, NDArray]:
+    unw_data1: NDArray,
+    rdict1: dict,
+    unw_data2: NDArray,
+    rdict2: dict,
+    verbose: Optional[bool] = False,
+) -> Tuple[NDArray, NDArray]:
     """Sequential stitching function implementation from `stitch_2frames`
     for metadata layers
 
@@ -600,21 +672,25 @@ def stitch_2frames_metadata(
     """
     # GET FRAME OVERLAP
     box_1, box_2 = ARIAtools.util.stitch.frame_overlap(
-        rdict1['SNWE'], rdict2['SNWE'],
-        [rdict1['LAT_SPACING'], rdict1['LON_SPACING']],
-        [rdict2['LAT_SPACING'], rdict2['LON_SPACING']],
-        [-0.1, 0.1])
+        rdict1["SNWE"],
+        rdict2["SNWE"],
+        [rdict1["LAT_SPACING"], rdict1["LON_SPACING"]],
+        [rdict2["LAT_SPACING"], rdict2["LON_SPACING"]],
+        [-0.1, 0.1],
+    )
 
     # EXAMINE THE OVERLAP
     for i in range(unw_data1.shape[0]):
         diff = _metadata_offset(
-            unw_data1[i][box_1], unw_data2[i][box_2], print_msg=verbose)
+            unw_data1[i][box_1], unw_data2[i][box_2], print_msg=verbose
+        )
         unw_data2[i] += diff
     return unw_data1, unw_data2
 
 
-def _metadata_offset(unw1: NDArray, unw2: NDArray,
-                     print_msg: Optional[bool] = False) -> Tuple[np.float32]:
+def _metadata_offset(
+    unw1: NDArray, unw2: NDArray, print_msg: Optional[bool] = False
+) -> Tuple[np.float32]:
     """
     Get mean difference of metadata layers
 
@@ -644,35 +720,40 @@ def _metadata_offset(unw1: NDArray, unw2: NDArray,
     if n_points != 0:
         if print_msg:
             print(
-                f'   Number of points: {n_points}\n'
-                f'   Mean diff: {diff_value:.2f}\n')
+                f"   Number of points: {n_points}\n" f"   Mean diff: {diff_value:.2f}\n"
+            )
 
         return diff_value
     else:
-        print(f' {np.sum(~np.isnan(data1))}: {np.sum(~np.isnan(data2))}\n'
-              f' Number of points: {n_points}')
+        print(
+            f" {np.sum(~np.isnan(data1))}: {np.sum(~np.isnan(data2))}\n"
+            f" Number of points: {n_points}"
+        )
         return None
+
 
 # MAIN
 
 
-def product_stitch_sequential(input_unw_files: List[str],
-                              input_conncomp_files: List[str],
-                              arrres: List[float],
-                              epsg: Optional[str] = 'EPSG:4326',
-                              output_unw: Optional[str] = './unwMerged',
-                              output_conn: Optional[str] = './connCompMerged',
-                              output_format: Optional[str] = 'ENVI',
-                              is_nisar_file: Optional[bool] = False,
-                              bounds: Optional[tuple] = None,
-                              clip_json: Optional[str] = None,
-                              mask_file: Optional[str] = None,
-                              # [meandiff, cycle2pi]
-                              correction_method: Optional[str] = 'cycle2pi',
-                              range_correction: Optional[bool] = True,
-                              verbose: Optional[bool] = False,
-                              save_fig: Optional[bool] = False,
-                              overwrite: Optional[bool] = True) -> None:
+def product_stitch_sequential(
+    input_unw_files: List[str],
+    input_conncomp_files: List[str],
+    arrres: List[float],
+    epsg: Optional[str] = "EPSG:4326",
+    output_unw: Optional[str] = "./unwMerged",
+    output_conn: Optional[str] = "./connCompMerged",
+    output_format: Optional[str] = "ENVI",
+    is_nisar_file: Optional[bool] = False,
+    bounds: Optional[tuple] = None,
+    clip_json: Optional[str] = None,
+    mask_file: Optional[str] = None,
+    # [meandiff, cycle2pi]
+    correction_method: Optional[str] = "cycle2pi",
+    range_correction: Optional[bool] = True,
+    verbose: Optional[bool] = False,
+    save_fig: Optional[bool] = False,
+    overwrite: Optional[bool] = True,
+) -> None:
     """
     Sequential stitching of frames along the track. Starts from the Southern
     frame and goes towards the North. Stitching is perform with forward and
@@ -735,43 +816,45 @@ def product_stitch_sequential(input_unw_files: List[str],
         output_conn.parent.mkdir(exist_ok=True)
 
     # create temp files
-    temp_unw_out = output_unw.parent / ('temp_' + output_unw.name)
-    temp_conn_out = output_conn.parent / ('temp_' + output_conn.name)
+    temp_unw_out = output_unw.parent / ("temp_" + output_unw.name)
+    temp_conn_out = output_conn.parent / ("temp_" + output_conn.name)
 
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_unw_files) == 1:
+        osgeo.gdal.BuildVRT(str(temp_unw_out.with_suffix(".vrt")), input_unw_files)
         osgeo.gdal.BuildVRT(
-            str(temp_unw_out.with_suffix('.vrt')), input_unw_files)
-        osgeo.gdal.BuildVRT(
-                str(temp_conn_out.with_suffix('.vrt')), input_conncomp_files)
+            str(temp_conn_out.with_suffix(".vrt")), input_conncomp_files
+        )
         if is_nisar_file:
             # Get path to mask in the GUNW
-            nisar_binary_mask = \
-                ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
+            nisar_binary_mask = ARIAtools.util.stitch.get_binary_nisar_mask_from_path(
                 input_unw_files[0]
             )
 
             # apply it and save as temporary GeoTIFFs
             ARIAtools.util.stitch.apply_mask_and_write(
-                vrt_unw_path=str(temp_unw_out.with_suffix('.vrt')),
-                vrt_conn_path=str(temp_conn_out.with_suffix('.vrt')),
+                vrt_unw_path=str(temp_unw_out.with_suffix(".vrt")),
+                vrt_conn_path=str(temp_conn_out.with_suffix(".vrt")),
                 binary_mask=nisar_binary_mask,
                 out_unw_path=temp_unw_out,
                 out_conn_path=temp_conn_out,
-                multiply_unw_by=-1
+                multiply_unw_by=-1,
             )
 
     else:
-        (combined_unwrap, combined_conn, combined_snwe) = \
-            stitch_unwrapped_frames(
-                input_unw_files, input_conncomp_files,
-                is_nisar_file=is_nisar_file,
-                proj=epsg,
-                xres=arrres[0], yres=arrres[1],
-                correction_method=correction_method,
-                range_correction=range_correction, direction_N_S=True,
-                verbose=verbose)
+        (combined_unwrap, combined_conn, combined_snwe) = stitch_unwrapped_frames(
+            input_unw_files,
+            input_conncomp_files,
+            is_nisar_file=is_nisar_file,
+            proj=epsg,
+            xres=arrres[0],
+            yres=arrres[1],
+            correction_method=correction_method,
+            range_correction=range_correction,
+            direction_N_S=True,
+            verbose=verbose,
+        )
 
         # Invert phase to match date2_date1 convention
         if is_nisar_file:
@@ -780,23 +863,37 @@ def product_stitch_sequential(input_unw_files: List[str],
         # Write
         # write stitched unwrappedPhase
         ARIAtools.util.stitch.write_GUNW_array(
-            temp_unw_out, combined_unwrap, combined_snwe,
-            format=output_format, epsg=epsg, verbose=verbose,
-            update_mode=overwrite, add_vrt=True, nodata=0.0)
+            temp_unw_out,
+            combined_unwrap,
+            combined_snwe,
+            format=output_format,
+            epsg=epsg,
+            verbose=verbose,
+            update_mode=overwrite,
+            add_vrt=True,
+            nodata=0.0,
+        )
 
         # write stitched connectedComponents
         ARIAtools.util.stitch.write_GUNW_array(
-            temp_conn_out, combined_conn, combined_snwe,
-            format=output_format, epsg=epsg, verbose=verbose,
-            update_mode=overwrite, add_vrt=True, nodata=-1.0)
+            temp_conn_out,
+            combined_conn,
+            combined_snwe,
+            format=output_format,
+            epsg=epsg,
+            verbose=verbose,
+            update_mode=overwrite,
+            add_vrt=True,
+            nodata=-1.0,
+        )
 
     # Crop
     if verbose:
-        LOGGER.info(f'Cropping to {bounds}')
+        LOGGER.info(f"Cropping to {bounds}")
 
     if overwrite:
         if verbose:
-            LOGGER.info(f'Removing {output_unw}, {output_conn}')
+            LOGGER.info(f"Removing {output_unw}, {output_conn}")
 
         output_unw.unlink(missing_ok=True)
         output_conn.unlink(missing_ok=True)
@@ -806,27 +903,32 @@ def product_stitch_sequential(input_unw_files: List[str],
     #       Also, it looks like it is important to close osgeo.gdal.Warp
     #       osgeo.gdal.Warp/Translate add 6 seconds to runtime
 
-    for output, input in zip([output_conn, output_unw],
-                             [temp_conn_out, temp_unw_out]):
+    for output, input in zip([output_conn, output_unw], [temp_conn_out, temp_unw_out]):
         # Crop if selected
         ds = osgeo.gdal.Warp(
-            str(output), str(input.with_suffix('.vrt')), format=output_format,
-            cutlineDSName=clip_json, xRes=arrres[0], yRes=arrres[1],
-            targetAlignedPixels=True, dstSRS=epsg,
-            outputBounds=bounds, outputType=osgeo.gdal.GDT_Float32)
+            str(output),
+            str(input.with_suffix(".vrt")),
+            format=output_format,
+            cutlineDSName=clip_json,
+            xRes=arrres[0],
+            yRes=arrres[1],
+            targetAlignedPixels=True,
+            dstSRS=epsg,
+            outputBounds=bounds,
+            outputType=osgeo.gdal.GDT_Float32,
+        )
+        assert ds is not None, f"Could not warp {input.with_suffix('.vrt')}"
         ds = None
 
         # Update VRT
         if verbose:
             LOGGER.info(f'Writing {output}, {output.with_suffix(".vrt")}')
 
-        osgeo.gdal.Translate(
-            str(output.with_suffix('.vrt')), str(output), format="VRT")
+        osgeo.gdal.Translate(str(output.with_suffix(".vrt")), str(output), format="VRT")
 
         # Remove temp files
-        for suffix in [None, '.vrt', '.xml', '.hdr', '.aux.xml', '.tif']:
-            target = (input if suffix is None else
-                      input.with_suffix(suffix))
+        for suffix in [None, ".vrt", ".xml", ".hdr", ".aux.xml", ".tif"]:
+            target = input if suffix is None else input.with_suffix(suffix)
             if target.exists():
                 target.unlink()
 
@@ -841,8 +943,11 @@ def product_stitch_sequential(input_unw_files: List[str],
 
             mask_array = mask.ReadAsArray()
             array = ARIAtools.util.stitch.get_GUNW_array(
-                str(output.with_suffix('.vrt')),
-                xres=arrres[0], yres=arrres[1], proj=epsg)
+                str(output.with_suffix(".vrt")),
+                xres=arrres[0],
+                yres=arrres[1],
+                proj=epsg,
+            )
 
             if output == output_conn:
                 # Mask connected components
@@ -859,8 +964,8 @@ def product_stitch_sequential(input_unw_files: List[str],
 
         # mask out zeros
         array = ARIAtools.util.stitch.get_GUNW_array(
-            str(output.with_suffix('.vrt')),
-            xres=arrres[0], yres=arrres[1], proj=epsg)
+            str(output.with_suffix(".vrt")), xres=arrres[0], yres=arrres[1], proj=epsg
+        )
 
         if output == output_conn:
             # Mask connected components
@@ -868,10 +973,12 @@ def product_stitch_sequential(input_unw_files: List[str],
 
         else:
             concomp_array = ARIAtools.util.stitch.get_GUNW_array(
-                str(output_conn.with_suffix('.vrt')),
-                xres=arrres[0], yres=arrres[1], proj=epsg)
-            concomp_array[(concomp_array == -1)
-                          | (concomp_array == 0)] = np.nan
+                str(output_conn.with_suffix(".vrt")),
+                xres=arrres[0],
+                yres=arrres[1],
+                proj=epsg,
+            )
+            concomp_array[(concomp_array == -1) | (concomp_array == 0)] = np.nan
             concomp_array = np.isnan(concomp_array)
             array[array == 0] = np.nan
             array[concomp_array] = np.nan
@@ -883,9 +990,11 @@ def product_stitch_sequential(input_unw_files: List[str],
     # Plot stitched
     # NOTE: saving output figure adds 4 seconds
     if save_fig:
-        plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')),
-                           str(output_conn.with_suffix('.vrt')),
-                           epsg)
+        plot_GUNW_stitched(
+            str(output_unw.with_suffix(".vrt")),
+            str(output_conn.with_suffix(".vrt")),
+            epsg,
+        )
 
     # Remove temp files
     if temp_unw_out.exists():
@@ -893,10 +1002,11 @@ def product_stitch_sequential(input_unw_files: List[str],
 
 
 def product_stitch_sequential_metadata(
-        input_meta_files: List[str],
-        output_meta: Optional[str] = './tempMerged',
-        output_format: Optional[str] = 'ENVI',
-        verbose: Optional[bool] = False) -> None:
+    input_meta_files: List[str],
+    output_meta: Optional[str] = "./tempMerged",
+    output_format: Optional[str] = "ENVI",
+    verbose: Optional[bool] = False,
+) -> None:
     """
     Sequential stitching of frames implementation from
     `product_stitch_sequential` for metadata layers
@@ -920,7 +1030,7 @@ def product_stitch_sequential_metadata(
     # Create VRT and exit early if only one frame passed,
     # and therefore no stitching needed
     if len(input_meta_files) == 1:
-        osgeo.gdal.BuildVRT(output_meta + '.vrt', input_meta_files)
+        osgeo.gdal.BuildVRT(output_meta + ".vrt", input_meta_files)
         return
 
     # Outputs
@@ -936,10 +1046,10 @@ def product_stitch_sequential_metadata(
 
     for meta_file in input_meta_files:
         meta_attr_dicts.append(ARIAtools.util.stitch.get_GUNW_attr(meta_file))
-        temp_snwe_list.append(meta_attr_dicts[-1]['SNWE'])
-        temp_latlon_spacing_list.append([
-            meta_attr_dicts[-1]['LAT_SPACING'],
-            meta_attr_dicts[-1]['LON_SPACING']])
+        temp_snwe_list.append(meta_attr_dicts[-1]["SNWE"])
+        temp_latlon_spacing_list.append(
+            [meta_attr_dicts[-1]["LAT_SPACING"], meta_attr_dicts[-1]["LON_SPACING"]]
+        )
 
     # get sorted indices for frame bounds, from South to North
     # Sequential stitching starts from the most south frame and moves
@@ -954,27 +1064,24 @@ def product_stitch_sequential_metadata(
     # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
-
-            frame1_meta = meta_attr_dicts[ix1][
-                'PATH'].split('"')[1].split('/')[-1]
-            LOGGER.info('Frame-1: ', frame1_meta)
-            framew_meta = meta_attr_dicts[ix2][
-                'PATH'].split('"')[1].split('/')[-1]
-            LOGGER.info('Frame-2: ', framew_meta)
+            frame1_meta = meta_attr_dicts[ix1]["PATH"].split('"')[1].split("/")[-1]
+            LOGGER.info("Frame-1: ", frame1_meta)
+            framew_meta = meta_attr_dicts[ix2]["PATH"].split('"')[1].split("/")[-1]
+            LOGGER.info("Frame-2: ", framew_meta)
 
         # Frame1
         frame1_meta_array = ARIAtools.util.stitch.get_GUNW_array(
-            meta_attr_dicts[ix1]['PATH'])
+            meta_attr_dicts[ix1]["PATH"]
+        )
 
         # Frame2
         frame2_meta_array = ARIAtools.util.stitch.get_GUNW_array(
-            meta_attr_dicts[ix2]['PATH'])
+            meta_attr_dicts[ix2]["PATH"]
+        )
 
         # Mask nodata values
-        frame1_meta_array[
-            frame1_meta_array == meta_attr_dicts[ix1]['NODATA']] = np.nan
-        frame2_meta_array[
-            frame2_meta_array == meta_attr_dicts[ix2]['NODATA']] = np.nan
+        frame1_meta_array[frame1_meta_array == meta_attr_dicts[ix1]["NODATA"]] = np.nan
+        frame2_meta_array[frame2_meta_array == meta_attr_dicts[ix2]["NODATA"]] = np.nan
 
         if i == 0:
             (corr_meta1, corr_meta2) = stitch_2frames_metadata(
@@ -982,7 +1089,8 @@ def product_stitch_sequential_metadata(
                 meta_attr_dicts[ix1],
                 frame2_meta_array,
                 meta_attr_dicts[ix2],
-                verbose=verbose)
+                verbose=verbose,
+            )
 
             # Store corrected values
             corrected_meta_arrays = [corr_meta1, corr_meta2]
@@ -993,7 +1101,8 @@ def product_stitch_sequential_metadata(
                 meta_attr_dicts[ix1],
                 frame2_meta_array,
                 meta_attr_dicts[ix2],
-                verbose=verbose)
+                verbose=verbose,
+            )
 
             # Overwrite the last element in corrected arrays
             # TODO: check how to do this without using del
@@ -1001,10 +1110,13 @@ def product_stitch_sequential_metadata(
             corrected_meta_arrays.extend([corr_meta1, corr_meta2])
 
     # Combine corrected unwrappedPhase arrays
-    combined_meta, combined_snwe, _ = \
-        ARIAtools.util.stitch.combine_data_to_single(
-            corrected_meta_arrays, snwe_list, latlon_spacing_list,
-            method='mean', latlon_step=[-0.1, 0.1])
+    combined_meta, combined_snwe, _ = ARIAtools.util.stitch.combine_data_to_single(
+        corrected_meta_arrays,
+        snwe_list,
+        latlon_spacing_list,
+        method="mean",
+        latlon_step=[-0.1, 0.1],
+    )
 
     # replace nan with 0.0
     combined_meta = np.nan_to_num(combined_meta, nan=0.0)
@@ -1015,20 +1127,27 @@ def product_stitch_sequential_metadata(
 
     # write stitched metadata product
     ARIAtools.util.stitch.write_GUNW_array(
-        meta_out, combined_meta, combined_snwe, format=output_format,
-        verbose=verbose, add_vrt=True, nodata=0.0)
+        meta_out,
+        combined_meta,
+        combined_snwe,
+        format=output_format,
+        verbose=verbose,
+        add_vrt=True,
+        nodata=0.0,
+    )
 
 
-def plot_GUNW_stitched(stiched_unw_filename: str,
-                       stiched_conn_filename: str, epsg: str) -> None:
-    '''
+def plot_GUNW_stitched(
+    stiched_unw_filename: str, stiched_conn_filename: str, epsg: str
+) -> None:
+    """
     Plotting function for stitched outputs
-    '''
-    from matplotlib import pyplot as plt
+    """
     import matplotlib as mpl
+    from matplotlib import pyplot as plt
 
     # no display
-    mpl.use('Agg')
+    mpl.use("Agg")
 
     # Save plot
     cmap = plt.cm.cividis_r  # define the colormap
@@ -1037,23 +1156,21 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
     cmaplist = [cmap(i) for i in range(cmap.N)]
 
     # force the first color entry to be red
-    cmaplist[0] = (.9, .1, .1, 1.0)
+    cmaplist[0] = (0.9, 0.1, 0.1, 1.0)
 
     # create the new map
-    cmap = mpl.colors.LinearSegmentedColormap.from_list(
-        'Custom cmap', cmaplist, cmap.N)
+    cmap = mpl.colors.LinearSegmentedColormap.from_list("Custom cmap", cmaplist, cmap.N)
 
     output_dir = pathlib.Path(stiched_unw_filename).absolute()
-    output_fig = output_dir.parent / 'stitched.png'
+    output_fig = output_dir.parent / "stitched.png"
     output_fig.unlink(missing_ok=True)
 
     # Load Data
-    stitched_unw = ARIAtools.util.stitch.get_GUNW_array(
-        stiched_unw_filename, proj=epsg)
+    stitched_unw = ARIAtools.util.stitch.get_GUNW_array(stiched_unw_filename, proj=epsg)
     stitched_conn = ARIAtools.util.stitch.get_GUNW_array(
-        stiched_conn_filename, proj=epsg)
-    stitched_attr = ARIAtools.util.stitch.get_GUNW_attr(
-        stiched_unw_filename, proj=epsg)
+        stiched_conn_filename, proj=epsg
+    )
+    stitched_attr = ARIAtools.util.stitch.get_GUNW_attr(stiched_unw_filename, proj=epsg)
 
     # ConnComp discrete colormap
     bounds = np.linspace(0, 30, 31)
@@ -1065,29 +1182,39 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
 
     # Common plot options
     plot_kwargs = {
-        'extent': ARIAtools.util.stitch.snwe_to_extent(stitched_attr['SNWE']),
-        'interpolation': 'nearest'}
+        "extent": ARIAtools.util.stitch.snwe_to_extent(stitched_attr["SNWE"]),
+        "interpolation": "nearest",
+    }
 
     # Figure
     fig, axs = plt.subplots(1, 3, dpi=300, sharey=True)
 
     # Re-wrapped
-    im1 = axs[0].imshow(
-        np.mod(stitched_unw, 4 * np.pi), cmap='jet', **plot_kwargs)
+    im1 = axs[0].imshow(np.mod(stitched_unw, 4 * np.pi), cmap="jet", **plot_kwargs)
 
     # Unwrapped
     im2 = axs[1].imshow(
-        stitched_unw * (0.0556 / (6 * np.pi)), cmap='jet', clim=[-0.2, 0.2],
-        **plot_kwargs)
+        stitched_unw * (0.0556 / (6 * np.pi)),
+        cmap="jet",
+        clim=[-0.2, 0.2],
+        **plot_kwargs,
+    )
 
     # Connected Components
     im3 = axs[2].imshow(stitched_conn, cmap=cmap, norm=norm, **plot_kwargs)
 
-    for im, ax, label, txt, in zip(
-            [im1, im2, im3], axs, ['rad', 'm', '#'],
-            ['Re-wrapped phase w 20 rad', 'Unwrapped phase [m]',
-             'Connected Components']):
-        fig.colorbar(im, ax=ax, location='bottom', shrink=0.8, label=label)
+    for (
+        im,
+        ax,
+        label,
+        txt,
+    ) in zip(
+        [im1, im2, im3],
+        axs,
+        ["rad", "m", "#"],
+        ["Re-wrapped phase w 20 rad", "Unwrapped phase [m]", "Connected Components"],
+    ):
+        fig.colorbar(im, ax=ax, location="bottom", shrink=0.8, label=label)
         ax.set_title(txt, fontsize=10)
 
     fig.tight_layout()

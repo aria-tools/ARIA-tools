@@ -5,14 +5,13 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import copy
 import glob
 import logging
 import os
 import shutil
-from time import sleep
 
 import affine
-import copy
 import osgeo.gdal
 import pyproj
 import rasterio
@@ -21,22 +20,31 @@ import tile_mate
 import ARIAtools.util.shp
 import ARIAtools.util.vrt
 
-
 LOGGER = logging.getLogger(__name__)
 
 
 def prep_mask(
-        product_dict, maskfilename, bbox_file, prods_TOTbbox, proj,
-        amp_thresh=None, arrres=None, workdir='./', outputFormat='ENVI',
-        num_threads='2', multilooking=None, rankedResampling=False,
-        runlog=None):
+    product_dict,
+    maskfilename,
+    bbox_file,
+    prods_TOTbbox,
+    proj,
+    amp_thresh=None,
+    arrres=None,
+    workdir="./",
+    outputFormat="ENVI",
+    num_threads="2",
+    multilooking=None,
+    rankedResampling=False,
+    runlog=None,
+):
     """
     Function to load and export mask file with tile_mate
     """
     LOGGER.debug("prep_mask")
 
     # If specified DEM subdirectory exists, delete contents
-    workdir = os.path.join(workdir, 'mask')
+    workdir = os.path.join(workdir, "mask")
     workdir = os.path.abspath(workdir)
     os.makedirs(workdir, exist_ok=True)
 
@@ -45,70 +53,78 @@ def prep_mask(
 
     # File must be physically extracted, cannot proceed with VRT format
     # Defaulting to ENVI format
-    if outputFormat == 'VRT':
-        outputFormat = 'ENVI'
+    if outputFormat == "VRT":
+        outputFormat = "ENVI"
 
     # Set output res
     if multilooking is not None:
         arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
     # Retrieve update mode
-    update_mode = 'full_extract'
+    update_mode = "full_extract"
     if runlog is not None:
         log_data = runlog.load()
-        if 'update_mode' in log_data.keys():
-            update_mode = log_data['update_mode']
+        if "update_mode" in log_data.keys():
+            update_mode = log_data["update_mode"]
 
     # set temp directory
-    temp_workdir = os.path.join(workdir, 'tmp_dir')
+    temp_workdir = os.path.join(workdir, "tmp_dir")
 
     # delete temporary directory
     if os.path.exists(temp_workdir):
         shutil.rmtree(temp_workdir)
 
     # Download mask
-    if maskfilename.lower() == 'download' or \
-            maskfilename.lower() in tile_mate.stitcher.DATASET_SHORTNAMES:
+    if (
+        maskfilename.lower() == "download"
+        or maskfilename.lower() in tile_mate.stitcher.DATASET_SHORTNAMES
+    ):
         # if download specified, default to esa world cover mask
-        if maskfilename.lower() == 'download':
-            maskfilename = 'esa_world_cover_2021'
+        if maskfilename.lower() == "download":
+            maskfilename = "esa_world_cover_2021"
         lyr_name = copy.deepcopy(maskfilename)
-        LOGGER.info('Downloading water mask: %s', lyr_name)
+        LOGGER.info("Downloading water mask: %s", lyr_name)
 
         # set file names
-        uncropped_maskfilename = os.path.join(workdir,
-                                              f'{maskfilename}_uncropped.tif')
-        maskfilename = os.path.join(workdir, f'{maskfilename}.msk')
-        ref_file = os.path.join(workdir, 'tmp_referencefile')
+        uncropped_maskfilename = os.path.join(workdir, f"{maskfilename}_uncropped.tif")
+        maskfilename = os.path.join(workdir, f"{maskfilename}.msk")
+        ref_file = os.path.join(workdir, "tmp_referencefile")
 
         # Check if mask has already been downloaded and covers necessary area
-        if os.path.exists(uncropped_maskfilename) \
-            and update_mode != 'full_extract':
+        if os.path.exists(uncropped_maskfilename) and update_mode != "full_extract":
             LOGGER.warning(
-                '%s has already been downloaded. Skipping download.',
-                uncropped_maskfilename)
+                "%s has already been downloaded. Skipping download.",
+                uncropped_maskfilename,
+            )
         else:
             # download mask
             dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
-                bounds, tile_shortname=lyr_name)
+                bounds, tile_shortname=lyr_name
+            )
 
             # fill permanent water body
-            if lyr_name in ('esa_world_cover_2020', 'esa_world_cover_2021'):
+            if lyr_name in ("esa_world_cover_2020", "esa_world_cover_2021"):
                 dat_arr[dat_arr == 80] = 0
                 dat_arr[dat_arr != 0] = 1
 
             # assign datatype and set resampling mode
-            dat_arr = dat_arr.astype('byte')
-            f_dtype = 'uint8'
+            dat_arr = dat_arr.astype("byte")
+            f_dtype = "uint8"
             resampling_mode = rasterio.warp.Resampling.nearest
 
             # get output parameters from temp file
             crs = pyproj.CRS.from_wkt(proj)
             with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
                 osgeo.gdal.Warp(
-                    ref_file, product_dict[0], format=outputFormat,
-                    outputBounds=bounds, xRes=arrres[0], yRes=arrres[1],
-                    targetAlignedPixels=True, multithread=True)
+                    ref_file,
+                    product_dict[0],
+                    format=outputFormat,
+                    outputBounds=bounds,
+                    xRes=arrres[0],
+                    yRes=arrres[1],
+                    targetAlignedPixels=True,
+                    multithread=True,
+                )
 
             with rasterio.open(ref_file) as src:
                 reference_gt = src.transform
@@ -116,56 +132,72 @@ def prep_mask(
                 resize_row = src.height
 
             # remove temporary file
-            for j in glob.glob(ref_file + '*'):
+            for j in glob.glob(ref_file + "*"):
                 if os.path.isfile(j):
                     os.remove(j)
 
             # save uncropped raster to file
-            with rasterio.open(uncropped_maskfilename, 'w',
-                               height=resize_row, width=resize_col, count=1,
-                               dtype=f_dtype, crs=crs,
-                               transform=affine.Affine(*reference_gt)) as dst:
+            with rasterio.open(
+                uncropped_maskfilename,
+                "w",
+                height=resize_row,
+                width=resize_col,
+                count=1,
+                dtype=f_dtype,
+                crs=crs,
+                transform=affine.Affine(*reference_gt),
+            ) as dst:
                 rasterio.warp.reproject(
-                    source=dat_arr, destination=rasterio.band(dst, 1),
-                    src_transform=dat_prof['transform'],
-                    src_crs=dat_prof['crs'], dst_transform=reference_gt,
-                    dst_crs=crs, resampling=resampling_mode)
+                    source=dat_arr,
+                    destination=rasterio.band(dst, 1),
+                    src_transform=dat_prof["transform"],
+                    src_crs=dat_prof["crs"],
+                    dst_transform=reference_gt,
+                    dst_crs=crs,
+                    resampling=resampling_mode,
+                )
 
         # save cropped mask with precise spacing
         with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
             osgeo.gdal.Warp(
-                maskfilename, uncropped_maskfilename, format=outputFormat,
-                outputBounds=bounds, outputType=osgeo.gdal.GDT_Byte,
-                xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-                multithread=True)
+                maskfilename,
+                uncropped_maskfilename,
+                format=outputFormat,
+                outputBounds=bounds,
+                outputType=osgeo.gdal.GDT_Byte,
+                xRes=arrres[0],
+                yRes=arrres[1],
+                targetAlignedPixels=True,
+                multithread=True,
+            )
 
         update_file = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
         update_file.SetProjection(proj)
-        update_file.GetRasterBand(1).SetNoDataValue(0.)
-        osgeo.gdal.Translate(f'{maskfilename}.vrt',
-                             maskfilename, format='VRT')
+        update_file.GetRasterBand(1).SetNoDataValue(0.0)
+        osgeo.gdal.Translate(f"{maskfilename}.vrt", maskfilename, format="VRT")
 
     # User specified mask
     else:
-        LOGGER.info("Using user specified mask %s" % maskfilename)
+        LOGGER.info("Using user specified mask %s", maskfilename)
         # Path to local version of user specified mask
         user_mask = os.path.abspath(maskfilename)  # for clarity
         user_mask_n = os.path.basename(os.path.splitext(user_mask)[0])
-        local_mask = os.path.join(workdir, f'{user_mask_n}.msk')
-        local_mask_unc = os.path.join(workdir, f'{user_mask_n}_uncropped.msk')
+        local_mask = os.path.join(workdir, f"{user_mask_n}.msk")
+        local_mask_unc = os.path.join(workdir, f"{user_mask_n}_uncropped.msk")
         if user_mask == local_mask:
             LOGGER.debug(
-                'The mask you specified already exists in %s, '
-                'using the existing one...' % os.path.dirname(local_mask))
+                "The mask you specified already exists in %s, "
+                "using the existing one...",
+                os.path.dirname(local_mask),
+            )
 
             # move all original files to temp path to circumvent gdal issues
             os.makedirs(temp_workdir, exist_ok=True)
-            local_mask_noext = os.path.join(workdir, '%s.' % (user_mask_n))
-            for j in glob.glob(local_mask_noext + '*'):
+            local_mask_noext = os.path.join(workdir, f"{user_mask_n}.")
+            for j in glob.glob(local_mask_noext + "*"):
                 shutil.move(j, temp_workdir)
 
-            temp_local_mask = os.path.join(
-                temp_workdir, '%s.msk' % (user_mask_n))
+            temp_local_mask = os.path.join(temp_workdir, f"{user_mask_n}.msk")
             ds = osgeo.gdal.Open(temp_local_mask)
 
         else:
@@ -174,23 +206,30 @@ def prep_mask(
 
             # shutil.copy(user_mask, local_mask_unc)
             ds = osgeo.gdal.BuildVRT(
-                f'{local_mask_unc}.vrt', user_mask, outputBounds=bounds)
-            assert ds is not None, f'Could not open user mask: {user_mask}'
+                f"{local_mask_unc}.vrt", user_mask, outputBounds=bounds
+            )
+            assert ds is not None, f"Could not open user mask: {user_mask}"
 
         # crop the user mask and write
         with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
             osgeo.gdal.Warp(
-                f'{local_mask}', ds, format=outputFormat,
-                cutlineDSName=prods_TOTbbox, outputBounds=bounds,
-                xRes=arrres[0], yRes=arrres[1], targetAlignedPixels=True,
-                multithread=True)
+                f"{local_mask}",
+                ds,
+                format=outputFormat,
+                cutlineDSName=prods_TOTbbox,
+                outputBounds=bounds,
+                xRes=arrres[0],
+                yRes=arrres[1],
+                targetAlignedPixels=True,
+                multithread=True,
+            )
 
         # set projection of the local mask
         mask_file = osgeo.gdal.Open(local_mask, osgeo.gdal.GA_Update)
         mask_file.SetProjection(proj)
 
         # create vrt for local cropped mask
-        osgeo.gdal.Translate(f'{local_mask}.vrt', local_mask, format='VRT')
+        osgeo.gdal.Translate(f"{local_mask}.vrt", local_mask, format="VRT")
 
         # assign new local mask for amp thresh
         maskfilename = local_mask
@@ -198,9 +237,14 @@ def prep_mask(
     # Make average amplitude mask
     if amp_thresh is not None:
         amp_file = ARIAtools.util.vrt.rasterAverage(
-            os.path.join(workdir, 'avgamplitude'), product_dict, bounds,
-            prods_TOTbbox, arrres, outputFormat=outputFormat,
-            thresh=amp_thresh)
+            os.path.join(workdir, "avgamplitude"),
+            product_dict,
+            bounds,
+            prods_TOTbbox,
+            arrres,
+            outputFormat=outputFormat,
+            thresh=amp_thresh,
+        )
 
         # Update mask with average amplitude
         mask_file = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
@@ -210,10 +254,17 @@ def prep_mask(
     # crop/expand mask to DEM size?
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         osgeo.gdal.Warp(
-            maskfilename, maskfilename, format=outputFormat,
-            cutlineDSName=prods_TOTbbox, outputBounds=bounds, xRes=arrres[0],
-            yRes=arrres[1], targetAlignedPixels=True, multithread=True,
-            options=['-overwrite'])
+            maskfilename,
+            maskfilename,
+            format=outputFormat,
+            cutlineDSName=prods_TOTbbox,
+            outputBounds=bounds,
+            xRes=arrres[0],
+            yRes=arrres[1],
+            targetAlignedPixels=True,
+            multithread=True,
+            options=["-overwrite"],
+        )
 
     mask = osgeo.gdal.Open(maskfilename, osgeo.gdal.GA_Update)
     mask.SetProjection(proj)
@@ -225,8 +276,7 @@ def prep_mask(
 
     # Update VRT
     translate_options = osgeo.gdal.TranslateOptions(format="VRT")
-    osgeo.gdal.Translate(
-        maskfilename + '.vrt', maskfilename, options=translate_options)
+    osgeo.gdal.Translate(maskfilename + ".vrt", maskfilename, options=translate_options)
 
     # return filename of mask
     return maskfilename

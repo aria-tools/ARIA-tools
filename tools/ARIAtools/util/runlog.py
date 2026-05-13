@@ -5,16 +5,14 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import os
-import logging
-import pickle
 import datetime
+import logging
+import os
+import pickle
+
 import shapely
 import yaml
 
-import ARIAtools
-import ARIAtools.util.log
-import ARIAtools.util.shp
 from ARIAtools.constants import ARIA_STACK_DEFAULTS
 
 LOGGER = logging.getLogger(__name__)
@@ -26,58 +24,58 @@ class RunLog:
     Parameters relevant to a user for future use will be recorded in a
     human-readable YAML file.
     """
+
     def __init__(self, workdir):
         """
         Initialize log directory and files.
         Record basic information such as date and time of run.
         Initialize core parameters.
         """
-        LOGGER.info('Run log initiated')
+        LOGGER.info("Run log initiated")
 
         # Record parameters
-        self.run_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.run_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.workdir = os.path.abspath(workdir)
 
         # Automatically establish log directory and files
-        self.log_dir = os.path.join(self.workdir, 'config')
+        self.log_dir = os.path.join(self.workdir, "config")
         os.makedirs(self.log_dir, exist_ok=True)
 
-        self.log_name = os.path.join(self.log_dir, 'PICKLE.pkl')
+        self.log_name = os.path.join(self.log_dir, "PICKLE.pkl")
         if not os.path.exists(self.log_name):
-            with open(self.log_name, 'wb') as log_file:
+            with open(self.log_name, "wb") as log_file:
                 pickle.dump({}, log_file)
 
         self.__initialize_config__()
 
-        self.file_list_name = os.path.join(self.log_dir, 'files.yaml')
+        self.file_list_name = os.path.join(self.log_dir, "files.yaml")
         if not os.path.exists(self.file_list_name):
-            with open(self.file_list_name, 'w') as list_file:
-                yaml.dump({'runs': []}, list_file)
+            with open(self.file_list_name, "w") as list_file:
+                yaml.dump({"runs": []}, list_file)
 
-        self.extracted_files_name = os.path.join(self.log_dir,
-                                                 'extracted_files.yaml')
+        self.extracted_files_name = os.path.join(self.log_dir, "extracted_files.yaml")
         if not os.path.exists(self.extracted_files_name):
-            with open(self.extracted_files_name, 'w') as extr_file:
-                yaml.dump({'runs': []}, extr_file)
+            with open(self.extracted_files_name, "w") as extr_file:
+                yaml.dump({"runs": []}, extr_file)
 
         # Automatically update core parameters
         self.__update_runtimes__()
-        self.update('workdir', self.workdir)
-        self.update('update_mode', 'full_extract')
+        self.update("workdir", self.workdir)
+        self.update("update_mode", "full_extract")
 
     def __initialize_config__(self):
-        """ Initialize human-readable configuration file. """
+        """Initialize human-readable configuration file."""
         # Formulate config file name
-        self.config_name = os.path.join(self.log_dir, 'config.yaml')
+        self.config_name = os.path.join(self.log_dir, "config.yaml")
 
         # Create file if it does not exist
         if not os.path.exists(self.config_name):
-            with open(self.config_name, 'w') as config_file:
+            with open(self.config_name, "w") as config_file:
                 yaml.dump({}, config_file)
 
     def load(self):
-        """ Load all data from PICKLE file. """
-        with open(self.log_name, 'rb') as log_file:
+        """Load all data from PICKLE file."""
+        with open(self.log_name, "rb") as log_file:
             log_data = pickle.load(log_file)
 
         return log_data
@@ -91,39 +89,49 @@ class RunLog:
         # Recall existing log data
         log_data = self.load()
 
-        LOGGER.debug('Writing %s to log file', attr_name)
+        LOGGER.debug("Writing %s to log file", attr_name)
 
         # Check if previous version of attribute should be saved
-        if attr_name in ['total_bbox', 'total_bbox_metadatalyr']:
+        if attr_name in ["total_bbox", "total_bbox_metadatalyr"]:
             if attr_name in log_data.keys():
-                log_data[f'prev_{attr_name}'] = log_data[attr_name]
+                log_data[f"prev_{attr_name}"] = log_data[attr_name]
 
         # Check if attributes should be written to YAML file
-        if attr_name == 'run_times':
-            self.__update_configs__('run_times', attr_value)
+        if attr_name == "run_times":
+            self.__update_configs__("run_times", attr_value)
 
-        elif attr_name in ['workdir', 'aria_version', 'aria_routine',
-                           'prods_TOTbbox', 'prods_TOTbbox_metadatalyr']:
+        elif attr_name in [
+            "workdir",
+            "aria_version",
+            "aria_routine",
+            "prods_TOTbbox",
+            "prods_TOTbbox_metadatalyr",
+        ]:
             self.__update_configs__(attr_name, attr_value)
 
-        elif attr_name == 'args':
+        elif attr_name == "args":
             attrs = attr_value.__dict__
-            config_params = ['bbox', 'croptounion',
-                             'multilooking', 'minimumOverlap', 'nc_version',
-                             'projection']
+            config_params = [
+                "bbox",
+                "croptounion",
+                "multilooking",
+                "minimumOverlap",
+                "nc_version",
+                "projection",
+            ]
             for param in config_params:
                 if param in attrs.keys():
                     self.__update_configs__(param, attrs[param])
 
-        if attr_name == 'files':
+        if attr_name == "files":
             self.__update_file_list__(attr_value)
 
-        if attr_name == 'extracted_files':
+        if attr_name == "extracted_files":
             attr_value = self.__update_extracted_files__(attr_value)
 
         # Write new log data
         log_data[attr_name] = attr_value
-        with open(self.log_name, 'wb') as log_file:
+        with open(self.log_name, "wb") as log_file:
             pickle.dump(log_data, log_file)
 
     def __update_runtimes__(self):
@@ -136,12 +144,12 @@ class RunLog:
         # Retrieve existing data
         log_data = self.load()
 
-        if 'run_times' in log_data.keys():
-            log_data['run_times'].append(self.run_time)
+        if "run_times" in log_data.keys():
+            log_data["run_times"].append(self.run_time)
         else:
-            log_data['run_times'] = [self.run_time]
+            log_data["run_times"] = [self.run_time]
 
-        self.update('run_times', log_data['run_times'])
+        self.update("run_times", log_data["run_times"])
 
     def __update_configs__(self, attr_name, attr_value):
         """
@@ -149,66 +157,64 @@ class RunLog:
         value.
         """
         # Convert shapely polygon to WKT
-        if type(attr_value) == shapely.Polygon:
+        if isinstance(attr_value, shapely.Polygon):
             attr_value = attr_value.wkt
 
         # Recall existing config data
-        with open(self.config_name, 'r') as config_file:
+        with open(self.config_name) as config_file:
             config_data = yaml.safe_load(config_file)
 
         # Write new data
         config_data[attr_name] = attr_value
-        with open(self.config_name, 'w') as config_file:
+        with open(self.config_name, "w") as config_file:
             config_file.write(
-'''# Configuration parameters for prior invocation of ARIA-tools.
+                """# Configuration parameters for prior invocation of ARIA-tools.
 # These parameters describe the function invoked and arguments passed in a
 # previous run, presented in human-readable format.
 # Passing these arguments to the specified function can be used to
-# replicate the previous run.\n''')
+# replicate the previous run.\n"""
+            )
             yaml.dump(config_data, config_file)
 
     def __update_file_list__(self, files):
-        """
-        """
+        """ """
         # Organize files by run time
         file_dict = {f"run_time {self.run_time}": files}
 
         # Recall existing config data
-        with open(self.file_list_name, 'r') as list_file:
+        with open(self.file_list_name) as list_file:
             run_dict = yaml.safe_load(list_file)
 
         # Add current run to list
-        run_dict['runs'].append(file_dict)
+        run_dict["runs"].append(file_dict)
 
         # Write to YAML file
-        with open(self.file_list_name, 'w') as list_file:
-            list_file.write('# Files passed to previous ARIA-tools run.\n')
+        with open(self.file_list_name, "w") as list_file:
+            list_file.write("# Files passed to previous ARIA-tools run.\n")
             yaml.dump(run_dict, list_file)
 
     def __update_extracted_files__(self, extracted_files):
-        """ Write list of extracted files to YAML. """
+        """Write list of extracted files to YAML."""
         # Parse extracted files
-        extr_dict = {'total_nb_extracted': len(extracted_files)}
+        extr_dict = {"total_nb_extracted": len(extracted_files)}
 
         for layer in ARIA_STACK_DEFAULTS:
             # Determine files from relevant layer
-            extr_dict[layer] = [
-                fname for fname in extracted_files if layer in fname]
+            extr_dict[layer] = [fname for fname in extracted_files if layer in fname]
 
             # Remove accounted-for files from list
-            extracted_files = [
-                fname for fname in extracted_files if layer not in fname]
-        extr_dict['other'] = extracted_files
+            extracted_files = [fname for fname in extracted_files if layer not in fname]
+        extr_dict["other"] = extracted_files
 
         # Organize files by run time
         run_time = f"run_time {self.run_time}"
         extr_lyr_dict = {run_time: extr_dict}
 
         # Recall existing config data
-        with open(self.extracted_files_name, 'r') as extr_file:
+        with open(self.extracted_files_name) as extr_file:
             run_dict = yaml.safe_load(extr_file)
 
-        runs = run_dict['runs']
+        runs = run_dict["runs"]
         run_times = []
         [run_times.extend(run.keys()) for run in runs]
 
@@ -221,15 +227,14 @@ class RunLog:
 
                     # Merge new and existing dictionary entries
                     for key, value in exist_entry.items():
-                        run[run_time][key] = \
-                            value + extr_lyr_dict[run_time][key]
+                        run[run_time][key] = value + extr_lyr_dict[run_time][key]
         else:
             # Start new entry for this run time
-            run_dict['runs'].append(extr_lyr_dict)
+            run_dict["runs"].append(extr_lyr_dict)
 
         # Write parameters
-        with open(self.extracted_files_name, 'w') as extr_file:
-            extr_file.write('# Files extracted by previous ARIA-tools run.\n')
+        with open(self.extracted_files_name, "w") as extr_file:
+            extr_file.write("# Files extracted by previous ARIA-tools run.\n")
             yaml.dump(run_dict, extr_file)
 
         return run_dict

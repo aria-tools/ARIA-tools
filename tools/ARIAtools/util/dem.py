@@ -8,31 +8,42 @@
 """
 Digital Elevation Model utilities
 """
-import os
-import shutil
-import logging
-import numpy as np
 
-import osgeo
+import logging
+import os
+
 import dem_stitcher
+import numpy as np
+import osgeo
 
 import ARIAtools.util.shp
 
 LOGGER = logging.getLogger(__name__)
 
 
-def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
-             proj, arrres=None, workdir='./',
-             outputFormat='ENVI', num_threads='2', dem_name: str = 'glo_90',
-             multilooking=None, rankedResampling=False, runlog=None):
+def prep_dem(
+    demfilename,
+    bbox_file,
+    prods_TOTbbox,
+    prods_TOTbbox_metadatalyr,
+    proj,
+    arrres=None,
+    workdir="./",
+    outputFormat="ENVI",
+    num_threads="2",
+    dem_name: str = "glo_90",
+    multilooking=None,
+    rankedResampling=False,
+    runlog=None,
+):
     """
     Function to load and export DEM, lat, lon arrays.
     If "Download" flag is specified, DEM will be downloaded on the fly.
     """
-    LOGGER.debug('prep_dem')
+    LOGGER.debug("prep_dem")
     # If specified DEM subdirectory exists, delete contents
-    workdir = os.path.join(workdir, 'DEM')
-    aria_dem = os.path.join(workdir, f'{dem_name}.dem')
+    workdir = os.path.join(workdir, "DEM")
+    aria_dem = os.path.join(workdir, f"{dem_name}.dem")
     os.makedirs(workdir, exist_ok=True)
 
     # bounds of user bbox
@@ -40,77 +51,93 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
     # File must be physically extracted, cannot proceed with VRT format.
     # Defaulting to ENVI format.
-    if outputFormat == 'VRT':
-        outputFormat = 'ENVI'
+    if outputFormat == "VRT":
+        outputFormat = "ENVI"
 
     # Set output res
     if multilooking is not None:
         arrres = [arrres[0] * multilooking, arrres[1] * multilooking]
 
-    if demfilename.lower() == 'download':
+    if demfilename.lower() == "download":
         if dem_name not in dem_stitcher.datasets.DATASETS:
             raise ValueError(
-                '%s must be in %s' % (
-                    dem_name, ', '.join(dem_stitcher.datasets.DATASETS)))
+                f"{dem_name} must be in " f"{', '.join(dem_stitcher.datasets.DATASETS)}"
+            )
 
-        LOGGER.info('Downloading DEM: %s', dem_name)
+        LOGGER.info("Downloading DEM: %s", dem_name)
         demfilename = download_dem(
-            aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name, runlog)
+            aria_dem, prods_TOTbbox_metadatalyr, num_threads, dem_name, runlog
+        )
 
     # checks for user specified DEM, ensure it's georeferenced
     else:
-        LOGGER.info("Using user specified DEM %s" % demfilename)
+        LOGGER.info("Using user specified DEM %s", demfilename)
         demfilename = os.path.abspath(demfilename)
-        assert os.path.exists(demfilename), (
-            f'Cannot open DEM at: {demfilename}')
+        assert os.path.exists(demfilename), f"Cannot open DEM at: {demfilename}"
 
         ds_u = osgeo.gdal.Open(demfilename)
-        epsg = osgeo.osr.SpatialReference(
-            wkt=ds_u.GetProjection()).GetAttrValue('AUTHORITY', 1)
-        assert epsg is not None, (
-            f'No projection information in DEM: {demfilename}')
+        epsg = osgeo.osr.SpatialReference(wkt=ds_u.GetProjection()).GetAttrValue(
+            "AUTHORITY", 1
+        )
+        assert epsg is not None, f"No projection information in DEM: {demfilename}"
 
     # write cropped DEM
     if demfilename == os.path.abspath(aria_dem):
-        LOGGER.warning('The DEM you specified already exists in %s, '
-                       'using the existing one...', os.path.dirname(aria_dem))
-        ds_aria = osgeo.gdal.Open(aria_dem)
+        LOGGER.warning(
+            "The DEM you specified already exists in %s, " "using the existing one...",
+            os.path.dirname(aria_dem),
+        )
+        existing_dem = osgeo.gdal.Open(aria_dem)
+        assert existing_dem is not None, f"Could not open DEM at: {aria_dem}"
+        existing_dem = None
 
     else:
         with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
             gdal_warp_kwargs = {
-                'format': outputFormat, 'cutlineDSName': prods_TOTbbox,
-                'outputBounds': bounds, 'outputType': osgeo.gdal.GDT_Int16,
-                'dstNodata': -32768,
-                'xRes': arrres[0], 'yRes': arrres[1],
-                'targetAlignedPixels': True, 'multithread': True}
+                "format": outputFormat,
+                "cutlineDSName": prods_TOTbbox,
+                "outputBounds": bounds,
+                "outputType": osgeo.gdal.GDT_Int16,
+                "dstNodata": -32768,
+                "xRes": arrres[0],
+                "yRes": arrres[1],
+                "targetAlignedPixels": True,
+                "multithread": True,
+            }
             osgeo.gdal.Warp(
-                aria_dem, demfilename,
-                options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+                aria_dem,
+                demfilename,
+                options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs),
+            )
 
         update_file = osgeo.gdal.Open(aria_dem, osgeo.gdal.GA_Update)
         update_file.SetProjection(proj)
-        ds_aria = osgeo.gdal.Translate(
-            f'{aria_dem}.vrt', aria_dem, format='VRT')
-        LOGGER.info(
-            'Applied cutline to produce 3 arc-sec SRTM DEM: %s', aria_dem)
+        vrt_ds = osgeo.gdal.Translate(f"{aria_dem}.vrt", aria_dem, format="VRT")
+        assert vrt_ds is not None, f"Could not build VRT for DEM at: {aria_dem}"
+        vrt_ds = None
+        LOGGER.info("Applied cutline to produce 3 arc-sec SRTM DEM: %s", aria_dem)
 
     # Load DEM and setup lat and lon arrays
     # pass expanded DEM for metadata field interpolation
-    bounds = list(
-        ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr).bounds)
+    bounds = list(ARIAtools.util.shp.open_shp(prods_TOTbbox_metadatalyr).bounds)
 
     with osgeo.gdal.config_options({"GDAL_NUM_THREADS": num_threads}):
         gdal_warp_kwargs = {
-            'format': outputFormat, 'outputBounds': bounds,
-            'dstNodata': -32768,
-            'xRes': arrres[0],
-            'yRes': arrres[1], 'targetAlignedPixels': True,
-            'multithread': True, 'options': ['-overwrite']}
-        demfile_expanded = aria_dem.replace('.dem', '_expanded.dem')
+            "format": outputFormat,
+            "outputBounds": bounds,
+            "dstNodata": -32768,
+            "xRes": arrres[0],
+            "yRes": arrres[1],
+            "targetAlignedPixels": True,
+            "multithread": True,
+            "options": ["-overwrite"],
+        }
+        demfile_expanded = aria_dem.replace(".dem", "_expanded.dem")
         ds_aria_expanded = osgeo.gdal.Warp(
-            demfile_expanded, aria_dem,
-            options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs))
+            demfile_expanded,
+            aria_dem,
+            options=osgeo.gdal.WarpOptions(**gdal_warp_kwargs),
+        )
 
     # Define lat/lon arrays for fullres layers
     gt = ds_aria_expanded.GetGeoTransform()
@@ -127,10 +154,10 @@ def prep_dem(demfilename, bbox_file, prods_TOTbbox, prods_TOTbbox_metadatalyr,
 
 
 def download_dem(
-        path_dem, path_prod_union, num_threads, dem_name='glo_90',
-        runlog=None):
+    path_dem, path_prod_union, num_threads, dem_name="glo_90", runlog=None
+):
     """Download the DEM over product bbox union."""
-    LOGGER.debug('download_dem')
+    LOGGER.debug("download_dem")
     root = os.path.splitext(path_dem)[0]
     vrt_path = f"{root}_uncropped.vrt"
 
@@ -144,16 +171,15 @@ def download_dem(
             tiles_exist = True
 
     # Retrieve update mode
-    update_mode = 'full_extract'
+    update_mode = "full_extract"
     if runlog is not None:
         log_data = runlog.load()
-        if 'update_mode' in log_data.keys():
-            update_mode = log_data['update_mode']
+        if "update_mode" in log_data.keys():
+            update_mode = log_data["update_mode"]
 
     # Check if DEM has already been downloaded and overlaps necessary area
-    if tiles_exist and update_mode != 'full_extract':
-        LOGGER.warning(
-            '%s has already been downloaded. Skipping download.', vrt_path)
+    if tiles_exist and update_mode != "full_extract":
+        LOGGER.warning("%s has already been downloaded. Skipping download.", vrt_path)
 
     else:
         dirname = os.path.dirname(path_dem)
@@ -163,11 +189,13 @@ def download_dem(
         prod_shapefile = ARIAtools.util.shp.open_shp(path_prod_union)
         extent = prod_shapefile.bounds
 
-        localize_tiles_to_gtiff = False if dem_name == 'glo_30' else True
+        localize_tiles_to_gtiff = False if dem_name == "glo_30" else True
         dem_tile_paths = dem_stitcher.get_dem_tile_paths(
-            bounds=extent, dem_name=dem_name,
+            bounds=extent,
+            dem_name=dem_name,
             localize_tiles_to_gtiff=localize_tiles_to_gtiff,
-            tile_dir=tile_dir)
+            tile_dir=tile_dir,
+        )
 
         ds = osgeo.gdal.BuildVRT(vrt_path, dem_tile_paths)
 

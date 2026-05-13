@@ -10,7 +10,7 @@ Copyright (c) 2026, California Institute of Technology.
 
 import logging
 import threading
-import numpy as np
+
 from osgeo import gdal
 
 LOGGER = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class MaskCache:
 
     _cache = {}
     _lock = threading.RLock()
-    _stats = {'hits': 0, 'misses': 0}
+    _stats = {"hits": 0, "misses": 0}
 
     @classmethod
     def get(cls, maskfile):
@@ -67,22 +67,22 @@ class MaskCache:
         # Fast path: check cache without lock (common case)
         if maskfile in cls._cache:
             with cls._lock:
-                cls._stats['hits'] += 1
+                cls._stats["hits"] += 1
             return cls._cache[maskfile]
 
         # Slow path: read from disk with lock
         with cls._lock:
             # Double-check after acquiring lock (another thread may have loaded)
             if maskfile in cls._cache:
-                cls._stats['hits'] += 1
+                cls._stats["hits"] += 1
                 return cls._cache[maskfile]
 
             # Read mask from disk
-            LOGGER.debug('Loading mask from file: %s', maskfile)
+            LOGGER.debug("Loading mask from file: %s", maskfile)
             try:
                 mask_ds = gdal.Open(maskfile, gdal.GA_ReadOnly)
                 if mask_ds is None:
-                    LOGGER.warning('Failed to open mask file: %s', maskfile)
+                    LOGGER.warning("Failed to open mask file: %s", maskfile)
                     return None
 
                 # Read array
@@ -93,15 +93,16 @@ class MaskCache:
 
                 # Cache the array
                 cls._cache[maskfile] = mask_array
-                cls._stats['misses'] += 1
+                cls._stats["misses"] += 1
 
-                LOGGER.debug('Cached mask array: %s (shape: %s)',
-                           maskfile, mask_array.shape)
+                LOGGER.debug(
+                    "Cached mask array: %s (shape: %s)", maskfile, mask_array.shape
+                )
 
                 return mask_array
 
             except Exception as e:
-                LOGGER.error('Error reading mask file %s: %s', maskfile, e)
+                LOGGER.error("Error reading mask file %s: %s", maskfile, e)
                 return None
 
     @classmethod
@@ -115,11 +116,11 @@ class MaskCache:
         with cls._lock:
             num_cached = len(cls._cache)
             cls._cache.clear()
-            cls._stats['hits'] = 0
-            cls._stats['misses'] = 0
+            cls._stats["hits"] = 0
+            cls._stats["misses"] = 0
 
             if num_cached > 0:
-                LOGGER.debug('Cleared mask cache (%d masks freed)', num_cached)
+                LOGGER.debug("Cleared mask cache (%d masks freed)", num_cached)
 
     @classmethod
     def get_stats(cls):
@@ -136,14 +137,14 @@ class MaskCache:
             - 'hit_rate': Cache hit rate (0.0 to 1.0)
         """
         with cls._lock:
-            total = cls._stats['hits'] + cls._stats['misses']
-            hit_rate = cls._stats['hits'] / total if total > 0 else 0.0
+            total = cls._stats["hits"] + cls._stats["misses"]
+            hit_rate = cls._stats["hits"] / total if total > 0 else 0.0
 
             return {
-                'cached': len(cls._cache),
-                'hits': cls._stats['hits'],
-                'misses': cls._stats['misses'],
-                'hit_rate': hit_rate,
+                "cached": len(cls._cache),
+                "hits": cls._stats["hits"],
+                "misses": cls._stats["misses"],
+                "hit_rate": hit_rate,
             }
 
     @classmethod
