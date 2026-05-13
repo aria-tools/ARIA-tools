@@ -103,8 +103,9 @@ def createParser():
         dest="bbox",
         type=str,
         default=None,
-        help="Provide either valid shapefile or Lat/Lon Bounding SNWE. -- "
-        "Example : '19 20 -99.5 -98.5'",
+        help="Provide either valid shapefile, Lat/Lon Bounding SNWE "
+        '(e.g., "19 20 -99.5 -98.5"), or WKT POLYGON string '
+        '(e.g., "POLYGON((lon lat, ...))")',
     )
     parser.add_argument(
         "-m",

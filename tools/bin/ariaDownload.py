@@ -77,8 +77,10 @@ def createParser():
              'comma separated')
     parser.add_argument(
         '-b', '--bbox', default="-90 90 -180 180", type=str,
-        help='Lat/Lon Bounding SNWE, or GDAL-readable file containing '
-             'POLYGON geometry. Default is set to global scale')
+        help='Lat/Lon Bounding SNWE (e.g., "36.75 37.225 -76.655 -75.928"), '
+             'WKT POLYGON string (e.g., "POLYGON((lon lat, ...))"), '
+             'or GDAL-readable file containing POLYGON geometry. '
+             'Default is set to global scale')
     parser.add_argument(
         '-w', '--workdir', dest='wd', default='./products', type=str,
         help='Specify directory to deposit all outputs. Default is "products" '
@@ -139,7 +141,7 @@ def createParser():
 
 
 def make_bbox(inp_bbox):
-    """Make a WKT from SNWE or a shapefile"""
+    """Make a WKT from SNWE, WKT string, or a shapefile"""
     if inp_bbox is None:
         return None
 
@@ -148,6 +150,15 @@ def make_bbox(inp_bbox):
         poly = shapely.geometry.Polygon(ring)
 
     else:
+        # Try WKT string first (e.g., "POLYGON((...))")
+        if inp_bbox.strip().upper().startswith('POLYGON'):
+            try:
+                poly = shapely.wkt.loads(inp_bbox)
+                return poly
+            except Exception:
+                pass  # Fall through to SNWE parsing
+
+        # Parse as SNWE string
         try:
             S, N, W, E = [float(i) for i in inp_bbox.split()]
 

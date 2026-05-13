@@ -186,6 +186,7 @@ def create_parser():
     frame_group.add_argument(
         '-b', '--bbox', default=None, type=str,
         help='Lat/Lon Bounding box SNWE (e.g., "36.0 37.0 -118.0 -117.0"), '
+             'WKT POLYGON string (e.g., "POLYGON((lon lat, ...))"), '
              'or GDAL-readable file containing POLYGON geometry. '
              'Required for --getframes.')
     frame_group.add_argument(
@@ -332,12 +333,13 @@ def get_frame_property(feature, keys, default='N/A'):
 
 def make_bbox(inp_bbox):
     """
-    Create a shapely Polygon from a SNWE bounding box string or shapefile.
+    Create a shapely Polygon from a SNWE bounding box string, WKT string, or shapefile.
 
     Parameters
     ----------
     inp_bbox : str
         Either a space-separated string of "S N W E" coordinates,
+        a WKT POLYGON string (e.g., "POLYGON((lon lat, ...))"),
         or a path to a GDAL-readable file with polygon geometry.
 
     Returns
@@ -353,6 +355,16 @@ def make_bbox(inp_bbox):
         ring = open_shp(inp_bbox, 0, 0).exterior
         poly = Polygon(ring)
     else:
+        # Try WKT string first (e.g., "POLYGON((...))")
+        if inp_bbox.strip().upper().startswith('POLYGON'):
+            try:
+                from shapely import wkt
+                poly = wkt.loads(inp_bbox)
+                return poly
+            except Exception:
+                pass  # Fall through to SNWE parsing
+
+        # Parse as SNWE string
         try:
             S, N, W, E = [float(i) for i in inp_bbox.split()]
 

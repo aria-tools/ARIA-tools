@@ -45,6 +45,51 @@ def unwrap_self_readproduct(arg):
     return arg[0].__readproduct__(arg[1])[0]
 
 
+def _bbox_output_path(workdir):
+    """Return the standard GeoJSON path used for parsed user bounds."""
+    return os.path.join(workdir, 'user_bbox.json')
+
+
+def _save_user_bbox(workdir, polygon, projection):
+    """Persist a parsed user bbox polygon and return its output path."""
+    bbox_file = _bbox_output_path(workdir)
+    ARIAtools.util.shp.save_shp(
+        bbox_file, polygon, projection, drivername='GeoJSON')
+    LOGGER.info('Shapefile %s created for input user bounds', bbox_file)
+    return bbox_file
+
+
+def _parse_bbox_argument(bbox, workdir, projection):
+    """Parse a bbox argument as SNWE, WKT POLYGON, or vector file path."""
+    if os.path.isfile(bbox):
+        return ARIAtools.util.shp.open_shp(bbox), bbox
+
+    bbox_text = bbox.strip()
+    if bbox_text.upper().startswith('POLYGON'):
+        try:
+            polygon = shapely.wkt.loads(bbox_text)
+        except Exception as exc:
+            raise Exception(
+                'Cannot understand the --bbox argument. WKT input '
+                'is incorrect or path does not exist.'
+            ) from exc
+
+        return polygon, _save_user_bbox(workdir, polygon, projection)
+
+    try:
+        snwe = [float(val) for val in bbox_text.split()]
+    except ValueError as exc:
+        raise Exception(
+            'Cannot understand the --bbox argument. String input '
+            'is incorrect or path does not exist.'
+        ) from exc
+
+    polygon = shapely.geometry.Polygon(np.column_stack((
+        np.array([snwe[2], snwe[3], snwe[3], snwe[2], snwe[2]]),
+        np.array([snwe[0], snwe[0], snwe[1], snwe[1], snwe[0]]))))
+    return polygon, _save_user_bbox(workdir, polygon, projection)
+
+
 def package_dict(scene, new_scene, scene_ind,
                  sorted_dict=None, dict_ind=None):
     """
@@ -584,41 +629,8 @@ class Product:
             bbox = prod_bbox
 
         if bbox is not None:
-            # If list
-            bbox_is_list = isinstance(
-                [str(val) for val in bbox.split()], list)
-            if bbox_is_list and not os.path.isfile(bbox):
-
-                try:
-                    bbox = [float(val) for val in bbox.split()]
-                except ValueError:
-                    raise Exception(
-                        'Cannot understand the --bbox argument. String input '
-                        'is incorrect or path does not exist.')
-
-                # Use shapely to make list
-                # Pass lons/lats to create polygon
-                self.bbox = shapely.geometry.Polygon(np.column_stack((
-                    np.array([bbox[2], bbox[3], bbox[3], bbox[2], bbox[2]]),
-                    np.array([bbox[0], bbox[0], bbox[1], bbox[1], bbox[0]]))))
-
-                # Save polygon in shapefile
-                ARIAtools.util.shp.save_shp(
-                    os.path.join(workdir, 'user_bbox.json'),
-                    self.bbox, self.projection, drivername='GeoJSON')
-                self.bbox_file = os.path.join(workdir, 'user_bbox.json')
-
-                LOGGER.info(
-                    'Shapefile %s created for input user bounds',
-                    os.path.join(workdir, 'user_bbox.json'))
-
-            # If shapefile
-            elif os.path.isfile(bbox):
-                self.bbox = ARIAtools.util.shp.open_shp(bbox)
-                self.bbox_file = bbox
-
-            else:
-                raise Exception('bbox input neither valid list nor file')
+            self.bbox, self.bbox_file = _parse_bbox_argument(
+                bbox, workdir, self.projection)
 
         else:
             self.bbox = None

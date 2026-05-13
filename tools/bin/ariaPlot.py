@@ -52,8 +52,9 @@ def createParser():
              'directory where script is launched.')
     parser.add_argument(
         '-b', '--bbox', dest='bbox', type=str, default=None,
-        help='Provide either valid shapefile or Lat/Lon Bounding SNWE. -- '
-             'Example : "19 20 -99.5 -98.5"')
+        help='Provide either valid shapefile, Lat/Lon Bounding SNWE '
+             '(e.g., "19 20 -99.5 -98.5"), or WKT POLYGON string '
+             '(e.g., "POLYGON((lon lat, ...))")')
     parser.add_argument(
         '-m', '--mask', dest='mask', type=str, default=None,
         help='Path to mask file or "Download". File needs to be GDAL '
