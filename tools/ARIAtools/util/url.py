@@ -35,20 +35,25 @@ def url_versions(urls, user_version, wd):
 # do not match older. Will only support specific versions or 'all'
 def url_versions_full(urls, user_version, wd):
     """For duplicate products (other than version number)
-    Uses the the latest if user_version is None else use specified ver."""
+    Uses the the latest if user_version is None else use specified ver.
+
+    Optimized O(n) implementation using dict-based grouping instead of
+    nested loops (was O(n²) before optimization).
+    """
     if isinstance(user_version, str) and user_version.lower() == 'all':
         return urls
 
-    url_bases = []
+    # Group URLs by base name in single pass - O(n)
+    url_groups = {}
     for url in urls:
         url_base = '-'.join(url.split('-')[:-1])
-        if not url_base in url_bases:
-            url_bases.append(url_base)
+        if url_base not in url_groups:
+            url_groups[url_base] = []
+        url_groups[url_base].append(url)
 
+    # Process each group to select version - O(n) total
     urls_final = []
-    for url_base in url_bases:
-        # get the possible matches
-        duplicates = [url for url in urls if url_base in url]
+    for url_base, duplicates in url_groups.items():
         if len(duplicates) == 1:
             urls_final.append(duplicates[0])
         else:
