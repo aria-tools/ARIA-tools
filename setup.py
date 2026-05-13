@@ -4,7 +4,12 @@
 Project metadata and install behavior live in ``pyproject.toml``.
 """
 
-from setuptools import setup
+
+def main() -> None:
+    from setuptools import setup
+
+    setup()
 
 
-setup()
+if __name__ == "__main__":
+    main()
