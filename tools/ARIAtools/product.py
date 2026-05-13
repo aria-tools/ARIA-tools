@@ -6,30 +6,30 @@
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+import datetime
+import glob
+import itertools
+import logging
 import os
 import re
-import glob
-import logging
-import datetime
-import itertools
-import osgeo
 
 import netCDF4
 import numpy as np
+import osgeo
 import shapely.geometry
 import shapely.ops
 import shapely.wkt
 from pyproj import Transformer
 
 import ARIAtools.constants
-import ARIAtools.util.url
-import ARIAtools.util.shp
 import ARIAtools.util.meta_cache
 import ARIAtools.util.s3
+import ARIAtools.util.shp
+import ARIAtools.util.url
 from aria_tools.errors import AriaToolsError
 
 osgeo.gdal.UseExceptions()
-osgeo.gdal.PushErrorHandler('CPLQuietErrorHandler')
+osgeo.gdal.PushErrorHandler("CPLQuietErrorHandler")
 
 ONE_DAY = datetime.timedelta(days=1)
 LOGGER = logging.getLogger(__name__)
@@ -47,15 +47,14 @@ def unwrap_self_readproduct(arg):
 
 def _bbox_output_path(workdir):
     """Return the standard GeoJSON path used for parsed user bounds."""
-    return os.path.join(workdir, 'user_bbox.json')
+    return os.path.join(workdir, "user_bbox.json")
 
 
 def _save_user_bbox(workdir, polygon, projection):
     """Persist a parsed user bbox polygon and return its output path."""
     bbox_file = _bbox_output_path(workdir)
-    ARIAtools.util.shp.save_shp(
-        bbox_file, polygon, projection, drivername='GeoJSON')
-    LOGGER.info('Shapefile %s created for input user bounds', bbox_file)
+    ARIAtools.util.shp.save_shp(bbox_file, polygon, projection, drivername="GeoJSON")
+    LOGGER.info("Shapefile %s created for input user bounds", bbox_file)
     return bbox_file
 
 
@@ -65,13 +64,13 @@ def _parse_bbox_argument(bbox, workdir, projection):
         return ARIAtools.util.shp.open_shp(bbox), bbox
 
     bbox_text = bbox.strip()
-    if bbox_text.upper().startswith('POLYGON'):
+    if bbox_text.upper().startswith("POLYGON"):
         try:
             polygon = shapely.wkt.loads(bbox_text)
         except Exception as exc:
             raise Exception(
-                'Cannot understand the --bbox argument. WKT input '
-                'is incorrect or path does not exist.'
+                "Cannot understand the --bbox argument. WKT input "
+                "is incorrect or path does not exist."
             ) from exc
 
         return polygon, _save_user_bbox(workdir, polygon, projection)
@@ -80,18 +79,22 @@ def _parse_bbox_argument(bbox, workdir, projection):
         snwe = [float(val) for val in bbox_text.split()]
     except ValueError as exc:
         raise Exception(
-            'Cannot understand the --bbox argument. String input '
-            'is incorrect or path does not exist.'
+            "Cannot understand the --bbox argument. String input "
+            "is incorrect or path does not exist."
         ) from exc
 
-    polygon = shapely.geometry.Polygon(np.column_stack((
-        np.array([snwe[2], snwe[3], snwe[3], snwe[2], snwe[2]]),
-        np.array([snwe[0], snwe[0], snwe[1], snwe[1], snwe[0]]))))
+    polygon = shapely.geometry.Polygon(
+        np.column_stack(
+            (
+                np.array([snwe[2], snwe[3], snwe[3], snwe[2], snwe[2]]),
+                np.array([snwe[0], snwe[0], snwe[1], snwe[1], snwe[0]]),
+            )
+        )
+    )
     return polygon, _save_user_bbox(workdir, polygon, projection)
 
 
-def package_dict(scene, new_scene, scene_ind,
-                 sorted_dict=None, dict_ind=None):
+def package_dict(scene, new_scene, scene_ind, sorted_dict=None, dict_ind=None):
     """
     Strip and prep keys and values for dictionary of sorted, spatiotemporally
     contiguous products
@@ -125,20 +128,24 @@ def package_dict(scene, new_scene, scene_ind,
                     new_scene[scene_ind][i] = []
             # then merge
             dict_vals = [
-                list(a) for a in zip(
-                    scene[scene_ind].values(), new_scene[scene_ind].values())]
+                list(a)
+                for a in zip(scene[scene_ind].values(), new_scene[scene_ind].values())
+            ]
         else:
-            dict_vals = [
-                list(a) for a in zip(scene[scene_ind].values())]
+            dict_vals = [list(a) for a in zip(scene[scene_ind].values())]
 
     # IFG corresponding to reference product already exists, append to dict
     if sorted_dict:
-        dict_vals = [[
-            subitem for item in a for subitem in (
-                item if isinstance(item, list) else [item])]
+        dict_vals = [
+            [
+                subitem
+                for item in a
+                for subitem in (item if isinstance(item, list) else [item])
+            ]
             for a in zip(
-                sorted_dict[dict_ind][scene_ind].values(),
-                new_scene[scene_ind].values())]
+                sorted_dict[dict_ind][scene_ind].values(), new_scene[scene_ind].values()
+            )
+        ]
 
     new_dict = dict(zip(dict_keys, dict_vals))
     return new_dict
@@ -155,19 +162,20 @@ def remove_scenes(products):
     sorted_products = []
 
     # only check ARIA-S1 GUNW products
-    if os.path.basename(products[0][1]['unwrappedPhase'].split(
-            '"')[1])[:2] == 'S1':
+    if os.path.basename(products[0][1]["unwrappedPhase"].split('"')[1])[:2] == "S1":
         for i in enumerate(products[:-1]):
             scene = i[1]
             new_scene = products[i[0] + 1]
             scene_t_ref = datetime.datetime.strptime(
-                scene[0]['pair_name'][:8], "%Y%m%d")
+                scene[0]["pair_name"][:8], "%Y%m%d"
+            )
             new_scene_t_ref = datetime.datetime.strptime(
-                new_scene[0]['pair_name'][:8], "%Y%m%d")
-            scene_t = datetime.datetime.strptime(
-                scene[0]['pair_name'][9:], "%Y%m%d")
+                new_scene[0]["pair_name"][:8], "%Y%m%d"
+            )
+            scene_t = datetime.datetime.strptime(scene[0]["pair_name"][9:], "%Y%m%d")
             new_scene_t = datetime.datetime.strptime(
-                new_scene[0]['pair_name'][9:], "%Y%m%d")
+                new_scene[0]["pair_name"][9:], "%Y%m%d"
+            )
 
             # check temporal overlap
             sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
@@ -176,22 +184,24 @@ def remove_scenes(products):
             # Only pass scene if it temporally (i.e. in same orbit)
             # overlaps with reference scene
             if sec_within_day and ref_within_day:
-
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
                 dict_item = None
                 for item in sorted_products:
-                    scene_in_ifg = scene[1][
-                        'unwrappedPhase'] in item[1]['unwrappedPhase']
+                    scene_in_ifg = (
+                        scene[1]["unwrappedPhase"] in item[1]["unwrappedPhase"]
+                    )
                     if scene_in_ifg:
                         dict_item = item
                         break
                 if dict_item is not None:
                     dict_ind = sorted_products.index(dict_item)
                     dict_1 = package_dict(
-                        scene, new_scene, 0, sorted_products, dict_ind)
+                        scene, new_scene, 0, sorted_products, dict_ind
+                    )
                     dict_2 = package_dict(
-                        scene, new_scene, 1, sorted_products, dict_ind)
+                        scene, new_scene, 1, sorted_products, dict_ind
+                    )
                     sorted_products[dict_ind] = [dict_1, dict_2]
                 # Match IFG corresponding to reference product NOT found
                 # so initialize dictionary for new IFG
@@ -203,13 +213,13 @@ def remove_scenes(products):
 
             # If prods correspond to different orbits entirely
             else:
-
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    scene_in_ifg = scene[1][
-                        'unwrappedPhase'] in item[1]['unwrappedPhase']
+                    scene_in_ifg = (
+                        scene[1]["unwrappedPhase"] in item[1]["unwrappedPhase"]
+                    )
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
@@ -221,8 +231,9 @@ def remove_scenes(products):
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    scene_in_ifg = new_scene[1][
-                        'unwrappedPhase'] in item[1]['unwrappedPhase']
+                    scene_in_ifg = (
+                        new_scene[1]["unwrappedPhase"] in item[1]["unwrappedPhase"]
+                    )
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
                 if track_existing_ifg == []:
@@ -233,7 +244,8 @@ def remove_scenes(products):
 
         sorted_products = [
             [item[0] for item in sorted_products],
-            [item[1] for item in sorted_products]]
+            [item[1] for item in sorted_products],
+        ]
 
         # Go through each pair and check if there are any
         # legacy products to remove
@@ -241,28 +253,31 @@ def remove_scenes(products):
             # If any version 3 products exist for a given IFG
             # remove all version 2 products
             vers = []
-            for unw_f in i[1]['unwrappedPhase']:
-                basename_unw = os.path.basename(
-                    unw_f.split('"')[1])
-                ver_str = re.search(
-                    r'(v\d+_\d+_\d+.*)\.',
-                    basename_unw).group(1)
-                ver_num = float(ver_str[1:].replace('_', ''))
+            for unw_f in i[1]["unwrappedPhase"]:
+                basename_unw = os.path.basename(unw_f.split('"')[1])
+                ver_str = re.search(r"(v\d+_\d+_\d+.*)\.", basename_unw).group(1)
+                ver_num = float(ver_str[1:].replace("_", ""))
                 vers.append(ver_num)
 
             # determine if there is a mix of incompatible versions
-            v2_prods = any(item < 300. for item in vers)
-            v3_prods = any(item >= 300. for item in vers)
+            v2_prods = any(item < 300.0 for item in vers)
+            v3_prods = any(item >= 300.0 for item in vers)
 
             if v2_prods and v3_prods:
-                legacy_indices = [ind for ind, val in enumerate(vers)
-                                  if val < 300.]
-                track_legacy_products.extend([val for ind, val in enumerate(
-                    i[1]['unwrappedPhase']) if ind in legacy_indices])
+                legacy_indices = [ind for ind, val in enumerate(vers) if val < 300.0]
+                track_legacy_products.extend(
+                    [
+                        val
+                        for ind, val in enumerate(i[1]["unwrappedPhase"])
+                        if ind in legacy_indices
+                    ]
+                )
 
                 # Iterate over each dictionary to remove these keys
-                LOGGER.debug('The following v2 products were rejected '
-                             'to ensure they are not mixed with v3 products:')
+                LOGGER.debug(
+                    "The following v2 products were rejected "
+                    "to ensure they are not mixed with v3 products:"
+                )
                 for item in track_legacy_products:
                     LOGGER.debug(os.path.basename(item.split('"')[1]))
 
@@ -270,7 +285,7 @@ def remove_scenes(products):
         if track_legacy_products != []:
             filt_products = []
             for i in products:
-                if i[1]['unwrappedPhase'] not in track_legacy_products:
+                if i[1]["unwrappedPhase"] not in track_legacy_products:
                     filt_products.append(i)
 
             products = filt_products
@@ -284,42 +299,42 @@ def _configure_gdal_virtual_access():
     _set = osgeo.gdal.SetConfigOption
 
     # Use the shared master cookie so background workers inherit the Earthdata login!
-    # 1. Share the cookie AND let GDAL write to it. This prevents 
+    # 1. Share the cookie AND let GDAL write to it. This prevents
     # the workers from constantly hammering the Earthdata URS login!
-    cookie_path = os.environ.get('GDAL_HTTP_COOKIEFILE', '/tmp/cookies.txt')
+    cookie_path = os.environ.get("GDAL_HTTP_COOKIEFILE", "/tmp/cookies.txt")
 
-    if _get('GDAL_HTTP_COOKIEFILE') is None:
-        _set('GDAL_HTTP_COOKIEFILE', cookie_path)
-    if _get('GDAL_HTTP_COOKIEJAR') is None:
-        _set('GDAL_HTTP_COOKIEJAR', cookie_path) 
+    if _get("GDAL_HTTP_COOKIEFILE") is None:
+        _set("GDAL_HTTP_COOKIEFILE", cookie_path)
+    if _get("GDAL_HTTP_COOKIEJAR") is None:
+        _set("GDAL_HTTP_COOKIEJAR", cookie_path)
 
-    # 2. Re-enable the VSI Cache! (Without this, GDAL downloads 
+    # 2. Re-enable the VSI Cache! (Without this, GDAL downloads
     # the same HDF5 headers hundreds of times)
-    _set('HDF5_USE_FILE_LOCKING', 'FALSE')
-    if _get('VSI_CACHE') is None:
-        _set('VSI_CACHE', 'YES')
-    _set('VSI_CACHE_SIZE', '536870912')
+    _set("HDF5_USE_FILE_LOCKING", "FALSE")
+    if _get("VSI_CACHE") is None:
+        _set("VSI_CACHE", "YES")
+    _set("VSI_CACHE_SIZE", "536870912")
 
     # 3. Re-enable Connection Pooling! (Reuses HTTPS sockets)
-    _set('GDAL_MAX_DATASET_POOL_SIZE', '1000')
+    _set("GDAL_MAX_DATASET_POOL_SIZE", "1000")
 
     # 4. Disable HTTP Multiplexing (Earthdata WAF rejects these)
-    _set('GDAL_HTTP_MERGE_CONSECUTIVE_RANGES', 'NO')
-    _set('GDAL_HTTP_MULTIPLEX', 'NO')
-    _set('CPL_VSIL_CURL_USE_HEAD', 'NO')
+    _set("GDAL_HTTP_MERGE_CONSECUTIVE_RANGES", "NO")
+    _set("GDAL_HTTP_MULTIPLEX", "NO")
+    _set("CPL_VSIL_CURL_USE_HEAD", "NO")
 
     # 5. Network tuning
-    _set('CPL_VSIL_CURL_CHUNK_SIZE', '524288')
-    _set('GDAL_HTTP_MAX_RETRY', '10')
-    _set('GDAL_HTTP_RETRY_DELAY', '3')
+    _set("CPL_VSIL_CURL_CHUNK_SIZE", "524288")
+    _set("GDAL_HTTP_MAX_RETRY", "10")
+    _set("GDAL_HTTP_RETRY_DELAY", "3")
 
-    LOGGER.debug(f'GDAL virtual access configured using {cookie_path}')
+    LOGGER.debug(f"GDAL virtual access configured using {cookie_path}")
 
     # If AWS S3 credentials are in the environment (set by the parent
     # process), restore GDAL config so /vsis3/ paths work in workers.
     ARIAtools.util.s3.restore_gdal_s3_from_env()
 
-    LOGGER.debug(f'GDAL virtual access configured using {cookie_path}')
+    LOGGER.debug(f"GDAL virtual access configured using {cookie_path}")
 
 
 def _read_hdf5_dataset(fname, dataset_path):
@@ -356,8 +371,7 @@ def _read_hdf5_dataset(fname, dataset_path):
         if arr is not None:
             return arr.item() if arr.ndim == 0 else arr
 
-    raise RuntimeError(
-        f'Could not read {dataset_path} from {fname} via GDAL')
+    raise RuntimeError(f"Could not read {dataset_path} from {fname} via GDAL")
 
 
 # Input file(s) and bbox as either list or physical shape file.
@@ -367,10 +381,23 @@ class Product:
     contiguous interferograms.
     """
 
-    def __init__(self, filearg, bbox=None, workdir='./', num_threads=1,
-                 url_version='None', nc_version='None', projection='4326',
-                 verbose=False, tropo_models=None, layers=None, croptounion=False,
-                 runlog=None, demfile=None, mask=None):
+    def __init__(
+        self,
+        filearg,
+        bbox=None,
+        workdir="./",
+        num_threads=1,
+        url_version="None",
+        nc_version="None",
+        projection="4326",
+        verbose=False,
+        tropo_models=None,
+        layers=None,
+        croptounion=False,
+        runlog=None,
+        demfile=None,
+        mask=None,
+    ):
         """
         Parse products and input bounding box (if specified)
         """
@@ -409,8 +436,9 @@ class Product:
         self.mask = mask
 
         # pass number of threads for multiprocessing computation
-        if num_threads == 'all':
+        if num_threads == "all":
             import multiprocessing
+
             self.num_threads = multiprocessing.cpu_count()
 
         else:
@@ -418,19 +446,25 @@ class Product:
 
         # Determine if file input is single file, a list, or wildcard
         # If list of files
-        if len([str(val) for val in filearg.split(',')]) > 1:
-            self.files = [str(i) for i in filearg.split(',')]
+        if len([str(val) for val in filearg.split(",")]) > 1:
+            self.files = [str(i) for i in filearg.split(",")]
 
             # If wildcard
             self.files = [
-                os.path.abspath(item) for sublist in
-                [glob.glob(os.path.expanduser(os.path.expandvars(i)))
-                 if '*' in i else [i] for i in self.files] for item in sublist]
+                os.path.abspath(item)
+                for sublist in [
+                    glob.glob(os.path.expanduser(os.path.expandvars(i)))
+                    if "*" in i
+                    else [i]
+                    for i in self.files
+                ]
+                for item in sublist
+            ]
 
         # If list of URLs provided
-        elif os.path.basename(filearg).endswith('.txt'):
-            with open(filearg, 'r') as fh:
-                lines = [f.rstrip('\n') for f in fh.readlines()]
+        elif os.path.basename(filearg).endswith(".txt"):
+            with open(filearg) as fh:
+                lines = [f.rstrip("\n") for f in fh.readlines()]
             # Parse 2-column format (https_url,s3_url) or legacy
             # single-column (https_url only)
             self.files = []
@@ -438,8 +472,7 @@ class Product:
             for line in lines:
                 if not line.strip():
                     continue
-                https_url, s3_url = \
-                    ARIAtools.util.s3.parse_url_line(line)
+                https_url, s3_url = ARIAtools.util.s3.parse_url_line(line)
                 self.files.append(https_url)
                 if s3_url:
                     self._s3_url_map[https_url] = s3_url
@@ -452,65 +485,60 @@ class Product:
 
             # If wildcard
             else:
-                self.files = glob.glob(os.path.expanduser(
-                    os.path.expandvars(filearg)))
+                self.files = glob.glob(os.path.expanduser(os.path.expandvars(filearg)))
 
             # Convert relative paths to absolute paths
             self.files = [os.path.abspath(i) for i in self.files]
 
         if not self.files:
             raise AriaToolsError(
-                'No input products matched the provided file argument: '
-                f'{filearg}'
+                "No input products matched the provided file argument: " f"{filearg}"
             )
 
         # capture and remove duplicate files (if applicable)
         self.files = ARIAtools.util.url.url_versions(
-            self.files, url_version, os.path.dirname(self.files[0]))
+            self.files, url_version, os.path.dirname(self.files[0])
+        )
 
         # remove files that arent .nc; iterate over copy of list thats edited
         tmp_files = self.files.copy()
         for f in tmp_files:
             ext = os.path.splitext(f)[1].lower()
-            if ext not in ['.nc', '.h5']:
+            if ext not in [".nc", ".h5"]:
                 self.files.remove(f)
-                LOGGER.warning('%s is not a supported NetCDF... skipping', f)
+                LOGGER.warning("%s is not a supported NetCDF... skipping", f)
 
         # Build S3 URL list aligned to filtered self.files
-        s3_url_map = getattr(self, '_s3_url_map', {})
+        s3_url_map = getattr(self, "_s3_url_map", {})
         s3_urls = [s3_url_map.get(f) for f in self.files]
 
         # For remote URLs, try S3 direct access (AWS) first,
         # otherwise fall back to /vsicurl/ (HTTPS).
-        has_urls = any('https://' in i for i in self.files)
+        has_urls = any("https://" in i for i in self.files)
         self._using_s3 = False
         if has_urls:
-            converted, self._using_s3 = \
-                ARIAtools.util.s3.maybe_use_s3(self.files, s3_urls)
+            converted, self._using_s3 = ARIAtools.util.s3.maybe_use_s3(
+                self.files, s3_urls
+            )
             if self._using_s3:
                 self.files = converted
             else:
                 # Default: wrap URLs with /vsicurl/
                 self.files = [
-                    f'/vsicurl/{i}' if 'https://' in i else i
-                    for i in self.files]
+                    f"/vsicurl/{i}" if "https://" in i else i for i in self.files
+                ]
 
         # Initialize metadata cache for GUNW products (S1 .nc and NISAR .h5)
-        if any(ext in i for i in self.files
-               for ext in ('.nc', '.h5')):
-            self._cache_file = ARIAtools.util.meta_cache._cache_path(
-                self._filearg)
-            self._cache_data = ARIAtools.util.meta_cache.load_cache(
-                self._cache_file)
+        if any(ext in i for i in self.files for ext in (".nc", ".h5")):
+            self._cache_file = ARIAtools.util.meta_cache._cache_path(self._filearg)
+            self._cache_data = ARIAtools.util.meta_cache.load_cache(self._cache_file)
 
         # check if virtual file reader is being captured as netcdf
-        is_remote = any('/vsicurl/' in i or '/vsis3/' in i
-                        for i in self.files)
+        is_remote = any("/vsicurl/" in i or "/vsis3/" in i for i in self.files)
         if is_remote:
             _configure_gdal_virtual_access()
 
-            this_file = [s for s in self.files
-                         if '/vsicurl/' in s or '/vsis3/' in s][0]
+            this_file = [s for s in self.files if "/vsicurl/" in s or "/vsis3/" in s][0]
             # Use NETCDF: prefix to force the netCDF driver — works
             # for both .nc (S1 GUNW) and .h5 (NISAR GUNW) files since
             # NISAR products are CF-compliant NetCDF-4.
@@ -521,62 +549,57 @@ class Product:
             except Exception:
                 fmt = None
 
-            if fmt != 'netCDF':
+            if fmt != "netCDF":
                 raise Exception(
-                    'System update required to read requested virtual '
-                    'products via the netCDF driver. '
-                    'Requires: Linux kernel >=4.3 and libnetcdf >=4.5. '
-                    f'Got driver={fmt!r} for {os.path.basename(this_file)}')
+                    "System update required to read requested virtual "
+                    "products via the netCDF driver. "
+                    "Requires: Linux kernel >=4.3 and libnetcdf >=4.5. "
+                    f"Got driver={fmt!r} for {os.path.basename(this_file)}"
+                )
 
         # check if local file reader is being captured as netcdf
-        local_files = [s for s in self.files
-                       if '/vsicurl/' not in s and '/vsis3/' not in s]
+        local_files = [
+            s for s in self.files if "/vsicurl/" not in s and "/vsis3/" not in s
+        ]
         if local_files:
             try:
-                ds = osgeo.gdal.Open(
-                    'NETCDF:"' + local_files[0] + '"')
+                ds = osgeo.gdal.Open('NETCDF:"' + local_files[0] + '"')
                 fmt = ds.GetDriver().GetDescription() if ds else None
                 ds = None
             except Exception:
                 fmt = None
-            if fmt != 'netCDF':
+            if fmt != "netCDF":
                 raise Exception(
-                    'System update required to read requested local '
-                    'products via the netCDF driver. '
-                    'Requires: Linux kernel >=4.3 and libnetcdf >=4.5. '
-                    f'Got driver={fmt!r} for {os.path.basename(local_files[0])}')
+                    "System update required to read requested local "
+                    "products via the netCDF driver. "
+                    "Requires: Linux kernel >=4.3 and libnetcdf >=4.5. "
+                    f"Got driver={fmt!r} for {os.path.basename(local_files[0])}"
+                )
 
         if len(self.files) == 0:
-            raise Exception('No file match found')
+            raise Exception("No file match found")
 
         # exit if user does not specify a valid tropo model name
         self.tropo_models = tropo_models
         fname = self.files[0]
         basename = os.path.basename(fname)
         if self.tropo_models is not None:
-            if basename.startswith('S1_'):
+            if basename.startswith("S1_"):
                 if isinstance(self.tropo_models, str):
-                    if self.tropo_models.lower() == 'all':
-                        self.tropo_models = (
-                            ARIAtools.constants.ARIA_TROPO_INTERNAL
-                        )
+                    if self.tropo_models.lower() == "all":
+                        self.tropo_models = ARIAtools.constants.ARIA_TROPO_INTERNAL
                     else:
-                        self.tropo_models = list(
-                            self.tropo_models.split(',')
-                        )
+                        self.tropo_models = list(self.tropo_models.split(","))
                         self.tropo_models = [
-                            i.replace(' ', '')
-                            for i in self.tropo_models]
+                            i.replace(" ", "") for i in self.tropo_models
+                        ]
                 for i in self.tropo_models:
                     if i not in ARIAtools.constants.ARIA_TROPO_INTERNAL:
                         error_msg = (
-                            'User-requested tropo model '
-                            '%s will not be generated '
-                            'as it is not one of the '
-                            'following valid models: %s' % (
-                                i, ', '.join(
-                                    ARIAtools.constants.ARIA_TROPO_INTERNAL)
-                            )
+                            f"User-requested tropo model {i} will not be "
+                            "generated as it is not one of the following "
+                            "valid models: "
+                            f"{', '.join(ARIAtools.constants.ARIA_TROPO_INTERNAL)}"
                         )
                         LOGGER.error(error_msg)
                         raise Exception(error_msg)
@@ -584,7 +607,7 @@ class Product:
         # set variables to check for tropo extract logic
         self.tropo_extract = False
         if layers is not None:
-            if 'troposphere' in layers:
+            if "troposphere" in layers:
                 self.tropo_extract = True
 
         # If specified workdir doesn't exist, create it
@@ -592,23 +615,21 @@ class Product:
             os.mkdir(workdir)
 
         # find native projection, if specified
-        if self.projection.lower() == 'native':
-            if basename.startswith('NISAR_'):
+        if self.projection.lower() == "native":
+            if basename.startswith("NISAR_"):
                 record_proj = []
                 pol_dict = {}
-                pol_dict['SV'] = 'VV'
-                pol_dict['SH'] = 'HH'
-                pol_dict['HHNA'] = 'HH'
+                pol_dict["SV"] = "VV"
+                pol_dict["SH"] = "HH"
+                pol_dict["HHNA"] = "HH"
                 for i in self.files:
                     # Use cached metadata instead of opening file
-                    meta = ARIAtools.util.meta_cache.get_or_extract(
-                        i, self._cache_data)
-                    if meta and meta.get('projection'):
-                        file_proj = int(meta['projection'])
+                    meta = ARIAtools.util.meta_cache.get_or_extract(i, self._cache_data)
+                    if meta and meta.get("projection"):
+                        file_proj = int(meta["projection"])
                         record_proj.append(file_proj)
                 # Save cache after potential extractions
-                ARIAtools.util.meta_cache.save_cache(
-                    self._cache_file, self._cache_data)
+                ARIAtools.util.meta_cache.save_cache(self._cache_file, self._cache_data)
                 self.projection = int(np.median(record_proj))
             else:
                 self.projection = 4326
@@ -617,20 +638,21 @@ class Product:
             self.projection = int(self.projection)
 
         # Check if bbox input is valid list or shapefile.
-        prod_bbox = os.path.join(workdir, 'productBoundingBox')
+        prod_bbox = os.path.join(workdir, "productBoundingBox")
         if self.croptounion is True:
-            prod_bbox = os.path.join(prod_bbox,
-                'productBoundingBox_croptounion_formetadatalyr.json')
+            prod_bbox = os.path.join(
+                prod_bbox, "productBoundingBox_croptounion_formetadatalyr.json"
+            )
         else:
-            prod_bbox = os.path.join(prod_bbox,
-                'productBoundingBox.json')
+            prod_bbox = os.path.join(prod_bbox, "productBoundingBox.json")
 
         if bbox is None and os.path.exists(prod_bbox):
             bbox = prod_bbox
 
         if bbox is not None:
             self.bbox, self.bbox_file = _parse_bbox_argument(
-                bbox, workdir, self.projection)
+                bbox, workdir, self.projection
+            )
 
         else:
             self.bbox = None
@@ -652,61 +674,65 @@ class Product:
         # Get standard product version from file
         # version accessed differently between URL vs downloaded product
         # vs NISAR and S1 GUNWs
-        if basename.startswith('NISAR_'):
-            version = basename.split('_')[-1][:-3]
-            version = '.'.join(version)
+        if basename.startswith("NISAR_"):
+            version = basename.split("_")[-1][:-3]
+            version = ".".join(version)
             nc_version_check = [version]
 
             # check the algorithm CRID version seperate.
-            CRIDversion = basename.split('_')[-5][-4:]
-            if int(CRIDversion)<5006:
+            CRIDversion = basename.split("_")[-5][-4:]
+            if int(CRIDversion) < 5006:
                 LOGGER.warning(
-                    'input file %s is an older, unsupported '
-                    'CRID version of the NISAR sample product', fname)
+                    "input file %s is an older, unsupported "
+                    "CRID version of the NISAR sample product",
+                    fname,
+                )
                 return []
 
         else:
             # version accessed differently between URL vs local product
             # Use metadata cache for remote files to avoid extra HTTP requests
             cached = ARIAtools.util.meta_cache.get_or_extract(
-                fname.replace('NETCDF:"', ''), self._cache_data)
-            if cached is not None and cached.get('version') is not None:
-                version = str(cached['version'])
+                fname.replace('NETCDF:"', ""), self._cache_data
+            )
+            if cached is not None and cached.get("version") is not None:
+                version = str(cached["version"])
             else:
                 version = str(
-                    osgeo.gdal.Open(fname).GetMetadataItem(
-                        'NC_GLOBAL#version'))
-            if version == 'None':
-                LOGGER.warning(
-                    '%s is not a supported file type... skipping', fname)
+                    osgeo.gdal.Open(fname).GetMetadataItem("NC_GLOBAL#version")
+                )
+            if version == "None":
+                LOGGER.warning("%s is not a supported file type... skipping", fname)
                 return []
 
             # Enforce forward-compatibility of netcdf versions
-            if self.nc_version == '1a':
-                nc_version_check = ['1a', '1b', '1c']
+            if self.nc_version == "1a":
+                nc_version_check = ["1a", "1b", "1c"]
 
-            if self.nc_version == '1b':
-                nc_version_check = ['1b', '1c']
+            if self.nc_version == "1b":
+                nc_version_check = ["1b", "1c"]
 
-            if self.nc_version == '1c':
-                nc_version_check = ['1c']
+            if self.nc_version == "1c":
+                nc_version_check = ["1c"]
 
         if version not in nc_version_check:
             LOGGER.warning(
-                'input nc_version = %s, file %s rejected because it is a '
-                'version %s product', self.nc_version, fname, version)
+                "input nc_version = %s, file %s rejected because it is a "
+                "version %s product",
+                self.nc_version,
+                fname,
+                version,
+            )
             return []
 
         # Get lists of radarmetadata/layer keys for this file version
         # separate NISAR reader
         file_bbox_intersect = True
-        if basename.split('_')[0] == 'NISAR':
-            rmdkeys, sdskeys, file_bbox = self.__NISARmappingVersion__(
-                fname, version)
+        if basename.split("_")[0] == "NISAR":
+            rmdkeys, sdskeys, file_bbox = self.__NISARmappingVersion__(fname, version)
 
         else:
-            rmdkeys, sdskeys, file_bbox = self.__mappingVersion__(
-                fname, version)
+            rmdkeys, sdskeys, file_bbox = self.__mappingVersion__(fname, version)
 
         # Open standard product bbox
         if self.bbox is not None:
@@ -720,18 +746,16 @@ class Product:
         # If no bbox specified, just pass dictionaries
         if file_bbox_intersect is not False:
             # separate NISAR dict convention
-            if basename.split('_')[0] == 'NISAR':
+            if basename.split("_")[0] == "NISAR":
                 product_dicts = [
-                    self.__NISARmappingData__(
-                        fname, rmdkeys, sdskeys, version)
+                    self.__NISARmappingData__(fname, rmdkeys, sdskeys, version)
                 ]
 
             else:
-                product_dicts = [
-                    self.__mappingData__(fname, rmdkeys, sdskeys, version)]
+                product_dicts = [self.__mappingData__(fname, rmdkeys, sdskeys, version)]
 
             # assign product bounding box object to dictionary
-            product_dicts[0][1]['productBoundingBox'] = file_bbox
+            product_dicts[0][1]["productBoundingBox"] = file_bbox
 
         return product_dicts
 
@@ -748,29 +772,52 @@ class Product:
         "layerkeys" inside the mappingData function.
         """
         # ARIA standard product version 1a and 1b have same mapping
-        if version == '1a' or version == '1b':
-
+        if version == "1a" or version == "1b":
             # Radarmetadata names for these versions
-            rmdkeys = ['missionID', 'wavelength', 'centerFrequency',
-                       'productType', 'ISCEversion', 'unwrapMethod', 'DEM',
-                       'ESDthreshold', 'azimuthZeroDopplerStartTime',
-                       'azimuthZeroDopplerEndTime', 'azimuthTimeInterval',
-                       'slantRangeSpacing', 'slantRangeEnd', 'slantRangeStart']
+            rmdkeys = [
+                "missionID",
+                "wavelength",
+                "centerFrequency",
+                "productType",
+                "ISCEversion",
+                "unwrapMethod",
+                "DEM",
+                "ESDthreshold",
+                "azimuthZeroDopplerStartTime",
+                "azimuthZeroDopplerEndTime",
+                "azimuthTimeInterval",
+                "slantRangeSpacing",
+                "slantRangeEnd",
+                "slantRangeStart",
+            ]
 
             # Layer names for these versions
             sdskeys = [
-                'productBoundingBox', 'unwrappedPhase', 'coherence',
-                'connectedComponents', 'amplitude', 'perpendicularBaseline',
-                'parallelBaseline', 'incidenceAngle', 'lookAngle',
-                'azimuthAngle', 'ionosphere']
+                "productBoundingBox",
+                "unwrappedPhase",
+                "coherence",
+                "connectedComponents",
+                "amplitude",
+                "perpendicularBaseline",
+                "parallelBaseline",
+                "incidenceAngle",
+                "lookAngle",
+                "azimuthAngle",
+                "ionosphere",
+            ]
 
             # Pass pair name
-            read_file = netCDF4.Dataset(
-                fname, keepweakref=True).groups['science'].groups[
-                'radarMetaData'].groups['inputSLC']
-            self.pairname = (read_file.groups['reference'][
-                'L1InputGranules'][:][0][17:25] + '_' +
-                read_file.groups['secondary']['L1InputGranules'][:][0][17:25])
+            read_file = (
+                netCDF4.Dataset(fname, keepweakref=True)
+                .groups["science"]
+                .groups["radarMetaData"]
+                .groups["inputSLC"]
+            )
+            self.pairname = (
+                read_file.groups["reference"]["L1InputGranules"][:][0][17:25]
+                + "_"
+                + read_file.groups["secondary"]["L1InputGranules"][:][0][17:25]
+            )
         return rmdkeys, sdskeys
 
     def __OGmappingData__(self, fname, rmdkeys, sdskeys):
@@ -785,37 +832,57 @@ class Product:
         """
         # Expected radarmetadata
         RADAR_KEYS = [
-            'missionID', 'wavelength', 'centerFrequency', 'productType',
-            'ISCEversion', 'unwrapMethod', 'DEM', 'ESDthreshold',
-            'azimuthZeroDopplerStartTime', 'azimuthZeroDopplerEndTime',
-            'azimuthTimeInterval', 'slantRangeSpacing', 'slantRangeEnd',
-            'slantRangeStart']
+            "missionID",
+            "wavelength",
+            "centerFrequency",
+            "productType",
+            "ISCEversion",
+            "unwrapMethod",
+            "DEM",
+            "ESDthreshold",
+            "azimuthZeroDopplerStartTime",
+            "azimuthZeroDopplerEndTime",
+            "azimuthTimeInterval",
+            "slantRangeSpacing",
+            "slantRangeEnd",
+            "slantRangeStart",
+        ]
 
         # Expected layers
         LAYER_KEYS = [
-            'productBoundingBox', 'unwrappedPhase', 'coherence',
-            'connectedComponents', 'amplitude', 'bPerpendicular', 'bParallel',
-            'incidenceAngle', 'lookAngle', 'azimuthAngle', 'ionosphere']
+            "productBoundingBox",
+            "unwrappedPhase",
+            "coherence",
+            "connectedComponents",
+            "amplitude",
+            "bPerpendicular",
+            "bParallel",
+            "incidenceAngle",
+            "lookAngle",
+            "azimuthAngle",
+            "ionosphere",
+        ]
 
         # Parse radarmetadata
-        rdrmetadata = netCDF4.Dataset(
-            fname, keepweakref=True, diskless=True).groups['science'].groups[
-            'radarMetaData']
+        rdrmetadata = (
+            netCDF4.Dataset(fname, keepweakref=True, diskless=True)
+            .groups["science"]
+            .groups["radarMetaData"]
+        )
         rdrmetakeys = list(rdrmetadata.variables.keys())
         rdrmetadata_dict = {}
 
         # Parse layers - use cached subdatasets if available
-        clean_fname = fname.replace('NETCDF:"', '').rstrip('"')
-        cached = ARIAtools.util.meta_cache.get_or_extract(
-            clean_fname, self._cache_data)
+        clean_fname = fname.replace('NETCDF:"', "").rstrip('"')
+        cached = ARIAtools.util.meta_cache.get_or_extract(clean_fname, self._cache_data)
 
-        if cached and cached.get('subdatasets'):
+        if cached and cached.get("subdatasets"):
             # Cache returns list of subdataset paths directly
-            subdatasets = cached['subdatasets']
+            subdatasets = cached["subdatasets"]
         else:
             # Fallback to GDAL if cache unavailable
-            sdsdict = osgeo.gdal.Open(fname).GetMetadata('SUBDATASETS')
-            subdatasets = [v for k, v in sdsdict.items() if 'NAME' in k]
+            sdsdict = osgeo.gdal.Open(fname).GetMetadata("SUBDATASETS")
+            subdatasets = [v for k, v in sdsdict.items() if "NAME" in k]
 
         datalyr_dict = {}
 
@@ -823,33 +890,29 @@ class Product:
         for i in rdrmetakeys:
             # If layer expected
             try:
-                rdrmetadata_dict[RADAR_KEYS[rmdkeys.index(
-                    i)]] = rdrmetadata[i][0]
+                rdrmetadata_dict[RADAR_KEYS[rmdkeys.index(i)]] = rdrmetadata[i][0]
 
             # If new, unaccounted layer not expected in rdrmetakeys
             except BaseException:
-                LOGGER.warning(
-                    "Radarmetadata key %s not expected in rmdkeys", i)
-        rdrmetadata_dict['pair_name'] = self.pairname
+                LOGGER.warning("Radarmetadata key %s not expected in rmdkeys", i)
+        rdrmetadata_dict["pair_name"] = self.pairname
 
         # Setup datalyr_dict - now iterate over subdataset list
         for sd_path in subdatasets:
             # If layer expected
             try:
-                layer_name = sd_path.split(':')[-1].split('/')[-1]
+                layer_name = sd_path.split(":")[-1].split("/")[-1]
                 datalyr_dict[LAYER_KEYS[sdskeys.index(layer_name)]] = sd_path
             # If new, unaccounted layer not expected in LAYER_KEYS
             except BaseException:
-                LOGGER.warning(
-                    "Data layer key %s not expected in sdskeys", sd_path)
+                LOGGER.warning("Data layer key %s not expected in sdskeys", sd_path)
 
-        datalyr_dict['pair_name'] = self.pairname
+        datalyr_dict["pair_name"] = self.pairname
 
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # individual frames preserved here
-        datalyr_dict[
-            'productBoundingBoxFrames'] = datalyr_dict['productBoundingBox']
+        datalyr_dict["productBoundingBoxFrames"] = datalyr_dict["productBoundingBox"]
         return [rdrmetadata_dict, datalyr_dict]
 
     def __mappingVersion__(self, fname, version):
@@ -867,147 +930,162 @@ class Product:
         # ARIA standard prod v1a and 1b have same mapping
         # ARIA standard prod v1c differs with inclusion of ionosphere layer
         rdrmetadata_dict = {}
-        if version.lower() in ['1a', '1b', '1c']:
-
+        if version.lower() in ["1a", "1b", "1c"]:
             # Pass pair name
             basename = os.path.basename(fname)
-            self.pairname = basename.split('-')[6]
+            self.pairname = basename.split("-")[6]
 
             # Radarmetadata names for these versions
-            rdrmetadata_dict['pair_name'] = self.pairname
-            rdrmetadata_dict['azimuthZeroDopplerMidTime'] = (
-                self.pairname[:4] + '-' + self.pairname[4:6] + '-' +
-                self.pairname[6:8] + 'T' + basename.split('-')[7][:2] + ':' +
-                basename.split('-')[7][2:4] + ':' +
-                basename.split('-')[7][4:] + '.0')
+            rdrmetadata_dict["pair_name"] = self.pairname
+            rdrmetadata_dict["azimuthZeroDopplerMidTime"] = (
+                self.pairname[:4]
+                + "-"
+                + self.pairname[4:6]
+                + "-"
+                + self.pairname[6:8]
+                + "T"
+                + basename.split("-")[7][:2]
+                + ":"
+                + basename.split("-")[7][2:4]
+                + ":"
+                + basename.split("-")[7][4:]
+                + ".0"
+            )
 
             # assign latitude to assist with sorting
-            rdrmetadata_dict[
-                'centerLatitude'] = basename.split('-')[8].split('_')[1]
-            if rdrmetadata_dict['centerLatitude'][-1] == 'S':
-                rdrmetadata_dict['centerLatitude'] = (
-                    -1 * int(rdrmetadata_dict['centerLatitude'][:-1]))
+            rdrmetadata_dict["centerLatitude"] = basename.split("-")[8].split("_")[1]
+            if rdrmetadata_dict["centerLatitude"][-1] == "S":
+                rdrmetadata_dict["centerLatitude"] = -1 * int(
+                    rdrmetadata_dict["centerLatitude"][:-1]
+                )
 
             else:
-                rdrmetadata_dict['centerLatitude'] = int(rdrmetadata_dict[
-                    'centerLatitude'][:-1])
+                rdrmetadata_dict["centerLatitude"] = int(
+                    rdrmetadata_dict["centerLatitude"][:-1]
+                )
 
             # hardcoded keys for a given sensor
-            rdrmetadata_dict['projection'] = self.projection
-            if basename.startswith('S1'):
-                rdrmetadata_dict['missionID'] = 'Sentinel-1'
-                rdrmetadata_dict['productType'] = 'UNW GEO IFG'
-                rdrmetadata_dict['wavelength'] = 0.05546576
-                rdrmetadata_dict['centerFrequency'] = 5.4050007e+09
-                rdrmetadata_dict['slantRangeSpacing'] = 2.329562187194824
-                rdrmetadata_dict['slantRangeStart'] = 798980.125
-                rdrmetadata_dict['slantRangeEnd'] = 956307.125
+            rdrmetadata_dict["projection"] = self.projection
+            if basename.startswith("S1"):
+                rdrmetadata_dict["missionID"] = "Sentinel-1"
+                rdrmetadata_dict["productType"] = "UNW GEO IFG"
+                rdrmetadata_dict["wavelength"] = 0.05546576
+                rdrmetadata_dict["centerFrequency"] = 5.4050007e09
+                rdrmetadata_dict["slantRangeSpacing"] = 2.329562187194824
+                rdrmetadata_dict["slantRangeStart"] = 798980.125
+                rdrmetadata_dict["slantRangeEnd"] = 956307.125
                 # hardcoded key meant to gauge temporal connectivity of scenes
                 # (i.e. seconds between start and end)
-                rdrmetadata_dict['sceneLength'] = 35
+                rdrmetadata_dict["sceneLength"] = 35
 
-            elif basename.startswith('ALOS2'):
-                rdrmetadata_dict['missionID'] = 'ALOS-2'
-                rdrmetadata_dict['productType'] = 'UNW GEO IFG'
-                rdrmetadata_dict['wavelength'] = 0.229
-                rdrmetadata_dict['centerFrequency'] = 1.2364997e+09
-                rdrmetadata_dict['slantRangeSpacing'] = 8.582534
-                rdrmetadata_dict['slantRangeStart'] = 695397.
-                rdrmetadata_dict['slantRangeEnd'] = 913840.2
+            elif basename.startswith("ALOS2"):
+                rdrmetadata_dict["missionID"] = "ALOS-2"
+                rdrmetadata_dict["productType"] = "UNW GEO IFG"
+                rdrmetadata_dict["wavelength"] = 0.229
+                rdrmetadata_dict["centerFrequency"] = 1.2364997e09
+                rdrmetadata_dict["slantRangeSpacing"] = 8.582534
+                rdrmetadata_dict["slantRangeStart"] = 695397.0
+                rdrmetadata_dict["slantRangeEnd"] = 913840.2
                 # hardcoded key meant to gauge temporal connectivity of scenes
                 # (i.e. seconds between start and end)
-                rdrmetadata_dict['sceneLength'] = 52
+                rdrmetadata_dict["sceneLength"] = 52
 
             else:
-                raise Exception('Sensor %s for file %s not supported.'
-                                % (basename.split('-')[0], fname))
+                raise Exception(
+                    f"Sensor {basename.split('-')[0]} for file {fname} not supported."
+                )
 
             # Layer names for these versions
             sdskeys = [
-                'productBoundingBox',
-                '/science/grids/data/unwrappedPhase',
-                '/science/grids/data/coherence',
-                '/science/grids/data/connectedComponents',
-                '/science/grids/data/amplitude',
-                '/science/grids/imagingGeometry/perpendicularBaseline',
-                '/science/grids/imagingGeometry/parallelBaseline',
-                '/science/grids/imagingGeometry/incidenceAngle',
-                '/science/grids/imagingGeometry/lookAngle',
-                '/science/grids/imagingGeometry/azimuthAngle']
+                "productBoundingBox",
+                "/science/grids/data/unwrappedPhase",
+                "/science/grids/data/coherence",
+                "/science/grids/data/connectedComponents",
+                "/science/grids/data/amplitude",
+                "/science/grids/imagingGeometry/perpendicularBaseline",
+                "/science/grids/imagingGeometry/parallelBaseline",
+                "/science/grids/imagingGeometry/incidenceAngle",
+                "/science/grids/imagingGeometry/lookAngle",
+                "/science/grids/imagingGeometry/azimuthAngle",
+            ]
 
             # get product bounding box
             file_bbox = ARIAtools.util.shp.open_shp(
-                fname + '":' + sdskeys[0], 'productBoundingBox', 1)
+                fname + '":' + sdskeys[0], "productBoundingBox", 1
+            )
 
-            if version.lower() == '1c':
-                lyr_pref = '/science/grids/corrections'
+            if version.lower() == "1c":
+                lyr_pref = "/science/grids/corrections"
                 sdskeys_addlyrs = [
-                    lyr_pref + '/derived/ionosphere/ionosphere',
-                    lyr_pref + '/external/tides/solidEarth'
-                    '/reference/solidEarthTide']
+                    lyr_pref + "/derived/ionosphere/ionosphere",
+                    lyr_pref + "/external/tides/solidEarth" "/reference/solidEarthTide",
+                ]
 
                 # Get weather model name(s) - use cache when available
-                raw_fname = fname.replace('NETCDF:"', '')
+                raw_fname = fname.replace('NETCDF:"', "")
                 cached_meta = ARIAtools.util.meta_cache.get_or_extract(
                     raw_fname, self._cache_data
                 )
 
                 model_name = []
-                if cached_meta and cached_meta.get('tropo_models'):
-                    model_name = list(cached_meta['tropo_models'])
+                if cached_meta and cached_meta.get("tropo_models"):
+                    model_name = list(cached_meta["tropo_models"])
                 else:
                     meta = osgeo.gdal.Info(fname)
                     for i in meta.split():
-                        trop_path = '/science/grids/corrections/external/troposphere/'
+                        trop_path = "/science/grids/corrections/external/troposphere/"
                         if trop_path in i:
-                            model_name.append(i.split('/')[-3])
+                            model_name.append(i.split("/")[-3])
 
                 # exit if user wishes to extract a tropo layer
                 # but no valid tropo model name is specified by user
                 if self.tropo_extract is True and self.tropo_models is None:
-                    error_msg = 'User specifies extraction of tropo layer, ' \
-                                'but no valid tropo model input specified ' \
-                                'with the --tropo_models option'
+                    error_msg = (
+                        "User specifies extraction of tropo layer, "
+                        "but no valid tropo model input specified "
+                        "with the --tropo_models option"
+                    )
                     LOGGER.error(error_msg)
                     raise Exception(error_msg)
 
                 # exit if specifies a tropo model name
                 # but does not explicitly specify to extract a tropo layer
-                if (self.tropo_extract is False and
-                        self.tropo_models is not None):
-                    TROPO_OPTIONS = {'troposphereWet',
-                                     'troposphereHydrostatic',
-                                     'troposphereTotal'}
-                    error_msg = 'User specifies tropo model with ' \
-                                'the --tropo_models option, but does not ' \
-                                'specify extraction of a tropo layer ' \
-                                'with the --layers option, specifically ' \
-                                'any of %s' % ', '.join(TROPO_OPTIONS)
+                if self.tropo_extract is False and self.tropo_models is not None:
+                    TROPO_OPTIONS = {
+                        "troposphereWet",
+                        "troposphereHydrostatic",
+                        "troposphereTotal",
+                    }
+                    error_msg = (
+                        "User specifies tropo model with the --tropo_models "
+                        "option, but does not specify extraction of a tropo "
+                        "layer with the --layers option, specifically any of "
+                        f"{', '.join(TROPO_OPTIONS)}"
+                    )
                     LOGGER.error(error_msg)
                     raise Exception(error_msg)
 
                 model_name = list(set(model_name))
                 for i in model_name:
                     sdskeys_addlyrs.append(
-                        f'{lyr_pref}/external/troposphere/{i}/'
-                        'reference/troposphereWet'
+                        f"{lyr_pref}/external/troposphere/{i}/"
+                        "reference/troposphereWet"
                     )
                     sdskeys_addlyrs.append(
-                        f'{lyr_pref}/external/troposphere/{i}/'
-                        'reference/troposphereHydrostatic'
+                        f"{lyr_pref}/external/troposphere/{i}/"
+                        "reference/troposphereHydrostatic"
                     )
 
                 # Fast cache lookup to remove keys not found in product
-                if cached_meta and cached_meta.get('subdatasets'):
+                if cached_meta and cached_meta.get("subdatasets"):
                     sdskeys_addlyrs = [
-                        key for key in sdskeys_addlyrs
-                        if any(key in sds for sds in cached_meta['subdatasets'])
+                        key
+                        for key in sdskeys_addlyrs
+                        if any(key in sds for sds in cached_meta["subdatasets"])
                     ]
                 else:
                     meta = osgeo.gdal.Info(fname)
-                    sdskeys_addlyrs = [
-                        key for key in sdskeys_addlyrs if key in meta
-                    ]
+                    sdskeys_addlyrs = [key for key in sdskeys_addlyrs if key in meta]
 
                 sdskeys.extend(sdskeys_addlyrs)
 
@@ -1026,42 +1104,45 @@ class Product:
         """
         # Expected layers
         LAYER_KEYS = [
-            'productBoundingBox', 'unwrappedPhase', 'coherence',
-            'connectedComponents', 'amplitude', 'bPerpendicular',
-            'bParallel', 'incidenceAngle', 'lookAngle', 'azimuthAngle']
+            "productBoundingBox",
+            "unwrappedPhase",
+            "coherence",
+            "connectedComponents",
+            "amplitude",
+            "bPerpendicular",
+            "bParallel",
+            "incidenceAngle",
+            "lookAngle",
+            "azimuthAngle",
+        ]
 
         these_layer_keys = LAYER_KEYS.copy()
-        if version.lower() == '1c':
-
+        if version.lower() == "1c":
             # remove references to keys not found in product
-            addkeys = ['ionosphere', 'solidEarthTide']
-            keys_reject = [
-                i for i in addkeys if i not in ''.join(sdskeys)]
+            addkeys = ["ionosphere", "solidEarthTide"]
+            keys_reject = [i for i in addkeys if i not in "".join(sdskeys)]
             addkeys = [i for i in addkeys if i not in keys_reject]
 
             # check for tropo layers for each model
-            tropo_lyrs = ['troposphereWet', 'troposphereHydrostatic']
+            tropo_lyrs = ["troposphereWet", "troposphereHydrostatic"]
             for i in ARIAtools.constants.ARIA_TROPO_INTERNAL:
-                if i in ''.join(sdskeys):
-                    addkeys.append(f'{tropo_lyrs[0]}_' + i)
-                    addkeys.append(f'{tropo_lyrs[1]}_' + i)
+                if i in "".join(sdskeys):
+                    addkeys.append(f"{tropo_lyrs[0]}_" + i)
+                    addkeys.append(f"{tropo_lyrs[1]}_" + i)
 
             if self.tropo_extract:
-                keys_reject.extend([
-                    i for i in tropo_lyrs if i not in ''.join(addkeys)])
+                keys_reject.extend([i for i in tropo_lyrs if i not in "".join(addkeys)])
             for i in keys_reject:
-                LOGGER.warning(
-                    'Expected data layer key %s not found in %s' % (i, fname))
+                LOGGER.warning("Expected data layer key %s not found in %s", i, fname)
             these_layer_keys.extend(addkeys)
 
         # Setup datalyr_dict
         datalyr_dict = {}
-        datalyr_dict['pair_name'] = self.pairname
+        datalyr_dict["pair_name"] = self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # individual frames preserved here
-        datalyr_dict[
-            'productBoundingBoxFrames'] = fname + '":' + sdskeys[0]
+        datalyr_dict["productBoundingBoxFrames"] = fname + '":' + sdskeys[0]
         for i in enumerate(these_layer_keys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
@@ -1083,134 +1164,139 @@ class Product:
         """
         # initiate variables
         rdrmetadata_dict = {}
-        sdskeys = ['/science/LSAR/identification/boundingPolygon']
+        sdskeys = ["/science/LSAR/identification/boundingPolygon"]
         # Pass pair name (Forced to date2_date1 convention)
         basename = os.path.basename(fname)
-        self.pairname = basename.split('_')[13][:8] + '_'
-        self.pairname += basename.split('_')[11][:8]
+        self.pairname = basename.split("_")[13][:8] + "_"
+        self.pairname += basename.split("_")[11][:8]
 
         # Get polarization
         pol_dict = {}
-        pol_dict['SV'] = 'VV'
-        pol_dict['SH'] = 'HH'
-        pol_dict['HHNA'] = 'HH'
-        file_pol = pol_dict[basename.split('_')[10]]
+        pol_dict["SV"] = "VV"
+        pol_dict["SH"] = "HH"
+        pol_dict["HHNA"] = "HH"
+        file_pol = pol_dict[basename.split("_")[10]]
 
         # Radarmetadata names for these versions
-        rdrmetadata_dict['pair_name'] = self.pairname
+        rdrmetadata_dict["pair_name"] = self.pairname
         # get mid azimuth time
-        ref_doppler_time = datetime.datetime.strptime(basename.split('_')[11],
-                                                      '%Y%m%dT%H%M%S')
-        sec_doppler_time = datetime.datetime.strptime(basename.split('_')[12],
-                                                      '%Y%m%dT%H%M%S')
+        ref_doppler_time = datetime.datetime.strptime(
+            basename.split("_")[11], "%Y%m%dT%H%M%S"
+        )
+        sec_doppler_time = datetime.datetime.strptime(
+            basename.split("_")[12], "%Y%m%dT%H%M%S"
+        )
         mid_dt = ref_doppler_time
         mid_dt += (sec_doppler_time - ref_doppler_time) / 2
-        mid_datetime_str = mid_dt.strftime('%Y-%m-%dT%H:%M:%S')
-        mid_datetime_str += '.0'
-        rdrmetadata_dict['azimuthZeroDopplerMidTime'] = mid_datetime_str
+        mid_datetime_str = mid_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        mid_datetime_str += ".0"
+        rdrmetadata_dict["azimuthZeroDopplerMidTime"] = mid_datetime_str
 
         # assign latitude to assist with sorting
         # get product bounding box
         # and other variables
-        lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
-        wrapped_lyr_pref = f'{lyr_pref}/wrappedInterferogram/{file_pol}/'
-        lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
+        lyr_pref = "/science/LSAR/GUNW/grids/frequencyA"
+        wrapped_lyr_pref = f"{lyr_pref}/wrappedInterferogram/{file_pol}/"
+        lyr_pref += f"/unwrappedInterferogram/{file_pol}/"
 
         # Raw file path (without NETCDF:" prefix) for cache lookups
-        raw_fname = fname.replace('NETCDF:"', '')
+        raw_fname = fname.replace('NETCDF:"', "")
 
         # HDF5 paths for NISAR scalar/string metadata that GDAL's
         # netCDF driver cannot read (scalars/strings).  Read once
         # via h5py then cached in the metadata sidecar.
         nisar_h5_fields = {
-            'boundingPolygon':
-                '/science/LSAR/identification/boundingPolygon',
-            'centerFrequency':
-                '/science/LSAR/GUNW/grids/frequencyA/centerFrequency',
-            'xCoordinateSpacing':
-                f'{lyr_pref}xCoordinateSpacing',
+            "boundingPolygon": "/science/LSAR/identification/boundingPolygon",
+            "centerFrequency": "/science/LSAR/GUNW/grids/frequencyA/centerFrequency",
+            "xCoordinateSpacing": f"{lyr_pref}xCoordinateSpacing",
         }
 
         latlon_file_bbox = ARIAtools.util.meta_cache.get_h5_field(
-            raw_fname, 'boundingPolygon',
-            nisar_h5_fields, self._cache_data)
+            raw_fname, "boundingPolygon", nisar_h5_fields, self._cache_data
+        )
         latlon_file_bbox = shapely.wkt.loads(latlon_file_bbox)
 
         center_freq_var = float(
             ARIAtools.util.meta_cache.get_h5_field(
-                raw_fname, 'centerFrequency',
-                nisar_h5_fields, self._cache_data))
+                raw_fname, "centerFrequency", nisar_h5_fields, self._cache_data
+            )
+        )
 
         rdr_slant_range_spac = float(
             ARIAtools.util.meta_cache.get_h5_field(
-                raw_fname, 'xCoordinateSpacing',
-                nisar_h5_fields, self._cache_data))
+                raw_fname, "xCoordinateSpacing", nisar_h5_fields, self._cache_data
+            )
+        )
 
         # referenceSlantRange is a 3D array — readable via GDAL netCDF
         rdr_slant_range = np.asarray(
             _read_hdf5_dataset(
-                fname,
-                '/science/LSAR/GUNW/metadata/'
-                'radarGrid/referenceSlantRange')).flatten()
+                fname, "/science/LSAR/GUNW/metadata/" "radarGrid/referenceSlantRange"
+            )
+        ).flatten()
         min_range = float(min(rdr_slant_range))
         max_range = float(max(rdr_slant_range))
-        rdrmetadata_dict['centerFrequency'] = center_freq_var
-        rdrmetadata_dict[
-            'wavelength'] = 299792458 / rdrmetadata_dict['centerFrequency']
-        rdrmetadata_dict['centerLatitude'] = int(latlon_file_bbox.centroid.y)
-        rdrmetadata_dict['projection'] = self.projection
+        rdrmetadata_dict["centerFrequency"] = center_freq_var
+        rdrmetadata_dict["wavelength"] = 299792458 / rdrmetadata_dict["centerFrequency"]
+        rdrmetadata_dict["centerLatitude"] = int(latlon_file_bbox.centroid.y)
+        rdrmetadata_dict["projection"] = self.projection
         pyproj_transformer = Transformer.from_crs(
-            'EPSG:4326', f'EPSG:{self.projection}', always_xy=True)
+            "EPSG:4326", f"EPSG:{self.projection}", always_xy=True
+        )
         file_bbox = shapely.ops.transform(
-            lambda x, y, z=None: pyproj_transformer.transform(x, y),
-            latlon_file_bbox)
+            lambda x, y, z=None: pyproj_transformer.transform(x, y), latlon_file_bbox
+        )
 
         # hardcoded keys
-        rdrmetadata_dict['missionID'] = 'NISAR'
-        rdrmetadata_dict['productType'] = 'UNW GEO IFG'
-        rdrmetadata_dict['slantRangeSpacing'] = rdr_slant_range_spac
-        rdrmetadata_dict['slantRangeStart'] = min_range
-        rdrmetadata_dict['slantRangeEnd'] = max_range
+        rdrmetadata_dict["missionID"] = "NISAR"
+        rdrmetadata_dict["productType"] = "UNW GEO IFG"
+        rdrmetadata_dict["slantRangeSpacing"] = rdr_slant_range_spac
+        rdrmetadata_dict["slantRangeStart"] = min_range
+        rdrmetadata_dict["slantRangeEnd"] = max_range
         # hardcoded key meant to gauge temporal connectivity of scenes
         # (i.e. seconds between start and end)
-        rdrmetadata_dict['sceneLength'] = 16
+        rdrmetadata_dict["sceneLength"] = 16
 
         # assigning full-res layer names
-        sdskeys.extend([
-            lyr_pref + 'unwrappedPhase',
-            lyr_pref + 'coherenceMagnitude',
-            lyr_pref + 'connectedComponents',
-            lyr_pref + 'ionospherePhaseScreen',
-            lyr_pref + 'ionospherePhaseScreenUncertainty',
-            wrapped_lyr_pref + 'wrappedInterferogram'
-        ])
-        lyr_pref = '/science/LSAR/GUNW/metadata/radarGrid/'
-        sdskeys.extend([
-            lyr_pref + 'perpendicularBaseline',
-            lyr_pref + 'parallelBaseline',
-            lyr_pref + 'incidenceAngle',
-            lyr_pref + 'losUnitVectorX',  # derive azimuthAngle from this
-            lyr_pref + 'losUnitVectorY',  # derive azimuthAngle from this
-            lyr_pref + 'elevationAngle'   # the equivalent of lookAngle
-        ])
+        sdskeys.extend(
+            [
+                lyr_pref + "unwrappedPhase",
+                lyr_pref + "coherenceMagnitude",
+                lyr_pref + "connectedComponents",
+                lyr_pref + "ionospherePhaseScreen",
+                lyr_pref + "ionospherePhaseScreenUncertainty",
+                wrapped_lyr_pref + "wrappedInterferogram",
+            ]
+        )
+        lyr_pref = "/science/LSAR/GUNW/metadata/radarGrid/"
+        sdskeys.extend(
+            [
+                lyr_pref + "perpendicularBaseline",
+                lyr_pref + "parallelBaseline",
+                lyr_pref + "incidenceAngle",
+                lyr_pref + "losUnitVectorX",  # derive azimuthAngle from this
+                lyr_pref + "losUnitVectorY",  # derive azimuthAngle from this
+                lyr_pref + "elevationAngle",  # the equivalent of lookAngle
+            ]
+        )
 
         # Track and add additional correction layers, if they exist
         sdskeys_addlyrs = [
-            f'{lyr_pref}slantRangeSolidEarthTidesPhase',
-            f'{lyr_pref}hydrostaticTroposphericPhaseScreen',
-            f'{lyr_pref}wetTroposphericPhaseScreen'
+            f"{lyr_pref}slantRangeSolidEarthTidesPhase",
+            f"{lyr_pref}hydrostaticTroposphericPhaseScreen",
+            f"{lyr_pref}wetTroposphericPhaseScreen",
         ]
 
         cached_meta = ARIAtools.util.meta_cache.get_h5_field(
-                raw_fname, 'subdatasets',
-                sdskeys_addlyrs, self._cache_data
+            raw_fname, "subdatasets", sdskeys_addlyrs, self._cache_data
         )
 
         # Fast lookup: check if target strings exist in cached subdatasets
-        if cached_meta and cached_meta.get('subdatasets'):
+        if cached_meta and cached_meta.get("subdatasets"):
             sdskeys_addlyrs = [
-                key for key in sdskeys_addlyrs
-                if any(key in sds for sds in cached_meta['subdatasets'])
+                key
+                for key in sdskeys_addlyrs
+                if any(key in sds for sds in cached_meta["subdatasets"])
             ]
         else:
             # Fallback to slow GDAL info if the cache is empty/fails
@@ -1236,42 +1322,48 @@ class Product:
         """
         # Expected layers
         layerkeys = [
-            'productBoundingBox', 'unwrappedPhase', 'coherence',
-            'connectedComponents', 'ionospherePhaseScreen',
-            'ionospherePhaseScreenUncertainty', 'wrappedInterferogram',
-            'bPerpendicular', 'bParallel', 'incidenceAngle', 'losUnitVectorX',
-            'losUnitVectorY', 'elevationAngle',
-            'slantRangeSolidEarthTidesPhase',
-            'hydrostaticTroposphericPhaseScreen',
-            'wetTroposphericPhaseScreen']
+            "productBoundingBox",
+            "unwrappedPhase",
+            "coherence",
+            "connectedComponents",
+            "ionospherePhaseScreen",
+            "ionospherePhaseScreenUncertainty",
+            "wrappedInterferogram",
+            "bPerpendicular",
+            "bParallel",
+            "incidenceAngle",
+            "losUnitVectorX",
+            "losUnitVectorY",
+            "elevationAngle",
+            "slantRangeSolidEarthTidesPhase",
+            "hydrostaticTroposphericPhaseScreen",
+            "wetTroposphericPhaseScreen",
+        ]
 
         # Setup datalyr_dict
         datalyr_dict = {}
-        datalyr_dict['pair_name'] = self.pairname
+        datalyr_dict["pair_name"] = self.pairname
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # individual frames preserved here
-        datalyr_dict[
-            'productBoundingBoxFrames'] = fname + '":' + sdskeys[0]
+        datalyr_dict["productBoundingBoxFrames"] = fname + '":' + sdskeys[0]
         for i in enumerate(layerkeys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
         # Rewrite tropo, iono, SET, lookAngle, and amplitude keys
-        datalyr_dict['ionosphere'] = datalyr_dict.pop(
-            'ionospherePhaseScreen')
-        datalyr_dict['troposphereHydrostatic'] = datalyr_dict.pop(
-            'hydrostaticTroposphericPhaseScreen')
-        datalyr_dict['troposphereWet'] = datalyr_dict.pop(
-            'wetTroposphericPhaseScreen')
-        datalyr_dict['solidEarthTide'] = datalyr_dict.pop(
-            'slantRangeSolidEarthTidesPhase')
-        datalyr_dict['lookAngle'] = datalyr_dict.pop(
-            'elevationAngle')
-        datalyr_dict['amplitude'] = datalyr_dict.pop(
-            'wrappedInterferogram')
+        datalyr_dict["ionosphere"] = datalyr_dict.pop("ionospherePhaseScreen")
+        datalyr_dict["troposphereHydrostatic"] = datalyr_dict.pop(
+            "hydrostaticTroposphericPhaseScreen"
+        )
+        datalyr_dict["troposphereWet"] = datalyr_dict.pop("wetTroposphericPhaseScreen")
+        datalyr_dict["solidEarthTide"] = datalyr_dict.pop(
+            "slantRangeSolidEarthTidesPhase"
+        )
+        datalyr_dict["lookAngle"] = datalyr_dict.pop("elevationAngle")
+        datalyr_dict["amplitude"] = datalyr_dict.pop("wrappedInterferogram")
 
         # add azimuthAngle key hack (to be handled downstream)
-        datalyr_dict['azimuthAngle'] = datalyr_dict['losUnitVectorX']
+        datalyr_dict["azimuthAngle"] = datalyr_dict["losUnitVectorX"]
 
         return [rdrmetadata_dict, datalyr_dict]
 
@@ -1304,16 +1396,17 @@ class Product:
 
             # If scenes share >90% spatial overlap AND same dates
             # they MUST be duplicates. Reject the latter.
-            same_time = (new_scene[0]['pair_name'][9:] ==
-                         scene[0]['pair_name'][9:]) and \
-                (new_scene[0]['pair_name'][:8] ==
-                 scene[0]['pair_name'][:8])
-            scene_shape = scene[1]['productBoundingBox']
-            new_scene_shape = new_scene[1]['productBoundingBox']
-            same_area = new_scene_shape.intersection(scene_shape).area \
-                / scene_shape.area
-            inv_same_area = scene_shape.intersection(new_scene_shape).area \
-                / new_scene_shape.area
+            same_time = (
+                new_scene[0]["pair_name"][9:] == scene[0]["pair_name"][9:]
+            ) and (new_scene[0]["pair_name"][:8] == scene[0]["pair_name"][:8])
+            scene_shape = scene[1]["productBoundingBox"]
+            new_scene_shape = new_scene[1]["productBoundingBox"]
+            same_area = (
+                new_scene_shape.intersection(scene_shape).area / scene_shape.area
+            )
+            inv_same_area = (
+                scene_shape.intersection(new_scene_shape).area / new_scene_shape.area
+            )
 
             if same_time and same_area > 0.9:
                 # If applicable, overwrite smaller scene with larger one
@@ -1326,26 +1419,25 @@ class Product:
                 vers = []
                 scenes = [scene, new_scene]
                 for sc in scenes:
-                    unw_f = sc[1]['unwrappedPhase']
-                    basename_unw = os.path.basename(
-                        unw_f.split('"')[1])
+                    unw_f = sc[1]["unwrappedPhase"]
+                    basename_unw = os.path.basename(unw_f.split('"')[1])
                     # parse version from NISAR and S1 GUNWs appropriately
                     ext = os.path.splitext(basename_unw)[1].lower()
-                    if ext == '.nc':
-                        ver_str = re.search(
-                            r'(v\d+_\d+_\d+.*)\.',
-                            basename_unw).group(1)
-                        ver_num = float(ver_str[1:].replace('_', ''))
-                    elif ext == '.h5':
-                        ver_str = basename_unw.split('_')[-1][:-3]
+                    if ext == ".nc":
+                        ver_str = re.search(r"(v\d+_\d+_\d+.*)\.", basename_unw).group(
+                            1
+                        )
+                        ver_num = float(ver_str[1:].replace("_", ""))
+                    elif ext == ".h5":
+                        ver_str = basename_unw.split("_")[-1][:-3]
                         ver_num = float(ver_str)
                     else:
                         LOGGER.error(
-                            "Unable to determine version of product: %s",
-                            basename_unw)
+                            "Unable to determine version of product: %s", basename_unw
+                        )
                         raise Exception(
-                            "Unable to determine version of product: %s" %
-                            basename_unw)
+                            f"Unable to determine version of product: {basename_unw}"
+                        )
                     vers.append(ver_num)
 
                 use_scene = scenes[np.argmax(vers)]
@@ -1357,18 +1449,18 @@ class Product:
 
                 LOGGER.debug(
                     "Duplicate product captured. Rejecting scene %s",
-                    os.path.basename(scenes[0][1]['unwrappedPhase'].split(
-                        ':')[1]))
+                    os.path.basename(scenes[0][1]["unwrappedPhase"].split(":")[1]),
+                )
 
         # Delete duplicate products
         self.products = list(
-            self.products for self.products, _ in
-            itertools.groupby(self.products))
+            self.products for self.products, _ in itertools.groupby(self.products)
+        )
 
         if len(num_dups) > 0:
             LOGGER.warning(
-                "%d products rejected since they are duplicates",
-                len(num_dups))
+                "%d products rejected since they are duplicates", len(num_dups)
+            )
 
         # If only one pair in list, add it to list.
         if len(self.products) == 1:
@@ -1384,57 +1476,58 @@ class Product:
             scene = i[1]
             new_scene = self.products[i[0] + 1]
             scene_t_ref = datetime.datetime.strptime(
-                scene[0]['pair_name'][:8], "%Y%m%d")
+                scene[0]["pair_name"][:8], "%Y%m%d"
+            )
             new_scene_t_ref = datetime.datetime.strptime(
-                new_scene[0]['pair_name'][:8], "%Y%m%d")
-            scene_t = datetime.datetime.strptime(
-                scene[0]['pair_name'][9:], "%Y%m%d")
+                new_scene[0]["pair_name"][:8], "%Y%m%d"
+            )
+            scene_t = datetime.datetime.strptime(scene[0]["pair_name"][9:], "%Y%m%d")
             new_scene_t = datetime.datetime.strptime(
-                new_scene[0]['pair_name'][9:], "%Y%m%d")
-            scene_area = scene[1]['productBoundingBox']
-            new_scene_area = new_scene[1]['productBoundingBox']
+                new_scene[0]["pair_name"][9:], "%Y%m%d"
+            )
+            scene_area = scene[1]["productBoundingBox"]
+            new_scene_area = new_scene[1]["productBoundingBox"]
 
             # check spatiotemporal overlap
-            scene_intersects = scene_area.intersection(
-                new_scene_area).area > 0.
+            scene_intersects = scene_area.intersection(new_scene_area).area > 0.0
             sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
             ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
 
             # check spatiotemporal overlap
-            scene_intersects = scene_area.intersection(
-                new_scene_area).area > 0.
+            scene_intersects = scene_area.intersection(new_scene_area).area > 0.0
             sec_within_day = abs(new_scene_t - scene_t) <= ONE_DAY
             ref_within_day = abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
 
             # Only pass scene if it temporally (i.e. in same orbit)
             # and spatially overlaps with reference scene
             if scene_intersects and sec_within_day and ref_within_day:
-
                 # Do not export prod if already tracked as a rejected pair
-                ref_rejected = scene[0][
-                    'pair_name'] in track_rejected_pairs
-                sec_rejected = new_scene[0][
-                    'pair_name'] in track_rejected_pairs
+                ref_rejected = scene[0]["pair_name"] in track_rejected_pairs
+                sec_rejected = new_scene[0]["pair_name"] in track_rejected_pairs
                 if ref_rejected or sec_rejected:
-                    track_rejected_pairs.extend((
-                        scene[0]['pair_name'], new_scene[0]['pair_name']))
+                    track_rejected_pairs.extend(
+                        (scene[0]["pair_name"], new_scene[0]["pair_name"])
+                    )
                     continue
 
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does then append values
                 dict_item = None
                 for item in sorted_products:
-                    scene_in_ifg = scene[1][
-                        'unwrappedPhase'] in item[1]['unwrappedPhase']
+                    scene_in_ifg = (
+                        scene[1]["unwrappedPhase"] in item[1]["unwrappedPhase"]
+                    )
                     if scene_in_ifg:
                         dict_item = item
                         break
                 if dict_item is not None:
                     dict_ind = sorted_products.index(dict_item)
                     dict_1 = package_dict(
-                        scene, new_scene, 0, sorted_products, dict_ind)
+                        scene, new_scene, 0, sorted_products, dict_ind
+                    )
                     dict_2 = package_dict(
-                        scene, new_scene, 1, sorted_products, dict_ind)
+                        scene, new_scene, 1, sorted_products, dict_ind
+                    )
                     sorted_products[dict_ind] = [dict_1, dict_2]
                 # Match IFG corresponding to reference product NOT found
                 # so initialize dictionary for new IFG
@@ -1447,28 +1540,28 @@ class Product:
             # If pairs are within the same day
             # but do not intersect this means there is a gap
             # Reject date from prod list, and keep track of all failed dates
-            elif (scene_area.intersection(new_scene_area).area == 0. and
-                  abs(new_scene_t - scene_t) <= ONE_DAY and
-                  abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY):
-
-                track_rejected_pairs.extend((
-                    scene[0]['pair_name'], new_scene[0]['pair_name']))
-                LOGGER.debug(
-                    "Gap for interferogram %s", scene[0]['pair_name'])
+            elif (
+                scene_area.intersection(new_scene_area).area == 0.0
+                and abs(new_scene_t - scene_t) <= ONE_DAY
+                and abs(new_scene_t_ref - scene_t_ref) <= ONE_DAY
+            ):
+                track_rejected_pairs.extend(
+                    (scene[0]["pair_name"], new_scene[0]["pair_name"])
+                )
+                LOGGER.debug("Gap for interferogram %s", scene[0]["pair_name"])
 
             # If prods correspond to different orbits entirely
             else:
-
                 # Check if IFG dict corresponding to ref prod already exists
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    scene_in_ifg = scene[1][
-                        'unwrappedPhase'] in item[1]['unwrappedPhase']
+                    scene_in_ifg = (
+                        scene[1]["unwrappedPhase"] in item[1]["unwrappedPhase"]
+                    )
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
-                ref_not_rejected = scene[0][
-                    'pair_name'] not in track_rejected_pairs
+                ref_not_rejected = scene[0]["pair_name"] not in track_rejected_pairs
                 if track_existing_ifg == [] and ref_not_rejected:
                     dict_1 = package_dict(scene, scene, 0)
                     dict_2 = package_dict(scene, scene, 1)
@@ -1478,12 +1571,14 @@ class Product:
                 # and if it does not then pass as new IFG
                 track_existing_ifg = []
                 for item in sorted_products:
-                    scene_in_ifg = new_scene[1][
-                        'unwrappedPhase'] in item[1]['unwrappedPhase']
+                    scene_in_ifg = (
+                        new_scene[1]["unwrappedPhase"] in item[1]["unwrappedPhase"]
+                    )
                     if scene_in_ifg:
                         track_existing_ifg.append(item)
-                scene_not_rejected = new_scene[0][
-                    'pair_name'] not in track_rejected_pairs
+                scene_not_rejected = (
+                    new_scene[0]["pair_name"] not in track_rejected_pairs
+                )
                 if track_existing_ifg == [] and scene_not_rejected:
                     dict_1 = package_dict(new_scene, new_scene, 0)
                     dict_2 = package_dict(new_scene, new_scene, 1)
@@ -1494,41 +1589,53 @@ class Product:
         track_rejected_pairs = list(set(track_rejected_pairs))
         if len(track_rejected_pairs) > 0:
             LOGGER.warning(
-                '%d out of %d interferograms rejected since stitched '
-                'interferogram would have gaps' % (
-                    len(track_rejected_pairs),
-                    len([item[0] for item in sorted_products])))
+                "%d out of %d interferograms rejected since stitched "
+                "interferogram would have gaps",
+                len(track_rejected_pairs),
+                len([item[0] for item in sorted_products]),
+            )
 
             # Provide report of which files were kept vs. which were not
-            LOGGER.debug('Specifically, gaps were found between the '
-                         'following interferograms:')
+            LOGGER.debug(
+                "Specifically, gaps were found between the " "following interferograms:"
+            )
 
             record_rejected_scenes = []
             for item in self.products:
-                if item[0]['pair_name'] in track_rejected_pairs:
+                if item[0]["pair_name"] in track_rejected_pairs:
                     record_rejected_scenes.append(
-                        item[1]['unwrappedPhase'].split('"')[1])
+                        item[1]["unwrappedPhase"].split('"')[1]
+                    )
 
             for record_rejected_scene in list(set(record_rejected_scenes)):
                 LOGGER.debug(os.path.basename(record_rejected_scene))
 
         else:
             LOGGER.info(
-                'All (%d) interferograms are spatially continuous.',
-                len(sorted_products))
+                "All (%d) interferograms are spatially continuous.",
+                len(sorted_products),
+            )
 
         sorted_products = [
-            [item[0] for item in sorted_products if (item[0]['pair_name'][0]
-             not in track_rejected_pairs)],
-            [item[1] for item in sorted_products if (item[1]['pair_name'][0]
-             not in track_rejected_pairs)]]
+            [
+                item[0]
+                for item in sorted_products
+                if (item[0]["pair_name"][0] not in track_rejected_pairs)
+            ],
+            [
+                item[1]
+                for item in sorted_products
+                if (item[1]["pair_name"][0] not in track_rejected_pairs)
+            ],
+        ]
 
         # Report dictionaries for all valid products
         # Check if pairs successfully selected
         if sorted_products == [[], []]:
             raise Exception(
-                'No valid interferogram meet spatial criteria due to gaps '
-                'and/or invalid input, nothing to export.')
+                "No valid interferogram meet spatial criteria due to gaps "
+                "and/or invalid input, nothing to export."
+            )
 
         return sorted_products
 
@@ -1538,55 +1645,59 @@ class Product:
         prev_products = []
         if self.runlog:
             log_data = self.runlog.load()
-            if 'files' in log_data and 'products' in log_data:
-                prev_files = log_data['files']
-                prev_products = log_data['products']
+            if "files" in log_data and "products" in log_data:
+                prev_files = log_data["files"]
+                prev_products = log_data["products"]
 
             # dedup DEM file
-            prev_demfile = log_data.get('demfile')
+            prev_demfile = log_data.get("demfile")
             if prev_demfile is not None and self.demfile != prev_demfile:
                 if self.demfile is None:
                     self.demfile = prev_demfile
-                elif isinstance(self.demfile, str) and \
-                        self.demfile.lower() == 'download':
+                elif (
+                    isinstance(self.demfile, str) and self.demfile.lower() == "download"
+                ):
                     LOGGER.warning(
-                        'specified DEM download, when DEM %s already exists',
-                        prev_demfile)
+                        "specified DEM download, when DEM %s already exists",
+                        prev_demfile,
+                    )
                     self.demfile = prev_demfile
 
             # dedup mask file
-            prev_maskfile = log_data.get('maskfilename')
+            prev_maskfile = log_data.get("maskfilename")
             if prev_maskfile is not None and self.mask != prev_maskfile:
                 if self.mask is None:
                     self.mask = prev_maskfile
-                elif isinstance(self.mask, str) and \
-                        self.mask.lower() == 'download':
+                elif isinstance(self.mask, str) and self.mask.lower() == "download":
                     LOGGER.warning(
-                        'specified msk download, when msk %s already exists',
-                        prev_maskfile)
+                        "specified msk download, when msk %s already exists",
+                        prev_maskfile,
+                    )
                     self.mask = prev_maskfile
 
             # check for crop to union inconsistency
-            if ('croptounion' in log_data.keys()) \
-                    and (self.croptounion != log_data['croptounion']):
-                raise Exception('croptounion has changed since previous run. '
-                                'Necessary to run from scratch.')
+            if ("croptounion" in log_data.keys()) and (
+                self.croptounion != log_data["croptounion"]
+            ):
+                raise Exception(
+                    "croptounion has changed since previous run. "
+                    "Necessary to run from scratch."
+                )
 
         # Check which past files are included in the current list
         for product in prev_products:
             # Isolate product file name
             _, datalyr_dict = product
-            prod_name = datalyr_dict['productBoundingBoxFrames'].split('"')[1]
+            prod_name = datalyr_dict["productBoundingBoxFrames"].split('"')[1]
 
             # Ensure product still exists where originally found
             # For virtual (vsicurl) paths, os.path.exists() always returns
             # False, so we only check membership in current file list.
-            is_remote = ('/vsicurl/' in prod_name
-                         or '/vsis3/' in prod_name)
+            is_remote = "/vsicurl/" in prod_name or "/vsis3/" in prod_name
             if prod_name in self.files and (is_remote or os.path.exists(prod_name)):
                 self.products += [product]
             else:
-                raise Exception('Product not found: %s', prod_name)
+                raise Exception("Product not found: %s", prod_name)
 
         # Only populate list of dictionaries if the file intersects with bbox
         # and is not included in list of already-processed products
@@ -1594,63 +1705,70 @@ class Product:
             if file not in prev_files:
                 self.products += self.__readproduct__(file)
             else:
-                LOGGER.info('Product already read: %s', file)
+                LOGGER.info("Product already read: %s", file)
 
         if self.runlog is not None:
-            self.runlog.update('files', self.files)
-            self.runlog.update('products', self.products)
+            self.runlog.update("files", self.files)
+            self.runlog.update("products", self.products)
 
         # Sort by pair, start time, and latitude
-        self.products = list(sorted(
-            [i for i in self.products if i != []], key=lambda i: (
-                i[0]['pair_name'], i[0]['centerLatitude'],
-                i[0]['azimuthZeroDopplerMidTime'])))
+        self.products = list(
+            sorted(
+                [i for i in self.products if i != []],
+                key=lambda i: (
+                    i[0]["pair_name"],
+                    i[0]["centerLatitude"],
+                    i[0]["azimuthZeroDopplerMidTime"],
+                ),
+            )
+        )
 
         # determine if there is a mix of different sensors
-        s1_prods = all(i[0]['missionID'] ==
-                       'Sentinel-1' for i in self.products)
-        alos2_prods = all(i[0]['missionID'] == 'ALOS-2' for i in self.products)
-        nisar_prods = all(i[0]['missionID'] == 'NISAR' for i in self.products)
+        s1_prods = all(i[0]["missionID"] == "Sentinel-1" for i in self.products)
+        alos2_prods = all(i[0]["missionID"] == "ALOS-2" for i in self.products)
+        nisar_prods = all(i[0]["missionID"] == "NISAR" for i in self.products)
 
         # Exit if products from different sensors were mixed
         if not s1_prods and not alos2_prods and not nisar_prods:
-
             raise Exception(
-                'Specified input contains standard products from different '
-                'sensors, please proceed with homogeneous products')
+                "Specified input contains standard products from different "
+                "sensors, please proceed with homogeneous products"
+            )
 
         # Check if any pairs meet criteria
         if self.products == []:
-            raise Exception('No valid pairs meet spatial criteria, nothing '
-                            'to export.')
+            raise Exception(
+                "No valid pairs meet spatial criteria, nothing " "to export."
+            )
 
         if len(self.products) != len(self.files):
             LOGGER.warning(
-                '%d out of %d GUNW products rejected',
-                len(self.files) - len(self.products), len(self.files))
+                "%d out of %d GUNW products rejected",
+                len(self.files) - len(self.products),
+                len(self.files),
+            )
 
             # Provide report of which files were kept vs. which weren't
-            LOGGER.debug(
-                'Specifically, the following GUNW products were rejected:')
+            LOGGER.debug("Specifically, the following GUNW products were rejected:")
             for i in self.files:
-                product_bboxes = [i[1]['unwrappedPhase'].split('"')[1]
-                                  for i in self.products]
+                product_bboxes = [
+                    i[1]["unwrappedPhase"].split('"')[1] for i in self.products
+                ]
                 if i not in product_bboxes:
                     LOGGER.debug(os.path.basename(i))
 
         else:
             LOGGER.info(
-                'All (%d) GUNW products meet spatial bbox criteria.',
-                len(self.files))
+                "All (%d) GUNW products meet spatial bbox criteria.", len(self.files)
+            )
 
         # Split products in spatiotemporally continuous groups
         LOGGER.info(
-            'Group GUNW products into spatiotemporally continuous '
-            'interferograms.')
+            "Group GUNW products into spatiotemporally continuous " "interferograms."
+        )
         self.products = self.__continuous_time__()
 
         # Persist metadata cache to avoid re-reading on next invocation
-        ARIAtools.util.meta_cache.save_cache(
-            self._cache_file, self._cache_data)
+        ARIAtools.util.meta_cache.save_cache(self._cache_file, self._cache_data)
 
         return self.products
