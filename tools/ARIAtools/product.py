@@ -555,19 +555,15 @@ class Product:
                 pol_dict['SH'] = 'HH'
                 pol_dict['HHNA'] = 'HH'
                 for i in self.files:
-                    basename = os.path.basename(i)
-                    file_pol = pol_dict[basename.split('_')[10]]
-                    lyr_pref = '/science/LSAR/GUNW/grids/frequencyA'
-                    lyr_pref += f'/unwrappedInterferogram/{file_pol}/'
-                    # Read projection from the spatial reference of a
-                    # data layer; the 'projection' scalar dataset in
-                    # HDF5 is not readable via GDAL's netCDF driver.
-                    sds = f'NETCDF:"{i}":{lyr_pref}unwrappedPhase'
-                    ds = osgeo.gdal.Open(sds, osgeo.gdal.GA_ReadOnly)
-                    srs = ds.GetSpatialRef()
-                    file_proj = int(srs.GetAuthorityCode(None))
-                    ds = None
-                    record_proj.append(file_proj)
+                    # Use cached metadata instead of opening file
+                    meta = ARIAtools.util.meta_cache.get_or_extract(
+                        i, self._cache_data)
+                    if meta and meta.get('projection'):
+                        file_proj = int(meta['projection'])
+                        record_proj.append(file_proj)
+                # Save cache after potential extractions
+                ARIAtools.util.meta_cache.save_cache(
+                    self._cache_file, self._cache_data)
                 self.projection = int(np.median(record_proj))
             else:
                 self.projection = 4326
@@ -796,9 +792,19 @@ class Product:
         rdrmetakeys = list(rdrmetadata.variables.keys())
         rdrmetadata_dict = {}
 
-        # Parse layers
-        sdsdict = osgeo.gdal.Open(fname).GetMetadata('SUBDATASETS')
-        sdsdict = {k: v for k, v in sdsdict.items() if 'NAME' in k}
+        # Parse layers - use cached subdatasets if available
+        clean_fname = fname.replace('NETCDF:"', '').rstrip('"')
+        cached = ARIAtools.util.meta_cache.get_or_extract(
+            clean_fname, self._cache_data)
+
+        if cached and cached.get('subdatasets'):
+            # Cache returns list of subdataset paths directly
+            subdatasets = cached['subdatasets']
+        else:
+            # Fallback to GDAL if cache unavailable
+            sdsdict = osgeo.gdal.Open(fname).GetMetadata('SUBDATASETS')
+            subdatasets = [v for k, v in sdsdict.items() if 'NAME' in k]
+
         datalyr_dict = {}
 
         # Setup rdrmetadata_dict
@@ -814,16 +820,16 @@ class Product:
                     "Radarmetadata key %s not expected in rmdkeys", i)
         rdrmetadata_dict['pair_name'] = self.pairname
 
-        # Setup datalyr_dict
-        for i in sdsdict.items():
+        # Setup datalyr_dict - now iterate over subdataset list
+        for sd_path in subdatasets:
             # If layer expected
             try:
-                datalyr_dict[LAYER_KEYS[sdskeys.index(
-                    i[1].split(':')[-1].split('/')[-1])]] = i[1]
+                layer_name = sd_path.split(':')[-1].split('/')[-1]
+                datalyr_dict[LAYER_KEYS[sdskeys.index(layer_name)]] = sd_path
             # If new, unaccounted layer not expected in LAYER_KEYS
             except BaseException:
                 LOGGER.warning(
-                    "Data layer key %s not expected in sdskeys", i[1])
+                    "Data layer key %s not expected in sdskeys", sd_path)
 
         datalyr_dict['pair_name'] = self.pairname
 

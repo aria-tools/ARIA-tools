@@ -22,6 +22,7 @@ import io
 import json
 import logging
 import os
+import threading
 import time
 
 import h5py
@@ -33,6 +34,9 @@ LOGGER = logging.getLogger(__name__)
 
 # Sentinel used when a key is genuinely absent from a product
 _MISSING = '__missing__'
+
+# Thread lock for cache operations
+_cache_lock = threading.RLock()
 
 
 def _cache_path(url_file):
@@ -78,24 +82,28 @@ def load_cache(cache_file):
 
 
 def save_cache(cache_file, cache_data):
-    """Persist the cache dict to disk."""
+    """Persist the cache dict to disk (thread-safe)."""
     if cache_file is None:
         return
-    try:
-        with open(cache_file, 'w') as fh:
-            json.dump(cache_data, fh, indent=1)
-        LOGGER.debug('Saved metadata cache (%d entries) to %s',
-                     len(cache_data), cache_file)
-    except OSError as exc:
-        LOGGER.warning('Could not write metadata cache %s: %s',
-                       cache_file, exc)
+    with _cache_lock:
+        try:
+            with open(cache_file, 'w') as fh:
+                json.dump(cache_data, fh, indent=1)
+            LOGGER.debug('Saved metadata cache (%d entries) to %s',
+                         len(cache_data), cache_file)
+        except OSError as exc:
+            LOGGER.warning('Could not write metadata cache %s: %s',
+                           cache_file, exc)
 
 
 def extract_metadata_gdal(fname):
-    """Extract lightweight metadata from a GUNW product using only GDAL.
+    """Extract comprehensive metadata from a GUNW product using only GDAL.
 
     Uses a single ``gdal.Info(..., options=['-json'])`` call which
     fetches the minimum number of HTTP range requests for remote files.
+
+    **Phase 1 Optimization**: Now extracts projection, bounds, geotransform,
+    and size in addition to basic metadata to eliminate repeated file opens.
 
     Parameters
     ----------
@@ -105,8 +113,18 @@ def extract_metadata_gdal(fname):
     Returns
     -------
     dict
-        Dictionary with keys: version, driver, subdatasets, nc_global,
-        gdal_info_ts (timestamp of extraction).
+        Dictionary with keys:
+        - version: Product version string
+        - driver: GDAL driver name
+        - subdatasets: List of subdataset paths
+        - tropo_models: List of available troposphere models
+        - nc_global: NC_GLOBAL attributes dict
+        - projection: EPSG code as string (e.g. '4326') [NEW]
+        - geotransform: 6-element geotransform tuple [NEW]
+        - bounds: [minX, minY, maxX, maxY] [NEW]
+        - size: [width, height] [NEW]
+        - gdal_info_ts: Timestamp of extraction
+        - _cache_complete: Boolean indicating if all fields extracted [NEW]
     """
     netcdf_fname = f'NETCDF:"{fname}'
 
@@ -124,11 +142,12 @@ def extract_metadata_gdal(fname):
     version = nc_global.get('NC_GLOBAL#version', None)
 
     # Collect subdataset names
+    subdatasets = []
     if fname.endswith('.nc'):
         subdatasets_raw = metadata.get('SUBDATASETS', {})
         subdatasets = [
             v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
-    if fname.endswith('.h5'):
+    elif fname.endswith('.h5'):
         subdatasets_raw = metadata.get('Subdatasets', {})
         subdatasets = [
             v for k, v in sorted(subdatasets_raw.items()) if 'NAME' in k]
@@ -142,18 +161,136 @@ def extract_metadata_gdal(fname):
             if idx + 1 < len(parts):
                 tropo_models.add(parts[idx + 1])
 
+    # --- NEW: Extract spatial metadata ---
+
+    # Extract projection/SRS
+    projection = None
+    coord_system = info.get('coordinateSystem', {})
+    wkt = coord_system.get('wkt')
+    if wkt:
+        try:
+            srs = osgeo.osr.SpatialReference()
+            srs.ImportFromWkt(wkt)
+            srs.AutoIdentifyEPSG()
+            epsg_code = srs.GetAuthorityCode(None)
+            if epsg_code:
+                projection = str(epsg_code)
+        except Exception as e:
+            LOGGER.debug('Could not extract projection from WKT: %s', e)
+
+    # Extract geotransform
+    geotransform = info.get('geoTransform', None)
+
+    # Extract size
+    size = info.get('size', [None, None])
+
+    # Extract bounds from corner coordinates
+    bounds = None
+    corners = info.get('cornerCoordinates', {})
+    if 'upperLeft' in corners and 'lowerRight' in corners:
+        try:
+            ul = corners['upperLeft']
+            lr = corners['lowerRight']
+            # [minX, minY, maxX, maxY]
+            bounds = [ul[0], lr[1], lr[0], ul[1]]
+        except (KeyError, IndexError, TypeError) as e:
+            LOGGER.debug('Could not extract bounds from corners: %s', e)
+
+    # Alternative: compute bounds from geotransform and size
+    if bounds is None and geotransform and size[0] and size[1]:
+        try:
+            gt = geotransform
+            width, height = size
+            minX = gt[0]
+            maxY = gt[3]
+            maxX = gt[0] + gt[1] * width
+            minY = gt[3] + gt[5] * height
+            bounds = [minX, minY, maxX, maxY]
+        except Exception as e:
+            LOGGER.debug('Could not compute bounds from geotransform: %s', e)
+
+    # Track completeness for cache validation
+    cache_complete = all([
+        version is not None,
+        projection is not None,
+        geotransform is not None,
+        bounds is not None,
+        size[0] is not None,
+    ])
+
     return {
         'version': version,
         'driver': info.get('driverShortName', None),
         'subdatasets': subdatasets,
         'tropo_models': sorted(tropo_models),
         'nc_global': nc_global,
+        # New fields for Phase 1 optimization:
+        'projection': projection,
+        'geotransform': geotransform,
+        'bounds': bounds,
+        'size': size,
+        '_cache_complete': cache_complete,
         'gdal_info_ts': time.time(),
     }
 
 
-def get_or_extract(fname, cache_data):
-    """Return cached metadata for *fname*, extracting if not cached.
+def _is_cache_stale(fname, cached_meta, ttl_seconds=3600):
+    """Check if cached metadata is stale and needs refresh.
+
+    Parameters
+    ----------
+    fname : str
+        Product path (may include ``/vsicurl/`` prefix).
+    cached_meta : dict
+        Cached metadata dictionary with 'gdal_info_ts' timestamp.
+    ttl_seconds : int, optional
+        Time-to-live in seconds for remote files (default: 1 hour).
+
+    Returns
+    -------
+    bool
+        True if cache entry is stale and should be refreshed.
+    """
+    # Check if timestamp exists
+    cache_ts = cached_meta.get('gdal_info_ts')
+    if cache_ts is None:
+        return True  # No timestamp = stale
+
+    # Check completeness flag for expanded cache fields
+    if not cached_meta.get('_cache_complete', False):
+        LOGGER.debug('Cache entry incomplete, needs refresh')
+        return True
+
+    is_remote = fname.startswith(('http://', 'https://', '/vsicurl/', '/vsis3/'))
+
+    if is_remote:
+        # Remote files: use TTL
+        age_seconds = time.time() - cache_ts
+        if age_seconds > ttl_seconds:
+            LOGGER.debug('Remote cache entry expired (age: %.1f min, TTL: %.1f min)',
+                        age_seconds / 60, ttl_seconds / 60)
+            return True
+    else:
+        # Local files: check mtime
+        try:
+            file_mtime = os.path.getmtime(fname)
+            if file_mtime > cache_ts:
+                LOGGER.debug('Local file modified since cache (file mtime: %s, cache: %s)',
+                           file_mtime, cache_ts)
+                return True
+        except OSError:
+            # File doesn't exist or not accessible
+            LOGGER.debug('Cannot stat local file: %s', fname)
+            return True
+
+    return False
+
+
+def get_or_extract(fname, cache_data, ttl_seconds=3600):
+    """Return cached metadata for *fname*, extracting if not cached or stale.
+
+    Thread-safe: Multiple threads can safely call this function with the
+    same cache_data dict. Uses double-check locking to minimize contention.
 
     Parameters
     ----------
@@ -161,6 +298,9 @@ def get_or_extract(fname, cache_data):
         Product path (may include ``/vsicurl/`` prefix).
     cache_data : dict
         Mutable cache dict; will be updated in-place on cache miss.
+    ttl_seconds : int, optional
+        Time-to-live in seconds for remote files (default: 1 hour).
+        Local files use mtime-based validation instead.
 
     Returns
     -------
@@ -168,16 +308,33 @@ def get_or_extract(fname, cache_data):
         Metadata dict for the product, or None on failure.
     """
     key = _file_key(fname)
-    if key in cache_data:
-        LOGGER.debug('Cache hit: %s', os.path.basename(key))
-        return cache_data[key]
 
-    LOGGER.debug('Cache miss – extracting metadata: %s',
-                os.path.basename(key))
-    meta = extract_metadata_gdal(fname)
-    if meta is not None:
-        cache_data[key] = meta
-    return meta
+    # Fast path: check cache without lock (common case for cache hits)
+    if key in cache_data:
+        cached_meta = cache_data[key]
+        if not _is_cache_stale(fname, cached_meta, ttl_seconds):
+            LOGGER.debug('Cache hit (fresh): %s', os.path.basename(key))
+            return cached_meta
+
+    # Slow path: cache miss or stale - acquire lock for extraction
+    with _cache_lock:
+        # Double-check after acquiring lock (another thread may have loaded)
+        if key in cache_data:
+            cached_meta = cache_data[key]
+            if not _is_cache_stale(fname, cached_meta, ttl_seconds):
+                LOGGER.debug('Cache hit (fresh, after lock): %s', os.path.basename(key))
+                return cached_meta
+            else:
+                LOGGER.debug('Cache hit (stale) – refreshing: %s', os.path.basename(key))
+        else:
+            LOGGER.debug('Cache miss – extracting metadata: %s',
+                        os.path.basename(key))
+
+        # Extract metadata (may be slow for remote files)
+        meta = extract_metadata_gdal(fname)
+        if meta is not None:
+            cache_data[key] = meta
+        return meta
 
 
 # ---------- h5py helpers for scalar/string HDF5 metadata ------------------
