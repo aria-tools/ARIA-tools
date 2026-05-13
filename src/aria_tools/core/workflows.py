@@ -662,6 +662,7 @@ def generate_stack(
             for aria_date in aria_dates
         ]
     )
+
     prog_bar = ARIAtools.util.misc.ProgressBar(
         maxValue=len(dlist),
         prefix=f"Exporting {output_file_name}: ",
@@ -740,7 +741,7 @@ def generate_stack(
                 orb_dir = "UNKNOWN"
 
             path = os.path.relpath(os.path.abspath(data), start=stack_dir)
-            outstr = f'''  <VRTRasterBand dataType="{data_type}" band="{index}">
+            outstr = f"""  <VRTRasterBand dataType="{data_type}" band="{index}">
         <NoDataValue>{no_data}</NoDataValue>
         <SimpleSource>
             <SourceFilename relativeToVRT="1">{path}</SourceFilename>
@@ -759,7 +760,7 @@ def generate_stack(
             <MDI key="endRange">{end_range}</MDI>
             <MDI key="slantRangeSpacing">{range_spacing}</MDI>
             <MDI key="orbitDirection">{orb_dir}</MDI>
-            <MDI key="PLATFORM">{platform}</MDI>'''
+            <MDI key="PLATFORM">{platform}</MDI>"""
             fid.write(outstr)
             if b_perp:
                 fid.write(
