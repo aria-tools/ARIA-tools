@@ -36,6 +36,7 @@ import ARIAtools.util.vrt
 import ARIAtools.util.shp
 import ARIAtools.util.misc
 import ARIAtools.util.seq_stitch
+import ARIAtools.util.mask_cache
 import aria_tools.execution.workers
 
 from ARIAtools.constants import ARIA_PX_SIZES
@@ -1503,13 +1504,14 @@ def handle_epoch_layers(
 
                 # Apply mask (if specified)
                 if mask is not None:
-                    # Load mask
+                    # Load VRT data
                     ds_vrt_read = osgeo.gdal.Open(
                         j[1][:-4] + '.vrt', osgeo.gdal.GA_ReadOnly
                     )
                     vrt_arr = ds_vrt_read.ReadAsArray()
                     ds_vrt_read = None
-                    mask_arr = mask.ReadAsArray() * vrt_arr
+                    # Apply cached mask array (no file read needed)
+                    mask_arr = mask * vrt_arr
 
                     # Initiate file update with mask
                     update_file = osgeo.gdal.Open(
@@ -1648,7 +1650,9 @@ def export_product_worker(
     sign_multiplier = -1 if (is_nisar_file and layer in [
         'bPerpendicular', 'bParallel']) else 1
 
-    mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
+    # Use mask cache to avoid repeated file opens
+    # MaskCache returns the array directly, not a GDAL dataset
+    mask_array = ARIAtools.util.mask_cache.MaskCache.get(maskfile)
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
         None
@@ -1905,15 +1909,16 @@ def export_product_worker(
                     num_threads=num_threads)
 
             # Apply mask (if specified)
-            if mask is not None:
+            if mask_array is not None:
                 for j in [outFileConnComp, outFilePhs]:
-                    # Load mask
+                    # Load VRT data
                     ds_vrt_read = osgeo.gdal.Open(
                         j + '.vrt', osgeo.gdal.GA_ReadOnly
                     )
                     vrt_arr = ds_vrt_read.ReadAsArray()
                     ds_vrt_read = None
-                    mask_arr = mask.ReadAsArray() * vrt_arr
+                    # Apply cached mask array (no file read needed)
+                    mask_arr = mask_array * vrt_arr
 
                     # Initiate file update with mask
                     update_file = osgeo.gdal.Open(
@@ -1935,14 +1940,15 @@ def export_product_worker(
                     num_threads=num_threads)
 
             # Apply mask (if specified)
-            if mask is not None:
-                # Load mask
+            if mask_array is not None:
+                # Load VRT data
                 ds_vrt_read = osgeo.gdal.Open(
                     outname + '.vrt', osgeo.gdal.GA_ReadOnly
                 )
                 vrt_arr = ds_vrt_read.ReadAsArray()
                 ds_vrt_read = None
-                mask_arr = mask.ReadAsArray() * vrt_arr
+                # Apply cached mask array (no file read needed)
+                mask_arr = mask_array * vrt_arr
 
                 # Initiate file update with mask
                 update_file = osgeo.gdal.Open(
@@ -1992,7 +1998,9 @@ def export_products(
     ref_geotrans = None
     ref_arr = None
 
-    mask = None if maskfile is None else osgeo.gdal.Open(maskfile)
+    # Use mask cache to avoid repeated file opens
+    mask_array = ARIAtools.util.mask_cache.MaskCache.get(maskfile)
+    mask = maskfile  # Keep reference to maskfile for format checks
     dem = None if demfile is None else osgeo.gdal.Open(demfile)
     dem_expanded = (
         None if demfile_expanded is None
@@ -2008,7 +2016,7 @@ def export_products(
     lyr_input_dict = {
         'layers': layers, 'prods_TOTbbox': prods_TOTbbox,
         'proj': epsg_code, 'dem': dem_expanded, 'lat': lat, 'lon': lon,
-        'mask': mask, 'verbose': verbose, 'multilooking': multilooking,
+        'mask': mask_array, 'verbose': verbose, 'multilooking': multilooking,
         'rankedResampling': rankedResampling, 'num_threads': num_threads,
         'is_nisar_file': is_nisar_file}
 
