@@ -33,12 +33,8 @@ def pytest_collection_modifyitems(
     items: list[pytest.Item],
 ) -> None:
     skip_slow = pytest.mark.skip(reason="need --run-slow option to run")
-    skip_network = pytest.mark.skip(
-        reason="need --run-network option to run"
-    )
-    skip_credentialed = pytest.mark.skip(
-        reason="need --run-credentialed option to run"
-    )
+    skip_network = pytest.mark.skip(reason="need --run-network option to run")
+    skip_credentialed = pytest.mark.skip(reason="need --run-credentialed option to run")
 
     for item in items:
         item_path = Path(str(getattr(item, "path", item.fspath)))
@@ -56,13 +52,11 @@ def pytest_collection_modifyitems(
 
         if "slow" in item.keywords and not config.getoption("--run-slow"):
             item.add_marker(skip_slow)
-        if (
-            "network_required" in item.keywords
-            and not config.getoption("--run-network")
+        if "network_required" in item.keywords and not config.getoption(
+            "--run-network"
         ):
             item.add_marker(skip_network)
-        if (
-            "credentialed" in item.keywords
-            and not config.getoption("--run-credentialed")
+        if "credentialed" in item.keywords and not config.getoption(
+            "--run-credentialed"
         ):
             item.add_marker(skip_credentialed)

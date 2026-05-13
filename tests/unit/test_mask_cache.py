@@ -8,11 +8,10 @@ Tests the ARIAtools.util.mask_cache module to ensure:
 - Memory usage is reasonable
 """
 
-import pytest
-import numpy as np
-import tempfile
 import os
-from pathlib import Path
+
+import numpy as np
+import pytest
 
 # Test imports
 from ARIAtools.util.mask_cache import MaskCache, get_mask_array
@@ -46,8 +45,8 @@ class TestMaskCacheBasics:
 
         # Should return same array object
         assert mask1 is mask2
-        assert stats1['misses'] == 1
-        assert stats2['hits'] == 1
+        assert stats1["misses"] == 1
+        assert stats2["hits"] == 1
 
     def test_multiple_calls_use_cache(self, test_mask_file):
         """Multiple calls reuse cached mask."""
@@ -59,9 +58,9 @@ class TestMaskCacheBasics:
 
         # Check stats
         stats = MaskCache.get_stats()
-        assert stats['misses'] == 1
-        assert stats['hits'] == 9
-        assert stats['hit_rate'] == 0.9
+        assert stats["misses"] == 1
+        assert stats["hits"] == 9
+        assert stats["hit_rate"] == 0.9
 
     def test_different_masks_cached_separately(self, test_mask_file, test_mask_file_2):
         """Different mask files cached separately."""
@@ -70,23 +69,23 @@ class TestMaskCacheBasics:
 
         # Should be different arrays
         assert mask1 is not mask2
-        assert MaskCache.get_stats()['cached'] == 2
+        assert MaskCache.get_stats()["cached"] == 2
 
     def test_cache_clear_works(self, test_mask_file):
         """Cache can be cleared."""
         # Load mask
         mask1 = MaskCache.get(test_mask_file)
-        assert MaskCache.get_stats()['cached'] == 1
+        assert MaskCache.get_stats()["cached"] == 1
 
         # Clear cache
         MaskCache.clear()
-        assert MaskCache.get_stats()['cached'] == 0
-        assert MaskCache.get_stats()['hits'] == 0
+        assert MaskCache.get_stats()["cached"] == 0
+        assert MaskCache.get_stats()["hits"] == 0
 
         # Load again (should be miss)
         mask2 = MaskCache.get(test_mask_file)
         assert mask2 is not mask1  # Different object
-        assert MaskCache.get_stats()['misses'] == 1
+        assert MaskCache.get_stats()["misses"] == 1
 
     def test_returns_numpy_array(self, test_mask_file):
         """Returned mask is numpy array."""
@@ -122,33 +121,35 @@ class TestMaskCacheFileHandling:
         """File handles properly closed after loading."""
         try:
             import psutil
+
             proc = psutil.Process(os.getpid())
         except ImportError:
             pytest.skip("psutil not available for file descriptor testing")
 
-        initial_fds = proc.num_fds() if hasattr(proc, 'num_fds') else proc.num_handles()
+        initial_fds = proc.num_fds() if hasattr(proc, "num_fds") else proc.num_handles()
 
         # Load mask 10 times
         for _ in range(10):
             MaskCache.get(test_mask_file)
 
-        final_fds = proc.num_fds() if hasattr(proc, 'num_fds') else proc.num_handles()
+        final_fds = proc.num_fds() if hasattr(proc, "num_fds") else proc.num_handles()
 
         # Should only have 0-1 additional file descriptors
         fd_increase = final_fds - initial_fds
-        assert fd_increase <= 1, \
-            f"File handle leak detected: {fd_increase} handles opened"
+        assert (
+            fd_increase <= 1
+        ), f"File handle leak detected: {fd_increase} handles opened"
 
     def test_handles_missing_file(self):
         """Missing file handled gracefully."""
-        result = MaskCache.get('/nonexistent/path/mask.tif')
+        result = MaskCache.get("/nonexistent/path/mask.tif")
 
         assert result is None  # Should return None, not crash
 
     def test_handles_corrupted_file(self, tmp_path):
         """Corrupted file handled gracefully."""
-        corrupt_file = tmp_path / 'corrupt.tif'
-        corrupt_file.write_text('not a valid GeoTIFF')
+        corrupt_file = tmp_path / "corrupt.tif"
+        corrupt_file.write_text("not a valid GeoTIFF")
 
         result = MaskCache.get(str(corrupt_file))
 
@@ -256,7 +257,7 @@ class TestMaskCacheMemory:
         MaskCache.clear()
 
         tracemalloc.start()
-        mask = MaskCache.get(large_test_mask)
+        MaskCache.get(large_test_mask)
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
@@ -265,8 +266,9 @@ class TestMaskCacheMemory:
         expected_max_mb = 10  # Allow some overhead
 
         peak_mb = peak / 1_000_000
-        assert peak_mb < expected_max_mb, \
-            f"Excessive memory: {peak_mb:.2f} MB (expected < {expected_max_mb} MB)"
+        assert (
+            peak_mb < expected_max_mb
+        ), f"Excessive memory: {peak_mb:.2f} MB (expected < {expected_max_mb} MB)"
 
     def test_cache_doesnt_duplicate_arrays(self, test_mask_file):
         """Cache doesn't duplicate array data."""
@@ -274,7 +276,7 @@ class TestMaskCacheMemory:
 
         # Load mask
         mask1 = MaskCache.get(test_mask_file)
-        size1 = sys.getsizeof(mask1)
+        sys.getsizeof(mask1)
 
         # Get mask again (should reuse)
         mask2 = MaskCache.get(test_mask_file)
@@ -309,18 +311,17 @@ class TestLegacyCompatibility:
 
 # Fixtures
 
+
 @pytest.fixture
 def test_mask_file(tmp_path):
     """Create a test mask file."""
     import osgeo.gdal
 
-    mask_file = tmp_path / 'test_mask.tif'
+    mask_file = tmp_path / "test_mask.tif"
 
     # Create simple 100x100 mask
-    driver = osgeo.gdal.GetDriverByName('GTiff')
-    ds = driver.Create(
-        str(mask_file), 100, 100, 1, osgeo.gdal.GDT_Byte
-    )
+    driver = osgeo.gdal.GetDriverByName("GTiff")
+    ds = driver.Create(str(mask_file), 100, 100, 1, osgeo.gdal.GDT_Byte)
 
     # Fill with test data (1s and 0s)
     data = np.random.randint(0, 2, (100, 100), dtype=np.uint8)
@@ -343,12 +344,10 @@ def test_mask_file_2(tmp_path):
     """Create a second test mask file."""
     import osgeo.gdal
 
-    mask_file = tmp_path / 'test_mask_2.tif'
+    mask_file = tmp_path / "test_mask_2.tif"
 
-    driver = osgeo.gdal.GetDriverByName('GTiff')
-    ds = driver.Create(
-        str(mask_file), 50, 50, 1, osgeo.gdal.GDT_Byte
-    )
+    driver = osgeo.gdal.GetDriverByName("GTiff")
+    ds = driver.Create(str(mask_file), 50, 50, 1, osgeo.gdal.GDT_Byte)
 
     data = np.ones((50, 50), dtype=np.uint8)
     ds.GetRasterBand(1).WriteArray(data)
@@ -367,12 +366,10 @@ def large_test_mask(tmp_path):
     """Create a large test mask (1000x1000)."""
     import osgeo.gdal
 
-    mask_file = tmp_path / 'large_mask.tif'
+    mask_file = tmp_path / "large_mask.tif"
 
-    driver = osgeo.gdal.GetDriverByName('GTiff')
-    ds = driver.Create(
-        str(mask_file), 1000, 1000, 1, osgeo.gdal.GDT_Byte
-    )
+    driver = osgeo.gdal.GetDriverByName("GTiff")
+    ds = driver.Create(str(mask_file), 1000, 1000, 1, osgeo.gdal.GDT_Byte)
 
     data = np.random.randint(0, 2, (1000, 1000), dtype=np.uint8)
     ds.GetRasterBand(1).WriteArray(data)

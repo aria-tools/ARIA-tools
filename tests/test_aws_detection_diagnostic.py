@@ -20,19 +20,22 @@ def test_imdsv2():
     print("=" * 60)
     try:
         import requests
+
         # IMDSv2 token request
         token_resp = requests.put(
-            'http://169.254.169.254/latest/api/token',
-            headers={'X-aws-ec2-metadata-token-ttl-seconds': '60'},
-            timeout=2)
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+            timeout=2,
+        )
         token_resp.raise_for_status()
         token = token_resp.text
         print(f"  Token obtained: {token[:20]}...")
 
         meta_resp = requests.get(
-            'http://169.254.169.254/latest/meta-data/instance-id',
-            headers={'X-aws-ec2-metadata-token': token},
-            timeout=2)
+            "http://169.254.169.254/latest/meta-data/instance-id",
+            headers={"X-aws-ec2-metadata-token": token},
+            timeout=2,
+        )
         meta_resp.raise_for_status()
         print(f"  Instance ID: {meta_resp.text}")
         print("  RESULT: DETECTED as AWS EC2")
@@ -51,9 +54,10 @@ def test_imdsv1():
     print("=" * 60)
     try:
         import requests
+
         meta_resp = requests.get(
-            'http://169.254.169.254/latest/meta-data/instance-id',
-            timeout=2)
+            "http://169.254.169.254/latest/meta-data/instance-id", timeout=2
+        )
         meta_resp.raise_for_status()
         print(f"  Instance ID: {meta_resp.text}")
         print("  RESULT: DETECTED as AWS EC2 via IMDSv1")
@@ -72,8 +76,8 @@ def test_boto3_sts():
     print("=" * 60)
     try:
         import boto3
-        import botocore.exceptions
-        sts = boto3.client('sts', region_name='us-west-2')
+
+        sts = boto3.client("sts", region_name="us-west-2")
         identity = sts.get_caller_identity()
         print(f"  Account: {identity['Account']}")
         print(f"  ARN:     {identity['Arn']}")
@@ -98,7 +102,7 @@ def test_boto3_region():
     print("=" * 60)
     try:
         import boto3
-        import botocore.exceptions
+
         session = boto3.session.Session()
         region = session.region_name
         creds = session.get_credentials()
@@ -130,17 +134,17 @@ def test_env_vars():
     print("TEST 5: AWS environment variables")
     print("=" * 60)
     aws_vars = [
-        'AWS_DEFAULT_REGION',
-        'AWS_REGION',
-        'AWS_ACCESS_KEY_ID',
-        'AWS_SECRET_ACCESS_KEY',
-        'AWS_SESSION_TOKEN',
-        'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
-        'AWS_CONTAINER_CREDENTIALS_FULL_URI',
-        'AWS_EXECUTION_ENV',
-        'AWS_LAMBDA_FUNCTION_NAME',
-        'ECS_CONTAINER_METADATA_URI',
-        'ECS_CONTAINER_METADATA_URI_V4',
+        "AWS_DEFAULT_REGION",
+        "AWS_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+        "AWS_EXECUTION_ENV",
+        "AWS_LAMBDA_FUNCTION_NAME",
+        "ECS_CONTAINER_METADATA_URI",
+        "ECS_CONTAINER_METADATA_URI_V4",
     ]
 
     found_any = False
@@ -148,8 +152,8 @@ def test_env_vars():
         val = os.environ.get(var)
         if val:
             # Mask credentials
-            if 'KEY' in var or 'SECRET' in var or 'TOKEN' in var:
-                display = val[:8] + '...' if len(val) > 8 else '***'
+            if "KEY" in var or "SECRET" in var or "TOKEN" in var:
+                display = val[:8] + "..." if len(val) > 8 else "***"
             else:
                 display = val
             print(f"  {var} = {display}")
@@ -170,14 +174,16 @@ def test_ecs_metadata():
     print("=" * 60)
     print("TEST 6: ECS/Fargate metadata endpoint")
     print("=" * 60)
-    ecs_uri = os.environ.get('ECS_CONTAINER_METADATA_URI_V4') or \
-              os.environ.get('ECS_CONTAINER_METADATA_URI')
+    ecs_uri = os.environ.get("ECS_CONTAINER_METADATA_URI_V4") or os.environ.get(
+        "ECS_CONTAINER_METADATA_URI"
+    )
     if not ecs_uri:
         print("  ECS metadata URI not in environment")
         print("  RESULT: NOT in ECS/Fargate container")
         return False
     try:
         import requests
+
         resp = requests.get(ecs_uri, timeout=2)
         resp.raise_for_status()
         data = resp.json()
@@ -195,8 +201,8 @@ def test_container_creds():
     print("=" * 60)
     print("TEST 7: Container credentials endpoint")
     print("=" * 60)
-    rel_uri = os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI')
-    full_uri = os.environ.get('AWS_CONTAINER_CREDENTIALS_FULL_URI')
+    rel_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+    full_uri = os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI")
     if rel_uri:
         print(f"  Relative URI: {rel_uri}")
         print("  RESULT: Container role credentials available")
@@ -218,13 +224,13 @@ def main():
     print()
 
     results = {}
-    results['IMDSv2'] = test_imdsv2()
-    results['IMDSv1'] = test_imdsv1()
-    results['boto3_STS'] = test_boto3_sts()
-    results['boto3_session'] = test_boto3_region()
-    results['env_vars'] = test_env_vars()
-    results['ECS_metadata'] = test_ecs_metadata()
-    results['container_creds'] = test_container_creds()
+    results["IMDSv2"] = test_imdsv2()
+    results["IMDSv1"] = test_imdsv1()
+    results["boto3_STS"] = test_boto3_sts()
+    results["boto3_session"] = test_boto3_region()
+    results["env_vars"] = test_env_vars()
+    results["ECS_metadata"] = test_ecs_metadata()
+    results["container_creds"] = test_container_creds()
 
     print()
     print("=" * 60)
@@ -246,5 +252,5 @@ def main():
     return detected
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

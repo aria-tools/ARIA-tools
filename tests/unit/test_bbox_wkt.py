@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from ARIAtools import product
 
 
@@ -62,4 +61,3 @@ def test_parse_bbox_argument_accepts_snwe_string(
 def test_parse_bbox_argument_rejects_invalid_text(tmp_path: Path) -> None:
     with pytest.raises(Exception, match="Cannot understand the --bbox argument"):
         product._parse_bbox_argument("not-a-bbox", str(tmp_path), 4326)
-
