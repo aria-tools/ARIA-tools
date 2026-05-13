@@ -101,6 +101,12 @@ Install the package in editable mode:
 python -m pip install -e .
 ```
 
+Enable the repository hooks so every local `git commit` runs the same checks:
+
+```bash
+pre-commit install
+```
+
 To keep the conda environment aligned with the repo over time:
 
 ```bash
@@ -266,17 +272,30 @@ For local development and CI-style checks, install the package in the active
 
 ```bash
 python -m pip install -e .
+pre-commit install
 ```
 
 Common validation commands:
 
 ```bash
-python -m ruff check src/aria_tools tests/unit tests/integration
-python -m ruff format --check src/aria_tools tests/unit tests/integration
+pre-commit run --all-files
 python -m pytest tests/unit -q
 python -m pytest tests/integration -q
 python -m pytest tests/regression/validate_test.py -q
 ```
+
+Recommended contributor flow:
+
+```bash
+pre-commit install
+git commit
+```
+
+After `pre-commit install`, each local commit runs the repository hooks
+automatically. CI also runs `pre-commit run --all-files`, so the same checks
+must pass in GitHub before merge. To fully enforce this for contributors,
+enable branch protection on `v2` and require the `lint` job from
+`.github/workflows/test.yml`.
 
 The test suite uses markers to separate quick offline checks from slower or
 environment-dependent workflows:
