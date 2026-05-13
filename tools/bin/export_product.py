@@ -6,33 +6,31 @@
 # RESERVED. United States Government Sponsorship acknowledged.
 #
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import os
 import argparse
 import json
+import os
 
 import ARIAtools.extractProduct
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        'export_products_json', help='Export products json input file')
+    parser.add_argument("export_products_json", help="Export products json input file")
     args = parser.parse_args()
 
     with open(args.export_products_json) as ifp:
         export_product_args = json.load(ifp)
 
-    ii, ilayer, outname, prod_arr = \
-        ARIAtools.extractProduct.export_product_worker(*export_product_args)
+    ii, ilayer, outname, prod_arr = ARIAtools.extractProduct.export_product_worker(
+        *export_product_args
+    )
 
-    outputs = {
-        'ii': ii, 'ilayer': ilayer, 'outname': outname, 'prod_arr': prod_arr}
+    outputs = {"ii": ii, "ilayer": ilayer, "outname": outname, "prod_arr": prod_arr}
 
     base_dir = os.path.abspath(os.path.dirname(args.export_products_json))
-    outfile = os.path.join(base_dir, 'outputs_%d_%d.json' % (
-        ii, ilayer))
+    outfile = os.path.join(base_dir, f"outputs_{ii}_{ilayer}.json")
 
-    with open(outfile, 'w') as ofp:
+    with open(outfile, "w") as ofp:
         json.dump(outputs, ofp)
 
 

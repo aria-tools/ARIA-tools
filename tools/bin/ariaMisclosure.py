@@ -11,14 +11,16 @@ import argparse
 import logging
 
 import ARIAtools.computeMisclosure
+import ARIAtools.stack
 import ARIAtools.util.log
-
+import matplotlib.pyplot as plt
 from pandas.plotting import register_matplotlib_converters
+
 register_matplotlib_converters()
 
-LOGGER = logging.getLogger('ariaMisclosure.py')
+LOGGER = logging.getLogger("ariaMisclosure.py")
 
-DESCRIPTION = '''
+DESCRIPTION = """
 Compute the cumulative misclosure of phase triplets based on a set of
 interferograms saved in the stack/unwrapStack.vrt data set. During triplet
 computation, values at a reference point are removed from the interferograms
@@ -44,9 +46,9 @@ history of any pixel by clicking on the maps.
 Thumbnail images of the misclosure associated with any given triplet are
 saved in the MisclosureFigs folder. Additionally, georeferenced tiffs of the
 cumulative misclosure and absolute cumulative misclosure maps are saved.
-'''
+"""
 
-EXAMPLES = '''EXAMPLES
+EXAMPLES = """EXAMPLES
 
 # Using the unwrapStack.vrt to call all interferograms, automatically find a
 reference point
@@ -57,118 +59,187 @@ ariaMisclosure.py -f stack/unwrapStack.vrt -refLon 89.358 -refLat 32.621
 
 # Limit triplet selection by time interval (12 days to 48 days)
 ariaMisclosure.py -f stack/unwrapStack.vrt --mintime 12 --maxtime 48
-'''
+"""
 
 
 def create_parser():
     parser = argparse.ArgumentParser(
-        description=DESCRIPTION, formatter_class=argparse.RawTextHelpFormatter,
-        epilog=EXAMPLES)
+        description=DESCRIPTION,
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=EXAMPLES,
+    )
 
     # Input data
     parser.add_argument(
-        '-f', '--file', dest='imgfile', type=str, required=True,
-        help='ARIA files. Specify the stack/unwrapStack.vrt file, or a '
-             'wildcard operator in the unwrappedPhase folder (see EXAMPLES)')
+        "-f",
+        "--file",
+        dest="imgfile",
+        type=str,
+        required=True,
+        help="ARIA files. Specify the stack/unwrapStack.vrt file, or a "
+        "wildcard operator in the unwrappedPhase folder (see EXAMPLES)",
+    )
     parser.add_argument(
-        '-w', '--workdir', dest='workdir', type=str, default='./',
-        help='Specify directory to deposit all outputs. Default is local '
-             'directory where script is launched.')
+        "-w",
+        "--workdir",
+        dest="workdir",
+        type=str,
+        default="./",
+        help="Specify directory to deposit all outputs. Default is local "
+        "directory where script is launched.",
+    )
     parser.add_argument(
-        '--startdate', dest='startDate', type=str, default='20140615',
-        help='Start date for data series')
+        "--startdate",
+        dest="startDate",
+        type=str,
+        default="20140615",
+        help="Start date for data series",
+    )
     parser.add_argument(
-        '--enddate', dest='endDate', type=str, default=None,
-        help='End date for data series')
+        "--enddate",
+        dest="endDate",
+        type=str,
+        default=None,
+        help="End date for data series",
+    )
     parser.add_argument(
-        '--exclude-pairs', dest='excludePairs', type=str, default=None,
+        "--exclude-pairs",
+        dest="excludePairs",
+        type=str,
+        default=None,
         help='List of pairs to exclude, e.g., "20160116_20160101 '
-             '20171031_20161030". This can also be provided in as a text '
-             'file with one line per date pair.')
+        '20171031_20161030". This can also be provided in as a text '
+        "file with one line per date pair.",
+    )
     parser.add_argument(
-        '--plot-pairs', dest='plotPairs', action='store_true',
-        help='Plot the timespans of date pairs')
+        "--plot-pairs",
+        dest="plotPairs",
+        action="store_true",
+        help="Plot the timespans of date pairs",
+    )
 
     # Triplet formulation
     parser.add_argument(
-        '--mintime', dest='minTime', type=int, default=None,
-        help='Minimum time span of pairs in triplets (days)')
+        "--mintime",
+        dest="minTime",
+        type=int,
+        default=None,
+        help="Minimum time span of pairs in triplets (days)",
+    )
     parser.add_argument(
-        '--maxtime', dest='maxTime', type=int, default=None,
-        help='Maximum time span of pairs in triplets (days)')
+        "--maxtime",
+        dest="maxTime",
+        type=int,
+        default=None,
+        help="Maximum time span of pairs in triplets (days)",
+    )
     parser.add_argument(
-        '--print-triplets', dest='printTriplets', action='store_true',
-        help='Print list of existing triplets (i.e., those included in the '
-             'data set).')
+        "--print-triplets",
+        dest="printTriplets",
+        action="store_true",
+        help="Print list of existing triplets (i.e., those included in the "
+        "data set).",
+    )
     parser.add_argument(
-        '--plot-triplets', dest='plotTriplets', action='store_true',
-        help='Plot existing triplets')
+        "--plot-triplets",
+        dest="plotTriplets",
+        action="store_true",
+        help="Plot existing triplets",
+    )
 
     # Reference point
     parser.add_argument(
-        '-refX', dest='refX', type=int, default=None, help='Reference X pixel')
+        "-refX", dest="refX", type=int, default=None, help="Reference X pixel"
+    )
     parser.add_argument(
-        '-refY', dest='refY', type=int, default=None, help='Reference Y pixel')
+        "-refY", dest="refY", type=int, default=None, help="Reference Y pixel"
+    )
     parser.add_argument(
-        '-refLon', dest='refLon', type=float, default=None,
-        help='Reference longitude')
+        "-refLon", dest="refLon", type=float, default=None, help="Reference longitude"
+    )
     parser.add_argument(
-        '-refLat', dest='refLat', type=float, default=None,
-        help='Reference latitude')
+        "-refLat", dest="refLat", type=float, default=None, help="Reference latitude"
+    )
 
     # Query point
     parser.add_argument(
-        '--queryX', dest='queryX', type=int, default=None,
-        help='Query point X pixel')
+        "--queryX", dest="queryX", type=int, default=None, help="Query point X pixel"
+    )
     parser.add_argument(
-        '--queryY', dest='queryY', type=int, default=None,
-        help='Query point Y pixel')
+        "--queryY", dest="queryY", type=int, default=None, help="Query point Y pixel"
+    )
     parser.add_argument(
-        '--queryLon', dest='queryLon', type=float, default=None,
-        help='Query point longitude')
+        "--queryLon",
+        dest="queryLon",
+        type=float,
+        default=None,
+        help="Query point longitude",
+    )
     parser.add_argument(
-        '--queryLat', dest='queryLat', type=float, default=None,
-        help='Query point latitude')
+        "--queryLat",
+        dest="queryLat",
+        type=float,
+        default=None,
+        help="Query point latitude",
+    )
 
     # Vocalization
     parser.add_argument(
-        '-v', '--verbose', dest='verbose', action='store_true',
-        help='Verbose mode')
+        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+    )
 
     # Misclosure map formatting
     parser.add_argument(
-        '--pctmin', dest='pctMinClip', type=float, default=1,
-        help='Minimum percent clip value for cumulative misclosure plot')
+        "--pctmin",
+        dest="pctMinClip",
+        type=float,
+        default=1,
+        help="Minimum percent clip value for cumulative misclosure plot",
+    )
     parser.add_argument(
-        '--pctmax', dest='pctMaxClip', type=float, default=99,
-        help='Maximum percent clip value for cumulative misclosure plot')
+        "--pctmax",
+        dest="pctMaxClip",
+        type=float,
+        default=99,
+        help="Maximum percent clip value for cumulative misclosure plot",
+    )
     parser.add_argument(
-        '--plot-time-intervals', dest='plotTimeIntervals', action='store_true',
-        help='Plot triplet intervals in misclosure analysis figure.')
+        "--plot-time-intervals",
+        dest="plotTimeIntervals",
+        action="store_true",
+        help="Plot triplet intervals in misclosure analysis figure.",
+    )
     parser.add_argument(
-        '--log-level', 
-        choices=['debug', 'info', 'warning', 'error'], 
-        default='info', 
-        help='Logger log level. Default: info.'
+        "--log-level",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Logger log level. Default: info.",
     )
     return parser
 
 
 def main(inps=None):
     # Gather arguments
-    parser = createParser()
+    parser = create_parser()
     args = parser.parse_args()
 
     log_level = {
-        'debug': logging.DEBUG, 'info': logging.INFO,
-        'warning': logging.WARNING, 'error': logging.ERROR}[args.log_level]
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }[args.log_level]
     logging.basicConfig(level=log_level, format=ARIAtools.util.log.FORMAT)
 
     # Load data based on data type
-    dataStack = ARIATools.stack.Stack(
-        imgfile=args.imgfile, workdir=args.workdir, startDate=args.startDate,
-        endDate=args.endDate, excludePairs=args.excludePairs,
-        verbose=args.verbose)
+    dataStack = ARIAtools.stack.Stack(
+        imgfile=args.imgfile,
+        workdir=args.workdir,
+        startDate=args.startDate,
+        endDate=args.endDate,
+        excludePairs=args.excludePairs,
+        verbose=args.verbose,
+    )
 
     # Plot pairs if requested
     if args.plotPairs:
@@ -176,8 +247,8 @@ def main(inps=None):
 
     # Create list of triplets
     dataStack.createTriplets(
-        minTime=args.minTime, maxTime=args.maxTime,
-        printTriplets=args.printTriplets)
+        minTime=args.minTime, maxTime=args.maxTime, printTriplets=args.printTriplets
+    )
 
     # Plot triplets if requested
     if args.plotTriplets:
@@ -185,14 +256,17 @@ def main(inps=None):
 
     # Compute misclosure
     dataStack.computeMisclosure(
-        refXY=[args.refX, args.refY], refLoLa=[args.refLon, args.refLat])
+        refXY=[args.refX, args.refY], refLoLa=[args.refLon, args.refLat]
+    )
 
     # Plot and analyze data
     dataStack.plotCumMisclosure(
         queryXY=[args.queryX, args.queryY],
-        queryLoLa=[args.queryLon, args.queryLat], pctmin=args.pctMinClip,
+        queryLoLa=[args.queryLon, args.queryLat],
+        pctmin=args.pctMinClip,
         pctmax=args.pctMaxClip,
-        plotTimeIntervals=args.plotTimeIntervals)
+        plotTimeIntervals=args.plotTimeIntervals,
+    )
     plt.show()
 
     # Save misclosure map for each triplet to figures
@@ -202,5 +276,5 @@ def main(inps=None):
     dataStack.saveCumMisclosure()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
