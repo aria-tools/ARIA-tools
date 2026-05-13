@@ -1,4 +1,4 @@
-"""Week 4 tests for ``ariaOrderASF`` optional dependency boundaries."""
+"""Week 4 tests for ``ariaOrderASF`` missing-dependency guidance."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def test_order_module_can_build_parser_without_matplotlib(
     assert args.status_name == "example-job"
 
 
-def test_order_plotting_points_to_plot_extra_when_matplotlib_is_missing(
+def test_order_plotting_points_to_install_when_matplotlib_is_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -66,7 +66,7 @@ def test_order_plotting_points_to_plot_extra_when_matplotlib_is_missing(
         block_matplotlib=True,
     )
 
-    with pytest.raises(ImportError, match=r"\.\[plot\]"):
+    with pytest.raises(ImportError, match=r"pip install -e \."):
         module.plot_baseline(
             {
                 dt.date(2024, 1, 1): 0.0,
@@ -78,7 +78,7 @@ def test_order_plotting_points_to_plot_extra_when_matplotlib_is_missing(
         )
 
 
-def test_order_optional_dependency_errors_reference_order_extra(
+def test_order_missing_dependency_errors_reference_full_install(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = load_order_module(
@@ -87,7 +87,7 @@ def test_order_optional_dependency_errors_reference_order_extra(
     )
 
     monkeypatch.setattr(module, "HAS_ASF_ENUMERATION", False)
-    with pytest.raises(ImportError, match=r"\.\[order\]"):
+    with pytest.raises(ImportError, match=r"pip install -e \."):
         module.get_acquisitions_for_frame(
             25050,
             dt.date(2024, 1, 1),
@@ -95,5 +95,5 @@ def test_order_optional_dependency_errors_reference_order_extra(
         )
 
     monkeypatch.setattr(module, "HAS_HYP3_SDK", False)
-    with pytest.raises(ImportError, match=r"\.\[order\]"):
+    with pytest.raises(ImportError, match=r"pip install -e \."):
         module.order_pairs(25050, "unused.csv")

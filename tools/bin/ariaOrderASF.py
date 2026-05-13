@@ -66,9 +66,9 @@ CREDITS_PER_PAIR = 60
 ASF_MONTHLY_QUOTA = 8000
 
 
-def _extra_install_hint(extra_name):
-    """Return a repo-friendly install hint for an optional dependency set."""
-    return f'python -m pip install -e ".[{extra_name}]"'
+def _install_hint():
+    """Return a repo-friendly install hint for the full package."""
+    return 'python -m pip install -e .'
 
 
 def _require_matplotlib():
@@ -80,7 +80,7 @@ def _require_matplotlib():
     except ImportError as exc:
         raise ImportError(
             'matplotlib is required for ARIA order plotting outputs.\n'
-            f'Install the plot extra with:\n  {_extra_install_hint("plot")}'
+            f'Install ARIA-tools with:\n  {_install_hint()}'
         ) from exc
 
     return mdates, mlines, plt
@@ -589,8 +589,8 @@ def get_acquisitions_for_frame(frame_id, start_date, end_date):
     if not HAS_ASF_ENUMERATION:
         raise ImportError(
             'asf_enumeration is required for acquisition queries.\n'
-            'Install the order extra with:\n'
-            f'  {_extra_install_hint("order")}')
+            'Install ARIA-tools with:\n'
+            f'  {_install_hint()}')
 
     LOGGER.info('Querying acquisitions for frame %s via '
                 'asf_enumeration ...', frame_id)
@@ -1610,8 +1610,8 @@ def order_pairs(frame_id, pairs_file, job_name=None, dry_run=False,
     if not HAS_HYP3_SDK:
         raise ImportError(
             'hyp3_sdk is required for --orderpairs.\n'
-            'Install the order extra with:\n'
-            f'  {_extra_install_hint("order")}')
+            'Install ARIA-tools with:\n'
+            f'  {_install_hint()}')
 
     # --- read pairs CSV --- #
     pairs_to_order = _read_pairs_csv(pairs_file)
@@ -1773,8 +1773,8 @@ def status_jobs(status_name=None, job_ids=None):
     if not HAS_HYP3_SDK:
         raise ImportError(
             'hyp3_sdk is required for --statusjobs.\n'
-            'Install the order extra with:\n'
-            f'  {_extra_install_hint("order")}')
+            'Install ARIA-tools with:\n'
+            f'  {_install_hint()}')
 
     if not status_name and not job_ids:
         raise ValueError(

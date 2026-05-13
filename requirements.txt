@@ -1,10 +1,8 @@
-# Contributor environment for repo work and CI.
-# This file is intentionally broader than the pip install surface in
-# pyproject.toml: it includes optional command extras and test tooling.
+# Full ARIA-tools dependency surface for runtime plus contributor tooling.
 affine
 asf_search >=12.0.3
 asf_enumeration >=0.4.0
-boto3               # optional: S3 direct download when running on AWS
+boto3
 dem_stitcher>=2.5.8
 gdal>=3.7.0
 h5py
@@ -15,18 +13,21 @@ netcdf4
 numpy
 pandas
 pip
+pre-commit
 pyproj
 pytest
+pytest-cov
 #python>=3.8,<3.14
 python-dateutil
 rasterio
 rioxarray
 requests
+ruff
 scipy>1.10.0
 shapely
 tile_mate>=0.0.12
 xarray
-hyp3_sdk>=7.7.6    # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
+hyp3_sdk>=7.7.6
 ## notebook dependencies, keep commented out for better compatibility with other codes
 #jupyterlab
 #jupyter_contrib_nbextensions

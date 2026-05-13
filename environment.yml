@@ -3,15 +3,14 @@
 # remove environment : conda env remove -n ARIA-tools
 # enter  environment : conda activate ARIA-tools
 # exit   environment : conda deactivate
-# Contributor environment for repo work and CI.
-# This environment intentionally includes optional command dependencies and
-# test tooling; pyproject.toml remains the authoritative pip install surface.
+# Full ARIA-tools environment for runtime, repo work, and CI.
+# The editable install is expected to use the same all-in dependency surface.
 name: ARIA-tools
 channels:
   - conda-forge
 dependencies:
   - affine
-  - boto3               # optional: S3 direct download when running on AWS
+  - boto3
   - dem_stitcher>=2.5.8
   - gdal>=3.7.0
   - h5py
@@ -38,7 +37,7 @@ dependencies:
   - tile_mate>=0.0.12
   - wheel
   - xarray
-  - hyp3_sdk>=7.7.6  # dependencies for ariaOrderASF --orderpairs / --statusjobs mode
+  - hyp3_sdk>=7.7.6
   - asf_search >=12.0.3
   - asf_enumeration >=0.4.0
   - pip:

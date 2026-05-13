@@ -13,51 +13,32 @@ authors = [
   { name = "ARIA-tools developers" },
 ]
 # Authoritative pip install surface for ARIA-tools.
-# Contributor environment files may include additional optional command
-# dependencies and test tooling for repo work and CI.
+# The editable install includes the full runtime and contributor toolchain.
 dependencies = [
   "affine",
-  "asf-search>=12.0.3",
+  "asf-search[asf-enumeration]>=12.0.3",
+  "boto3",
   "dem-stitcher>=2.5.8",
   "GDAL>=3.7.0",
   "h5py",
+  "hyp3-sdk>=7.7.6",
+  "matplotlib",
   "netCDF4",
   "numpy",
   "pandas",
+  "pre-commit",
   "pyproj",
+  "pytest",
+  "pytest-cov",
   "python-dateutil",
   "rasterio",
   "rioxarray",
   "requests",
+  "ruff",
   "scipy>1.10.0",
   "shapely",
   "tile-mate>=0.0.12",
   "xarray",
-]
-
-[project.optional-dependencies]
-# Optional command groups install on top of the core dependencies above.
-aws = [
-  "boto3",
-]
-order = [
-  "asf-search[asf-enumeration]>=12.0.3",
-  "hyp3-sdk>=7.7.6",
-]
-plot = [
-  "matplotlib",
-]
-dev = [
-  "pre-commit",
-  "pytest",
-  "pytest-cov",
-  "ruff",
-]
-all = [
-  "asf-search[asf-enumeration]>=12.0.3",
-  "boto3",
-  "hyp3-sdk>=7.7.6",
-  "matplotlib",
 ]
 
 [project.scripts]
