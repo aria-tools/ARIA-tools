@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from ARIAtools.util import meta_cache
@@ -47,7 +48,13 @@ def test_load_cache_returns_empty_dict_for_invalid_json(tmp_path: Path) -> None:
 def test_get_or_extract_uses_cached_entry_without_reextracting(
     monkeypatch,
 ) -> None:
-    cache_data = {"https://example.test/file.nc": {"version": "cached"}}
+    cache_data = {
+        "https://example.test/file.nc": {
+            "version": "cached",
+            "gdal_info_ts": time.time(),
+            "_cache_complete": True,
+        }
+    }
     calls: list[str] = []
     monkeypatch.setattr(
         meta_cache,
@@ -60,7 +67,7 @@ def test_get_or_extract_uses_cached_entry_without_reextracting(
         cache_data,
     )
 
-    assert result == {"version": "cached"}
+    assert result["version"] == "cached"
     assert calls == []
 
 

@@ -1788,8 +1788,8 @@ def _run_export_products_with_processes(mp_args, num_workers, layer):
 def _run_export_jobs(mp_args, num_workers, layer, multiproc_method):
     """Dispatch export jobs to the supported serial or process backends."""
 
-    if multiproc_method == "single" or num_workers == 1 or len(mp_args) <= 1:
-        if multiproc_method == "processes" and (num_workers == 1 or len(mp_args) <= 1):
+    if multiproc_method == "single" or num_workers == 1:
+        if multiproc_method == "processes" and num_workers == 1:
             LOGGER.debug(
                 "Running %d total jobs serially because parallel export "
                 "would not provide any benefit",
@@ -1811,9 +1811,7 @@ def _run_export_jobs(mp_args, num_workers, layer, multiproc_method):
 
     if multiproc_method == "processes":
         LOGGER.debug("Running %d total jobs with processes", len(mp_args))
-        return _run_export_products_with_processes(
-            mp_args, min(num_workers, len(mp_args)), layer
-        )
+        return _run_export_products_with_processes(mp_args, num_workers, layer)
 
     raise ValueError(
         f'Unknown multiproc_method "{multiproc_method}". Expected '

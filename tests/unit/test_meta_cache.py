@@ -231,10 +231,13 @@ class TestGetOrExtract:
         mock_extract.assert_called_once()
 
     @patch("ARIAtools.util.meta_cache.extract_metadata_gdal")
-    def test_cache_hit_returns_cached(self, mock_extract):
+    def test_cache_hit_returns_cached(self, mock_extract, tmp_path):
         """Cache hit returns cached data without extraction."""
+        test_file = tmp_path / "product.nc"
+        test_file.touch()
+
         cache_data = {
-            "product.nc": {
+            str(test_file): {
                 "version": "1c",
                 "projection": "4326",
                 "gdal_info_ts": time.time(),
@@ -242,7 +245,7 @@ class TestGetOrExtract:
             }
         }
 
-        result = get_or_extract("product.nc", cache_data)
+        result = get_or_extract(str(test_file), cache_data)
 
         assert result["version"] == "1c"
         mock_extract.assert_not_called()

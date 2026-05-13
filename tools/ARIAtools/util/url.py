@@ -11,6 +11,13 @@ import os
 LOGGER = logging.getLogger(__name__)
 
 
+def _parse_version_token(version_token):
+    """Return a comparable tuple for version strings like ``v2.0.0``."""
+
+    normalized = version_token.lstrip("v").rstrip(".nc").replace("_", ".")
+    return tuple(int(part) for part in normalized.split("."))
+
+
 # Grab older version products if specified.
 def url_versions(urls, user_version, wd):
     """For duplicate products (other than version number)
@@ -59,19 +66,26 @@ def url_versions_full(urls, user_version, wd):
         if len(duplicates) == 1:
             urls_final.append(duplicates[0])
         else:
-            versions = []
-            for dupe in duplicates:
-                ver_str = dupe.split("-")[-1]
-                versions.append(float(ver_str.lstrip("v").rstrip(".nc")))
+            parsed_duplicates = [
+                (_parse_version_token(dupe.split("-")[-1]), dupe) for dupe in duplicates
+            ]
 
-            # default, use latest version
             if user_version is None:
-                version = str(max(versions))
-                version = f"v{version[0]}_{version[1]}_{version[2]}.nc"
+                _, selected_url = max(parsed_duplicates, key=lambda item: item[0])
             else:
-                version = f"v{user_version}.nc"
+                requested_version = _parse_version_token(str(user_version))
+                matches = [
+                    dupe
+                    for version, dupe in parsed_duplicates
+                    if version == requested_version
+                ]
+                if not matches:
+                    raise Exception(
+                        f"No products with user specified version: {user_version}"
+                    )
+                selected_url = matches[0]
 
-            urls_final.append(f"{url_base}-{version}")
+            urls_final.append(selected_url)
 
             # move duplicates to a different folder
             dupe_folder = os.path.join(wd, "duplicated_products")
