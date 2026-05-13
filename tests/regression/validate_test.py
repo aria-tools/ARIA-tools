@@ -9,7 +9,9 @@
 import hashlib
 import logging
 import os
+import shutil
 import subprocess
+import sys
 import tarfile
 
 import numpy as np
@@ -72,6 +74,34 @@ NETCDF_FILES["download"] = {
 }
 
 LOGGER = logging.getLogger(__name__)
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+REGRESSION_DIR = os.path.join(REPO_ROOT, "tests", "regression")
+
+
+def _run_regression_script(script_name):
+    script_path = os.path.join(REGRESSION_DIR, script_name)
+    return subprocess.call([sys.executable, script_path], cwd=REPO_ROOT)
+
+
+def _sync_golden_data_with_boto3():
+    import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
+
+    bucket = "aria-tools"
+    prefix = "tests/regression/"
+    client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if key.endswith("/"):
+                continue
+            relpath = key[len(prefix) :]
+            destination = os.path.join(REPO_ROOT, relpath)
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            client.download_file(bucket, key, destination)
 
 
 class ENVIDataTester:
@@ -293,17 +323,32 @@ class TestAriaDownload:
 
 @pytest.fixture(scope="session")
 def sync_golden_data():
-    return_code = subprocess.call(
-        "aws s3 sync s3://aria-tools/tests/regression/ . --no-sign-request", shell=True
-    )
-    if return_code != 0:
-        LOGGER.error("Error syncing golden test data!")
-        raise AssertionError("Error syncing golden test data!")
+    aws_cli = shutil.which("aws")
+    if aws_cli:
+        return_code = subprocess.call(
+            [
+                aws_cli,
+                "s3",
+                "sync",
+                "s3://aria-tools/tests/regression/",
+                ".",
+                "--no-sign-request",
+            ],
+            cwd=REPO_ROOT,
+        )
+        if return_code == 0:
+            return
+
+    try:
+        _sync_golden_data_with_boto3()
+    except Exception as exc:
+        LOGGER.error("Error syncing golden test data: %s", exc)
+        raise AssertionError("Error syncing golden test data!") from exc
 
 
 @pytest.fixture(scope="session")
 def run_extract_test(sync_golden_data):
-    return_code = subprocess.call("./run_extract_test.py", shell=True)
+    return_code = _run_regression_script("run_extract_test.py")
     if return_code != 0:
         LOGGER.error("Error running ariaExtract test case!")
         raise AssertionError("Error running ariaExtract test case!")
@@ -311,7 +356,7 @@ def run_extract_test(sync_golden_data):
 
 @pytest.fixture(scope="session")
 def run_nisar_extract_test(sync_golden_data):
-    return_code = subprocess.call("./run_nisar_extract_test.py", shell=True)
+    return_code = _run_regression_script("run_nisar_extract_test.py")
     if return_code != 0:
         LOGGER.error("Error running NISAR ariaExtract test case!")
         raise AssertionError("Error running NISAR ariaExtract test case!")
@@ -319,7 +364,7 @@ def run_nisar_extract_test(sync_golden_data):
 
 @pytest.fixture(scope="session")
 def run_tssetup_test(sync_golden_data):
-    return_code = subprocess.call("./run_tssetup_test.py", shell=True)
+    return_code = _run_regression_script("run_tssetup_test.py")
     if return_code != 0:
         LOGGER.error("Error running ariaTSsetup test case!")
         raise AssertionError("Error running ariaTSsetup test case!")
@@ -327,7 +372,7 @@ def run_tssetup_test(sync_golden_data):
 
 @pytest.fixture(scope="session")
 def run_download_test(sync_golden_data):
-    return_code = subprocess.call("./run_download_test.py", shell=True)
+    return_code = _run_regression_script("run_download_test.py")
     if return_code != 0:
         LOGGER.error("Error running ariaDownload test case!")
         raise AssertionError("Error running ariaDownload test case!")
