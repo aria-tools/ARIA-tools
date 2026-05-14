@@ -10,7 +10,6 @@ Tests the ARIAtools.util.meta_cache module to ensure:
 """
 
 import json
-import os
 import threading
 import time
 from unittest.mock import patch
@@ -435,27 +434,28 @@ class TestExpandedMetadata:
 class TestIntegrationWithGDAL:
     """Integration tests with real GDAL operations."""
 
-    @pytest.mark.skipif(
-        not os.path.exists("/usr/bin/gdal_translate"), reason="GDAL not available"
-    )
     def test_extract_metadata_real_file(self, tmp_path):
-        """Extract metadata from real GeoTIFF."""
-        from osgeo import gdal
+        """Extract metadata from a real NetCDF file."""
+        netcdf4 = pytest.importorskip(
+            "netCDF4",
+            reason="netCDF4 Python bindings not available",
+        )
 
-        # Create test GeoTIFF
-        test_file = tmp_path / "test.tif"
-        driver = gdal.GetDriverByName("GTiff")
-        ds = driver.Create(str(test_file), 100, 100, 1, gdal.GDT_Byte)
-        ds.SetGeoTransform([0, 1, 0, 0, 0, -1])
-        ds.SetProjection("EPSG:4326")
-        data = np.random.randint(0, 256, (100, 100), dtype=np.uint8)
-        ds.GetRasterBand(1).WriteArray(data)
-        ds = None
+        # Create a small NetCDF file with minimal product metadata.
+        test_file = tmp_path / "test.nc"
+        with netcdf4.Dataset(test_file, "w") as ds:
+            ds.createDimension("y", 100)
+            ds.createDimension("x", 100)
+            var = ds.createVariable("science", "f4", ("y", "x"))
+            var[:] = np.random.random((100, 100)).astype(np.float32)
+            ds.setncattr("version", "1c")
 
         # Extract metadata
         meta = extract_metadata_gdal(str(test_file))
 
-        # Verify expanded fields present
+        # Verify metadata was extracted from a real file.
         assert meta is not None
-        assert "geotransform" in meta
-        assert meta["geotransform"] == [0, 1, 0, 0, 0, -1]
+        assert meta["version"] == "1c"
+        assert "driver" in meta
+        assert "subdatasets" in meta
+        assert "size" in meta
