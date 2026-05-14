@@ -13,7 +13,7 @@ import os
 import sys
 
 
-def test_imdsv2():
+def probe_imdsv2():
     """Test 1: EC2 Instance Metadata Service v2 (current method)."""
     print("=" * 60)
     print("TEST 1: EC2 IMDSv2 metadata service")
@@ -46,7 +46,7 @@ def test_imdsv2():
         return False
 
 
-def test_imdsv1():
+def probe_imdsv1():
     """Test 2: EC2 Instance Metadata Service v1 (legacy, no token)."""
     print()
     print("=" * 60)
@@ -68,7 +68,7 @@ def test_imdsv1():
         return False
 
 
-def test_boto3_sts():
+def probe_boto3_sts():
     """Test 3: boto3 STS GetCallerIdentity (works with IAM roles)."""
     print()
     print("=" * 60)
@@ -94,7 +94,7 @@ def test_boto3_sts():
         return False
 
 
-def test_boto3_region():
+def probe_boto3_region():
     """Test 4: boto3 session region / credential detection."""
     print()
     print("=" * 60)
@@ -127,7 +127,7 @@ def test_boto3_region():
         return False
 
 
-def test_env_vars():
+def probe_env_vars():
     """Test 5: Check AWS-related environment variables."""
     print()
     print("=" * 60)
@@ -168,7 +168,7 @@ def test_env_vars():
     return found_any
 
 
-def test_ecs_metadata():
+def probe_ecs_metadata():
     """Test 6: ECS/Fargate container metadata endpoint."""
     print()
     print("=" * 60)
@@ -195,7 +195,7 @@ def test_ecs_metadata():
         return False
 
 
-def test_container_creds():
+def probe_container_creds():
     """Test 7: AWS container credentials URI (ECS/EKS task role)."""
     print()
     print("=" * 60)
@@ -224,13 +224,13 @@ def main():
     print()
 
     results = {}
-    results["IMDSv2"] = test_imdsv2()
-    results["IMDSv1"] = test_imdsv1()
-    results["boto3_STS"] = test_boto3_sts()
-    results["boto3_session"] = test_boto3_region()
-    results["env_vars"] = test_env_vars()
-    results["ECS_metadata"] = test_ecs_metadata()
-    results["container_creds"] = test_container_creds()
+    results["IMDSv2"] = probe_imdsv2()
+    results["IMDSv1"] = probe_imdsv1()
+    results["boto3_STS"] = probe_boto3_sts()
+    results["boto3_session"] = probe_boto3_region()
+    results["env_vars"] = probe_env_vars()
+    results["ECS_metadata"] = probe_ecs_metadata()
+    results["container_creds"] = probe_container_creds()
 
     print()
     print("=" * 60)
@@ -250,6 +250,22 @@ def main():
         print("  --> NOT detected as AWS by any method")
 
     return detected
+
+
+def test_main_returns_detection_summary(monkeypatch, capsys):
+    """Main returns a boolean detection summary from probe results."""
+    monkeypatch.setattr(__import__(__name__), "probe_imdsv2", lambda: False)
+    monkeypatch.setattr(__import__(__name__), "probe_imdsv1", lambda: False)
+    monkeypatch.setattr(__import__(__name__), "probe_boto3_sts", lambda: True)
+    monkeypatch.setattr(__import__(__name__), "probe_boto3_region", lambda: False)
+    monkeypatch.setattr(__import__(__name__), "probe_env_vars", lambda: False)
+    monkeypatch.setattr(__import__(__name__), "probe_ecs_metadata", lambda: False)
+    monkeypatch.setattr(__import__(__name__), "probe_container_creds", lambda: False)
+
+    assert main() is True
+
+    captured = capsys.readouterr()
+    assert "AWS DETECTED via: boto3_STS" in captured.out
 
 
 if __name__ == "__main__":
