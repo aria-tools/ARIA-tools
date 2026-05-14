@@ -125,11 +125,10 @@ def test_main_converts_expected_errors_to_exit_code_2(
 
     monkeypatch.setattr(app, "run", raise_expected_error)
 
-    with pytest.raises(SystemExit) as excinfo:
-        app.main(["extract"])
+    exit_code = app.main(["extract"])
 
     captured = capsys.readouterr()
 
-    assert excinfo.value.code == 2
+    assert exit_code == 2
     assert captured.out == ""
     assert captured.err.strip() == "aria-tools: error: bad inputs"

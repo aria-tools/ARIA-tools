@@ -80,13 +80,13 @@ def run(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main(argv: Sequence[str] | None = None) -> int:
     try:
-        raise SystemExit(run(argv))
+        return run(argv)
     except AriaToolsError as exc:
         print(f"aria-tools: error: {exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
