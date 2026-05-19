@@ -153,6 +153,48 @@ def prep_dem(
     return aria_dem, demfile_expanded, lat, lon
 
 
+def _validate_tile_integrity(tile_path):
+    """
+    Validate that a DEM tile file exists, has non-zero size, and is readable.
+
+    Parameters
+    ----------
+    tile_path : str
+        Path to the tile file to validate
+
+    Returns
+    -------
+    bool
+        True if tile is valid, False if needs re-download
+    """
+    if not os.path.exists(tile_path):
+        return False
+
+    # Check file size is non-zero
+    try:
+        file_size = os.path.getsize(tile_path)
+        if file_size == 0:
+            LOGGER.warning("Tile %s has zero size, needs re-download", tile_path)
+            return False
+    except OSError as e:
+        LOGGER.warning("Cannot access tile %s: %s", tile_path, e)
+        return False
+
+    # Verify file is readable by GDAL
+    try:
+        ds = osgeo.gdal.Open(tile_path, osgeo.gdal.GA_ReadOnly)
+        if ds is None:
+            LOGGER.warning(
+                "Tile %s cannot be opened by GDAL, needs re-download", tile_path
+            )
+            return False
+        ds = None
+        return True
+    except Exception as e:
+        LOGGER.warning("Error validating tile %s: %s", tile_path, e)
+        return False
+
+
 def download_dem(
     path_dem, path_prod_union, num_threads, dem_name="glo_90", runlog=None
 ):
@@ -161,14 +203,30 @@ def download_dem(
     root = os.path.splitext(path_dem)[0]
     vrt_path = f"{root}_uncropped.vrt"
 
-    # Check that VRT tiles exist
+    # Check that VRT tiles exist and are valid
     tiles_exist = False
     if os.path.exists(vrt_path):
-        ds = osgeo.gdal.Open(vrt_path, osgeo.gdal.GA_ReadOnly)
-        tile_names = ds.GetFileList()
-        tile_checks = [os.path.exists(tile_name) for tile_name in tile_names]
-        if False not in tile_checks:
-            tiles_exist = True
+        try:
+            ds = osgeo.gdal.Open(vrt_path, osgeo.gdal.GA_ReadOnly)
+            if ds is not None:
+                tile_names = ds.GetFileList()
+                ds = None
+
+                # Validate each tile
+                tile_checks = [
+                    _validate_tile_integrity(tile_name) for tile_name in tile_names
+                ]
+                if False not in tile_checks:
+                    tiles_exist = True
+                else:
+                    invalid_count = tile_checks.count(False)
+                    LOGGER.warning(
+                        "%d/%d tiles are invalid or missing, will re-download",
+                        invalid_count,
+                        len(tile_names),
+                    )
+        except Exception as e:
+            LOGGER.warning("Error validating VRT %s: %s", vrt_path, e)
 
     # Retrieve update mode
     update_mode = "full_extract"

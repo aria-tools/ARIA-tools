@@ -23,6 +23,56 @@ import ARIAtools.util.vrt
 LOGGER = logging.getLogger(__name__)
 
 
+def _validate_mask_integrity(mask_path):
+    """
+    Validate that a mask file exists, has non-zero size, and is readable.
+
+    Parameters
+    ----------
+    mask_path : str
+        Path to the mask file to validate
+
+    Returns
+    -------
+    bool
+        True if mask is valid, False if needs re-download
+    """
+    if not os.path.exists(mask_path):
+        return False
+
+    # Check file size is non-zero
+    try:
+        file_size = os.path.getsize(mask_path)
+        if file_size == 0:
+            LOGGER.warning("Mask %s has zero size, needs re-download", mask_path)
+            return False
+    except OSError as e:
+        LOGGER.warning("Cannot access mask %s: %s", mask_path, e)
+        return False
+
+    # Verify file is readable by GDAL
+    try:
+        ds = osgeo.gdal.Open(mask_path, osgeo.gdal.GA_ReadOnly)
+        if ds is None:
+            LOGGER.warning(
+                "Mask %s cannot be opened by GDAL, needs re-download", mask_path
+            )
+            return False
+
+        # Additional check: ensure raster has data
+        band = ds.GetRasterBand(1)
+        if band.XSize == 0 or band.YSize == 0:
+            LOGGER.warning("Mask %s has zero dimensions, needs re-download", mask_path)
+            ds = None
+            return False
+
+        ds = None
+        return True
+    except Exception as e:
+        LOGGER.warning("Error validating mask %s: %s", mask_path, e)
+        return False
+
+
 def prep_mask(
     product_dict,
     maskfilename,
@@ -90,13 +140,27 @@ def prep_mask(
         maskfilename = os.path.join(workdir, f"{maskfilename}.msk")
         ref_file = os.path.join(workdir, "tmp_referencefile")
 
-        # Check if mask has already been downloaded and covers necessary area
-        if os.path.exists(uncropped_maskfilename) and update_mode != "full_extract":
+        # Check if mask has already been downloaded and is valid
+        mask_is_valid = _validate_mask_integrity(uncropped_maskfilename)
+
+        if mask_is_valid and update_mode != "full_extract":
             LOGGER.warning(
-                "%s has already been downloaded. Skipping download.",
+                "%s has already been downloaded and is valid. Skipping download.",
                 uncropped_maskfilename,
             )
         else:
+            if not mask_is_valid and os.path.exists(uncropped_maskfilename):
+                LOGGER.info("Existing mask is invalid or incomplete, re-downloading...")
+                # Remove invalid file
+                try:
+                    os.remove(uncropped_maskfilename)
+                except OSError as e:
+                    LOGGER.warning(
+                        "Could not remove invalid mask %s: %s",
+                        uncropped_maskfilename,
+                        e,
+                    )
+
             # download mask
             dat_arr, dat_prof = tile_mate.get_raster_from_tiles(
                 bounds, tile_shortname=lyr_name
