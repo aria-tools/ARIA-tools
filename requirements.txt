@@ -1,23 +1,19 @@
-# Full ARIA-tools dependency surface for runtime plus contributor tooling.
+# Pip-compatible mirror of the runtime plus contributor dependency surface.
+# Conda-only libraries belong in ``environment.yml`` instead.
 affine
-asf_search >=12.0.3
-asf_enumeration >=0.4.0
+asf-search[asf-enumeration]>=12.0.3
 boto3
-dem_stitcher>=2.5.8
-gdal>=3.7.0
+dem-stitcher>=2.5.8
+GDAL>=3.7.0
 h5py
-libgdal-hdf5
-libgdal-netcdf
 matplotlib
-netcdf4
+netCDF4
 numpy
 pandas
-pip
 pre-commit
 pyproj
 pytest
 pytest-cov
-#python>=3.8,<3.14
 python-dateutil
 rasterio
 rioxarray
@@ -25,9 +21,7 @@ requests
 ruff
 scipy>1.10.0
 shapely
-tile_mate>=0.0.12
+tile-mate>=0.0.12
+tqdm
 xarray
-hyp3_sdk>=7.7.6
-## notebook dependencies, keep commented out for better compatibility with other codes
-#jupyterlab
-#jupyter_contrib_nbextensions
+hyp3-sdk>=7.7.6

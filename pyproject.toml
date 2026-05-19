@@ -13,7 +13,8 @@ authors = [
   { name = "ARIA-tools developers" },
 ]
 # Authoritative pip install surface for ARIA-tools.
-# The editable install includes the full runtime and contributor toolchain.
+# ``requirements.txt`` mirrors this list for pip-based workflows, while
+# ``environment.yml`` carries the conda-only geospatial stack details.
 dependencies = [
   "affine",
   "asf-search[asf-enumeration]>=12.0.3",
@@ -38,6 +39,7 @@ dependencies = [
   "scipy>1.10.0",
   "shapely",
   "tile-mate>=0.0.12",
+  "tqdm",
   "xarray",
 ]
 

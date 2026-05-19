@@ -3,17 +3,21 @@
 # remove environment : conda env remove -n ARIA-tools
 # enter  environment : conda activate ARIA-tools
 # exit   environment : conda deactivate
-# Full ARIA-tools environment for runtime, repo work, and CI.
-# The editable install is expected to use the same all-in dependency surface.
+# Full ARIA-tools conda environment for runtime, repo work, and CI.
+# This file intentionally includes conda-only geospatial libraries that do not
+# belong in the pip-facing ``requirements.txt`` or ``pyproject.toml``.
 name: ARIA-tools
 channels:
   - conda-forge
 dependencies:
   - affine
+  - asf_enumeration>=0.4.0
+  - asf_search>=12.0.3
   - boto3
   - dem_stitcher>=2.5.8
   - gdal>=3.7.0
   - h5py
+  - hyp3_sdk>=7.7.6
   - libgdal-hdf5
   - libgdal-netcdf
   - matplotlib
@@ -25,22 +29,20 @@ dependencies:
   - pyproj
   - pytest
   - pytest-cov
-  - ruff
-  - python>=3.8,<3.14
+  - python>=3.8
   - python-dateutil
   - rasterio
   - rioxarray
   - requests
+  - ruff
   - scipy>1.10.0
   - setuptools>=68
   - shapely
   - tile_mate>=0.0.12
+  - tqdm
   - wheel
   - xarray
-  - hyp3_sdk>=7.7.6
-  - asf_search >=12.0.3
-  - asf_enumeration >=0.4.0
-  - pip:
-  #for ARIA-tools-docs
-  #- jupyterlab
-  #- jupyter_contrib_nbextensions
+  # Optional documentation dependencies (install separately if needed):
+  # - pip:
+  #   - jupyterlab
+  #   - jupyter_contrib_nbextensions
