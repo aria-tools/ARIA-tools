@@ -10,7 +10,7 @@ workflow arguments and outputs were intentionally kept familiar.
 
 - Use `aria-tools <command>` as the primary interface.
 - Keep legacy script entry points installed during the compatibility period.
-- Use modern `pyproject.toml` packaging with optional extras.
+- Use modern `pyproject.toml` packaging with one install surface.
 - Use native Python process execution instead of GNU `parallel`.
 - Run tests against the installed package rather than a source-path shim.
 
@@ -37,26 +37,13 @@ v2 uses `pyproject.toml` as the authoritative pip install surface.
 python -m pip install -e .
 ```
 
-Optional functionality is installed with extras:
-
-```bash
-python -m pip install -e ".[aws]"
-python -m pip install -e ".[order]"
-python -m pip install -e ".[plot]"
-python -m pip install -e ".[dev]"
-```
-
-Current extras:
-
-| Extra | Purpose |
-| --- | --- |
-| `aws` | AWS/S3 direct-access support |
-| `order` | HyP3 ordering dependencies |
-| `plot` | Plotting dependencies |
-| `dev` | Contributor tooling such as `pytest`, `ruff`, and `pre-commit` |
+There is no extras split in the current package metadata. The editable install
+surface is a single package definition, and the current project install also
+includes the contributor tools used in this repository.
 
 For repo work and CI, `environment.yml` remains intentionally broader than the
-base pip install surface.
+pip install surface because it carries the GDAL-capable conda environment used
+for local development and workflow validation.
 
 ## Execution Model Changes
 
@@ -164,13 +151,13 @@ That is normal while `aria_meta_cache.json` is being populated.
 ### A command help path works but a live workflow still fails
 
 That usually means the interface is wired correctly but the workflow still
-depends on data, credentials, or optional dependencies not present in the
-current environment.
+depends on data, credentials, or environment-level prerequisites not present
+in the current environment.
 
 ## Migration Checklist
 
 - [ ] Install from `pyproject.toml` instead of relying on legacy setup flows
 - [ ] Prefer `aria-tools <command>` in new docs, scripts, and examples
-- [ ] Install only the extras your workflow needs
+- [ ] Use the documented single install surface for repo work
 - [ ] Re-run your key extract/timeseries workflows with real data
 - [ ] Keep legacy wrappers only where you still need compatibility
