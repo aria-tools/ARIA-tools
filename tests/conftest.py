@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_SRC_DIR = _REPO_ROOT / "src"
-_TOOLS_DIR = _REPO_ROOT / "tools"
-
-for _path in (_SRC_DIR, _TOOLS_DIR):
-    _path_str = str(_path)
-    if _path_str not in sys.path:
-        sys.path.insert(0, _path_str)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

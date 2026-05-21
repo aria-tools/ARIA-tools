@@ -63,12 +63,6 @@ import tempfile
 import time
 
 # ---------------------------------------------------------------------------
-# Ensure the tools/ tree is importable
-# ---------------------------------------------------------------------------
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(_REPO_ROOT, "tools"))
-
-# ---------------------------------------------------------------------------
 # Heavy imports are deferred to main() so --help works without deps
 # ---------------------------------------------------------------------------
 

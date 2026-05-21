@@ -33,13 +33,6 @@ import sys
 import tempfile
 import time
 
-# ---------------------------------------------------------------------------
-# Ensure the tools/ tree is on the path so we can import ARIAtools even when
-# the package is not installed via pip.
-# ---------------------------------------------------------------------------
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(_REPO_ROOT, "tools"))
-
 import ARIAtools.util.meta_cache as meta_cache  # noqa: E402
 import numpy as np  # noqa: E402
 import osgeo.gdal  # noqa: E402
