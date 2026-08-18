@@ -1320,7 +1320,7 @@ class Product:
         add new keys there).
 
         """
-        # Expected layers
+        # Expected layers always present in a NISAR GUNW product
         layerkeys = [
             "productBoundingBox",
             "unwrappedPhase",
@@ -1335,9 +1335,22 @@ class Product:
             "losUnitVectorX",
             "losUnitVectorY",
             "elevationAngle",
+        ]
+
+        # Optional correction layers: __NISARmappingVersion__ only appends
+        # these to sdskeys when the corresponding subdataset exists in the
+        # product, so mirror that same filtering here to keep layerkeys
+        # aligned with sdskeys and avoid indexing past the end of the list.
+        optional_layerkeys = [
             "slantRangeSolidEarthTidesPhase",
             "hydrostaticTroposphericPhaseScreen",
             "wetTroposphericPhaseScreen",
+        ]
+        optional_sdskeys = sdskeys[len(layerkeys) :]
+        layerkeys += [
+            key
+            for key in optional_layerkeys
+            if any(key in sds for sds in optional_sdskeys)
         ]
 
         # Setup datalyr_dict
@@ -1350,15 +1363,22 @@ class Product:
         for i in enumerate(layerkeys):
             datalyr_dict[i[1]] = fname + '":' + sdskeys[i[0]]
 
-        # Rewrite tropo, iono, SET, lookAngle, and amplitude keys
+        # Rewrite tropo, iono, SET, lookAngle, and amplitude keys.
+        # The three correction layers are optional, so only rewrite them
+        # when the product actually has the corresponding subdataset.
         datalyr_dict["ionosphere"] = datalyr_dict.pop("ionospherePhaseScreen")
-        datalyr_dict["troposphereHydrostatic"] = datalyr_dict.pop(
-            "hydrostaticTroposphericPhaseScreen"
-        )
-        datalyr_dict["troposphereWet"] = datalyr_dict.pop("wetTroposphericPhaseScreen")
-        datalyr_dict["solidEarthTide"] = datalyr_dict.pop(
-            "slantRangeSolidEarthTidesPhase"
-        )
+        if "hydrostaticTroposphericPhaseScreen" in datalyr_dict:
+            datalyr_dict["troposphereHydrostatic"] = datalyr_dict.pop(
+                "hydrostaticTroposphericPhaseScreen"
+            )
+        if "wetTroposphericPhaseScreen" in datalyr_dict:
+            datalyr_dict["troposphereWet"] = datalyr_dict.pop(
+                "wetTroposphericPhaseScreen"
+            )
+        if "slantRangeSolidEarthTidesPhase" in datalyr_dict:
+            datalyr_dict["solidEarthTide"] = datalyr_dict.pop(
+                "slantRangeSolidEarthTidesPhase"
+            )
         datalyr_dict["lookAngle"] = datalyr_dict.pop("elevationAngle")
         datalyr_dict["amplitude"] = datalyr_dict.pop("wrappedInterferogram")
 
