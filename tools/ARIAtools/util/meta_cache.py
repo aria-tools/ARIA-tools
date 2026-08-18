@@ -126,7 +126,7 @@ def extract_metadata_gdal(fname):
         - gdal_info_ts: Timestamp of extraction
         - _cache_complete: Boolean indicating if all fields extracted [NEW]
     """
-    netcdf_fname = f'NETCDF:"{fname}'
+    netcdf_fname = f'NETCDF:"{fname}"'
 
     # gdal.Info with -json returns everything we need in one call
     info_str = osgeo.gdal.Info(netcdf_fname, options=["-json"])
@@ -564,7 +564,7 @@ def get_h5_field(fname, field_name, h5_fields, cache_data):
         LOGGER.debug("Cache miss - reading: %s [%s]", os.path.basename(key), field_name)
 
         # GDAL Info requires NETCDF prefix to properly read HDF5 subdatasets
-        gdal_fname = f'NETCDF:"{fname}'
+        gdal_fname = f'NETCDF:"{fname}"'
         meta = osgeo.gdal.Info(gdal_fname)
 
         # Filter the requested fields against the GDAL metadata
