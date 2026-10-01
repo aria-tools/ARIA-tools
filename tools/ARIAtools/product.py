@@ -1209,20 +1209,42 @@ class Product:
         add new keys there).
 
         """
-        # Expected layers
+        # 1. Base layers that are ALWAYS expected
         layerkeys = [
             'productBoundingBox', 'unwrappedPhase', 'coherence',
             'connectedComponents', 'ionospherePhaseScreen',
             'ionospherePhaseScreenUncertainty', 'wrappedInterferogram',
             'bPerpendicular', 'bParallel', 'incidenceAngle', 'losUnitVectorX',
-            'losUnitVectorY', 'elevationAngle',
+            'losUnitVectorY', 'elevationAngle']
+
+        # 2. Optional correction layers
+        optional_layers = [
             'slantRangeSolidEarthTidesPhase',
             'hydrostaticTroposphericPhaseScreen',
-            'wetTroposphericPhaseScreen']
+            'wetTroposphericPhaseScreen'
+        ]
+        
+        # Initialize a tracker on the instance to ensure we only warn once per layer
+        if not hasattr(self, '_missing_layers_warned'):
+            self._missing_layers_warned = set()
+
+        # 3. Dynamically append or warn
+        for opt_layer in optional_layers:
+            if any(opt_layer in sds for sds in sdskeys):
+                layerkeys.append(opt_layer)
+            else:
+                # Log the warning only if we haven't warned about this specific layer yet
+                if opt_layer not in self._missing_layers_warned:
+                    LOGGER.warning(
+                        f"Optional layer '{opt_layer}' is missing from products in this stack "
+                        f"(e.g., {os.path.basename(fname)}). It will be safely skipped."
+                    )
+                    self._missing_layers_warned.add(opt_layer)
 
         # Setup datalyr_dict
         datalyr_dict = {}
         datalyr_dict['pair_name'] = self.pairname
+        
         # 'productBoundingBox' will be updated to point to shapefile
         # corresponding to final output raster, so record of
         # individual frames preserved here
@@ -1234,12 +1256,15 @@ class Product:
         # Rewrite tropo, iono, SET, lookAngle, and amplitude keys
         datalyr_dict['ionosphere'] = datalyr_dict.pop(
             'ionospherePhaseScreen')
-        datalyr_dict['troposphereHydrostatic'] = datalyr_dict.pop(
-            'hydrostaticTroposphericPhaseScreen')
-        datalyr_dict['troposphereWet'] = datalyr_dict.pop(
-            'wetTroposphericPhaseScreen')
-        datalyr_dict['solidEarthTide'] = datalyr_dict.pop(
-            'slantRangeSolidEarthTidesPhase')
+        
+        # Only attempt to pop optional layers if they were actually found and added
+        if 'hydrostaticTroposphericPhaseScreen' in datalyr_dict:
+            datalyr_dict['troposphereHydrostatic'] = datalyr_dict.pop('hydrostaticTroposphericPhaseScreen')
+        if 'wetTroposphericPhaseScreen' in datalyr_dict:
+            datalyr_dict['troposphereWet'] = datalyr_dict.pop('wetTroposphericPhaseScreen')
+        if 'slantRangeSolidEarthTidesPhase' in datalyr_dict:
+            datalyr_dict['solidEarthTide'] = datalyr_dict.pop('slantRangeSolidEarthTidesPhase')
+
         datalyr_dict['lookAngle'] = datalyr_dict.pop(
             'elevationAngle')
         datalyr_dict['amplitude'] = datalyr_dict.pop(
