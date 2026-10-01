@@ -203,7 +203,6 @@ def extract_bperp_dict_ts(domain_name, aria_prod):
                         # Release band reference
                         band = None
                 finally:
-                    # CRITICAL: Ensure file close happens no matter what
                     data_set = None
 
         meta[pair_name] = stat
@@ -312,9 +311,15 @@ def generate_stack(aria_prod, stack_layer, output_file_name,
                  len(rejected_dates), domain_name, ", ".join(rejected_dates)
             )
 
-    # Find files
+    # Find files and filter out any missing VRT files
     int_list = [os.path.join(workdir, stack_layer, aria_date + '.vrt')
                 for aria_date in aria_dates]
+    int_list = [f for f in int_list if os.path.exists(f)]
+
+    if len(int_list) == 0:
+        LOGGER.warning('No valid VRT files found for %s stack. Skipping.', stack_layer)
+        return []
+
     dlist = sorted(int_list)
     LOGGER.info(
         'Number of %s files discovered: %d' % (stack_layer, len(int_list)))
@@ -510,13 +515,6 @@ def main():
     runlog.update('aria_routine', 'ariaTSsetup.py')
     runlog.update('args', args)
 
-    # if user bbox was specified, file(s) not meeting imposed spatial
-    # criteria are rejected.
-    # Outputs = arrays ['standardproduct_info.products'] containing grouped
-    # “radarmetadata info” and “data layer keys+paths” dictionaries for each
-    # standard product
-    # In addition, path to bbox file ['standardproduct_info.bbox_file']
-    # (if bbox specified)
     LOGGER.info('Building ARIA product instance')
     standardproduct_info = ARIAtools.product.Product(
         args.imgfile, bbox=args.bbox, projection=args.projection,
@@ -526,9 +524,6 @@ def main():
         layers=args.layers, croptounion=args.croptounion, runlog=runlog,
         demfile=args.demfile, mask=args.mask)
 
-    # extract/merge productBoundingBox layers for each pair and update dict,
-    # report common track bbox (default is to take common intersection,
-    # but user may specify union), and expected shape for DEM.
     LOGGER.info('Extracting and merging product bounding boxes')
     (standardproduct_info.products[0], standardproduct_info.products[1],
      standardproduct_info.bbox_file, prods_TOTbbox,
@@ -541,8 +536,6 @@ def main():
             num_threads=args.num_threads, minimumOverlap=args.minimumOverlap,
             verbose=args.verbose, runlog=runlog)
 
-    # Download/Load DEM & Lat/Lon arrays, providing bbox,
-    # expected DEM shape, and output dir as input.
     dem_dict = {
         'demfilename': standardproduct_info.demfile,
         'bbox_file': standardproduct_info.bbox_file,
@@ -558,23 +551,17 @@ def main():
         'runlog': runlog
     }
 
-    # Pass DEM-filename, loaded DEM array, and lat/lon arrays
     LOGGER.debug('Download/cropping DEM')
     demfile, demfile_expanded, lat, lon = \
         ARIAtools.util.dem.prep_dem(**dem_dict)
 
-    # Load or download mask (if specified).
     if standardproduct_info.mask is not None:
-
-        # Extract amplitude layers
         amplitude_products = []
         for d in standardproduct_info.products[1]:
-            # for NISAR GUNW
             if is_nisar_file:
                 if 'coherence' in d:
                     for item in list(set(d['coherence'])):
                         amplitude_products.append(item)
-            # for S1 GUNW
             else:
                 if 'amplitude' in d:
                     for item in list(set(d['amplitude'])):
@@ -600,7 +587,6 @@ def main():
     else:
         maskfilename = None
 
-    # Extract
     export_dict = {
         'proj': proj,
         'bbox_file': standardproduct_info.bbox_file,
@@ -620,7 +606,6 @@ def main():
         'multilooking': args.multilooking
     }
 
-    # export unwrappedPhase
     layers = ARIAtools.constants.ARIA_STANDARD_INTF_LAYERS
     LOGGER.info('Extracting %s for each interferogram pair' % layers)
     ref_arr_record = ARIAtools.extractProduct.export_products(
@@ -628,11 +613,8 @@ def main():
         rankedResampling=args.rankedResampling,
         multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
-    # Clean up any stale HTTP sockets from the interferogram extraction
     osgeo.gdal.VSICurlClearCache()
 
-    # Use the pristine, unmodified dictionary of the FIRST pair! 
-    # This completely bypasses the extract_dict scrambling that crashes HDF5.
     first_pair_dict = standardproduct_info.products[1][0]
 
     geom_layers = ARIAtools.constants.ARIA_STANDARD_GEOM_LAYERS
@@ -640,14 +622,10 @@ def main():
         'Extracting single %s '
         'files valid over common interferometric grid' % geom_layers)
 
-    # Run ALL geometry layers sequentially. Since we only pass ONE pair,
-    # GNU parallel provides 0 speedup here, and using 'single' prevents 
-    # 5 simultaneous workers from hammering Earthdata for the exact same file!
     prod_arr_record = ARIAtools.extractProduct.export_products(
         [first_pair_dict], tropo_total=False, layers=geom_layers,
         multiproc_method='single', **export_dict, runlog=runlog)
 
-    # Track consistency of dimensions
     ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
     if extract_bperp_layer:
@@ -659,10 +637,8 @@ def main():
             layers=['bPerpendicular'], multiproc_method='gnu_parallel',
             **export_dict, runlog=runlog)
 
-        # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
     else:
-        # Extract bPerpendicular to json file
         bperp_dict = ARIAtools.extractProduct.extract_bperp_dict(
             standardproduct_info.products[1], num_threads=args.num_threads)
 
@@ -673,12 +649,10 @@ def main():
         with open(os.path.join(bperp_outdir, 'bperp.json'), 'w') as ofp:
             json.dump(bperp_dict, ofp)
 
-    # Extracting other layers, if specified
     (layers, args.tropo_total, model_names) = ARIAtools.util.vrt.layerCheck(
         standardproduct_info.products[1], args.layers, args.nc_version,
         args.tropo_models, extract_or_ts='tssetup')
 
-    # Capture existing output layers not captured in cmdline
     if update_mode == 'crop_only':
         ignore_names = ['unwrappedPhase', 'connectedComponents',
             'incidenceAngle', 'azimuthAngle', 'coherence', 'bPerpendicular']
@@ -700,19 +674,14 @@ def main():
             model_names=model_names, layers=layers,
             multiproc_method='gnu_parallel', **export_dict, runlog=runlog)
 
-        # Track consistency of dimensions
         ARIAtools.util.vrt.dim_check(ref_arr_record, prod_arr_record)
 
-    # Fix VRT files: replace /vsis3/ paths with /vsicurl/ for
-    # downstream tool compatibility (e.g. MintPy).
     ARIAtools.util.s3.fixup_vrt_s3_paths(args.workdir)
 
-    # Generate UNW stack
     ref_dlist = generate_stack(
         standardproduct_info, 'unwrappedPhase', 'unwrapStack',
         workdir=args.workdir, is_nisar_file=is_nisar_file)
 
-    # prepare additional stacks for other layers
     layers += ARIA_STACK_DEFAULTS
     layers.remove('unwrappedPhase')
     layers = sorted(list(set(layers)))
@@ -729,15 +698,12 @@ def main():
         if 'troposphereTotal' in layers:
             layers.remove('troposphereTotal')
 
-    # generate other stack layers
-    # generate stack default parms
     stack_dict = {'workdir': args.workdir, 'ref_dlist': ref_dlist,
                  'is_nisar_file': is_nisar_file}
     for layer in layers:
         if layer in ARIA_STACK_OUTFILES.keys():
             print('layer', layer)
 
-            # iterate through model dirs if necessary
             if 'tropo' in layer and not is_nisar_file:
                 model_dirs = glob.glob(
                     args.workdir + f'/{layer}/*', recursive=True)
@@ -759,8 +725,6 @@ def main():
             LOGGER.warning(
                 'Selected layer %s not supported in tsSetup' + msg, layer)
 
-    # Flush standard streams and force a hard exit for the gnu_parallel worker.
-    # This completely bypasses Python's noisy GDAL C-binding garbage collection phase.
     try:
         sys.stdout.flush()
         sys.stderr.flush()
@@ -771,4 +735,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
