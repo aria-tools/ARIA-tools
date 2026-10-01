@@ -27,6 +27,7 @@ sake of consistency, add function to re-enumerate components.
 DISCLAIMER : This is development script. Requires some additional clean-up
 and restructuring
 '''
+import os
 import osgeo
 import pathlib
 import logging
@@ -197,50 +198,7 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
                       range_correction: Optional[bool] = False,
                       verbose: Optional[bool] = False) -> \
         Tuple[NDArray, NDArray, dict]:
-    """
-    Function to sequentially stitch two frames along the same track. Mean
-    offset or 2pi integer cycles are estimated for each overlapping connected
-    components, which after correction are merged into the same component.
-    Code runs forward and backward, first correcting Northern frame with
-    respect to Southern, and then the opposite if corrected components
-    overlap with multiple components in Southern frame.
 
-    Parameters
-    ----------
-    unw_data1 : array
-        array containing unwrapped phase in Frame-1 (South)
-    conn_data1 : array
-        array containing connected components in Frame-1 (South)
-    rdict1 : dict
-        dict containing raster metadata [SNWE, latlon_spacing, nodata etc..]
-        for Frame-1 (South)
-    unw_data2 : array
-        array containing unwrapped phase in Frame-2 (North)
-    conn_data2 : array
-        array containing connected components in Frame-2 (North)
-    rdict2 : dict
-        dict containing raster metadata [SNWE, latlon_spacing, nodata etc..]
-        for Frame-2 (North)
-    correction_method : str
-        method to correct offset between overlapping connected components.
-        Available options:
-         "meanoff" - mean offset between components
-         "cycle2pi" - 2pi integer cycles between components
-    verbose : bool
-        print info messages [True/False]
-
-    Returns
-    -------
-    unw_data1 : array
-        corrected array containing unwrapped phase in Frame-1 (South)
-    conn_data1 : array
-        corrected array containing connected components in Frame-1 (South)
-    unw_data2 : array
-        corrected array containing unwrapped phase in Frame-2 (North)
-    conn_data2 : array
-        corrected array containing connected components in Frame-2 (North)
-
-    """
     # Adjust connected Component in Frame 2 to start
     # with last component number in Frame-1
     conn_data2 = conn_data2 + np.nanmax(conn_data1)
@@ -361,25 +319,6 @@ def stitch_unw2frames(unw_data1: NDArray, conn_data1: NDArray, rdict1: dict,
 
 def get_overlapping_conn(conn1: NDArray,
                          conn2: NDArray) -> Tuple[NDArray, NDArray]:
-    """
-    Get forward and backward pairs of overlapping connected components with
-    the number of overlaping pixels.
-    Return [connectComponent-Frame2, connectComponent-Frame1, number of pixels]
-
-    Parameters
-    ----------
-    conn1 : array
-        array containing connected components in Frame-1 (South)
-    conn2 : array
-        array containing connected components in Frame-2 (North)
-
-    Returns
-    -------
-    conn_pairs : array
-        forward pairs of overlapping components
-    conn_pairs_reverse : array
-        backward pairs of overlapping components
-    """
     conn_union = np.empty((0, 3), dtype=np.int32)
 
     # Get unique components
@@ -453,40 +392,7 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
                         range_correction: Optional[bool] = False,
                         print_msg: Optional[bool] = False) -> \
         Tuple[np.float32, np.float32, np.float32]:
-    """
-    Get mean difference of unwrapped Phase values for overlapping
-    connected components as 2pi int cycles
 
-    Parameters
-    ----------
-    unw1 : array
-        array containing unwrapped phase in Frame-1 (South)
-    concom1 : array
-        array containing connected components in Frame-1 (South)
-    ix1 : float
-        connected component lablein Frame-1 (South), (1...n, 0 is unrealiable)
-
-    unw2 : array
-        array containing unwrapped phase in Frame-2 (North)
-    concom2 : array
-        array containing connected components in Frame-2 (North)
-    ix2 : float
-        connected component label in Frame-2 (North),
-        (1...n, 0 is unrealiable)
-    range_correction: bool
-        calculate range correction due to small non 2-pi shift caused by
-        ESD different between frames
-
-    Returns
-    -------
-    diff_value : float
-        mean offset between overlapping component in two frames
-    correction2pi : float
-        2pi interger cycles between overlapping component in two frames
-    range_corr : float
-        correction for non 2-pi shift between overlapping component
-        in two frames
-    """
     # find the component in the data and keep overlap
     # dimensions for comparison
     idx = np.where((concom1 == ix1) & (concom2 == ix2))
@@ -513,9 +419,6 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
     else:
         range_corr = 0
 
-    # Note: range correctio sometimes gives oposite sign of
-    #        correction, and add half or one cycle more.
-    #        not sure, why that happens?? below is a hardcoded solution
     if np.abs(median_diff - (correction2pi + range_corr)) > 3.14:
         range_corr *= -1
 
@@ -536,23 +439,6 @@ def _integer_2pi_cycles(unw1: NDArray, concom1: NDArray, ix1: np.float32,
 
 def _range_correction(unw1: NDArray,
                       unw2: NDArray) -> np.float32:
-    """
-    Calculate range correction due to small non 2-pi shift caused by ESD
-    different between frames. If ESD is not used, this correction
-    can be skipped
-
-    Parameters
-    ----------
-    unw1 : array
-        array containing unwrapped phase in Frame-1 (South)
-    unw2 : array
-        array containing unwrapped phase in Frame-2 (North)
-
-    Returns
-    -------
-    range_corr : float
-        correction for non 2-pi shift
-    """
     # Wrap unwrapped Phase in Frame-1 and Frame-2
     unw1_wrapped = np.mod(unw1, (2 * np.pi)) - np.pi
     unw2_wrapped = np.mod(unw2, (2 * np.pi)) - np.pi
@@ -570,34 +456,7 @@ def stitch_2frames_metadata(
         unw_data1: NDArray, rdict1: dict,
         unw_data2: NDArray, rdict2: dict,
         verbose: Optional[bool] = False) -> Tuple[NDArray, NDArray]:
-    """Sequential stitching function implementation from `stitch_2frames`
-    for metadata layers
 
-    Parameters
-    ----------
-    unw_data1 : array
-        array containing unwrapped phase in Frame-1 (South)
-    rdict1 : dict
-        dict containing raster metadata [SNWE, latlon_spacing, nodata etc..]
-        for Frame-1 (South)
-    unw_data2 : array
-        array containing unwrapped phase in Frame-2 (North)
-    rdict2 : dict
-        dict containing raster metadata [SNWE, latlon_spacing, nodata etc..]
-        for Frame-2 (North)
-    verbose : bool
-        print info messages [True/False]
-
-    Returns
-    -------
-    unw_data1 : array
-        corrected array containing unwrapped phase in Frame-1 (South)
-    unw_data2 : array
-        corrected array containing unwrapped phase in Frame-2 (North)
-
-    TODO: combine corrected array in this function, return only the
-          stitched unwrapped Phase
-    """
     # GET FRAME OVERLAP
     box_1, box_2 = ARIAtools.util.stitch.frame_overlap(
         rdict1['SNWE'], rdict2['SNWE'],
@@ -615,26 +474,6 @@ def stitch_2frames_metadata(
 
 def _metadata_offset(unw1: NDArray, unw2: NDArray,
                      print_msg: Optional[bool] = False) -> Tuple[np.float32]:
-    """
-    Get mean difference of metadata layers
-
-    Parameters
-    ----------
-    unw1 : array
-        array containing unwrapped phase in Frame-1 (South)
-
-    unw2 : array
-        array containing unwrapped phase in Frame-2 (North)
-
-    Returns
-    -------
-    diff_value : float
-        mean offset between overlapping area in two frames
-    """
-    # Not sure if copy() is needed, left it here to avoid overwriting array
-    # due to numpy referencing
-    # TODO: use np.where to find the component in the data and keep overlap
-    # dimensions for comparison
     data1 = unw1.copy()
     data2 = unw2.copy()
 
@@ -667,64 +506,11 @@ def product_stitch_sequential(input_unw_files: List[str],
                               bounds: Optional[tuple] = None,
                               clip_json: Optional[str] = None,
                               mask_file: Optional[str] = None,
-                              # [meandiff, cycle2pi]
                               correction_method: Optional[str] = 'cycle2pi',
                               range_correction: Optional[bool] = True,
                               verbose: Optional[bool] = False,
                               save_fig: Optional[bool] = False,
                               overwrite: Optional[bool] = True) -> None:
-    """
-    Sequential stitching of frames along the track. Starts from the Southern
-    frame and goes towards the North. Stitching is perform with forward and
-    backward corrections of overlapping components between two neighboring
-    frames. The stitched track is stored locally, and then cropped to meet
-    the defined ARIAtools bounding box and masked with a water-mask
-    if selected.
-
-    Parameters
-    ----------
-    input_unw_files : list
-        list of S1 files with Unw Phase (multiple frames along same track)
-        ARIA GUNW:
-        'NETCDF:"%path/S1-GUNW-*.nc":/science/grids/data/unwrappedPhase'
-    input_conncomp_files : list
-        list of S1 files with Connected Components of unwrapped phase
-        (multiple frames along same track)
-        ARIA GUNW:
-        'NETCDF:"%path/S1-GUNW-*.nc":/science/grids/data/connectedComponents'
-    output_unw : str
-        str pointing to path and filename of output stitched Unwrapped Phase
-    output_conn : str
-        str pointing to path and filename of output stitched
-        Connected Components
-    output_format : str
-        output format used for gdal writer [e.g., Gtiff ENVI], default is ENVI
-    is_nisar_file : bool
-        is NISAR GUNW or now [True/False], default is False (assumes S1 GUNW)
-    bounds : tuple
-        (West, South, East, North) bounds obtained in ariaExtract.py
-    clip_json : str
-        path to /productBoundingBox.json producted by ariaExtract.py
-    mask_file : str
-        path to water mask file, example:
-        %aria_extract_path/mask/watermask.msk.vrt
-    correction_method : str
-        correction method for overlapping components, available options:
-         meanoff - mean offset between components
-         cycle2pi - 2pi integer cycles between components
-    range_correction : bool
-        use correction for non 2-pi shift in overlapping components
-        [True/False]
-    verbose : bool
-        print info messages [True/False]
-    save_fig : bool
-        save figure with stitched outputs [True/False]
-    overwrite : bool
-        overwrite stitched products [True/False]
-
-    NOTE: Move cropping (osgeo.gdal.Warp to bounds and clip_json) and masking
-          to ariaExtract.py to make this function modular for other use
-    """
     # Outputs
     output_unw = pathlib.Path(output_unw).absolute()
     if not output_unw.parent.exists():
@@ -801,20 +587,30 @@ def product_stitch_sequential(input_unw_files: List[str],
         output_unw.unlink(missing_ok=True)
         output_conn.unlink(missing_ok=True)
 
-    # NOTE: Run osgeo.gdal.Warp on temp file, if input and output are the same
-    #       warp creates empty raster, investigate why
-    #       Also, it looks like it is important to close osgeo.gdal.Warp
-    #       osgeo.gdal.Warp/Translate add 6 seconds to runtime
-
     for output, input in zip([output_conn, output_unw],
                              [temp_conn_out, temp_unw_out]):
-        # Crop if selected
+        # Crop if selected via intermediate GTiff
+        tmp_tif = str(output) + '.tmp.tif'
+        if os.path.exists(tmp_tif):
+            os.remove(tmp_tif)
+
         ds = osgeo.gdal.Warp(
-            str(output), str(input.with_suffix('.vrt')), format=output_format,
+            tmp_tif, str(input.with_suffix('.vrt')), format='GTiff',
             cutlineDSName=clip_json, xRes=arrres[0], yRes=arrres[1],
             targetAlignedPixels=True, dstSRS=epsg,
-            outputBounds=bounds, outputType=osgeo.gdal.GDT_Float32)
+            outputBounds=bounds, outputType=osgeo.gdal.GDT_Float32,
+            multithread=False, options=['-overwrite'])
         ds = None
+
+        # Clean destination output files before Translate
+        for suffix in [None, '.vrt', '.xml', '.hdr', '.aux.xml']:
+            target = (output if suffix is None else output.with_suffix(suffix))
+            if target.exists():
+                target.unlink()
+
+        osgeo.gdal.Translate(str(output), tmp_tif, format=output_format)
+        if os.path.exists(tmp_tif):
+            os.remove(tmp_tif)
 
         # Update VRT
         if verbose:
@@ -881,7 +677,6 @@ def product_stitch_sequential(input_unw_files: List[str],
         update_file = None
 
     # Plot stitched
-    # NOTE: saving output figure adds 4 seconds
     if save_fig:
         plot_GUNW_stitched(str(output_unw.with_suffix('.vrt')),
                            str(output_conn.with_suffix('.vrt')),
@@ -897,28 +692,7 @@ def product_stitch_sequential_metadata(
         output_meta: Optional[str] = './tempMerged',
         output_format: Optional[str] = 'ENVI',
         verbose: Optional[bool] = False) -> None:
-    """
-    Sequential stitching of frames implementation from
-    `product_stitch_sequential` for metadata layers
 
-    Parameters
-    ----------
-    input_meta_files : list
-        list of files with metadata layers (multiple frames along same track)
-        GUNW:'NETCDF:"%path/S1-GUNW-*.nc":
-        /science/grids/corrections/external/tides/solidEarth/reference'
-    output_meta : str
-        str pointing to path and filename of output stitched product
-    output_format : str
-        output format used for gdal writer [Gtiff, ENVI, VRT], default is ENVI
-    verbose : bool
-        print info messages [True/False]
-
-    NOTE: Move cropping (osgeo.gdal.Warp to bounds and clip_json) and masking
-          to ariaExtract.py to make this function modular for other use
-    """
-    # Create VRT and exit early if only one frame passed,
-    # and therefore no stitching needed
     if len(input_meta_files) == 1:
         osgeo.gdal.BuildVRT(output_meta + '.vrt', input_meta_files)
         return
@@ -926,11 +700,7 @@ def product_stitch_sequential_metadata(
     # Outputs
     output_meta = pathlib.Path(output_meta).absolute()
 
-    # Get raster attributes [SNWE, latlon_spacing, length, width. nodata]
-    # from each input file
-
-    # Initalize variables
-    meta_attr_dicts = []  # metadata layers
+    meta_attr_dicts = []
     temp_snwe_list = []
     temp_latlon_spacing_list = []
 
@@ -941,17 +711,11 @@ def product_stitch_sequential_metadata(
             meta_attr_dicts[-1]['LAT_SPACING'],
             meta_attr_dicts[-1]['LON_SPACING']])
 
-    # get sorted indices for frame bounds, from South to North
-    # Sequential stitching starts from the most south frame and moves
-    # forward to next one in the North direction
-    # TODO: add option to reverse direction of stitching
     sorted_ix = np.argsort(np.array(temp_snwe_list)[:, 0], axis=0)
 
-    # Loop through attributes
     snwe_list = [temp_snwe_list[ii] for ii in sorted_ix]
     latlon_spacing_list = [temp_latlon_spacing_list[ii] for ii in sorted_ix]
 
-    # Loop through sorted frames, and stitch neighboring frames
     for i, (ix1, ix2) in enumerate(zip(sorted_ix[:-1], sorted_ix[1:])):
         if verbose:
 
@@ -984,7 +748,6 @@ def product_stitch_sequential_metadata(
                 meta_attr_dicts[ix2],
                 verbose=verbose)
 
-            # Store corrected values
             corrected_meta_arrays = [corr_meta1, corr_meta2]
 
         else:
@@ -995,25 +758,18 @@ def product_stitch_sequential_metadata(
                 meta_attr_dicts[ix2],
                 verbose=verbose)
 
-            # Overwrite the last element in corrected arrays
-            # TODO: check how to do this without using del
             del corrected_meta_arrays[-1]
             corrected_meta_arrays.extend([corr_meta1, corr_meta2])
 
-    # Combine corrected unwrappedPhase arrays
     combined_meta, combined_snwe, _ = \
         ARIAtools.util.stitch.combine_data_to_single(
             corrected_meta_arrays, snwe_list, latlon_spacing_list,
             method='mean', latlon_step=[-0.1, 0.1])
 
-    # replace nan with 0.0
     combined_meta = np.nan_to_num(combined_meta, nan=0.0)
 
-    # Write
-    # create temp files
     meta_out = output_meta.parent / (output_meta.name)
 
-    # write stitched metadata product
     ARIAtools.util.stitch.write_GUNW_array(
         meta_out, combined_meta, combined_snwe, format=output_format,
         verbose=verbose, add_vrt=True, nodata=0.0)
@@ -1021,25 +777,16 @@ def product_stitch_sequential_metadata(
 
 def plot_GUNW_stitched(stiched_unw_filename: str,
                        stiched_conn_filename: str, epsg: str) -> None:
-    '''
-    Plotting function for stitched outputs
-    '''
+
     from matplotlib import pyplot as plt
     import matplotlib as mpl
 
-    # no display
     mpl.use('Agg')
 
-    # Save plot
-    cmap = plt.cm.cividis_r  # define the colormap
-
-    # extract all colors from the .jet map
+    cmap = plt.cm.cividis_r
     cmaplist = [cmap(i) for i in range(cmap.N)]
-
-    # force the first color entry to be red
     cmaplist[0] = (.9, .1, .1, 1.0)
 
-    # create the new map
     cmap = mpl.colors.LinearSegmentedColormap.from_list(
         'Custom cmap', cmaplist, cmap.N)
 
@@ -1047,7 +794,6 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
     output_fig = output_dir.parent / 'stitched.png'
     output_fig.unlink(missing_ok=True)
 
-    # Load Data
     stitched_unw = ARIAtools.util.stitch.get_GUNW_array(
         stiched_unw_filename, proj=epsg)
     stitched_conn = ARIAtools.util.stitch.get_GUNW_array(
@@ -1055,32 +801,25 @@ def plot_GUNW_stitched(stiched_unw_filename: str,
     stitched_attr = ARIAtools.util.stitch.get_GUNW_attr(
         stiched_unw_filename, proj=epsg)
 
-    # ConnComp discrete colormap
     bounds = np.linspace(0, 30, 31)
     norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
 
-    # Mask
     stitched_unw[stitched_unw == 0.0] = np.nan
     stitched_conn[stitched_conn == -1.0] = np.nan
 
-    # Common plot options
     plot_kwargs = {
         'extent': ARIAtools.util.stitch.snwe_to_extent(stitched_attr['SNWE']),
         'interpolation': 'nearest'}
 
-    # Figure
     fig, axs = plt.subplots(1, 3, dpi=300, sharey=True)
 
-    # Re-wrapped
     im1 = axs[0].imshow(
         np.mod(stitched_unw, 4 * np.pi), cmap='jet', **plot_kwargs)
 
-    # Unwrapped
     im2 = axs[1].imshow(
         stitched_unw * (0.0556 / (6 * np.pi)), cmap='jet', clim=[-0.2, 0.2],
         **plot_kwargs)
 
-    # Connected Components
     im3 = axs[2].imshow(stitched_conn, cmap=cmap, norm=norm, **plot_kwargs)
 
     for im, ax, label, txt, in zip(

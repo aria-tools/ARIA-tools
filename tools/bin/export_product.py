@@ -8,6 +8,11 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 import os
 import sys
+
+# Force HDF5 and GDAL environment overrides before C-libraries initialize
+os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
+os.environ['GDAL_PAM_ENABLED'] = 'NO'
+
 import h5py
 import argparse
 import json

@@ -108,7 +108,7 @@ def extract_metadata_gdal(fname):
         Dictionary with keys: version, driver, subdatasets, nc_global,
         gdal_info_ts (timestamp of extraction).
     """
-    netcdf_fname = f'NETCDF:"{fname}'
+    netcdf_fname = f'NETCDF:"{fname}"'
 
     # gdal.Info with -json returns everything we need in one call
     info_str = osgeo.gdal.Info(netcdf_fname, options=['-json'])
@@ -406,7 +406,7 @@ def get_h5_field(fname, field_name, h5_fields, cache_data):
         )
         
         # GDAL Info requires NETCDF prefix to properly read HDF5 subdatasets
-        gdal_fname = f'NETCDF:"{fname}'
+        gdal_fname = f'NETCDF:"{fname}"'
         meta = osgeo.gdal.Info(gdal_fname)
         
         # Filter the requested fields against the GDAL metadata
