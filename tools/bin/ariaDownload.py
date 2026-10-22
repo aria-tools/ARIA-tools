@@ -122,10 +122,10 @@ def createParser():
         help='Flight direction, options: ascending, a, descending, d')
     parser.add_argument(
         '--version', default=None,
-        help='Specify version as str, e.g. 2_0_4 or all prods. All products '
+        help='Specify version as str, e.g., 2_0_4 or all prods. For NISAR, '
+             'you can filter by scene name patterns like P05023. All products '
              'are downloaded by default. If version is specified, only '
-             'products which match that version are downloaded. '
-             'Not supported for NISAR currently.')
+             'products which match that version are downloaded.')
     parser.add_argument(
         '-v', '--verbose', action='store_true',
         help='Print products to be downloaded to stdout')
@@ -268,14 +268,25 @@ class Downloader:
         urls, ifgs, is_nisar_file = get_url_ifg(scenes)
 
         # Subset everything by version
+        original_urls = urls.copy()
+        
         if is_nisar_file and self.args.version is not None:
-            raise Exception(
-                'Version support not included for NISAR, remove the critera'
+            valid_urls = set(
+                u for u in original_urls if self.args.version in u
             )
         else:
-            urls = url_versions(urls, self.args.version, self.args.wd)
-        scenes = [scene for scene, url in zip(scenes, urls) if url in urls]
-        ifgs = [ifg for ifg, url in zip(ifgs, urls) if url in urls]
+            valid_urls = set(
+                url_versions(original_urls, self.args.version, self.args.wd)
+            )
+
+        scenes = [
+            scene for scene, url in zip(scenes, original_urls)
+            if url in valid_urls
+        ]
+        ifgs = [
+            ifg for ifg, url in zip(ifgs, original_urls) if url in valid_urls
+        ]
+        urls = [url for url in original_urls if url in valid_urls]
 
         # Filter scenes based on date and elapsed time criteria
         scenes, urls, ifgs = self.filter_scenes(
@@ -332,15 +343,17 @@ class Downloader:
             )
         elif self.args.mission.upper() == "NISAR":
             # Authenticate so the private ephemeral archive
-            # collection (C4052499921-ASF) is visible in CMR.
+            # collection is visible in CMR.
             session = self._get_asf_session()
             opts = asf_search.ASFSearchOptions(
-                collections=[
-                    "C2850261892-ASF",   # public NISAR GUNW
-                    "C4052499921-ASF",   # private ephemeral archive
-                ],
                 dataset=asf_search.constants.NISAR,
-                processingLevel=asf_search.constants.GUNW,
+                # Expand processing level to include provisional products 
+                # and drop hardcoded collections so new ones are caught
+                processingLevel=[
+                    asf_search.constants.GUNW, 
+                    "GUNW_PROVISIONAL", 
+                    "PR_GUNW"
+                ],
                 relativeOrbit=tracks,
                 flightDirection=flight_direction,
                 intersectsWith=bbox_wkt,

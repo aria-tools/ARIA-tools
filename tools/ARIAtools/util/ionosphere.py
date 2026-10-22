@@ -245,7 +245,6 @@ def stitch_ionosphere_frames(
         surface = np.ma.masked_array(surface, mask=np.isnan(combined_iono[0]))
         combined_iono_arr = surface.filled(fill_value=0.0)
         del surface
-        
 
     return combined_iono_arr, combined_iono[1], combined_iono[2]
 
@@ -316,19 +315,35 @@ def export_ionosphere(
             LOGGER.info(f"Removing {output_iono}")
         output_iono.unlink(missing_ok=True)
 
-    # Crop if selected
+    # Crop via intermediate GTiff
+    tmp_tif = str(output_iono) + ".tmp.tif"
+    if os.path.exists(tmp_tif):
+        os.remove(tmp_tif)
+
     ds = osgeo.gdal.Warp(
-        str(output_iono),
+        tmp_tif,
         str(temp_iono_out.with_suffix(".vrt")),
-        format=output_format,
+        format="GTiff",
         cutlineDSName=clip_json,
         xRes=arrres[0],
         yRes=arrres[1],
         targetAlignedPixels=True,
         dstSRS=epsg,
         outputBounds=bounds,
+        multithread=False,
+        options=['-overwrite']
     )
     ds = None
+
+    # Clean destination output before Translate
+    for suffix in [None, ".vrt", ".xml", ".hdr", ".aux.xml"]:
+        target = output_iono if suffix is None else output_iono.with_suffix(suffix)
+        if target.exists():
+            target.unlink()
+
+    osgeo.gdal.Translate(str(output_iono), tmp_tif, format=output_format)
+    if os.path.exists(tmp_tif):
+        os.remove(tmp_tif)
 
     # Fill NoData using nearest neighbor interpolation
     if not is_nisar_file:

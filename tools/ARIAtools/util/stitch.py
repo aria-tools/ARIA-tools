@@ -552,20 +552,12 @@ def get_binary_nisar_mask_from_path(gdal_path):
 
 def create_binary_nisar_mask(mask_path: str) -> np.ndarray:
     """
-    Reads a 3-digit NISAR SAR mask file and decodes it into a
-    binary mask in memory.
+    Reads a 3-digit NISAR SAR mask file and decodes it into a binary
+    mask in memory.
     
-    1 = Valid (Secondary RSLC has data, ignores water status)
-    0 = Invalid (Missing data in the secondary image ONLY, i.e., XX0)
-
-    Args:
-        mask_path (str): File path to the 3-digit mask file.
-
-    Returns:
-        np.ndarray: The decoded binary mask array.
-
-    Raises:
-        FileNotFoundError: If the mask file cannot be opened.
+    1 = Valid (Both Reference and Secondary RSLC have data, ignores
+        water status)
+    0 = Invalid (Missing data in either image)
     """
     ds_mask = gdal.Open(mask_path, gdal.GA_ReadOnly)
     if not ds_mask:
@@ -574,13 +566,18 @@ def create_binary_nisar_mask(mask_path: str) -> np.ndarray:
     arr_mask = ds_mask.ReadAsArray()
     ds_mask = None  # Free GDAL dataset from memory
 
-    # We only need to decode the least significant digit (Secondary RSLC)
-    # Ignore the internal water mask for now
-    sec_subswath = arr_mask % 10
+    # 1. Strip higher-order flag bits (Bit 8 and above).
+    # This isolates the 0-255 range where the 3-digit code lives.
+    clean_mask = arr_mask & 0xFF
 
-    # Create and return binary mask
-    # 1 if the last digit is not 0, otherwise 0
-    binary_mask = np.where(sec_subswath != 0, 1, 0)
+    # 2. Extract digits (ignoring the hundreds digit for water mask).
+    ref_subswath = (clean_mask // 10) % 10
+    sec_subswath = clean_mask % 10
+
+    # 3. Create binary mask.
+    # Valid only if BOTH reference and secondary swaths have data (> 0).
+    # We ignore water intentionally to give users control over water.
+    binary_mask = np.where((ref_subswath > 0) & (sec_subswath > 0), 1, 0)
 
     return binary_mask
 
